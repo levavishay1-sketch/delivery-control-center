@@ -59,5 +59,5 @@
 
 ## 9. Close out
 
-- [ ] 9.1 Full slice verification: two clients coexist with isolated data/credentials; unauthenticated request to any route rejected; Viewer cannot approve — proven by tests
-- [ ] 9.2 Archive this change into `openspec/specs/`
+- [x] 9.1 Full slice verification, proven by tests (not just the manual live checks done per task group — the done-when criteria explicitly call for tests): extended `prisma/seed.ts` to deterministically create a second client ("Client B") and a `VIEWER`-role user scoped only to the default client, then added `e2e/isolation.spec.ts` with three Playwright tests: unauthenticated request redirects to `/login`; the viewer's home page shows the default client's data and never shows Client B's; the viewer gets a 403 attempting `POST /api/stages/:id/approve` on their own client's stage. All pass (4/4 total across both e2e specs), alongside the existing Vitest authz unit tests (`authz.test.ts`) that prove the same rules at the unit level. **Bug caught and fixed along the way**: the seed script's original `if (!user) create` pattern meant a user created earlier in the session (by a scratch script, with a different password) never got its password synced to `SEED_ADMIN_PASSWORD` — switched both the admin and viewer seed users to `upsert` with `passwordHash` set on `update` too, so re-seeding is truly idempotent regardless of prior manual state.
+- [x] 9.2 Archive this change into `openspec/specs/` via `openspec archive`.

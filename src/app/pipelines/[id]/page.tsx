@@ -47,6 +47,7 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
           return (
             <div
               key={stageConfig.type}
+              data-stage-id={stage?.id}
               className={`rounded-lg border p-4 ${
                 isCurrent ? "border-black/25 dark:border-white/30" : "border-black/10 dark:border-white/15"
               }`}

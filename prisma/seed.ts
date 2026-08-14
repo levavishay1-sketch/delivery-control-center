@@ -8,13 +8,13 @@ async function main() {
   if (!adminPassword) {
     throw new Error("Set SEED_ADMIN_PASSWORD in .env before seeding.");
   }
-  const existingAdmin = await db.user.findUnique({ where: { email: adminEmail } });
-  if (!existingAdmin) {
-    await db.user.create({
-      data: { email: adminEmail, name: "Org Admin", isOrgAdmin: true, passwordHash: await hashPassword(adminPassword) },
-    });
-    console.log(`Seeded org-admin user ${adminEmail}.`);
-  }
+  const adminPasswordHash = await hashPassword(adminPassword);
+  await db.user.upsert({
+    where: { email: adminEmail },
+    update: { passwordHash: adminPasswordHash },
+    create: { email: adminEmail, name: "Org Admin", isOrgAdmin: true, passwordHash: adminPasswordHash },
+  });
+  console.log(`Seeded org-admin user ${adminEmail}.`);
 
   const org = await db.organization.upsert({
     where: { slug: "default" },
@@ -27,6 +27,27 @@ async function main() {
     update: {},
     create: { organizationId: org.id, name: "Default Client", slug: "default" },
   });
+
+  // A second client and a client-scoped Viewer user, so tenancy isolation and role
+  // enforcement have deterministic fixtures to run against (see e2e/isolation.spec.ts).
+  const clientB = await db.client.upsert({
+    where: { organizationId_slug: { organizationId: org.id, slug: "client-b" } },
+    update: {},
+    create: { organizationId: org.id, name: "Client B (isolation fixture)", slug: "client-b" },
+  });
+
+  const viewerEmail = "viewer@example.com";
+  const viewer = await db.user.upsert({
+    where: { email: viewerEmail },
+    update: { passwordHash: adminPasswordHash },
+    create: { email: viewerEmail, name: "Viewer User", passwordHash: adminPasswordHash },
+  });
+  await db.clientMembership.upsert({
+    where: { userId_clientId: { userId: viewer.id, clientId: client.id } },
+    update: { role: "VIEWER" },
+    create: { userId: viewer.id, clientId: client.id, role: "VIEWER" },
+  });
+  console.log(`Seeded "${clientB.name}" and gave ${viewerEmail} a VIEWER membership on "${client.name}" only.`);
 
   const project = await db.project.upsert({
     where: { clientId_key: { clientId: client.id, key: "DCC" } },
