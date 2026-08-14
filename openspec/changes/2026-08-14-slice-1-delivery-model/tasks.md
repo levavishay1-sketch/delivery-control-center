@@ -38,32 +38,15 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 4: Domain Layer — Decision Commands (4 tasks)
+## Task Group 4: Domain Layer — Decision Commands (4 tasks) — ✅ DONE
 
-**4.1** Implement `src/domain/decision/commands.ts`: `createDecision`.
-- Zod validation: workItemId, question, reason, impact, aiRecommendation (optional), aiConfidence (optional), deadline (optional).
-- Authorization: Project Manager+ or work item owner.
-- Side effect: set work item status='decision_required'.
-- Transaction: insert Decision, update status, record DECISION_CREATED audit event.
-- Tests: valid creation, authorization, status side effect.
+- [x] 4.1 Implemented `src/domain/decision/commands.ts`: `createDecision` with Zod validation (workItemId, question, reason, impact, aiRecommendation, aiConfidence, deadline all optional except first 4). Authorization: `requireClientRole(..., WRITE_ROLES)`. Side effect: sets work item status to DECISION_REQUIRED. Transaction: insert Decision with status=OPEN, update WorkItem, record audit event. Tests: valid creation, optional fields (aiRecommendation, aiConfidence, deadline), Viewer rejection, non-existent work item rejection.
 
-**4.2** Implement `src/domain/decision/commands.ts`: `approveDecision`.
-- Validation: exists and status='open'.
-- Authorization: any authenticated user (approval is recorded).
-- Side effect: restore work item to 'open' or 'in_progress'.
-- Transaction: set status='approved', approverId, resolvedAt=now(), update work item, record DECISION_APPROVED audit event.
-- Tests: approval, status restoration, authorization.
+- [x] 4.2 Implemented `approveDecision`. Validation: exists and status='OPEN' (rejects non-open). Authorization: any authenticated user (no role check). Side effect: restores work item status to OPEN. Transaction: sets status=APPROVED, approverId=ctx.userId, resolvedAt=now(); updates work item status; records audit event. Tests: approval with status restoration, Viewer can approve, non-open rejection, non-existent rejection.
 
-**4.3** Implement `src/domain/decision/commands.ts`: `rejectDecision`.
-- Validation: exists and status='open'.
-- Authorization: any authenticated user.
-- Side effect: keep status='decision_required'.
-- Transaction: set status='rejected', approverId, resolvedAt=now(), record DECISION_REJECTED audit event with reason.
-- Tests: rejection, status unchanged, audit event.
+- [x] 4.3 Implemented `rejectDecision(ctx, decisionId, reason?)`. Validation: exists and status='OPEN'. Authorization: any authenticated user. Side effect: status remains DECISION_REQUIRED (no work-item-status change). Transaction: sets status=REJECTED, approverId, resolvedAt; records audit event with optional reason detail. Tests: rejection with optional reason, status unchanged, Viewer can reject, non-open rejection.
 
-**4.4** Implement queries: `getPendingDecisions`, `getWorkItemDecision`, `getDecision`.
-- Create API routes (`POST /api/decisions`, `POST /api/decisions/[id]/approve`, `POST /api/decisions/[id]/reject`).
-- Commit: "Implement decision commands and API routes"
+- [x] 4.4 Implemented queries: `getWorkItemDecisions(workItemId)` (internal), `getPendingDecisions(ctx, clientId)` (requires ALL_ROLES), `getDecision(ctx, decisionId)` (with authz). Created API routes: `POST /api/decisions` (createDecision), `POST /api/decisions/[id]/approve` (approveDecision), `POST /api/decisions/[id]/reject` (rejectDecision with optional reason in body). All routes handle ZodError (400) and DomainError. Tests: 13 new integration tests passing. Build/Lint/Tests all passing (54 total). Commit: "Implement decision commands and API routes".
 
 ---
 
