@@ -14,47 +14,15 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 2: Domain Layer — Work Item Commands (6 tasks)
+## Task Group 2: Domain Layer — Work Item Commands (6 tasks) — ✅ DONE
 
-**2.1** Implement `src/domain/work-item/commands.ts`: `createWorkItem`.
-- Zod validation: projectId, type, title, description, ownerId, parentId (optional), dueDate (optional), risk (optional), priority (optional), executorType (optional), executorId (optional).
-- Authorization: requireClientRole(clientId, ['Manager', 'ProjectManager']).
-- Transaction: insert WorkItem with status='open', progress=0, sourceMode='manual'; record WORK_ITEM_CREATED audit event.
-- Tests (Vitest): valid creation, missing required fields, authorization check, audit event recorded.
-
-**2.2** Implement `src/domain/work-item/commands.ts`: `updateWorkItem`.
-- Allow updates to: title, description, status, risk, priority, ownerId, executorType, executorId, dueDate, progress.
-- Zod validation per field.
-- Authorization: owner or Manager+.
-- Transaction: update fields, record WORK_ITEM_UPDATED audit event.
-- Tests: update with authorization, no permission to update, field validation.
-
-**2.3** Implement `src/domain/work-item/commands.ts`: `updateWorkItemStatus`.
-- Validate status transitions (state machine).
-- Authorization: role-based (Manager+ can change status; Executor can advance in_progress→review).
-- Side effect: if transitioning to 'blocked', verify a blocker exists; if transitioning from 'blocked', verify no active blockers remain.
-- Transaction: update status, record WORK_ITEM_STATUS_CHANGED audit event.
-- Tests: valid transitions, invalid transitions, authorization, side effects.
-
-**2.4** Implement `src/domain/work-item/commands.ts`: `addParentWorkItem`.
-- Validation: both work items exist, same project, no cycles.
-- Authorization: Project Manager+.
-- Transaction: update child parentId, record audit event.
-- Tests: valid parent-child relationship, cycle detection, authorization.
-
-**2.5** Implement `src/domain/work-item/queries.ts`: `getWorkItem`, `listWorkItems`, `getWorkItemsByStatus`, `getWorkItemHierarchy`.
-- All queries respect tenant scoping and authorization.
-- listWorkItems supports pagination and optional filters (type, status, owner, parentId).
-- Tests: queries return correct data, pagination works, authorization enforced.
-
-**2.6** Create API routes for work-item CRUD.
-- `POST /api/work-items` → createWorkItem.
-- `PATCH /api/work-items/[id]` → updateWorkItem.
-- `PATCH /api/work-items/[id]/status` → updateWorkItemStatus.
-- `PATCH /api/work-items/[id]/parent` → addParentWorkItem.
-- Each route validates Zod input, calls domain command, returns JSON or error.
-- Tests: Vitest for route handlers (mocked Prisma), authorization checks.
-- Commit: "Implement work-item commands and API routes"
+- [x] 2.1 `createWorkItem` now Zod-validates its input (`createWorkItemSchema`) and records its own `WORK_ITEM_CREATED`-equivalent audit event with a `workItemId`. **Deviation**: authorization uses `requireClientRole(ctx, clientId, WRITE_ROLES)` (every role except VIEWER), matching every other command in the codebase — the "Manager, ProjectManager" pairing in the original task wording doesn't correspond to an actual role hierarchy; `authz.ts` only distinguishes write-capable roles from VIEWER (per-stage-type role policy is explicitly deferred to Slice 2 in `docs/ROADMAP.md`'s resolved-conflicts list).
+- [x] 2.2 `updateWorkItem` (title, description, risk, priority, ownerId, executorType, executorId, dueDate, progress). Zod-validated (`updateWorkItemSchema`, e.g. `progress` clamped 0–100). Status is deliberately excluded — that's `updateWorkItemStatus`'s job (see 2.3) so the state machine has one entry point.
+- [x] 2.3 `updateWorkItemStatus` validates transitions via `src/domain/work-item/status.ts`'s `assertValidTransition`. **Deviation from the original wording**: BLOCKED and DECISION_REQUIRED are unreachable from this command in *either* direction, not conditionally gated — entering them is a side effect of `createBlocker`/`createDecision` (Groups 3–4, not yet built), and leaving them is a side effect of `resolveBlocker`/`approveDecision`/`rejectDecision`. This is simpler than a runtime "check no active blocker exists" gate and makes the one legitimate way to reach/leave those states impossible to bypass accidentally.
+- [x] 2.4 `addParentWorkItem` — same-project check, self-parent rejection, and a full ancestor-chain walk to reject cycles (tested with a 3-level A→B→C chain).
+- [x] 2.5 `src/domain/work-item/queries.ts`: `getWorkItem`, `getWorkItemById` (unchecked, internal use), `listWorkItems` (paginated, filtered), `getWorkItemsByStatus`, `getWorkItemHierarchy`, plus `getHighRiskWorkItems` and `getUpcomingDeadlines` — added ahead of schedule because Task Group 6 (Attention Center) needs them and they belong with the rest of the WorkItem query surface.
+- [x] 2.6 API routes: `GET`/`PATCH /api/work-items/[id]`, `PATCH /api/work-items/[id]/status`, `PATCH /api/work-items/[id]/parent`. Existing `POST /api/work-items` updated to pass the body straight to `createWorkItem` (now that Zod validates it) and to return 400 on `ZodError`.
+- [x] Tests: `src/domain/work-item/commands.test.ts`, 16 integration tests against a **real local Postgres** (not mocked — see the file's top comment for why), covering valid creation, defaults, explicit fields, Viewer rejection, Zod rejection (empty title, out-of-range progress, cross-project parent), valid/invalid/terminal status transitions, audit event content, and parent/cycle handling. Full suite: `npm run build`, `npm run lint`, `npx tsc --noEmit` (clean besides the pre-existing bare-`tsc` `RouteContext` gap), `npm test` (28/28 passing across all 4 suites). Commit: "Slice 1 Task Group 2: WorkItem update/status/parent commands, queries, API routes".
 
 ---
 
