@@ -13,16 +13,110 @@ from memory of a prior conversation.
 
 ## Source of truth
 
-**`docs/roadmap-sources/2026-08-14-master-prompt-gap-analysis.md`** —
-received verbatim from the user on 2026-08-14, explicitly identified as
-"the original authoritative Master Prompt / gap-analysis source." Everything
-below is derived from it; section numbers (`§0`–`§9`) refer to that file.
+**`docs/roadmap-sources/2026-08-14-gap-analysis-full.md`** — the primary
+source, received verbatim from the user on 2026-08-14. Its own Part 5 is
+the same "Evolve Delivery Control Center into the real product" prompt
+saved earlier the same day as `2026-08-14-master-prompt-gap-analysis.md`
+(kept, not deleted, per the immutable-source rule — but superseded as the
+thing to cite going forward, since the full file is a strict superset).
+Section numbers (`§0`–`§9`, `Part 1`–`Part 6`) below refer to the full file
+unless noted otherwise.
+
+**Still outstanding**: this document is itself a summary/gap-analysis of a
+different, referenced-but-never-provided document — "Claude Code Master
+Prompt — AI Delivery Control Center.md" (70 sections, cited throughout as
+`§4`, `§20`, `§26`, `§58`, etc.). That underlying document has not been
+persisted here. The gap-analysis file gives real detail (e.g. 3 of the 9
+`WorkStatus` states by name: `decision_required`, `blocked`, `review`) but
+not everything — see the "Open gaps" note under Slice 1 below for exactly
+what's still unspecified and how it's being handled.
 
 This supersedes an earlier version of this roadmap that carried the same
 six-slice shape only as unverified, one-line paraphrases reconstructed from
 a compacted conversation summary — that version's content had no
 independent source and could not be trusted as scope. It's fully replaced
 now that the real document has been persisted.
+
+## Gap register (source: Part 2.2, 45 items)
+
+The full item-by-item comparison between the vision and what's built.
+**KEEP** = correct as-is · **EXTEND** = built but too thin · **MISSING** =
+absent · **CONFLICT** = the two source documents disagree (resolved in
+Part 4, see "Resolved conflicts" below). Each slice's scope below draws
+directly from this register; item numbers are referenced there.
+
+**Domain & work model**
+
+| # | Item | State |
+|---|---|---|
+| 1 | Work item type (project/task/bug/change) | MISSING |
+| 2 | risk, priority, owner, executorType, dueDate, progress | MISSING |
+| 3 | 9-state `WorkStatus` (incl. `decision_required`, `blocked`, `review`) | MISSING |
+| 4 | `parentId` — work item decomposition | MISSING |
+| 5 | Organization → Client → Project hierarchy | MISSING *(done in Slice 0)* |
+| 6 | Dependencies between work items | MISSING |
+| 7 | Critical path | MISSING (depends on #6) |
+| 8 | Blocker as a first-class object | MISSING |
+| 9 | Decision object (question/reason/impact/aiRecommendation/aiConfidence/deadline) | EXTEND (`Approval` has the outcome, not the context) |
+
+**Attention & UX**
+
+| # | Item | State |
+|---|---|---|
+| 10 | Attention Center | MISSING |
+| 11 | Dashboard as command center | MISSING |
+| 12 | Quick View drawer | MISSING |
+| 13 | Progressive disclosure (3 levels) | MISSING |
+| 14 | 360° Delivery Record (9 tabs) | EXTEND (`/pipelines/[id]` ≈ 1 tab) |
+| 15 | Per-work-item timeline | EXTEND (data exists, only a global 200-row feed) |
+| 16 | Ctrl+K command palette / global search | MISSING |
+| 17 | UI states (loading/empty/error/partial/stale/permission-denied) | EXTEND |
+| 18 | Explainability on every status/risk/recommendation | MISSING |
+| 19 | Responsive + WCAG 2.2 AA | MISSING |
+
+**SDD engine**
+
+| # | Item | State |
+|---|---|---|
+| 20 | Clarify stage | MISSING |
+| 21 | Analyze stage | MISSING |
+| 22 | Constitution as project-scoped versioned artifact | CONFLICT (built per-work-item) |
+| 23 | Final stage = Implement (real code) | CONFLICT (built final stage = Deploy doc) |
+| 24 | Configurable, role-based gate policy | EXTEND (`requiresApproval` read by nothing *(fixed in Slice 0)*) |
+| 25 | Versioned artifacts, pause/resume run state machine | EXTEND (`AI_DRAFTING` was a dead enum *(observability fixed in Slice 0)*) |
+| 26 | Pipeline optional per work item | CONFLICT (auto-created 1:1 today) |
+
+**AI execution**
+
+| # | Item | State |
+|---|---|---|
+| 27 | Agent registry + configurable routing | MISSING |
+| 28 | `AgentRun` entity | MISSING |
+| 29 | AI output → schema → validation → policy → domain command | MISSING |
+| 30 | Sandboxed coding runtime | MISSING |
+| 31 | AI cost rollups, budgets, thresholds | EXTEND (per-draft cost captured, never summed) |
+| 32 | Retry/backoff on AI/integration calls | MISSING |
+
+**Integrations, config, evidence, platform**
+
+| # | Item | State |
+|---|---|---|
+| 33 | Connector/SyncRun entities | EXTEND (`IntegrationAdapter` interface exists) |
+| 34 | Conflict handling (manual wins, surfaced) | MISSING |
+| 35 | Field-level provenance | EXTEND (row-level only) |
+| 36 | Azure DevOps adapter | MISSING *(now explicitly rejected rather than silently aliased, Slice 0)* |
+| 37 | Repositories/git/PRs/commits/tests awareness | MISSING |
+| 38 | Evidence-driven completion | MISSING |
+| 39 | Hierarchical config, impact preview, versioning | MISSING |
+| 40 | Roles & real backend authorization | MISSING *(done in Slice 0)* |
+| 41 | Per-client credential isolation | MISSING *(done in Slice 0)* |
+| 42 | Workflow engine / durable long-running processes | MISSING |
+| 43 | REST read API, OpenAPI | MISSING |
+| 44 | Definition of Done: tests, validation, authz, states, audit | MISSING *(test framework + CI done in Slice 0)* |
+| 45 | Idempotency | KEEP (partial — work-item upsert only) |
+
+*(Items marked "done in Slice 0" above are annotations added when updating
+this roadmap after Slice 0 shipped — not present in the original source.)*
 
 ## Master goal (source: `§0`)
 
@@ -92,13 +186,13 @@ re-litigate:
 
 | # | Name | Status | Source | Detail |
 |---|---|---|---|---|
-| 0 | Tenancy, identity, and the cheap fixes | **Done** | `2026-08-14-master-prompt-gap-analysis.md` §5 "Slice 0" (retroactively corroborated — built from a session-local plan before this source was persisted; scope matches) | `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/` |
-| 1 | The delivery model and the Attention Center | **Scoped — not started** | `2026-08-14-master-prompt-gap-analysis.md` §5 "Slice 1" | — |
-| 2 | SDD as a subsystem | **Scoped — not started** | `2026-08-14-master-prompt-gap-analysis.md` §5 "Slice 2" | — |
-| 3 | Agents as real execution resources | **Scoped — not started** | `2026-08-14-master-prompt-gap-analysis.md` §5 "Slice 3" | — |
-| 4 | Connector framework | **Scoped — not started** | `2026-08-14-master-prompt-gap-analysis.md` §5 "Slice 4" | — |
-| 5 | Engineering evidence | **Scoped — not started** | `2026-08-14-master-prompt-gap-analysis.md` §5 "Slice 5" | — |
-| 6 | Configuration Center | **Scoped — not started** | `2026-08-14-master-prompt-gap-analysis.md` §5 "Slice 6" | — |
+| 0 | Tenancy, identity, and the cheap fixes | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 0" (retroactively corroborated — built from a session-local plan before this source was persisted; scope matches) | `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/` |
+| 1 | The delivery model and the Attention Center | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 1" | — |
+| 2 | SDD as a subsystem | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 2" | — |
+| 3 | Agents as real execution resources | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | — |
+| 4 | Connector framework | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | — |
+| 5 | Engineering evidence | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | — |
+| 6 | Configuration Center | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | — |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -109,7 +203,7 @@ explicit approval, before any code is written.
 
 ### Slice 1 — The delivery model and the Attention Center
 
-*(Verbatim scope: see `2026-08-14-master-prompt-gap-analysis.md` §5. Summary
+*(Verbatim scope: see `2026-08-14-gap-analysis-full.md` §5. Summary
 below; the source file is authoritative if this drifts from it.)*
 
 - `WorkItem` extended to the full shape: `type`, `parentId`, 9-state
@@ -129,6 +223,17 @@ below; the source file is authoritative if this drifts from it.)*
   project → work item → dependency → blocker → appears in Attention Center
   with full explanation → Quick View → resolve blocker → timeline and audit
   both reflect it.
+
+**Open gaps — not invented, flagged for the implementation plan**: the
+source names `type` as `type` (values: project/task/bug/change, given
+directly) and 3 of `WorkStatus`'s 9 states (`decision_required`, `blocked`,
+`review`), but does not give the remaining 6 `WorkStatus` values, a
+risk scale, a priority scale, `executorType`'s value set, or `sourceMode`'s
+value set — these are only referenced by name, not defined, in both
+persisted source files. Any implementation plan must either (a) get these
+from the still-missing 70-section Master Prompt document, or (b) propose
+concrete values as an explicit, clearly-labeled assumption for approval
+before any migration is written — never silently choose values.
 
 ### Slice 2 — SDD as a subsystem
 
