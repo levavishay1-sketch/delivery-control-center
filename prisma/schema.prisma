@@ -50,6 +50,52 @@ enum AuditActor {
   USER
 }
 
+enum WorkItemType {
+  PROJECT
+  TASK
+  BUG
+  CHANGE
+}
+
+enum WorkStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  DECISION_REQUIRED
+  BLOCKED
+  REVIEW
+  APPROVED
+  COMPLETED
+  CLOSED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ExecutorType {
+  HUMAN
+  AI_AGENT
+  HYBRID
+  UNASSIGNED
+}
+
+enum DecisionStatus {
+  OPEN
+  APPROVED
+  REJECTED
+}
+
 // Auth.js-shaped tables. Only Credentials + JWT sessions are wired up in
 // src/auth.ts for now (see design.md — the Prisma adapter isn't configured
 // yet because nothing exercises it: Credentials + JWT doesn't call adapter
@@ -74,6 +120,11 @@ model User {
   memberships ClientMembership[]
   approvals   Approval[]
   auditEvents AuditEvent[]
+
+  ownedWorkItems    WorkItem[] @relation("WorkItemOwner")
+  executedWorkItems WorkItem[] @relation("WorkItemExecutor")
+  ownedBlockers     Blocker[]  @relation("BlockerOwner")
+  decidedDecisions  Decision[] @relation("DecisionApprover")
 }
 
 model Account {
@@ -184,13 +235,87 @@ model WorkItem {
   externalUrl String?
   title       String
   description String?
-  status      String   @default("open")
+  status      WorkStatus @default(OPEN)
   syncedAt    DateTime @default(now())
   createdAt   DateTime @default(now())
 
-  pipeline Pipeline?
+  // Slice 1 — delivery model extension. `source` (above) already serves the
+  // role a separate "sourceMode" field would have; not duplicated.
+  type         WorkItemType  @default(TASK)
+  parentId     String?
+  parent       WorkItem?     @relation("WorkItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children     WorkItem[]    @relation("WorkItemHierarchy")
+  risk         RiskLevel     @default(MEDIUM)
+  priority     PriorityLevel @default(MEDIUM)
+  ownerId      String?
+  owner        User?         @relation("WorkItemOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  executorType ExecutorType  @default(UNASSIGNED)
+  executorId   String?
+  executor     User?         @relation("WorkItemExecutor", fields: [executorId], references: [id], onDelete: SetNull)
+  dueDate      DateTime?
+  progress     Int           @default(0)
+  aiCost       Decimal       @default(0) @db.Decimal(10, 4)
+
+  pipeline     Pipeline?
+  blockers     Blocker[]
+  decisions    Decision[]
+  dependsOn    Dependency[]  @relation("DependentWorkItem")
+  dependedOnBy Dependency[]  @relation("DependencyTarget")
+  auditEvents  AuditEvent[]
 
   @@unique([projectId, source, externalId])
+  @@index([projectId, status])
+  @@index([parentId])
+}
+
+model Dependency {
+  id                  String   @id @default(cuid())
+  workItemId          String
+  workItem            WorkItem @relation("DependentWorkItem", fields: [workItemId], references: [id], onDelete: Cascade)
+  dependsOnWorkItemId String
+  dependsOnWorkItem   WorkItem @relation("DependencyTarget", fields: [dependsOnWorkItemId], references: [id], onDelete: Cascade)
+  reason              String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([workItemId, dependsOnWorkItemId])
+}
+
+model Blocker {
+  id             String    @id @default(cuid())
+  blockingItemId String
+  blockingItem   WorkItem  @relation(fields: [blockingItemId], references: [id], onDelete: Cascade)
+  ownerId        String
+  owner          User      @relation("BlockerOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  reason         String
+  requiredAction String
+  blockedSince   DateTime  @default(now())
+  impact         String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([blockingItemId, resolvedAt])
+}
+
+model Decision {
+  id               String         @id @default(cuid())
+  workItemId       String
+  workItem         WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  question         String
+  reason           String
+  impact           String
+  aiRecommendation String?
+  aiConfidence     Decimal?       @db.Decimal(5, 2)
+  deadline         DateTime?
+  approverId       String?
+  approver         User?          @relation("DecisionApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  status           DecisionStatus @default(OPEN)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  resolvedAt       DateTime?
+
+  @@index([workItemId, status])
 }
 
 model Pipeline {
@@ -254,6 +379,11 @@ model AuditEvent {
   pipeline   Pipeline?   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   stageId    String?
   stage      Stage?      @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  // Slice 1: lets Blocker/Decision/Dependency events (which have no pipelineId)
+  // trace back to the work item they're about, and powers the 360° Record's
+  // per-item Timeline tab.
+  workItemId String?
+  workItem   WorkItem?   @relation(fields: [workItemId], references: [id], onDelete: SetNull)
   actor      AuditActor
   // userId is the real, session-derived identity for USER-actor events; actorName is an
   // immutable display snapshot (also used for SYSTEM/AI actor names, which have no User row).
@@ -266,4 +396,5 @@ model AuditEvent {
 
   @@index([pipelineId, createdAt])
   @@index([projectId, createdAt])
+  @@index([workItemId, createdAt])
 }

@@ -4,33 +4,13 @@
 
 Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency entities, and builds the delivery control plane UI around them. Tasks are grouped into logical units, each testable and committable independently.
 
-## Task Group 1: Data Model & Migrations (5 tasks)
+## Task Group 1: Data Model & Migrations (5 tasks) — ✅ DONE
 
-**1.1** Create Prisma migration: add fields to `WorkItem` (type, parentId, status, risk, priority, ownerId, executorType, executorId, dueDate, progress, sourceMode, aiCost).
-- Add enums: WorkItemType (project, task, bug, change), WorkStatus (9 values), Risk (Low/Medium/High/Critical), Priority (same), ExecutorType (human, ai-agent, hybrid, unassigned), SourceMode (jira, azure-devops, github, manual).
-- Set defaults for existing rows: type='task', status='open', risk='Medium', priority='Medium', sourceMode='manual', progress=0.
-- Tests: migration runs without errors, existing data is preserved.
-
-**1.2** Create Prisma migration: add `Dependency` model.
-- Schema: id, workItemId, dependsOnWorkItemId, reason, createdAt, updatedAt.
-- Unique constraint: (workItemId, dependsOnWorkItemId).
-- FKs cascade on work-item deletion.
-- Tests: migration runs, unique constraint is enforced.
-
-**1.3** Create Prisma migration: add `Blocker` model.
-- Schema: id, blockingItemId, ownerId, reason, requiredAction, blockedSince, impact (nullable), resolvedAt (nullable), createdAt, updatedAt.
-- FKs reference WorkItem and User.
-- Tests: migration runs, blockers can be inserted and queried.
-
-**1.4** Create Prisma migration: add `Decision` model.
-- Schema: id, workItemId, question, reason, impact, aiRecommendation (nullable), aiConfidence (nullable), deadline (nullable), approverId (nullable), status (enum: open/approved/rejected), createdAt, updatedAt, resolvedAt (nullable).
-- FKs reference WorkItem and User.
-- Tests: migration runs, decisions can be inserted and queried.
-
-**1.5** Run all migrations on a test database and verify schema.
-- Confirm all new fields and models exist.
-- Verify constraints and indexes.
-- Commit: "Add Slice 1 data models: WorkItem extension, Dependency, Blocker, Decision"
+- [x] 1.1 Create Prisma migration: add fields to `WorkItem` (type, parentId, status, risk, priority, ownerId, executorType, executorId, dueDate, progress, aiCost). Enums: `WorkItemType`, `WorkStatus` (9 values), `RiskLevel`, `PriorityLevel`, `ExecutorType`. **Deviation from the original task wording**: no separate `sourceMode` field was added — `WorkItem.source: IntegrationType` already serves that role (see design.md's "Enums & Value Sets" note); adding a second field would have duplicated it. Defaults for existing rows: type=TASK, status=OPEN, risk=MEDIUM, priority=MEDIUM, progress=0. Migration: `20260814191505_slice1_delivery_model`.
+- [x] 1.2 Create Prisma migration: add `Dependency` model (workItemId, dependsOnWorkItemId, reason; unique on the pair; FKs cascade). Included in the same migration as 1.1 (Prisma generates one migration per `prisma migrate dev` run against the current schema diff).
+- [x] 1.3 Create Prisma migration: add `Blocker` model (blockingItemId, ownerId, reason, requiredAction, blockedSince, impact, resolvedAt). Included in the same migration.
+- [x] 1.4 Create Prisma migration: add `Decision` model (workItemId, question, reason, impact, aiRecommendation, aiConfidence, deadline, approverId, status, resolvedAt). Included in the same migration. Also added `AuditEvent.workItemId` (nullable FK) — not in the original task list, but required so Blocker/Decision/Dependency audit events (which have no `pipelineId`) can trace back to a work item, and so the Timeline tab (Task Group 9) can query per-item history. `recordAuditEvent()` remains the single write path; extended, not replaced.
+- [x] 1.5 Ran the migration against a real local Postgres (no `DATABASE_URL` was configured in this environment; started the pre-installed `postgresql@16` service and pointed `.env`, gitignored, at it). Verified: `npx prisma generate`, `npx tsc --noEmit` (clean besides pre-existing Next.js 16 generated-type errors that only appear via bare `tsc`, not `next build`), `npm run build` (clean), `npm run lint` (clean), `npm run db:seed` (clean — fixed a `status: "open"` string literal in `prisma/seed.ts` left over from the old free-string status field), and a live `psql` inspection of `WorkItem`'s new columns and the seeded row. Commit: "Add Slice 1 data models: WorkItem extension, Dependency, Blocker, Decision".
 
 ---
 

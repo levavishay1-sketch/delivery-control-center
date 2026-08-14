@@ -75,7 +75,7 @@ async function main() {
         description:
           "Users currently have to email support to reset their password. Add a self-service " +
           "'forgot password' flow that emails a reset link and lets the user set a new password.",
-        status: "open",
+        status: "OPEN",
       },
     }));
 
