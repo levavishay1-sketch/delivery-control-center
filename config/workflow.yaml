@@ -1,0 +1,36 @@
+# Delivery Control Center — SDD pipeline definition.
+#
+# This file is the single source of truth for the pipeline shape. Nothing in
+# the app code hardcodes stage order or gate rules — lib/config.ts loads this
+# at runtime, so changing the pipeline means editing this file, not the code.
+
+stages:
+  - type: CONSTITUTION
+    label: Constitution
+    description: Non-negotiable principles and constraints the delivery must respect.
+    promptTemplate: constitution.md
+    requiresApproval: true
+
+  - type: SPEC
+    label: Specification
+    description: What is being built and why, from the work item's intent.
+    promptTemplate: spec.md
+    requiresApproval: true
+
+  - type: PLAN
+    label: Plan
+    description: The technical approach and architecture for implementing the SPEC.
+    promptTemplate: plan.md
+    requiresApproval: true
+
+  - type: TASKS
+    label: Tasks
+    description: Concrete, ordered implementation tasks derived from the Plan.
+    promptTemplate: tasks.md
+    requiresApproval: true
+
+  - type: DEPLOY
+    label: Deploy
+    description: Deployment/rollout record for the completed work.
+    promptTemplate: deploy.md
+    requiresApproval: true

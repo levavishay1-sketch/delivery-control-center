@@ -1,0 +1,148 @@
+// Delivery Control Center — data model
+// learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum IntegrationType {
+  MANUAL
+  JIRA
+  AZURE_DEVOPS
+}
+
+enum StageType {
+  CONSTITUTION
+  SPEC
+  PLAN
+  TASKS
+  DEPLOY
+}
+
+enum StageStatus {
+  PENDING
+  AI_DRAFTING
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  DONE
+}
+
+enum PipelineStatus {
+  ACTIVE
+  COMPLETED
+  BLOCKED
+}
+
+enum ApprovalDecision {
+  APPROVED
+  REJECTED
+}
+
+enum AuditActor {
+  SYSTEM
+  AI
+  USER
+}
+
+model Project {
+  id                String          @id @default(cuid())
+  name              String
+  key               String          @unique
+  integrationType   IntegrationType @default(MANUAL)
+  integrationConfig Json?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  workItems   WorkItem[]
+  auditEvents AuditEvent[]
+}
+
+model WorkItem {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  source      IntegrationType
+  externalId  String
+  externalUrl String?
+  title       String
+  description String?
+  status      String   @default("open")
+  syncedAt    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  pipeline Pipeline?
+
+  @@unique([projectId, source, externalId])
+}
+
+model Pipeline {
+  id            String         @id @default(cuid())
+  workItemId    String         @unique
+  workItem      WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  currentStage  StageType      @default(CONSTITUTION)
+  status        PipelineStatus @default(ACTIVE)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  stages      Stage[]
+  auditEvents AuditEvent[]
+}
+
+model Stage {
+  id               String      @id @default(cuid())
+  pipelineId       String
+  pipeline         Pipeline    @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  type             StageType
+  status           StageStatus @default(PENDING)
+  content          String?
+  aiModel          String?
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal?    @db.Decimal(10, 4)
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  approvals   Approval[]
+  auditEvents AuditEvent[]
+
+  @@unique([pipelineId, type])
+}
+
+model Approval {
+  id           String            @id @default(cuid())
+  stageId      String
+  stage        Stage             @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  decision     ApprovalDecision
+  approverName String
+  comment      String?
+  decidedAt    DateTime          @default(now())
+}
+
+// pipelineId/projectId are both optional because an event can originate above
+// pipeline scope (e.g. a project-level integration sync) — but every audit
+// event still records enough to trace back to what it's about.
+model AuditEvent {
+  id         String      @id @default(cuid())
+  projectId  String?
+  project    Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  pipelineId String?
+  pipeline   Pipeline?   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stageId    String?
+  stage      Stage?      @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  actor      AuditActor
+  actorName  String?
+  action     String
+  detail     Json?
+  createdAt  DateTime    @default(now())
+
+  @@index([pipelineId, createdAt])
+  @@index([projectId, createdAt])
+}

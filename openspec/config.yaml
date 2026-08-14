@@ -1,0 +1,67 @@
+schema: spec-driven
+
+context: |
+  Delivery Control Center: pulls work items from Jira/Azure DevOps (or manual
+  entry), runs each one through a Constitution -> SPEC -> Plan -> Tasks ->
+  Deploy pipeline, records every draft/approval/rejection/cost in an
+  append-only audit trail, and lets AI agents draft each stage while humans
+  approve at every gate. End goal: transparent, gated, audited software
+  delivery. Note this project's own pipeline concept (Constitution/SPEC/Plan/
+  Tasks/Deploy) is a distinct, parallel thing from OpenSpec's proposal/specs/
+  design/tasks artifacts used here to plan *this codebase's* development -
+  don't conflate the two.
+
+  Stack: Next.js 16 (App Router, TypeScript, Tailwind) - one app, UI + API
+  routes together, no separate backend service. Prisma 7 with the
+  @prisma/adapter-pg driver adapter against Postgres (Neon, free tier).
+  Prisma 7 specifics: schema.prisma's datasource has no `url` field; the
+  connection string is passed to `new PrismaPg({ connectionString })` and
+  handed to `new PrismaClient({ adapter })` in src/lib/db.ts. The generated
+  client has no index/package.json for directory resolution - always import
+  from "@/generated/prisma/client", not "@/generated/prisma". Next.js 16
+  dynamic route handlers and pages use the generated `RouteContext<'/path'>`
+  and `PageProps<'/path'>` type helpers with `params` as a Promise (`await
+  ctx.params`), not manually-typed params.
+
+  Everything about the pipeline is config-driven, not hardcoded:
+  config/workflow.yaml defines stage order and gate rules, config/prompts/*.md
+  are the prompt templates. src/lib/config.ts loads both at runtime.
+
+  Key modules: src/lib/pipeline.ts (stage transitions: draft -> submit for
+  approval -> approve/reject -> advance, one function per transition, each
+  wrapped in a db.$transaction), src/lib/audit.ts (recordAuditEvent() - the
+  single write path for the audit trail; every transition must call it in the
+  same transaction as the state change it describes), src/lib/agents/
+  (AgentExecutor interface + mockExecutor.ts - v1 fakes AI output by filling
+  the prompt templates directly; a real LLM integration should implement the
+  same interface rather than changing callers), src/lib/integrations/
+  (IntegrationAdapter interface + manual.ts/jira.ts - Azure DevOps isn't
+  implemented yet and falls back to manual).
+
+  Conventions: no comments unless explaining non-obvious WHY; no
+  speculative abstractions or unused flexibility; Tailwind utility classes
+  directly in components, no separate CSS; server components read the DB via
+  Prisma directly (no client-side data-fetching library); small "use client"
+  islands call the API routes with fetch + router.refresh() for mutations.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
