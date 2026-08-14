@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { getFirstStageType, getNextStageType, getStageConfig } from "@/lib/config";
 import { recordAuditEvent } from "@/lib/audit";
 import { getAgentExecutor } from "@/lib/agents";
-import type { Prisma } from "@/generated/prisma/client";
+import type { Prisma, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 
@@ -33,11 +33,38 @@ export async function createPipeline(workItemId: string) {
 }
 
 /**
- * Runs the AI executor against a stage that's PENDING or REJECTED, moving it to
- * PENDING_APPROVAL. The executor call (a real network request when a model provider is
- * configured) deliberately happens outside any DB transaction — see design.md in
- * openspec/changes/real-ai-stage-drafting for why. The write below re-checks the stage's
- * status so a concurrent approval/rejection during the call can't be silently overwritten.
+ * Advances the pipeline past a just-completed stage: creates the next configured stage, or
+ * marks the pipeline COMPLETED if there isn't one. Shared by approveStage and draftStage's
+ * requiresApproval:false auto-complete path — both reach this the same way a human approval does.
+ */
+async function advancePipelinePastStage(tx: Prisma.TransactionClient, pipelineId: string, completedStageType: StageType) {
+  const nextType = getNextStageType(completedStageType);
+  if (nextType) {
+    await tx.stage.create({ data: { pipelineId, type: nextType } });
+    await tx.pipeline.update({ where: { id: pipelineId }, data: { currentStage: nextType } });
+    await recordAuditEvent(tx, {
+      pipelineId,
+      actor: "SYSTEM",
+      action: `Pipeline advanced to ${getStageConfig(nextType).label}`,
+    });
+  } else {
+    await tx.pipeline.update({ where: { id: pipelineId }, data: { status: "COMPLETED" } });
+    await recordAuditEvent(tx, {
+      pipelineId,
+      actor: "SYSTEM",
+      action: "Pipeline completed",
+    });
+  }
+}
+
+/**
+ * Runs the AI executor against a stage that's PENDING or REJECTED. The stage is moved to the
+ * observable AI_DRAFTING state before the executor call (a real network request when a model
+ * provider is configured) and out of it after — deliberately outside any DB transaction while
+ * the call is in flight, see design.md in openspec/changes/real-ai-stage-drafting for why. The
+ * write below re-checks the stage's status so a concurrent approval/rejection during the call
+ * can't be silently overwritten. If the stage's configuration doesn't require approval, it
+ * completes automatically and the pipeline advances as if a human had approved it.
  */
 export async function draftStage(ctx: AuthContext, stageId: string) {
   const stage = await db.stage.findUniqueOrThrow({
@@ -50,34 +77,51 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
     throw new Error(`Stage is ${stage.status}; only PENDING or REJECTED stages can be drafted.`);
   }
 
+  await db.stage.update({
+    where: { id: stage.id },
+    data: { status: "AI_DRAFTING", startedAt: stage.startedAt ?? new Date() },
+  });
+
   const previousStage = stage.pipeline.stages
     .filter((s) => s.type !== stage.type)
     .find((s) => s.status === "DONE" || s.status === "APPROVED");
 
-  const result = await getAgentExecutor().executeStage(stage.type, {
-    workItemTitle: stage.pipeline.workItem.title,
-    workItemDescription: stage.pipeline.workItem.description ?? "",
-    workItemSource: stage.pipeline.workItem.source,
-    workItemExternalId: stage.pipeline.workItem.externalId,
-    previousStageContent: previousStage?.content ?? undefined,
-  });
+  let result;
+  try {
+    result = await getAgentExecutor().executeStage(stage.type, {
+      workItemTitle: stage.pipeline.workItem.title,
+      workItemDescription: stage.pipeline.workItem.description ?? "",
+      workItemSource: stage.pipeline.workItem.source,
+      workItemExternalId: stage.pipeline.workItem.externalId,
+      previousStageContent: previousStage?.content ?? undefined,
+    });
+  } catch (err) {
+    // Don't leave the stage stuck in AI_DRAFTING if the executor call fails — only revert if
+    // it's still AI_DRAFTING (a concurrent approval/rejection may have already moved it on).
+    await db.stage.updateMany({
+      where: { id: stage.id, status: "AI_DRAFTING" },
+      data: { status: stage.status },
+    });
+    throw err;
+  }
 
   return db.$transaction(async (tx) => {
     const current = await tx.stage.findUniqueOrThrow({ where: { id: stage.id } });
-    if (current.status !== "PENDING" && current.status !== "REJECTED") {
+    if (current.status !== "AI_DRAFTING") {
       throw new Error(`Stage changed to ${current.status} while drafting; discarding this draft.`);
     }
 
+    const requiresApproval = getStageConfig(stage.type).requiresApproval;
     const updated = await tx.stage.update({
       where: { id: stage.id },
       data: {
-        status: "PENDING_APPROVAL",
+        status: requiresApproval ? "PENDING_APPROVAL" : "DONE",
         content: result.content,
         aiModel: result.aiModel,
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         costUsd: result.costUsd,
-        startedAt: current.startedAt ?? new Date(),
+        completedAt: requiresApproval ? undefined : new Date(),
       },
     });
 
@@ -97,6 +141,16 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
         costUsd: result.costUsd,
       },
     });
+
+    if (!requiresApproval) {
+      await recordAuditEvent(tx, {
+        pipelineId: stage.pipeline.id,
+        stageId: stage.id,
+        actor: "SYSTEM",
+        action: `${getStageConfig(stage.type).label} completed automatically (no approval required)`,
+      });
+      await advancePipelinePastStage(tx, stage.pipeline.id, stage.type);
+    }
 
     return updated;
   });
@@ -128,23 +182,7 @@ export async function approveStage(ctx: AuthContext, stageId: string, comment?: 
       detail: comment ? { comment } : undefined,
     });
 
-    const nextType = getNextStageType(stage.type);
-    if (nextType) {
-      await tx.stage.create({ data: { pipelineId: stage.pipeline.id, type: nextType } });
-      await tx.pipeline.update({ where: { id: stage.pipeline.id }, data: { currentStage: nextType } });
-      await recordAuditEvent(tx, {
-        pipelineId: stage.pipeline.id,
-        actor: "SYSTEM",
-        action: `Pipeline advanced to ${getStageConfig(nextType).label}`,
-      });
-    } else {
-      await tx.pipeline.update({ where: { id: stage.pipeline.id }, data: { status: "COMPLETED" } });
-      await recordAuditEvent(tx, {
-        pipelineId: stage.pipeline.id,
-        actor: "SYSTEM",
-        action: "Pipeline completed",
-      });
-    }
+    await advancePipelinePastStage(tx, stage.pipeline.id, stage.type);
 
     return tx.pipeline.findUniqueOrThrow({ where: { id: stage.pipeline.id }, include: { stages: true } });
   });

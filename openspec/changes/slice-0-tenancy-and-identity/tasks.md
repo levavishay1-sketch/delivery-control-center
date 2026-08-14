@@ -37,12 +37,12 @@
 
 ## 6. Fix the five inconsistencies
 
-- [ ] 6.1 `requiresApproval: false` actually skips the gate (uses the sdd-pipeline spec delta's new scenario)
-- [ ] 6.2 `AI_DRAFTING` is set via the `Job` row around the executor call, cleared after
-- [ ] 6.3 `WorkItem.status` rendered in the UI
-- [ ] 6.4 `Client`/`Project` integration config settable from a form
-- [ ] 6.5 `AZURE_DEVOPS` explicitly rejected as unavailable, not offered in the UI
-- [ ] 6.6 `/verify`: each behavior checked live, one at a time
+- [x] 6.1 `requiresApproval: false` actually skips the gate: `draftStage` now checks the stage's config after drafting and, if approval isn't required, marks it `DONE` directly and advances the pipeline the same way `approveStage` does (extracted into a shared `advancePipelinePastStage` helper), recording a `SYSTEM` audit event noting the auto-completion.
+- [x] 6.2 `AI_DRAFTING` set directly on the stage before the executor call and resolved after (**deviation from the plan**: no `Job` table — the spec delta's actual requirement is just an observable drafting state, which a direct status transition satisfies without the added scope of a job queue; a full `Job` table stays deferred, consistent with design.md's note that the richer durable-pause/resume state machine is Slice 2's job). Fixed a bug caught during this work: if the executor call throws (e.g. a real provider error), the stage is now reverted out of `AI_DRAFTING` back to its prior status instead of being left stuck — a failure mode that didn't exist before this change introduced the interim state.
+- [x] 6.3 `WorkItem.status` rendered as a badge next to each work item's title on the home page.
+- [x] 6.4 `Project` integration config settable from a form: `AddProjectForm` now shows Jira-specific fields (base URL, email, API token, project key) when Jira is selected, sent as `integrationConfig` in the existing create-project request. (`Client`-level config deferred — no client-level integration exists yet to configure.)
+- [x] 6.5 `AZURE_DEVOPS` explicitly rejected: `getIntegrationAdapter` no longer aliases it to the manual adapter — the adapter registry simply has no entry for it, and a sync attempt throws a `ValidationError` ("The AZURE_DEVOPS integration is not yet available.") instead of a raw `Error` that would have surfaced as an unhandled 500. It was already absent from `AddProjectForm`'s dropdown, so no UI change was needed there.
+- [x] 6.6 `/verify`: build, lint, Vitest (9/9) all pass. Each behavior checked live against the real dev server (with `ANTHROPIC_API_KEY` unset for this session so the mock executor runs instead of hitting the known Anthropic billing error): drafted a normal stage and confirmed `PENDING → AI_DRAFTING → PENDING_APPROVAL`; temporarily set `PLAN`'s `requiresApproval: false` in `config/workflow.yaml`, drafted it, confirmed it went straight to `DONE`, the pipeline advanced to `TASKS`, and the audit trail shows `AI drafted Plan` → `Plan completed automatically (no approval required)` → `Pipeline advanced to Tasks` — then reverted the config edit; created an `AZURE_DEVOPS` project via direct API call (bypassing the UI, which never offered it) and confirmed sync returns a clean 400 with the "not yet available" message, not a 500; confirmed the work-item status badge renders on the home page; created a Jira project with `integrationConfig` via the same request shape the new form sends and confirmed it's stored correctly.
 
 ## 7. Secrets encryption
 

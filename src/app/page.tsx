@@ -59,7 +59,12 @@ export default async function HomePage() {
                         href={item.pipeline ? `/pipelines/${item.pipeline.id}` : "#"}
                         className="flex items-center justify-between rounded border border-black/10 dark:border-white/10 px-3 py-2 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]"
                       >
-                        <span>{item.title}</span>
+                        <span className="flex items-center gap-2">
+                          {item.title}
+                          <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">
+                            {item.status}
+                          </span>
+                        </span>
                         <span className="flex items-center gap-2">
                           <span className="opacity-50">{item.pipeline?.currentStage}</span>
                           {item.pipeline && <StageBadge status={item.pipeline.status} />}
