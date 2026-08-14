@@ -50,10 +50,38 @@ enum AuditActor {
   USER
 }
 
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  clients Client[]
+}
+
+model Client {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name             String
+  slug             String
+  integrationConfig Json?
+  aiConfig         Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  projects Project[]
+
+  @@unique([organizationId, slug])
+}
+
 model Project {
   id                String          @id @default(cuid())
+  clientId          String
+  client            Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   name              String
-  key               String          @unique
+  key               String
   integrationType   IntegrationType @default(MANUAL)
   integrationConfig Json?
   createdAt         DateTime        @default(now())
@@ -61,6 +89,8 @@ model Project {
 
   workItems   WorkItem[]
   auditEvents AuditEvent[]
+
+  @@unique([clientId, key])
 }
 
 model WorkItem {

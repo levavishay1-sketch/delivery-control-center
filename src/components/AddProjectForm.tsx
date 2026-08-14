@@ -3,8 +3,14 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function AddProjectForm() {
+interface ClientOption {
+  id: string;
+  name: string;
+}
+
+export function AddProjectForm({ clients }: { clients: ClientOption[] }) {
   const router = useRouter();
+  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [name, setName] = useState("");
   const [key, setKey] = useState("");
   const [integrationType, setIntegrationType] = useState<"MANUAL" | "JIRA">("MANUAL");
@@ -18,7 +24,7 @@ export function AddProjectForm() {
     const res = await fetch("/api/projects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, key, integrationType }),
+      body: JSON.stringify({ clientId, name, key, integrationType }),
     });
     setPending(false);
     if (!res.ok) {
@@ -30,8 +36,30 @@ export function AddProjectForm() {
     router.refresh();
   }
 
+  if (clients.length === 0) {
+    return (
+      <p className="text-sm opacity-60">
+        Create a client before adding a project (see <code>npm run db:seed</code> for a default one).
+      </p>
+    );
+  }
+
   return (
     <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3 rounded-lg border border-black/10 dark:border-white/15 p-4">
+      <div className="flex flex-col gap-1">
+        <label className="text-xs opacity-70">Client</label>
+        <select
+          value={clientId}
+          onChange={(e) => setClientId(e.target.value)}
+          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        >
+          {clients.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
       <div className="flex flex-col gap-1">
         <label className="text-xs opacity-70">Project name</label>
         <input

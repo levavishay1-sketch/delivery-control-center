@@ -8,11 +8,11 @@
 
 ## 2. Tenancy schema
 
-- [ ] 2.1 Add `Organization`, `Client` models
-- [ ] 2.2 Add nullable `Project.clientId`, migrate, backfill a default Organization+Client, assign existing projects
-- [ ] 2.3 Alter `Project.clientId` to required; replace global-unique `key` with `@@unique([clientId, key])`
-- [ ] 2.4 `src/domain/project/` already exists (moved in group 1) — extend it with `clientId` scoping; add `src/domain/client/`, `src/domain/organization/`
-- [ ] 2.5 `/verify`: migration applies cleanly against real Neon DB; existing seeded project visible under the backfilled client; build passes
+- [x] 2.1 Add `Organization`, `Client` models
+- [x] 2.2 Add nullable `Project.clientId`, migrate, backfill a default Organization+Client, assign existing projects (`prisma/migrate-backfill-default-client.ts` — one-off, deleted after it ran successfully; not meant to be re-run or kept as permanent code)
+- [x] 2.3 Alter `Project.clientId` to required; replace global-unique `key` with `@@unique([clientId, key])` (migration authored by hand — `prisma migrate dev` refuses non-interactive environments; applied via `prisma migrate deploy`, confirmed zero drift with `prisma migrate status`)
+- [x] 2.4 Extended `src/domain/project/` with `clientId` scoping; added `src/domain/client/`, `src/domain/organization/`, `GET /api/clients`; `AddProjectForm` gained a client selector; home page now groups projects under a client heading (grew beyond the original wording — a client selector and grouped UI is what actually makes a required `clientId` usable without auth yet to imply "current client")
+- [x] 2.5 `/verify`: migration applies cleanly against real Neon DB (3 existing projects backfilled and visible under "Default Client"); build and lint pass; live-verified per-client key uniqueness — same key across two different clients succeeds, duplicate key within one client is correctly rejected by the DB constraint; confirmed via screenshot that the home page renders the new client-grouped layout correctly
 
 ## 3. Authentication
 

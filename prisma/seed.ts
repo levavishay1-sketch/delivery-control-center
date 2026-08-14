@@ -2,10 +2,23 @@ import { db } from "../src/lib/db";
 import { createPipeline } from "../src/domain/pipeline/commands";
 
 async function main() {
+  const org = await db.organization.upsert({
+    where: { slug: "default" },
+    update: {},
+    create: { name: "Default Organization", slug: "default" },
+  });
+
+  const client = await db.client.upsert({
+    where: { organizationId_slug: { organizationId: org.id, slug: "default" } },
+    update: {},
+    create: { organizationId: org.id, name: "Default Client", slug: "default" },
+  });
+
   const project = await db.project.upsert({
-    where: { key: "DCC" },
+    where: { clientId_key: { clientId: client.id, key: "DCC" } },
     update: {},
     create: {
+      clientId: client.id,
       name: "Delivery Control Center Demo",
       key: "DCC",
       integrationType: "MANUAL",

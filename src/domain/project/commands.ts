@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import type { IntegrationType, Prisma } from "@/generated/prisma/client";
 
 export interface CreateProjectInput {
+  clientId: string;
   name: string;
   key: string;
   integrationType?: IntegrationType;
@@ -11,6 +12,7 @@ export interface CreateProjectInput {
 export async function createProject(input: CreateProjectInput) {
   return db.project.create({
     data: {
+      clientId: input.clientId,
       name: input.name,
       key: input.key,
       integrationType: input.integrationType ?? "MANUAL",
