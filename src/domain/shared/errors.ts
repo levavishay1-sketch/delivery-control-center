@@ -20,6 +20,12 @@ export class ForbiddenError extends DomainError {
   }
 }
 
+export class UnauthorizedError extends DomainError {
+  constructor(message: string) {
+    super(message, 401);
+  }
+}
+
 export class ValidationError extends DomainError {
   constructor(message: string) {
     super(message, 400);

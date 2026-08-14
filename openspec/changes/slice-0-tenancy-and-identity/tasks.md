@@ -24,10 +24,10 @@
 
 ## 4. Roles + authorization
 
-- [ ] 4.1 Add `Role` enum, `ClientMembership` model
-- [ ] 4.2 Implement `requireClientRole()` in `src/domain/shared/authz.ts`
-- [ ] 4.3 Wire into every domain command and API route
-- [ ] 4.4 `/verify`: Vitest — unauthenticated rejected, wrong role rejected, correct role succeeds
+- [x] 4.1 Add `Role` enum, `ClientMembership` model (landed early, in group 3's migration, since the schema decision was made together with `User`)
+- [x] 4.2 Implement `requireClientRole()` and `requireOrgAdmin()` in `src/domain/shared/authz.ts`; `AuthContext` type in `src/domain/shared/context.ts`; `requireAuthContext()` session-to-context builder in `src/domain/shared/session.ts` (queries the user's `ClientMembership` rows and reads `isOrgAdmin` off the session)
+- [x] 4.3 Wired into every domain command/query that touches a client-scoped resource: `project`, `work-item`, `pipeline`, `client`, `organization`, `audit`. List queries filter to the caller's accessible clients (no filter for org admins); detail queries/commands call `requireClientRole`/`requireOrgAdmin` and resolve the owning client via the relevant FK chain (e.g. `stage.pipeline.workItem.project.clientId`). Every API route and the two Server Component pages (`/`, `/pipelines/[id]`, `/audit`) now build an `AuthContext` via `requireAuthContext()` and pass it through. **Scope grew beyond the original wording**: the audit trail (`listRecentAuditEvents`) was not explicitly named in the plan but was found to leak all clients' events regardless of caller — fixed in the same pass, since it's the same tenancy-isolation gap.
+- [x] 4.4 `/verify`: added Vitest (installed here, first use in this OpenSpec change — group 8 collects/finishes the suite and wires CI). `src/domain/shared/authz.test.ts` covers `requireClientRole`/`requireOrgAdmin` (correct role succeeds, wrong role/VIEWER-on-a-write rejected, no membership rejected, cross-client membership doesn't leak, org admin bypasses); `src/domain/shared/session.test.ts` covers `requireAuthContext` (unauthenticated rejected, authenticated builds the right context) via mocked `@/auth`/`@/lib/db`. 9/9 pass. Live-verified against the real DB and dev server: seeded a second client ("Client B") and a `VIEWER`-role user scoped only to the first client; logged in as that user and confirmed `GET /api/clients` and `GET /api/projects` return only their client's data (Client B invisible), a `POST /api/projects` attempt returns 403 Forbidden (VIEWER can't write), and an unauthenticated `GET /api/projects` redirects to `/login` (307). Build and lint both pass.
 
 ## 5. Real identity on decisions and audit
 

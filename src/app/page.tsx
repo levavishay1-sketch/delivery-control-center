@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { listProjectsForHome } from "@/domain/project/queries";
 import { listClients } from "@/domain/client/queries";
+import { requireAuthContext } from "@/domain/shared/session";
 import { AddProjectForm } from "@/components/AddProjectForm";
 import { AddWorkItemForm } from "@/components/AddWorkItemForm";
 import { SyncButton } from "@/components/SyncButton";
@@ -9,7 +10,8 @@ import { StageBadge } from "@/components/StageBadge";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [projects, clients] = await Promise.all([listProjectsForHome(), listClients()]);
+  const ctx = await requireAuthContext();
+  const [projects, clients] = await Promise.all([listProjectsForHome(ctx), listClients(ctx)]);
 
   const projectsByClient = new Map<string, typeof projects>();
   for (const project of projects) {

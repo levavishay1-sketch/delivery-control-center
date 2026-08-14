@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 import { getPipelineDetail } from "@/domain/pipeline/queries";
+import { requireAuthContext } from "@/domain/shared/session";
+import { ForbiddenError } from "@/domain/shared/errors";
 import { loadWorkflow } from "@/lib/config";
 import { StageBadge } from "@/components/StageBadge";
 import { DraftButton } from "@/components/DraftButton";
@@ -10,7 +12,11 @@ export const dynamic = "force-dynamic";
 export default async function PipelineDetailPage({ params }: PageProps<"/pipelines/[id]">) {
   const { id } = await params;
 
-  const pipeline = await getPipelineDetail(id);
+  const ctx = await requireAuthContext();
+  const pipeline = await getPipelineDetail(ctx, id).catch((err) => {
+    if (err instanceof ForbiddenError) return null;
+    throw err;
+  });
 
   if (!pipeline) notFound();
 

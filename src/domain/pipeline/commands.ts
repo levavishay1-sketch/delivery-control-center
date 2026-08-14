@@ -3,6 +3,8 @@ import { getFirstStageType, getNextStageType, getStageConfig } from "@/lib/confi
 import { recordAuditEvent } from "@/lib/audit";
 import { getAgentExecutor } from "@/lib/agents";
 import type { Prisma } from "@/generated/prisma/client";
+import type { AuthContext } from "@/domain/shared/context";
+import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 
 /** Creates a Pipeline for a work item, seeded with its first (PENDING) stage. */
 export async function createPipeline(workItemId: string) {
@@ -37,11 +39,12 @@ export async function createPipeline(workItemId: string) {
  * openspec/changes/real-ai-stage-drafting for why. The write below re-checks the stage's
  * status so a concurrent approval/rejection during the call can't be silently overwritten.
  */
-export async function draftStage(stageId: string) {
+export async function draftStage(ctx: AuthContext, stageId: string) {
   const stage = await db.stage.findUniqueOrThrow({
     where: { id: stageId },
-    include: { pipeline: { include: { workItem: true, stages: true } } },
+    include: { pipeline: { include: { workItem: { include: { project: true } }, stages: true } } },
   });
+  requireClientRole(ctx, stage.pipeline.workItem.project.clientId, WRITE_ROLES);
 
   if (stage.status !== "PENDING" && stage.status !== "REJECTED") {
     throw new Error(`Stage is ${stage.status}; only PENDING or REJECTED stages can be drafted.`);
@@ -100,9 +103,13 @@ export async function draftStage(stageId: string) {
 }
 
 /** Approves a stage's gate and advances the pipeline to the next stage (or completes it). */
-export async function approveStage(stageId: string, approverName: string, comment?: string) {
+export async function approveStage(ctx: AuthContext, stageId: string, approverName: string, comment?: string) {
   return db.$transaction(async (tx) => {
-    const stage = await tx.stage.findUniqueOrThrow({ where: { id: stageId }, include: { pipeline: true } });
+    const stage = await tx.stage.findUniqueOrThrow({
+      where: { id: stageId },
+      include: { pipeline: { include: { workItem: { include: { project: true } } } } },
+    });
+    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, WRITE_ROLES);
     if (stage.status !== "PENDING_APPROVAL") {
       throw new Error(`Stage is ${stage.status}; only PENDING_APPROVAL stages can be approved.`);
     }
@@ -143,9 +150,13 @@ export async function approveStage(stageId: string, approverName: string, commen
 }
 
 /** Rejects a stage's gate; the pipeline is blocked until the stage is redrafted via draftStage. */
-export async function rejectStage(stageId: string, approverName: string, comment?: string) {
+export async function rejectStage(ctx: AuthContext, stageId: string, approverName: string, comment?: string) {
   return db.$transaction(async (tx: Prisma.TransactionClient) => {
-    const stage = await tx.stage.findUniqueOrThrow({ where: { id: stageId }, include: { pipeline: true } });
+    const stage = await tx.stage.findUniqueOrThrow({
+      where: { id: stageId },
+      include: { pipeline: { include: { workItem: { include: { project: true } } } } },
+    });
+    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, WRITE_ROLES);
     if (stage.status !== "PENDING_APPROVAL") {
       throw new Error(`Stage is ${stage.status}; only PENDING_APPROVAL stages can be rejected.`);
     }

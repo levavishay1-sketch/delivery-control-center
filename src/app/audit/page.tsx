@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { listRecentAuditEvents } from "@/domain/audit/queries";
+import { requireAuthContext } from "@/domain/shared/session";
 
 export const dynamic = "force-dynamic";
 
 const ACTOR_ICON: Record<string, string> = { SYSTEM: "⚙️", AI: "🤖", USER: "🧑" };
 
 export default async function AuditTrailPage() {
-  const events = await listRecentAuditEvents();
+  const ctx = await requireAuthContext();
+  const events = await listRecentAuditEvents(ctx);
 
   return (
     <div className="flex flex-col gap-4">
