@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { rejectStage } from "@/lib/pipeline";
+import { rejectStage } from "@/domain/pipeline/commands";
 
 export async function POST(request: Request, ctx: RouteContext<"/api/stages/[id]/reject">) {
   const { id } = await ctx.params;

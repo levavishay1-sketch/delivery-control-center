@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { createPipeline } from "@/lib/pipeline";
+import { createWorkItem } from "@/domain/work-item/commands";
 
 /** Adds a work item by hand (the "manual" integration path) and starts its pipeline. */
 export async function POST(request: Request) {
@@ -15,18 +14,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "projectId and title are required" }, { status: 400 });
   }
 
-  const workItem = await db.workItem.create({
-    data: {
-      projectId,
-      source: "MANUAL",
-      externalId: `manual-${Date.now()}`,
-      title,
-      description,
-      status: "open",
-    },
-  });
-
-  const pipeline = await createPipeline(workItem.id);
-
+  const { workItem, pipeline } = await createWorkItem({ projectId, title, description });
   return NextResponse.json({ workItem, pipeline }, { status: 201 });
 }

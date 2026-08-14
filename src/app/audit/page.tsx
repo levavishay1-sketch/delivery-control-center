@@ -1,20 +1,12 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { listRecentAuditEvents } from "@/domain/audit/queries";
 
 export const dynamic = "force-dynamic";
 
 const ACTOR_ICON: Record<string, string> = { SYSTEM: "⚙️", AI: "🤖", USER: "🧑" };
 
 export default async function AuditTrailPage() {
-  const events = await db.auditEvent.findMany({
-    orderBy: { createdAt: "desc" },
-    take: 200,
-    include: {
-      project: true,
-      pipeline: { include: { workItem: true } },
-      stage: true,
-    },
-  });
+  const events = await listRecentAuditEvents();
 
   return (
     <div className="flex flex-col gap-4">

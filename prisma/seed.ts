@@ -1,5 +1,5 @@
 import { db } from "../src/lib/db";
-import { createPipeline } from "../src/lib/pipeline";
+import { createPipeline } from "../src/domain/pipeline/commands";
 
 async function main() {
   const project = await db.project.upsert({

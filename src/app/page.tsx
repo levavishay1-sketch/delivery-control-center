@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { db } from "@/lib/db";
+import { listProjectsForHome } from "@/domain/project/queries";
 import { AddProjectForm } from "@/components/AddProjectForm";
 import { AddWorkItemForm } from "@/components/AddWorkItemForm";
 import { SyncButton } from "@/components/SyncButton";
@@ -8,15 +8,7 @@ import { StageBadge } from "@/components/StageBadge";
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const projects = await db.project.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      workItems: {
-        orderBy: { createdAt: "desc" },
-        include: { pipeline: true },
-      },
-    },
-  });
+  const projects = await listProjectsForHome();
 
   return (
     <div className="flex flex-col gap-8">

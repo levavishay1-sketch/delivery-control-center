@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { db } from "@/lib/db";
+import { getPipelineDetail } from "@/domain/pipeline/queries";
 import { loadWorkflow } from "@/lib/config";
 import { StageBadge } from "@/components/StageBadge";
 import { DraftButton } from "@/components/DraftButton";
@@ -10,13 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function PipelineDetailPage({ params }: PageProps<"/pipelines/[id]">) {
   const { id } = await params;
 
-  const pipeline = await db.pipeline.findUnique({
-    where: { id },
-    include: {
-      workItem: { include: { project: true } },
-      stages: { include: { approvals: { orderBy: { decidedAt: "desc" } } } },
-    },
-  });
+  const pipeline = await getPipelineDetail(id);
 
   if (!pipeline) notFound();
 

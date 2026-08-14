@@ -1,20 +1,16 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { draftStage } from "@/lib/pipeline";
+import { getDraftableCurrentStage } from "@/domain/pipeline/queries";
+import { draftStage } from "@/domain/pipeline/commands";
 
 /** Runs the AI executor against the pipeline's current stage. */
 export async function POST(_req: Request, ctx: RouteContext<"/api/pipelines/[id]/advance">) {
   const { id } = await ctx.params;
-  const pipeline = await db.pipeline.findUnique({
-    where: { id },
-    include: { stages: { where: { status: { in: ["PENDING", "REJECTED"] } } } },
-  });
+  const { pipeline, stage } = await getDraftableCurrentStage(id);
 
   if (!pipeline) {
     return NextResponse.json({ error: "Pipeline not found" }, { status: 404 });
   }
 
-  const stage = pipeline.stages.find((s) => s.type === pipeline.currentStage);
   if (!stage) {
     return NextResponse.json(
       { error: `Current stage ${pipeline.currentStage} is not in a draftable state.` },
