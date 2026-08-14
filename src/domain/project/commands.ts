@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import type { IntegrationType, Prisma } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
+import { encryptIntegrationConfig } from "@/lib/integrations";
 
 export interface CreateProjectInput {
   clientId: string;
@@ -13,13 +14,16 @@ export interface CreateProjectInput {
 
 export async function createProject(ctx: AuthContext, input: CreateProjectInput) {
   requireClientRole(ctx, input.clientId, WRITE_ROLES);
+  const integrationType = input.integrationType ?? "MANUAL";
   return db.project.create({
     data: {
       clientId: input.clientId,
       name: input.name,
       key: input.key,
-      integrationType: input.integrationType ?? "MANUAL",
-      integrationConfig: input.integrationConfig as Prisma.InputJsonValue | undefined,
+      integrationType,
+      integrationConfig: encryptIntegrationConfig(integrationType, input.integrationConfig) as
+        | Prisma.InputJsonValue
+        | undefined,
     },
   });
 }

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { getIntegrationAdapter } from "@/lib/integrations";
+import { getIntegrationAdapter, decryptIntegrationConfig } from "@/lib/integrations";
 import { recordAuditEvent } from "@/lib/audit";
 import { createPipeline } from "@/domain/pipeline/commands";
 import { getProjectById } from "@/domain/project/queries";
@@ -41,7 +41,11 @@ export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) 
   requireClientRole(ctx, project.clientId, WRITE_ROLES);
 
   const adapter = getIntegrationAdapter(project.integrationType);
-  const fetched = await adapter.fetchWorkItems(project.integrationConfig as Record<string, unknown> | null);
+  const decryptedConfig = decryptIntegrationConfig(
+    project.integrationType,
+    project.integrationConfig as Record<string, unknown> | null
+  );
+  const fetched = await adapter.fetchWorkItems(decryptedConfig as Record<string, unknown> | null);
 
   const created: string[] = [];
   for (const item of fetched) {

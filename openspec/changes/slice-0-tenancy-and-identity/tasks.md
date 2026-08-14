@@ -46,9 +46,9 @@
 
 ## 7. Secrets encryption
 
-- [ ] 7.1 `src/domain/shared/crypto.ts` — `encryptSecret`/`decryptSecret`, AES-256-GCM, key from `ENCRYPTION_KEY`
-- [ ] 7.2 Apply to credential fields inside `integrationConfig`/`aiConfig` on write/read
-- [ ] 7.3 `/verify`: Vitest round-trip test; direct DB read confirms ciphertext, not plaintext
+- [x] 7.1 `src/domain/shared/crypto.ts` — `encryptSecret`/`decryptSecret`, AES-256-GCM (random IV + auth tag per call, stored as `iv:authTag:ciphertext`, all base64), key from `ENCRYPTION_KEY` (32-byte, base64). Added to `.env`/`.env.example`.
+- [x] 7.2 Applied to the credential fields inside `Project.integrationConfig` (**scope note**: `aiConfig` doesn't exist as a real, populated field yet — no code writes to it — so there was nothing to encrypt there; this will be revisited when `aiConfig` actually gets used). `src/lib/integrations/index.ts` defines which fields are secrets per integration type (`JIRA: ["apiToken"]`) and exposes `encryptIntegrationConfig`/`decryptIntegrationConfig`. `createProject` encrypts on write; `syncProjectWorkItems` decrypts immediately before handing the config to the adapter — everywhere else (list/detail queries, API responses) the config stays as encrypted ciphertext, so a project's stored credentials are never round-tripped back to the browser in the clear.
+- [x] 7.3 `/verify`: build, lint, Vitest (12/12, 3 new: round-trip, distinct-ciphertext-per-call via random IV, tamper detection via GCM auth tag) all pass. Live-verified: created a Jira project via the real API with a plaintext `apiToken`, confirmed the API's own JSON response already shows ciphertext (not the plaintext I sent), then read the raw DB row directly and confirmed the stored value is ciphertext, and that `decryptIntegrationConfig` recovers the exact original plaintext.
 
 ## 8. Tests + CI
 
