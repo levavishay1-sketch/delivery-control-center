@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
+import { auth, signOut } from "@/auth";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,7 +19,9 @@ export const metadata: Metadata = {
   description: "Transparent, gated, audited software delivery.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const session = await auth();
+
   return (
     <html
       lang="en"
@@ -36,6 +39,20 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/audit" className="text-sm opacity-70 hover:opacity-100">
               Audit Trail
             </Link>
+            {session?.user && (
+              <form
+                action={async () => {
+                  "use server";
+                  await signOut({ redirectTo: "/login" });
+                }}
+                className="ml-auto flex items-center gap-3"
+              >
+                <span className="text-xs opacity-60">{session.user.email}</span>
+                <button type="submit" className="text-sm opacity-70 hover:opacity-100 underline">
+                  Sign out
+                </button>
+              </form>
+            )}
           </nav>
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>

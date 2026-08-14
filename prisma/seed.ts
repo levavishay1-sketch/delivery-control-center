@@ -1,7 +1,21 @@
 import { db } from "../src/lib/db";
 import { createPipeline } from "../src/domain/pipeline/commands";
+import { hashPassword } from "../src/domain/shared/password";
 
 async function main() {
+  const adminEmail = "admin@example.com";
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  if (!adminPassword) {
+    throw new Error("Set SEED_ADMIN_PASSWORD in .env before seeding.");
+  }
+  const existingAdmin = await db.user.findUnique({ where: { email: adminEmail } });
+  if (!existingAdmin) {
+    await db.user.create({
+      data: { email: adminEmail, name: "Org Admin", isOrgAdmin: true, passwordHash: await hashPassword(adminPassword) },
+    });
+    console.log(`Seeded org-admin user ${adminEmail}.`);
+  }
+
   const org = await db.organization.upsert({
     where: { slug: "default" },
     update: {},

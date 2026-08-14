@@ -16,11 +16,11 @@
 
 ## 3. Authentication
 
-- [ ] 3.1 Install `next-auth`, `@auth/prisma-adapter`; add `Account`/`Session`/`VerificationToken` models; extend `User` with `passwordHash`, `isOrgAdmin`
-- [ ] 3.2 Configure Credentials provider + Prisma adapter + database session strategy
-- [ ] 3.3 Login page, `auth()` session helper, sign-out
-- [ ] 3.4 Seed script creates one org-admin user
-- [ ] 3.5 `/verify`: log in, session persists across refresh, unauthenticated request to a protected page redirects
+- [x] 3.1 Install `next-auth`; add `User`, `Account`/`Session`/`VerificationToken` models (standard Auth.js shape), `passwordHash`/`isOrgAdmin` on `User`; migration applied via `prisma migrate deploy` (hand-verified additive-only, `migrate status` confirmed zero drift)
+- [x] 3.2 Configure Credentials provider + JWT session strategy (**deviation from plan**: the plan specified "Credentials provider, database sessions" + `@auth/prisma-adapter`; `@auth/core`'s own Credentials provider docs state it requires JWT sessions, not database sessions — switched to `session: { strategy: "jwt" }` and did not wire up `PrismaAdapter` at all, since it provides no functional benefit without a database-session-based provider and its types don't match our custom Prisma client output path. `Account`/`Session`/`VerificationToken` tables are kept in the schema so a future OAuth provider is additive, not a migration. Documented in `src/auth.ts` comments.)
+- [x] 3.3 Login page (`src/app/login/page.tsx`, server action calling `signIn`), `auth()` session helper, sign-out button in `src/app/layout.tsx`. Split into `src/auth.config.ts` (Edge-safe, no Prisma) + `src/auth.ts` (Node runtime, adds Credentials provider) because Next.js 16's Proxy (renamed from Middleware) runs on the Edge runtime and can't load our Prisma client. `src/proxy.ts` builds its own `NextAuth(authConfig)` instance from the Edge-safe config only.
+- [x] 3.4 Seed script creates one org-admin user (`admin@example.com`, password from required `SEED_ADMIN_PASSWORD` env var, hashed via `src/domain/shared/password.ts`'s scrypt-based `hashPassword`)
+- [x] 3.5 `/verify`: unauthenticated request to `/` redirects to `/login` (confirmed via curl, 307). Login and session persistence: simulated the full NextAuth Credentials flow via curl (fetch CSRF token, POST to `/api/auth/callback/credentials`, reuse cookie jar) — login returns 302 with a valid session cookie, a follow-up authenticated request to `/` returns 200, and `/api/auth/session` returns the correct user. Build and lint both pass. (Initial live test failed against a stale `next dev` process left bound to port 3000 from earlier in the session, running pre-fix code — restarting the dev server resolved it; root cause was a stale process, not the auth implementation.)
 
 ## 4. Roles + authorization
 

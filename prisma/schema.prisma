@@ -50,6 +50,85 @@ enum AuditActor {
   USER
 }
 
+// Auth.js-shaped tables. Only Credentials + JWT sessions are wired up in
+// src/auth.ts for now (see design.md — the Prisma adapter isn't configured
+// yet because nothing exercises it: Credentials + JWT doesn't call adapter
+// methods, and wiring it prematurely risks a type mismatch between our
+// custom-output PrismaClient and the adapter's @prisma/client-typed
+// signature for zero functional benefit). Account/Session/VerificationToken
+// exist now so adding a real OAuth provider later is additive, not a
+// migration.
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  isOrgAdmin    Boolean   @default(false)
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships ClientMembership[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expires      DateTime
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum Role {
+  MANAGER
+  PROJECT_MANAGER
+  TECH_LEAD
+  EXECUTOR
+  VIEWER
+  SECURITY_REVIEWER
+}
+
+model ClientMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  role      Role
+  createdAt DateTime @default(now())
+
+  @@unique([userId, clientId])
+}
+
 model Organization {
   id        String   @id @default(cuid())
   name      String
@@ -71,7 +150,8 @@ model Client {
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
-  projects Project[]
+  projects    Project[]
+  memberships ClientMembership[]
 
   @@unique([organizationId, slug])
 }
