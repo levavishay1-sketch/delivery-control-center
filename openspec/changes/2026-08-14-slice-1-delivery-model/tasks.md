@@ -26,33 +26,15 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 3: Domain Layer — Blocker Commands (4 tasks)
+## Task Group 3: Domain Layer — Blocker Commands (4 tasks) — ✅ DONE
 
-**3.1** Implement `src/domain/blocker/commands.ts`: `createBlocker`.
-- Zod validation: blockingItemId, reason, requiredAction, ownerId, impact (optional).
-- Authorization: Project Manager+ or item owner.
-- Side effect: set work item status='blocked'.
-- Transaction: insert Blocker, update status, record BLOCKER_CREATED audit event.
-- Tests: valid creation, authorization, status side effect, audit event.
+- [x] 3.1 Implemented `src/domain/blocker/commands.ts`: `createBlocker` with Zod validation (blockingItemId, reason, requiredAction, ownerId, impact). Authorization: `requireClientRole(..., WRITE_ROLES)`. Side effect: sets work item status to BLOCKED. Transaction: insert Blocker, update WorkItem status, record audit event with blockingItem title and reason. Tests: valid creation with defaults, optional impact field, Viewer rejection, non-existent work item/owner rejection.
 
-**3.2** Implement `src/domain/blocker/commands.ts`: `updateBlocker`.
-- Allow updates to: reason, requiredAction, impact, ownerId.
-- Authorization: blocker owner or Manager+.
-- Transaction: update, record BLOCKER_UPDATED audit event.
-- Tests: update with authorization, no permission.
+- [x] 3.2 Implemented `updateBlocker` (reason, requiredAction, impact, ownerId). Authorization: blocker owner (checked via ownerId) OR WRITE_ROLES. Transaction: update, record audit event with changes. Tests: field updates, owner-only update, non-existent blocker rejection.
 
-**3.3** Implement `src/domain/blocker/commands.ts`: `resolveBlocker`.
-- Validation: exists and resolvedAt=null.
-- Authorization: blocker owner or Manager+.
-- Side effect: set resolvedAt=now(); if no other active blockers, restore work item to 'open' or prior non-blocked status.
-- Transaction: update, update work item status, record BLOCKER_RESOLVED audit event.
-- Tests: resolution, status restoration, authorization.
+- [x] 3.3 Implemented `resolveBlocker`. Validation: exists and resolvedAt=null (rejects if already resolved). Authorization: blocker owner OR WRITE_ROLES. Side effect: sets resolvedAt=now(); queries active blocker count for workItemId; if count=0 after this blocker's resolution, restores workItem status to OPEN. Transaction: update blocker and work item, record audit event. Tests: resolution and status restoration, multiple blockers (status remains BLOCKED until all resolved), already-resolved rejection, owner-only resolution, Viewer rejection.
 
-**3.4** Implement queries: `getActiveBlockers`, `getAllActiveBlockers`, `getBlocker`.
-- Respect tenant scoping and authorization.
-- Tests: query correctness, authorization.
-- Create API routes (`POST /api/blockers`, `PATCH /api/blockers/[id]`, `POST /api/blockers/[id]/resolve`).
-- Commit: "Implement blocker commands and API routes"
+- [x] 3.4 Implemented queries: `getActiveBlockers(workItemId)` (internal, no authz), `getAllActiveBlockers(ctx, clientId)` (requires ALL_ROLES), `getBlocker(ctx, blockerId)` (requires ALL_ROLES). Created API routes: `POST /api/blockers` (createBlocker), `PATCH /api/blockers/[id]` (updateBlocker), `POST /api/blockers/[id]/resolve` (resolveBlocker). All routes handle ZodError (400) and DomainError (per error.status). Tests: 16 integration tests against real Postgres, all passing (28/28 suite total). Commit: "Implement blocker commands and API routes".
 
 ---
 
