@@ -20,6 +20,7 @@ export async function listRecentAuditEvents(ctx: AuthContext, limit = 200) {
       project: true,
       pipeline: { include: { workItem: true } },
       stage: true,
+      workItem: { include: { pipeline: true } },
     },
   });
 }

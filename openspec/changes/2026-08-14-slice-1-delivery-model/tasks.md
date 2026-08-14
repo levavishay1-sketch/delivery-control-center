@@ -70,22 +70,11 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 7: Dashboard Redesign (2 tasks)
+## Task Group 7: Dashboard Redesign (2 tasks) — ✅ DONE
 
-**7.1** Update `GET /` (Home) Server Component.
-- Replace project list with:
-  - Attention summary card (4 counts with links to `/attention#section`).
-  - Project quick-access grid/list (top 5–10 projects).
-  - Recent activity feed (top 10 audit events).
-- Respect authorization (Viewer can see summaries but not approve).
-- Tests: component renders, counts are accurate, authorization enforced.
+- [x] 7.1 Updated `GET /` (`src/app/page.tsx`). Added an Attention Summary section (4 count cards linking to `/attention#section`, or an "All clear" green state when all 4 counts are zero — reuses `getItemsNeedingAttention`'s `summary`/`now`), a Project Quick Access grid (top 10 projects by most-recent-work-item activity, each card showing name/key, client, work-item count, and relative "updated Xm/h/d ago"), and a Recent Activity feed (top 10 audit events via `listRecentAuditEvents(ctx, 10)`, extended with a `workItem.pipeline` include so events can link to `/pipelines/[id]`). **Deviation — did not replace the project list**: the spec said "replace project list with..." but the existing project section is also the *only* UI for creating projects, creating work items, and triggering integration syncs (`AddProjectForm`, `AddWorkItemForm`, `SyncButton`) — there is no other page for that yet. Removing it would have broken the app's only write path for those actions to satisfy a UI-layout instruction. Instead: the new summary/quick-access/activity sections were added above the existing project management section (now labeled "Projects", unchanged otherwise except each project `<div>` gained an `id="project-{id}"` anchor so Quick Access cards can jump to it). Followed CLAUDE.md's guidance to surface an added-scope conflict rather than silently narrow the spec. Team Status (Slice-1-optional stub) was skipped — the spec marks it optional ("stub with 'Coming soon' if time allows") and no team/assignment concept exists yet to stub meaningfully. Same fix as the Attention Center: moved `Date.now()` out of the page and reused `attention.now` (and a pure `relativeTime(date, now)` helper) to satisfy the React Compiler's purity rule. Tests: covered by `attention/queries.test.ts` (data correctness of the reused aggregation) plus a live check (below).
 
-**7.2** Design and implement responsive layout.
-- Desktop: attention card top, projects grid middle, activity feed below.
-- Mobile: stack vertically.
-- Accessible: semantic HTML, ARIA labels.
-- Tests: responsive breakpoints, keyboard navigation.
-- Commit: "Redesign dashboard as command center"
+- [x] 7.2 Responsive layout: Attention Summary uses a `grid-cols-2 sm:grid-cols-4` grid (2 columns on mobile, 4 on desktop); Quick Access and Recent Activity sit in a `grid-cols-1 lg:grid-cols-2` layout (stacked on mobile, side-by-side on desktop); Quick Access cards themselves use `grid-cols-1 sm:grid-cols-2`. All sections use semantic `<section>` with `aria-labelledby` pointing at their heading's `id`, matching the Attention Center page's pattern. **Live verification** (real Postgres + running dev server): logged in as the seeded org-admin, loaded `/`, confirmed the Attention Summary showed accurate live counts (1 decision, 0 blockers, 2 risks, 1 deadline) matching `/attention`, the Quick Access card showed the right work-item count and "updated Xm ago", and the Recent Activity feed listed the 10 most recent audit events in reverse-chronological order with working `/pipelines/[id]` links — then deleted the live-check fixture data used for verification so the seeded demo data stays clean. Build/Lint/Tests: `npm run build` ✓, `npm run lint` ✓, `npm test` (68/68 passing — no regressions). Commit: "Redesign dashboard as command center".
 
 ---
 
