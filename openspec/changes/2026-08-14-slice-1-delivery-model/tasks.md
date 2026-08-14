@@ -50,25 +50,13 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 5: Domain Layer — Dependency Commands (3 tasks)
+## Task Group 5: Domain Layer — Dependency Commands (3 tasks) — ✅ DONE
 
-**5.1** Implement `src/domain/dependency/commands.ts`: `addDependency`.
-- Zod validation: workItemId, dependsOnWorkItemId, reason.
-- Validation: both items exist, same project, no cycles (call `detectCycles`).
-- Authorization: Project Manager+ or dependent work item owner.
-- Transaction: insert Dependency, record DEPENDENCY_ADDED audit event.
-- Tests: valid add, duplicate detection, cycle detection, authorization.
+- [x] 5.1 Implemented `src/domain/dependency/commands.ts`: `addDependency` with Zod validation (workItemId, dependsOnWorkItemId, reason). Validation: rejects self-dependency, duplicates, cross-project links (both items must be in same project). Authorization: `requireClientRole(..., WRITE_ROLES)`. Cycle detection: `detectCycles(workItemId, dependsOnWorkItemId)` uses BFS to check if there's a path from dependsOnWorkItemId to workItemId through existing dependencies; rejects if true. Transaction: insert Dependency, record audit event. Tests: valid add, self-dependency rejection, duplicate rejection, cross-project rejection, Viewer rejection.
 
-**5.2** Implement `src/domain/dependency/commands.ts`: `removeDependency`.
-- Authorization: Project Manager+ or dependent work item owner.
-- Transaction: delete, record DEPENDENCY_REMOVED audit event.
-- Tests: removal, authorization.
+- [x] 5.2 Implemented `removeDependency`. Authorization: `requireClientRole(..., WRITE_ROLES)`. Transaction: delete Dependency, record audit event. Tests: removal, Viewer rejection, non-existent rejection.
 
-**5.3** Implement queries: `getWorkItemDependencies`, `detectCycles`, `getCriticalPath` (stub for Slice 2).
-- `getWorkItemDependencies` returns upstream and downstream with reasons.
-- `detectCycles(workItemId, candidateTargetId)` returns boolean.
-- Create API routes (`POST /api/dependencies`, `DELETE /api/dependencies/[id]`).
-- Commit: "Implement dependency commands and API routes"
+- [x] 5.3 Implemented queries: `getWorkItemDependencies(workItemId)` returns { upstream: [...], downstream: [...] }. `getCriticalPath()` stub returns []. Created API routes: `POST /api/dependencies` (addDependency), `DELETE /api/dependencies/[id]` (removeDependency). Routes handle ZodError (400) and DomainError. Tests: 11 new integration tests covering dependencies, cycle detection (direct self-cycle, 3-level chain A→B→C preventing C→A), cross-project rejection, and authorization. All 65 tests passing. Build/Lint/Tests all passing. Commit: "Implement dependency commands and API routes".
 
 ---
 
