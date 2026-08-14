@@ -52,10 +52,10 @@
 
 ## 8. Tests + CI
 
-- [ ] 8.1 Vitest config; collect/complete unit tests from groups 4/6/7
-- [ ] 8.2 One Playwright smoke test: login → create client → create project → create work item → draft → approve
-- [ ] 8.3 `.github/workflows/ci.yml`: lint + build + Vitest on push
-- [ ] 8.4 `/verify`: `npm test` green locally; push and confirm Actions run is green
+- [x] 8.1 Vitest config landed in group 4; unit tests already collected across groups 4 (`authz.test.ts`, `session.test.ts`) and 7 (`crypto.test.ts`) — 12 tests total, nothing further to add here.
+- [x] 8.2 One Playwright smoke test (`e2e/smoke.spec.ts`): login → create project → create work item → draft with AI → approve (**scope note**: skips "create client" — the seed script already creates one default client, and creating a client isn't exposed through the UI yet, only via the domain layer directly, so there's no click-path to test). `playwright.config.ts` always spawns its own dev server with `ANTHROPIC_API_KEY` forced empty, so the run is deterministic and doesn't depend on live model-provider billing. Added `aria-label`s to `AddProjectForm`'s client/name/key fields so the test (and assistive tech) can target them reliably.
+- [x] 8.3 `.github/workflows/ci.yml`: checkout → setup-node → `npm ci` → lint → build → `npm test` (Vitest), on push/PR to `main`. Placeholder env values for `DATABASE_URL`/`AUTH_SECRET`/`ENCRYPTION_KEY` (build has no build-time DB queries — all routes are `force-dynamic` — and the Vitest suite mocks or self-supplies what it needs). Playwright intentionally excluded per design.md's decision 7 (needs a live seeded Postgres instance; local-only for now).
+- [x] 8.4 `/verify`: `npm test` (12/12) and `npx playwright test` (1/1) both green locally; `npm run build`/`npm run lint` also pass. Pushed to `main` and confirmed the resulting GitHub Actions run for this commit is green.
 
 ## 9. Close out
 

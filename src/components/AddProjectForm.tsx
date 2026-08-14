@@ -61,6 +61,7 @@ export function AddProjectForm({ clients }: { clients: ClientOption[] }) {
       <div className="flex flex-col gap-1">
         <label className="text-xs opacity-70">Client</label>
         <select
+          aria-label="Client"
           value={clientId}
           onChange={(e) => setClientId(e.target.value)}
           className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
@@ -75,6 +76,7 @@ export function AddProjectForm({ clients }: { clients: ClientOption[] }) {
       <div className="flex flex-col gap-1">
         <label className="text-xs opacity-70">Project name</label>
         <input
+          aria-label="Project name"
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -85,6 +87,7 @@ export function AddProjectForm({ clients }: { clients: ClientOption[] }) {
       <div className="flex flex-col gap-1">
         <label className="text-xs opacity-70">Key</label>
         <input
+          aria-label="Key"
           required
           value={key}
           onChange={(e) => setKey(e.target.value.toUpperCase())}

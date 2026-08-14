@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Placeholder values, not real secrets — sufficient for `prisma generate` and `next build`
+# (dynamic-only routes, no build-time DB queries). Live DB access isn't needed in CI; the
+# Playwright e2e suite (which does need one) is deliberately local-only for now, see
+# openspec/changes/slice-0-tenancy-and-identity/design.md.
+env:
+  DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci"
+  AUTH_SECRET: "ci-placeholder-secret-not-for-real-use-000000"
+  ENCRYPTION_KEY: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run build
+
+      - run: npm test
