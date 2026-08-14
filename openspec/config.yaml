@@ -44,15 +44,17 @@ context: |
   Prisma directly (no client-side data-fetching library); small "use client"
   islands call the API routes with fetch + router.refresh() for mutations.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+rules:
+  proposal:
+    - >-
+      Include a "## Roadmap Source" section as the FIRST section (before
+      "Why"), naming the docs/ROADMAP.md slice entry this change implements
+      and quoting the specific excerpt from docs/roadmap-sources/ the scope
+      is derived from. If no source document exists in docs/roadmap-sources/
+      yet, do not write this proposal - first save the user's planning
+      input there verbatim and update docs/ROADMAP.md, per CLAUDE.md's
+      "Durable inputs" policy. A proposal with no traceable source is not
+      ready to be proposed.
 
 # Per-operation guidance (optional)
 # Add advisory guidance for how apply and archive work should be conducted.
