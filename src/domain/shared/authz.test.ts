@@ -7,7 +7,7 @@ const CLIENT_A = "client-a";
 const CLIENT_B = "client-b";
 
 function ctxWith(memberships: AuthContext["memberships"], isOrgAdmin = false): AuthContext {
-  return { userId: "user-1", isOrgAdmin, memberships };
+  return { userId: "user-1", displayName: "Test User", isOrgAdmin, memberships };
 }
 
 describe("requireClientRole", () => {

@@ -72,6 +72,8 @@ model User {
   accounts    Account[]
   sessions    Session[]
   memberships ClientMembership[]
+  approvals   Approval[]
+  auditEvents AuditEvent[]
 }
 
 model Account {
@@ -231,6 +233,11 @@ model Approval {
   stageId      String
   stage        Stage             @relation(fields: [stageId], references: [id], onDelete: Cascade)
   decision     ApprovalDecision
+  // approverId is the real, session-derived identity; approverName is an immutable display
+  // snapshot (kept even if the user is later renamed/removed) — not a half-measure, both are
+  // meant to coexist. approverId is nullable only because it postdates this table.
+  approverId   String?
+  approver     User?             @relation(fields: [approverId], references: [id], onDelete: SetNull)
   approverName String
   comment      String?
   decidedAt    DateTime          @default(now())
@@ -248,6 +255,10 @@ model AuditEvent {
   stageId    String?
   stage      Stage?      @relation(fields: [stageId], references: [id], onDelete: SetNull)
   actor      AuditActor
+  // userId is the real, session-derived identity for USER-actor events; actorName is an
+  // immutable display snapshot (also used for SYSTEM/AI actor names, which have no User row).
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   actorName  String?
   action     String
   detail     Json?

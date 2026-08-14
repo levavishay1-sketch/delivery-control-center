@@ -6,15 +6,11 @@ import { DomainError } from "@/domain/shared/errors";
 export async function POST(request: Request, routeCtx: RouteContext<"/api/stages/[id]/reject">) {
   const { id } = await routeCtx.params;
   const body = await request.json().catch(() => ({}));
-  const { approverName, comment } = body as { approverName?: string; comment?: string };
-
-  if (!approverName) {
-    return NextResponse.json({ error: "approverName is required" }, { status: 400 });
-  }
+  const { comment } = body as { comment?: string };
 
   try {
     const ctx = await requireAuthContext();
-    const stage = await rejectStage(ctx, id, approverName, comment);
+    const stage = await rejectStage(ctx, id, comment);
     return NextResponse.json(stage);
   } catch (err) {
     if (err instanceof DomainError) {

@@ -31,9 +31,9 @@
 
 ## 5. Real identity on decisions and audit
 
-- [ ] 5.1 Add `Approval.approverId`, `AuditEvent.userId` (both nullable, real FKs)
-- [ ] 5.2 API routes stop accepting `approverName` from the request body; derive from session
-- [ ] 5.3 `/verify`: approve as a logged-in user; confirm DB row and audit entry show the real user
+- [x] 5.1 Add `Approval.approverId`, `AuditEvent.userId` (both nullable FKs to `User`, `onDelete: SetNull`); `approverName`/`actorName` kept as immutable display snapshots alongside the real FK, per the original plan's reasoning. Migration applied via `prisma migrate deploy` (`--create-only` succeeded, content reviewed as purely additive), `migrate status` confirms zero drift.
+- [x] 5.2 `approveStage`/`rejectStage` dropped their `approverName` parameter entirely — identity now comes only from `ctx.userId`/`ctx.displayName` (added `displayName` to `AuthContext`, populated from the session's `name`/`email`). API routes no longer read `approverName` from the request body at all (not just ignore it — the field is gone from the request/response contract). `ApprovalGate.tsx` dropped its "Your name" input accordingly.
+- [x] 5.3 `/verify`: build, lint, Vitest (9/9) all pass. Live-verified against the real DB: logged in as the seeded org-admin, approved a stage via `POST /api/stages/:id/approve` sending only `{"comment": "..."}` (no name field in the request at all), then read the `Approval` and `AuditEvent` rows directly from Postgres — both show `approverId`/`userId` = the real user's id and `approverName`/`actorName` = "Org Admin", joined back to `admin@example.com` via the FK.
 
 ## 6. Fix the five inconsistencies
 

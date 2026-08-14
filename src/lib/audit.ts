@@ -8,6 +8,8 @@ export interface AuditEventInput {
   pipelineId?: string;
   stageId?: string;
   actor: AuditActor;
+  /** Real user identity for USER-actor events; null for SYSTEM/AI, which have no User row. */
+  userId?: string;
   actorName?: string;
   action: string;
   detail?: Record<string, unknown>;
@@ -26,6 +28,7 @@ export async function recordAuditEvent(db: DbClient, input: AuditEventInput) {
       pipelineId: input.pipelineId,
       stageId: input.stageId,
       actor: input.actor,
+      userId: input.userId,
       actorName: input.actorName,
       action: input.action,
       detail: input.detail as Prisma.InputJsonValue | undefined,

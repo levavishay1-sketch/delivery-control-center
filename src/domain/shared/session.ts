@@ -15,5 +15,10 @@ export async function requireAuthContext(): Promise<AuthContext> {
     select: { clientId: true, role: true },
   });
 
-  return { userId: session.user.id, isOrgAdmin: session.user.isOrgAdmin, memberships };
+  return {
+    userId: session.user.id,
+    displayName: session.user.name ?? session.user.email ?? session.user.id,
+    isOrgAdmin: session.user.isOrgAdmin,
+    memberships,
+  };
 }

@@ -102,8 +102,8 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
   });
 }
 
-/** Approves a stage's gate and advances the pipeline to the next stage (or completes it). */
-export async function approveStage(ctx: AuthContext, stageId: string, approverName: string, comment?: string) {
+/** Approves a stage's gate and advances the pipeline to the next stage (or completes it). Approver identity comes from ctx, never a client-supplied name. */
+export async function approveStage(ctx: AuthContext, stageId: string, comment?: string) {
   return db.$transaction(async (tx) => {
     const stage = await tx.stage.findUniqueOrThrow({
       where: { id: stageId },
@@ -115,15 +115,16 @@ export async function approveStage(ctx: AuthContext, stageId: string, approverNa
     }
 
     await tx.approval.create({
-      data: { stageId: stage.id, decision: "APPROVED", approverName, comment },
+      data: { stageId: stage.id, decision: "APPROVED", approverId: ctx.userId, approverName: ctx.displayName, comment },
     });
     await tx.stage.update({ where: { id: stage.id }, data: { status: "DONE", completedAt: new Date() } });
     await recordAuditEvent(tx, {
       pipelineId: stage.pipeline.id,
       stageId: stage.id,
       actor: "USER",
-      actorName: approverName,
-      action: `${approverName} approved the ${getStageConfig(stage.type).label} gate`,
+      userId: ctx.userId,
+      actorName: ctx.displayName,
+      action: `${ctx.displayName} approved the ${getStageConfig(stage.type).label} gate`,
       detail: comment ? { comment } : undefined,
     });
 
@@ -149,8 +150,8 @@ export async function approveStage(ctx: AuthContext, stageId: string, approverNa
   });
 }
 
-/** Rejects a stage's gate; the pipeline is blocked until the stage is redrafted via draftStage. */
-export async function rejectStage(ctx: AuthContext, stageId: string, approverName: string, comment?: string) {
+/** Rejects a stage's gate; the pipeline is blocked until the stage is redrafted via draftStage. Rejecter identity comes from ctx, never a client-supplied name. */
+export async function rejectStage(ctx: AuthContext, stageId: string, comment?: string) {
   return db.$transaction(async (tx: Prisma.TransactionClient) => {
     const stage = await tx.stage.findUniqueOrThrow({
       where: { id: stageId },
@@ -162,7 +163,7 @@ export async function rejectStage(ctx: AuthContext, stageId: string, approverNam
     }
 
     await tx.approval.create({
-      data: { stageId: stage.id, decision: "REJECTED", approverName, comment },
+      data: { stageId: stage.id, decision: "REJECTED", approverId: ctx.userId, approverName: ctx.displayName, comment },
     });
     await tx.stage.update({ where: { id: stage.id }, data: { status: "REJECTED" } });
     await tx.pipeline.update({ where: { id: stage.pipeline.id }, data: { status: "BLOCKED" } });
@@ -170,8 +171,9 @@ export async function rejectStage(ctx: AuthContext, stageId: string, approverNam
       pipelineId: stage.pipeline.id,
       stageId: stage.id,
       actor: "USER",
-      actorName: approverName,
-      action: `${approverName} rejected the ${getStageConfig(stage.type).label} gate`,
+      userId: ctx.userId,
+      actorName: ctx.displayName,
+      action: `${ctx.displayName} rejected the ${getStageConfig(stage.type).label} gate`,
       detail: comment ? { comment } : undefined,
     });
 

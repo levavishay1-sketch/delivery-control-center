@@ -18,13 +18,14 @@ describe("requireAuthContext", () => {
   it("builds an AuthContext with memberships for a logged-in user", async () => {
     const { auth } = await import("@/auth");
     (auth as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
-      user: { id: "user-1", isOrgAdmin: false },
+      user: { id: "user-1", name: "Test User", isOrgAdmin: false },
     });
     const { requireAuthContext } = await import("./session");
 
     const ctx = await requireAuthContext();
     expect(ctx).toEqual({
       userId: "user-1",
+      displayName: "Test User",
       isOrgAdmin: false,
       memberships: [{ clientId: "client-a", role: "TECH_LEAD" }],
     });
