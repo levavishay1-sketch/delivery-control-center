@@ -97,7 +97,7 @@ export async function getHighRiskWorkItems(ctx: AuthContext) {
       status: { notIn: ["COMPLETED", "CLOSED"] },
       project: clientIds ? { clientId: { in: clientIds } } : undefined,
     },
-    include: { owner: true, project: true },
+    include: { owner: true, project: true, pipeline: true },
   });
   return items.sort((a, b) => RISK_ORDER[b.risk] - RISK_ORDER[a.risk]);
 }
@@ -115,6 +115,6 @@ export async function getUpcomingDeadlines(ctx: AuthContext, withinDays = 7) {
       project: clientIds ? { clientId: { in: clientIds } } : undefined,
     },
     orderBy: { dueDate: "asc" },
-    include: { owner: true, project: true },
+    include: { owner: true, project: true, pipeline: true },
   });
 }

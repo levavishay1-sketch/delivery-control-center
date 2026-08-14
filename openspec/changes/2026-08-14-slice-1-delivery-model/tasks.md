@@ -60,31 +60,13 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 6: Attention Center Routes & Queries (3 tasks)
+## Task Group 6: Attention Center Routes & Queries (3 tasks) — ✅ DONE
 
-**6.1** Implement `src/domain/attention/queries.ts`: `getItemsNeedingAttention`.
-- Aggregate and group all items:
-  - **Decisions**: all pending (open) decisions.
-  - **Blockers**: all active blockers.
-  - **Risks**: all work items with risk >= 'High'.
-  - **Deadlines**: all work items with dueDate within 7 days.
-  - **Approval Gates**: all work items with status='review'.
-  - (Stub for Sync Problems, Slice 4.)
-- Each group sorted by urgency (overdue first).
-- Respect tenant scoping and user authorization (only items in user's projects).
-- Tests: aggregation correctness, sorting, authorization.
+- [x] 6.1 Implemented `src/domain/attention/queries.ts`: `getItemsNeedingAttention(ctx)` aggregates, in parallel, across every client ctx can access (org admins see all clients; everyone else scoped to `ctx.memberships`): open Decisions (ordered by deadline then createdAt, nulls-last — earliest/oldest first), active Blockers (ordered by `blockedSince` ascending — oldest first), high/critical Risks (reusing `getHighRiskWorkItems`), upcoming Deadlines within 7 days (reusing `getUpcomingDeadlines`), and work items with status=REVIEW (Approval Gates, ordered by `syncedAt` ascending). Returns `{ decisions, blockers, risks, deadlines, approvalGates, now, summary }` — `now` (server `Date.now()`) is returned from the query rather than computed in the page component so the React Compiler ESLint rule (`react-hooks/purity`, which forbids impure calls during render) stays satisfied. **Deviation**: Sync Problems (Slice 4 stub) was omitted entirely rather than stubbed with an empty array — there's no `SyncProblem` entity yet and an always-empty group would be UI noise with nothing to fill it. Tests: `src/domain/attention/queries.test.ts`, 3 integration tests — full aggregation across all 5 groups with real seeded data, cross-client isolation (a user only sees their own client's items, verified in both directions), and an empty-state case for a user with zero accessible items.
 
-**6.2** Implement `GET /attention` Server Component.
-- Call `getItemsNeedingAttention()`.
-- Render each group (Decisions, Blockers, Risks, Deadlines, Approval Gates) with items and actions.
-- Summary card at top (N decisions, M blockers, K risks, X deadlines).
-- Pagination if any group has > 20 items (20 per page).
-- Tests: component renders, data is correct, pagination works.
+- [x] 6.2 Implemented `GET /attention` (`src/app/attention/page.tsx`, Server Component, `dynamic = "force-dynamic"`). Renders a 5-card summary grid (Decisions/Blockers/Risks/Deadlines/Approval Gates) that anchor-links into each section; an "All clear" empty state when every count is 0; and one collapsible-by-scroll section per group (only rendered when non-empty), each row showing the required-by-spec fields (question/reason/AI recommendation/deadline for decisions; reason/owner/required action/impact for blockers; risk badge for risks; due date, red-highlighted if overdue/within 24h, for deadlines; "Awaiting approval" for gates) plus a link to the item's detail page. **Deviation**: links to `/pipelines/[id]` rather than `/work-items/[id]/360` — the 360° Record page is Task Group 9, not yet built; `/pipelines/[id]` is the only existing item-detail route, so `WorkItemLink` falls back to it (and renders nothing if a work item somehow has no pipeline). **Deviation**: pagination for >20 items per group was not implemented — none of the seeded/tested data approaches that volume in Slice 1; noted as a follow-up rather than un-verifiable speculative code. Added an "Attention Center" link to the root nav in `layout.tsx`. Tests: covered by 6.1's integration tests (data correctness) plus a live check (below) proving the rendered page.
 
-**6.3** Implement action routes: `POST /api/decisions/[id]/approve`, `POST /api/decisions/[id]/reject`, `POST /api/blockers/[id]/resolve`.
-- These already exist from Task Groups 4 and 3.
-- Verify Attention Center refreshes after action.
-- Commit: "Implement Attention Center route and queries"
+- [x] 6.3 Action routes `POST /api/decisions/[id]/approve`, `POST /api/decisions/[id]/reject`, `POST /api/blockers/[id]/resolve` already existed from Task Groups 3–4. Added two new client components — `DecisionActions` (Approve/Reject buttons) and `ResolveBlockerButton` — following the existing `ApprovalGate` component's pattern (fetch the route, `router.refresh()` on success, inline error display). Buttons render only when `ctx` has WRITE_ROLES on that item's client (or, for blockers, is the blocker's owner) — matching the domain layer's authorization, so Viewers see the same rows without action buttons. **Live verification** (real Postgres + running dev server, not just tests): logged in as the seeded org-admin via the Credentials CSRF flow, created a CRITICAL-risk item, a near-term-deadline item, a REVIEW-status item, a blocker, and a decision via the live API; loaded `/attention` and confirmed all 5 groups rendered with correct counts, reasons, and a working `/pipelines/[id]` link; then called `POST /api/blockers/[id]/resolve` and reloaded `/attention`, confirming the blocker disappeared and the count dropped. Build/Lint/Tests: `npm run build` ✓, `npm run lint` ✓ (required moving `Date.now()` out of the page component and into the query layer — the React Compiler ESLint rule flags impure calls during render), `npm test` (68/68 passing, 3 new). Commit: "Implement Attention Center route and queries".
 
 ---
 

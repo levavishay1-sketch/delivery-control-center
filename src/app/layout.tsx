@@ -36,6 +36,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
             <Link href="/" className="text-sm opacity-70 hover:opacity-100">
               Projects
             </Link>
+            <Link href="/attention" className="text-sm opacity-70 hover:opacity-100">
+              Attention Center
+            </Link>
             <Link href="/audit" className="text-sm opacity-70 hover:opacity-100">
               Audit Trail
             </Link>
