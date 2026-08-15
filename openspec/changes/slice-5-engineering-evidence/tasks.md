@@ -1,19 +1,19 @@
 ## 1. Data model & migrations
 
-- [ ] 1.1 Add `Repository`, `Commit`, `PullRequest`, `TestRun`, `Build`, `Deployment`, `Evidence`, `CompletionException` models to `prisma/schema.prisma` (`Repository.connectorId` unique FK to `Connector`; `Commit`/`PullRequest` unique on `[repositoryId, externalId or sha]`; `TestRun`/`Build`/`Deployment` FK to `PullRequest` or `Commit` as appropriate; `Evidence` unique on `[workItemId, pullRequestId]`; `CompletionException` FK to `WorkItem` and `approvedByUserId` FK to `User`).
-- [ ] 1.2 Generate and apply the migration (`npx prisma migrate deploy` per the project's non-interactive-migration workaround); run `npx prisma generate`.
-- [ ] 1.3 Restart the dev server and worker so the regenerated Prisma Client is picked up (per the project's stale-client gotcha).
+- [x] 1.1 Add `Repository`, `Commit`, `PullRequest`, `TestRun`, `Build`, `Deployment`, `Evidence`, `CompletionException` models to `prisma/schema.prisma` (`Repository.connectorId` unique FK to `Connector`; `Commit`/`PullRequest` unique on `[repositoryId, externalId or sha]`; `TestRun`/`Build`/`Deployment` FK to `PullRequest` or `Commit` as appropriate; `Evidence` unique on `[workItemId, pullRequestId]`; `CompletionException` FK to `WorkItem` and `approvedByUserId` FK to `User`).
+- [x] 1.2 Generate and apply the migration (`npx prisma migrate deploy` per the project's non-interactive-migration workaround); run `npx prisma generate`.
+- [x] 1.3 Restart the dev server and worker so the regenerated Prisma Client is picked up (per the project's stale-client gotcha). (No dev server/worker was running; nothing to restart.)
 
 ## 2. GitHub adapter extension
 
-- [ ] 2.1 Add `fetchRepository`, `fetchCommits`, `fetchPullRequests`, `fetchCheckRuns` functions to `src/lib/integrations/github.ts`, using the existing `resolveConfig`/token pattern, each paginated and capped per design.md decision 4/risk 1.
-- [ ] 2.2 Unit test each function against a stubbed `fetch` (mirroring the existing `github.test.ts` pattern).
+- [x] 2.1 Add `fetchRepository`, `fetchCommits`, `fetchPullRequests`, `fetchCheckRuns` functions to `src/lib/integrations/github.ts`, using the existing `resolveConfig`/token pattern, each paginated and capped per design.md decision 4/risk 1.
+- [x] 2.2 Unit test each function against a stubbed `fetch` (mirroring the existing `github.test.ts` pattern).
 
 ## 3. Evidence domain logic — repositories & catch-up fetch
 
-- [ ] 3.1 Create `src/domain/evidence/commands.ts`: `linkRepository(ctx, projectId, config)` — WRITE_ROLES-gated, creates the `Repository` row against the project's GitHub `Connector`, then runs the bounded catch-up fetch (2.1's functions) inline, upserting `Commit`/`PullRequest`/`TestRun` rows; `unlinkRepository(ctx, repositoryId)`.
-- [ ] 3.2 Create `src/domain/evidence/queries.ts`: `getRepositoryForProject`, `listCommitsForRepository`, `listPullRequestsForRepository`.
-- [ ] 3.3 Unit tests for `linkRepository`/`unlinkRepository` against real Postgres, mocking `src/lib/integrations/github.ts`'s new fetch functions per the project's established `vi.mock` convention.
+- [x] 3.1 Create `src/domain/evidence/commands.ts`: `linkRepository(ctx, projectId, config)` — WRITE_ROLES-gated, creates the `Repository` row against the project's GitHub `Connector`, then runs the bounded catch-up fetch (2.1's functions) inline, upserting `Commit`/`PullRequest`/`TestRun` rows; `unlinkRepository(ctx, repositoryId)`.
+- [x] 3.2 Create `src/domain/evidence/queries.ts`: `getRepositoryForProject`, `listCommitsForRepository`, `listPullRequestsForRepository`.
+- [x] 3.3 Unit tests for `linkRepository`/`unlinkRepository` against real Postgres, mocking `src/lib/integrations/github.ts`'s new fetch functions per the project's established `vi.mock` convention.
 
 ## 4. Webhook event handling
 

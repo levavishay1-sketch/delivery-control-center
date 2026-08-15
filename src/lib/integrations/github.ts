@@ -58,6 +58,126 @@ export const githubAdapter: IntegrationAdapter = {
   },
 };
 
+export interface FetchedRepository {
+  externalId: string;
+  owner: string;
+  name: string;
+}
+
+export interface FetchedCommit {
+  sha: string;
+  message: string;
+  authorName: string | null;
+  authoredAt: string;
+  url: string;
+}
+
+export interface FetchedPullRequest {
+  number: number;
+  title: string;
+  state: "open" | "closed";
+  merged: boolean;
+  mergedAt: string | null;
+  headSha: string | null;
+  url: string;
+}
+
+export interface FetchedCheckRun {
+  externalId: string;
+  name: string;
+  status: string;
+  conclusion: string | null;
+  headSha: string;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+const GITHUB_API = "https://api.github.com";
+const CATCH_UP_PAGE_SIZE = 30;
+
+function githubHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+  };
+}
+
+async function githubGet(path: string, token: string): Promise<unknown> {
+  const res = await fetch(`${GITHUB_API}${path}`, { headers: githubHeaders(token) });
+  if (!res.ok) {
+    throw new Error(`GitHub request failed: ${res.status} ${res.statusText} — ${await res.text()}`);
+  }
+  return res.json();
+}
+
+export async function fetchRepository(config: Record<string, unknown> | null): Promise<FetchedRepository> {
+  const { owner, repo, token } = resolveConfig(config);
+  const data = (await githubGet(`/repos/${owner}/${repo}`, token)) as { id: number; name: string; owner: { login: string } };
+  return { externalId: String(data.id), owner: data.owner.login, name: data.name };
+}
+
+export async function fetchCommits(config: Record<string, unknown> | null): Promise<FetchedCommit[]> {
+  const { owner, repo, token } = resolveConfig(config);
+  const data = (await githubGet(`/repos/${owner}/${repo}/commits?per_page=${CATCH_UP_PAGE_SIZE}`, token)) as Array<{
+    sha: string;
+    html_url: string;
+    commit: { message: string; author: { name: string; date: string } | null };
+  }>;
+  return data.map((c) => ({
+    sha: c.sha,
+    message: c.commit.message,
+    authorName: c.commit.author?.name ?? null,
+    authoredAt: c.commit.author?.date ?? new Date().toISOString(),
+    url: c.html_url,
+  }));
+}
+
+export async function fetchPullRequests(config: Record<string, unknown> | null): Promise<FetchedPullRequest[]> {
+  const { owner, repo, token } = resolveConfig(config);
+  const data = (await githubGet(`/repos/${owner}/${repo}/pulls?state=all&per_page=${CATCH_UP_PAGE_SIZE}`, token)) as Array<{
+    number: number;
+    title: string;
+    state: string;
+    merged_at: string | null;
+    html_url: string;
+    head: { sha: string };
+  }>;
+  return data.map((pr) => ({
+    number: pr.number,
+    title: pr.title,
+    state: pr.state as "open" | "closed",
+    merged: pr.merged_at !== null,
+    mergedAt: pr.merged_at,
+    headSha: pr.head?.sha ?? null,
+    url: pr.html_url,
+  }));
+}
+
+export async function fetchCheckRuns(config: Record<string, unknown> | null, ref: string): Promise<FetchedCheckRun[]> {
+  const { owner, repo, token } = resolveConfig(config);
+  const data = (await githubGet(`/repos/${owner}/${repo}/commits/${ref}/check-runs?per_page=${CATCH_UP_PAGE_SIZE}`, token)) as {
+    check_runs: Array<{
+      id: number;
+      name: string;
+      status: string;
+      conclusion: string | null;
+      head_sha: string;
+      started_at: string | null;
+      completed_at: string | null;
+    }>;
+  };
+  return data.check_runs.map((run) => ({
+    externalId: String(run.id),
+    name: run.name,
+    status: run.status,
+    conclusion: run.conclusion,
+    headSha: run.head_sha,
+    startedAt: run.started_at,
+    completedAt: run.completed_at,
+  }));
+}
+
 /**
  * Verifies a GitHub webhook delivery's HMAC-SHA256 signature (the `X-Hub-Signature-256` header,
  * formatted `sha256=<hex>`), per GitHub's own documented scheme:

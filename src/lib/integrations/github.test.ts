@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { githubAdapter, verifyGithubSignature } from "./github";
+import {
+  fetchCheckRuns,
+  fetchCommits,
+  fetchPullRequests,
+  fetchRepository,
+  githubAdapter,
+  verifyGithubSignature,
+} from "./github";
 import { getIntegrationAdapter } from "./index";
 
 const VALID_CONFIG = { owner: "acme", repo: "widgets", token: "ghp_secret" };
@@ -57,6 +64,145 @@ describe("githubAdapter.fetchWorkItems", () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", text: async () => "repo not found" });
 
     await expect(githubAdapter.fetchWorkItems(VALID_CONFIG)).rejects.toThrow(/GitHub sync failed/);
+  });
+});
+
+describe("fetchRepository", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps a representative GitHub repo response", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: 42, name: "widgets", owner: { login: "acme" } }),
+    });
+
+    await expect(fetchRepository(VALID_CONFIG)).resolves.toEqual({
+      externalId: "42",
+      owner: "acme",
+      name: "widgets",
+    });
+  });
+});
+
+describe("fetchCommits", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps a representative GitHub commits API response", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          sha: "abc123",
+          html_url: "https://github.com/acme/widgets/commit/abc123",
+          commit: { message: "Fix widget", author: { name: "Ada", date: "2026-08-01T00:00:00Z" } },
+        },
+      ],
+    });
+
+    await expect(fetchCommits(VALID_CONFIG)).resolves.toEqual([
+      {
+        sha: "abc123",
+        message: "Fix widget",
+        authorName: "Ada",
+        authoredAt: "2026-08-01T00:00:00Z",
+        url: "https://github.com/acme/widgets/commit/abc123",
+      },
+    ]);
+  });
+});
+
+describe("fetchPullRequests", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps a representative GitHub pulls API response, including merged state", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        {
+          number: 9,
+          title: "Add widgets",
+          state: "closed",
+          merged_at: "2026-08-02T00:00:00Z",
+          html_url: "https://github.com/acme/widgets/pull/9",
+          head: { sha: "def456" },
+        },
+      ],
+    });
+
+    await expect(fetchPullRequests(VALID_CONFIG)).resolves.toEqual([
+      {
+        number: 9,
+        title: "Add widgets",
+        state: "closed",
+        merged: true,
+        mergedAt: "2026-08-02T00:00:00Z",
+        headSha: "def456",
+        url: "https://github.com/acme/widgets/pull/9",
+      },
+    ]);
+  });
+});
+
+describe("fetchCheckRuns", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("maps a representative GitHub check-runs API response", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        check_runs: [
+          {
+            id: 5,
+            name: "test",
+            status: "completed",
+            conclusion: "success",
+            head_sha: "def456",
+            started_at: "2026-08-02T00:00:00Z",
+            completed_at: "2026-08-02T00:05:00Z",
+          },
+        ],
+      }),
+    });
+
+    await expect(fetchCheckRuns(VALID_CONFIG, "def456")).resolves.toEqual([
+      {
+        externalId: "5",
+        name: "test",
+        status: "completed",
+        conclusion: "success",
+        headSha: "def456",
+        startedAt: "2026-08-02T00:00:00Z",
+        completedAt: "2026-08-02T00:05:00Z",
+      },
+    ]);
   });
 });
 

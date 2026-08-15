@@ -129,6 +129,31 @@ enum ConflictResolution {
   ACCEPTED_INCOMING
 }
 
+// Slice 5 — see openspec/changes/slice-5-engineering-evidence/design.md.
+enum PullRequestState {
+  OPEN
+  MERGED
+  CLOSED
+}
+
+enum TestRunStatus {
+  PENDING
+  PASSED
+  FAILED
+}
+
+enum BuildStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum DeploymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
 enum PipelineStatus {
   ACTIVE
   COMPLETED
@@ -217,14 +242,15 @@ model User {
   approvals   Approval[]
   auditEvents AuditEvent[]
 
-  ownedWorkItems           WorkItem[]        @relation("WorkItemOwner")
-  executedWorkItems        WorkItem[]        @relation("WorkItemExecutor")
-  ownedBlockers            Blocker[]         @relation("BlockerOwner")
-  decidedDecisions         Decision[]        @relation("DecisionApprover")
-  answeredClarifyQuestions ClarifyQuestion[] @relation("ClarifyQuestionAnsweredBy")
-  approvedBudgetOverrides  BudgetOverride[]  @relation("BudgetOverrideApprovedBy")
-  manualFieldEdits         FieldProvenance[] @relation("FieldProvenanceActor")
-  resolvedSyncConflicts    SyncConflict[]    @relation("SyncConflictResolvedBy")
+  ownedWorkItems               WorkItem[]            @relation("WorkItemOwner")
+  executedWorkItems            WorkItem[]            @relation("WorkItemExecutor")
+  ownedBlockers                Blocker[]             @relation("BlockerOwner")
+  decidedDecisions             Decision[]            @relation("DecisionApprover")
+  answeredClarifyQuestions     ClarifyQuestion[]     @relation("ClarifyQuestionAnsweredBy")
+  approvedBudgetOverrides      BudgetOverride[]      @relation("BudgetOverrideApprovedBy")
+  manualFieldEdits             FieldProvenance[]     @relation("FieldProvenanceActor")
+  resolvedSyncConflicts        SyncConflict[]        @relation("SyncConflictResolvedBy")
+  approvedCompletionExceptions CompletionException[] @relation("CompletionExceptionApprover")
 }
 
 model Account {
@@ -402,6 +428,10 @@ model WorkItem {
   // Slice 4 — per-field sync/manual-edit tracking and open sync conflicts.
   fieldProvenance FieldProvenance[]
   syncConflicts   SyncConflict[]
+
+  // Slice 5 — engineering evidence and completion-policy exceptions.
+  evidences            Evidence[]
+  completionExceptions CompletionException[]
 
   @@unique([projectId, source, externalId])
   @@index([projectId, status])
@@ -683,6 +713,7 @@ model Connector {
   syncRuns          SyncRun[]
   webhookDeliveries WebhookDelivery[]
   syncConflicts     SyncConflict[]
+  repository        Repository?
 }
 
 // Slice 4 — one row per sync attempt-cycle (one Job's full retry lifecycle),
@@ -759,6 +790,141 @@ model WebhookDelivery {
   receivedAt  DateTime  @default(now())
 
   @@unique([connectorId, deliveryId])
+}
+
+// Slice 5 — a project's linked GitHub repository, the source of engineering
+// evidence (design.md decision 1: one per Connector, reusing its auth/config
+// rather than storing its own).
+model Repository {
+  id          String    @id @default(cuid())
+  connectorId String    @unique
+  connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  owner       String
+  name        String
+  externalId  String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  commits      Commit[]
+  pullRequests PullRequest[]
+  testRuns     TestRun[]
+  builds       Build[]
+  deployments  Deployment[]
+}
+
+model Commit {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sha          String
+  message      String
+  authorName   String?
+  authoredAt   DateTime
+  url          String?
+  createdAt    DateTime   @default(now())
+
+  testRuns TestRun[]
+  builds   Build[]
+
+  @@unique([repositoryId, sha])
+}
+
+model PullRequest {
+  id           String           @id @default(cuid())
+  repositoryId String
+  repository   Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  number       Int
+  title        String
+  state        PullRequestState @default(OPEN)
+  merged       Boolean          @default(false)
+  mergedAt     DateTime?
+  headSha      String?
+  url          String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  testRuns  TestRun[]
+  evidences Evidence[]
+
+  @@unique([repositoryId, number])
+}
+
+// A test run is tied to the commit GitHub's check_run event names, and
+// optionally the pull request that commit belongs to (design.md risk 2: a
+// check_run can arrive before its pull_request event, so pullRequestId is
+// filled in once that later event is seen).
+model TestRun {
+  id            String        @id @default(cuid())
+  repositoryId  String
+  repository    Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  pullRequestId String?
+  pullRequest   PullRequest?  @relation(fields: [pullRequestId], references: [id], onDelete: SetNull)
+  commitId      String?
+  commit        Commit?       @relation(fields: [commitId], references: [id], onDelete: SetNull)
+  externalId    String
+  name          String
+  status        TestRunStatus @default(PENDING)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@unique([repositoryId, externalId])
+}
+
+model Build {
+  id           String      @id @default(cuid())
+  repositoryId String
+  repository   Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  commitId     String?
+  commit       Commit?     @relation(fields: [commitId], references: [id], onDelete: SetNull)
+  externalId   String
+  status       BuildStatus @default(PENDING)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@unique([repositoryId, externalId])
+}
+
+model Deployment {
+  id           String           @id @default(cuid())
+  repositoryId String
+  repository   Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  environment  String
+  status       DeploymentStatus @default(PENDING)
+  externalId   String
+  deployedAt   DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@unique([repositoryId, externalId])
+}
+
+// A work item's explicit (never inferred) link to a pull request as its
+// evidence (design.md — proposal.md's "not inferred" requirement).
+model Evidence {
+  id            String      @id @default(cuid())
+  workItemId    String
+  workItem      WorkItem    @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  pullRequestId String
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([workItemId, pullRequestId])
+}
+
+// A write-capable role's approval to complete a work item without
+// qualifying evidence (design.md decision 6: presence of a row is the
+// source of truth, not a boolean flag elsewhere).
+model CompletionException {
+  id               String   @id @default(cuid())
+  workItemId       String
+  workItem         WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  reason           String
+  approvedByUserId String
+  approvedByUser   User     @relation("CompletionExceptionApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime @default(now())
+
+  @@index([workItemId])
 }
 
 model Approval {
