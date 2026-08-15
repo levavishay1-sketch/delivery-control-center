@@ -60,10 +60,10 @@ committable independently, per this project's change-sizing convention
 
 ## Task Group 7: UI (4 tasks)
 
-- [ ] 7.1 Project settings: connector configuration form (type, auth, config fields per type, `WRITE_ROLES`), current status (`CONNECTED`/`DISCONNECTED`/`ERROR`), "Sync now" button calling `triggerSync`.
-- [ ] 7.2 Sync history view: a project's `SyncRun` list (status, item counts, timing), most recent first, visible to `ALL_ROLES`.
-- [ ] 7.3 Work-item detail: a provenance affordance per synced field (source, actor, timestamp) — visible to `ALL_ROLES`, matching the "no fabricated provenance" requirement (omit the affordance entirely for a field with no recorded `FieldProvenance`, don't show a misleading default).
-- [ ] 7.4 Conflict review surface: list of a project's open `SyncConflict`s (current vs. incoming value, source), with "Keep manual" / "Accept incoming" actions (`WRITE_ROLES`). Add an Attention Center entry type for open conflicts, per design.md's Attention Center mitigation.
+- [x] 7.1 Project settings: connector configuration form (type, auth, config fields per type, `WRITE_ROLES`), current status (`CONNECTED`/`DISCONNECTED`/`ERROR`), "Sync now" button calling `triggerSync`.
+- [x] 7.2 Sync history view: a project's `SyncRun` list (status, item counts, timing), most recent first, visible to `ALL_ROLES`.
+- [x] 7.3 Work-item detail: a provenance affordance per synced field (source, actor, timestamp) — visible to `ALL_ROLES`, matching the "no fabricated provenance" requirement (omit the affordance entirely for a field with no recorded `FieldProvenance`, don't show a misleading default).
+- [x] 7.4 Conflict review surface: list of a project's open `SyncConflict`s (current vs. incoming value, source), with "Keep manual" / "Accept incoming" actions (`WRITE_ROLES`). Add an Attention Center entry type for open conflicts, per design.md's Attention Center mitigation.
 
 ## Task Group 8: End-to-End Test Scenario (1 task)
 

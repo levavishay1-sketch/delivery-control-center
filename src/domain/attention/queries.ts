@@ -24,7 +24,7 @@ export async function getItemsNeedingAttention(ctx: AuthContext) {
   const clientIds = accessibleClientIds(ctx);
   const projectScope = clientIds ? { clientId: { in: clientIds } } : undefined;
 
-  const [decisions, blockers, risks, deadlines, approvalGates, pausedClarifications] = await Promise.all([
+  const [decisions, blockers, risks, deadlines, approvalGates, pausedClarifications, syncConflicts] = await Promise.all([
     db.decision.findMany({
       where: {
         status: "OPEN",
@@ -62,6 +62,16 @@ export async function getItemsNeedingAttention(ctx: AuthContext) {
       },
       orderBy: { updatedAt: "asc" },
     }),
+    // Slice 4 — an open sync conflict needs a human to pick manual-vs-incoming; see
+    // src/domain/connector/conflicts.ts's resolveConflict.
+    db.syncConflict.findMany({
+      where: {
+        resolvedAt: null,
+        workItem: { project: projectScope },
+      },
+      include: { workItem: { include: { project: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
   ]);
 
   return {
@@ -71,6 +81,7 @@ export async function getItemsNeedingAttention(ctx: AuthContext) {
     deadlines,
     approvalGates,
     pausedClarifications,
+    syncConflicts,
     now: Date.now(),
     summary: {
       decisions: decisions.length,
@@ -79,6 +90,7 @@ export async function getItemsNeedingAttention(ctx: AuthContext) {
       deadlines: deadlines.length,
       approvalGates: approvalGates.length,
       pausedClarifications: pausedClarifications.length,
+      syncConflicts: syncConflicts.length,
     },
   };
 }

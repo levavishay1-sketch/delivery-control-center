@@ -27,7 +27,7 @@ function formatDate(date: Date | null) {
 
 export default async function AttentionCenterPage() {
   const ctx = await requireAuthContext();
-  const { decisions, blockers, risks, deadlines, approvalGates, pausedClarifications, summary, now } =
+  const { decisions, blockers, risks, deadlines, approvalGates, pausedClarifications, syncConflicts, summary, now } =
     await getItemsNeedingAttention(ctx);
 
   const allClear =
@@ -36,7 +36,8 @@ export default async function AttentionCenterPage() {
     summary.risks === 0 &&
     summary.deadlines === 0 &&
     summary.approvalGates === 0 &&
-    summary.pausedClarifications === 0;
+    summary.pausedClarifications === 0 &&
+    summary.syncConflicts === 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -45,13 +46,14 @@ export default async function AttentionCenterPage() {
         <p className="text-sm opacity-60">Everything needing a human decision, in one place — with the reason always visible.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-7">
         <SummaryCard label="Decisions" count={summary.decisions} href="#decisions" />
         <SummaryCard label="Blockers" count={summary.blockers} href="#blockers" />
         <SummaryCard label="Risks" count={summary.risks} href="#risks" />
         <SummaryCard label="Deadlines" count={summary.deadlines} href="#deadlines" />
         <SummaryCard label="Approval Gates" count={summary.approvalGates} href="#approval-gates" />
         <SummaryCard label="Clarifications" count={summary.pausedClarifications} href="#clarifications" />
+        <SummaryCard label="Sync Conflicts" count={summary.syncConflicts} href="#sync-conflicts" />
       </div>
 
       {allClear && (
@@ -167,6 +169,22 @@ export default async function AttentionCenterPage() {
               </ul>
               <Link href={`/pipelines/${stage.pipelineId}`} className="text-xs underline opacity-70 w-fit">
                 Answer on the pipeline page
+              </Link>
+            </Row>
+          ))}
+        </Section>
+      )}
+
+      {summary.syncConflicts > 0 && (
+        <Section id="sync-conflicts" title="Sync Conflicts" count={summary.syncConflicts}>
+          {syncConflicts.map((conflict) => (
+            <Row key={conflict.id}>
+              <p className="font-medium">
+                A sync would overwrite a manually-edited &ldquo;{conflict.field}&rdquo; with a different value
+              </p>
+              <RowMeta workItem={conflict.workItem} />
+              <Link href={`/projects/${conflict.workItem.projectId}/settings`} className="text-xs underline opacity-70 w-fit">
+                Review on the project settings page
               </Link>
             </Row>
           ))}

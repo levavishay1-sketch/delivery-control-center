@@ -11,7 +11,7 @@ import { WRITE_ROLES } from "@/domain/shared/authz";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { serverNow } from "@/domain/shared/time";
 import { WorkItemTabs } from "@/components/WorkItemTabs";
-import { OverviewTab } from "@/components/OverviewTab";
+import { OverviewTab, ProvenanceNote } from "@/components/OverviewTab";
 import { DependenciesTab } from "@/components/DependenciesTab";
 import { TimelineTab } from "@/components/TimelineTab";
 
@@ -53,6 +53,14 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
   const candidates = siblingItems.items.filter((i) => !excludeIds.has(i.id)).map((i) => ({ id: i.id, title: i.title }));
 
   const members2 = members.map((m) => ({ id: m.id, name: m.name, email: m.email }));
+
+  const fieldProvenance = workItem.fieldProvenance.map((p) => ({
+    field: p.field,
+    source: p.source,
+    externalId: p.externalId,
+    actorUser: p.actorUser ? { name: p.actorUser.name, email: p.actorUser.email } : null,
+    updatedAt: p.updatedAt.toISOString(),
+  }));
 
   const tabs = [
     {
@@ -117,6 +125,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
           aiCost={aiCost.toString()}
           stageCosts={workItem.pipeline?.stages.map((s) => ({ type: s.type, costUsd: s.costUsd ? s.costUsd.toString() : null })) ?? []}
           now={now}
+          fieldProvenance={fieldProvenance}
         />
       ),
     },
@@ -185,7 +194,10 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
           {workItem.project.name} ({workItem.project.key})
         </p>
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-semibold">{workItem.title}</h1>
+          <h1 className="text-xl font-semibold">
+            {workItem.title}
+            <ProvenanceNote field="title" provenance={fieldProvenance} />
+          </h1>
           <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">{workItem.type}</span>
         </div>
       </div>

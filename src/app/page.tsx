@@ -184,13 +184,16 @@ export default async function HomePage() {
                       <h3 className="font-medium">
                         {project.name} <span className="opacity-50">({project.key})</span>
                       </h3>
-                      <p className="text-xs opacity-60">{project.integrationType}</p>
+                      <p className="text-xs opacity-60">{project.connector?.type ?? project.integrationType}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Link href={`/projects/${project.id}/constitution`} className="text-xs underline opacity-70 hover:opacity-100">
                         Constitution
                       </Link>
-                      {project.integrationType !== "MANUAL" && <SyncButton projectId={project.id} />}
+                      <Link href={`/projects/${project.id}/settings`} className="text-xs underline opacity-70 hover:opacity-100">
+                        Settings
+                      </Link>
+                      {project.connector && project.connector.type !== "MANUAL" && <SyncButton projectId={project.id} />}
                     </div>
                   </div>
 

@@ -135,6 +135,7 @@ describe("getItemsNeedingAttention", () => {
       deadlines: 0,
       approvalGates: 0,
       pausedClarifications: 0,
+      syncConflicts: 0,
     });
 
     await db.organization.delete({ where: { id: org.id } });

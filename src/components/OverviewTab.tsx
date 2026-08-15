@@ -61,6 +61,29 @@ interface ChildItem {
   pipelineId: string | null;
 }
 
+export interface FieldProvenanceEntry {
+  field: string;
+  source: string;
+  externalId: string | null;
+  actorUser: { name: string | null; email: string } | null;
+  updatedAt: string;
+}
+
+/** "Where did this value come from?" affordance (Slice 4 field-provenance capability). Renders nothing for a field with no recorded provenance — never fabricates an origin. */
+export function ProvenanceNote({ field, provenance }: { field: string; provenance: FieldProvenanceEntry[] }) {
+  const entry = provenance.find((p) => p.field === field);
+  if (!entry) return null;
+  const label =
+    entry.source === "MANUAL"
+      ? `Manually set by ${entry.actorUser?.name ?? entry.actorUser?.email ?? "a user"}`
+      : `Synced${entry.externalId ? ` (${entry.externalId})` : ""}`;
+  return (
+    <span title={`${label} · ${new Date(entry.updatedAt).toLocaleString()}`} className="ml-1 cursor-help text-xs opacity-40" aria-label={label}>
+      ⓘ
+    </span>
+  );
+}
+
 export function OverviewTab({
   workItem,
   members,
@@ -74,6 +97,7 @@ export function OverviewTab({
   aiCost,
   stageCosts,
   now,
+  fieldProvenance,
   onChanged,
 }: {
   workItem: {
@@ -104,9 +128,12 @@ export function OverviewTab({
   aiCost: string;
   stageCosts: { type: string; costUsd: string | null }[];
   now: number;
+  /** Per-field sync/manual-edit provenance (Slice 4). Defaults to none — Quick View's data isn't yet wired to fetch it. */
+  fieldProvenance?: FieldProvenanceEntry[];
   /** If given (e.g. by the Quick View drawer, whose data isn't a Server Component), called after a mutation instead of the default router.refresh(). */
   onChanged?: () => void;
 }) {
+  const provenance = fieldProvenance ?? [];
   const [editing, setEditing] = useState(false);
 
   const due = workItem.dueDate ? new Date(workItem.dueDate) : null;
@@ -137,12 +164,20 @@ export function OverviewTab({
 
   return (
     <div className="flex flex-col gap-4">
-      {workItem.description && <p className="text-sm opacity-80 whitespace-pre-wrap">{workItem.description}</p>}
+      {workItem.description && (
+        <p className="text-sm opacity-80 whitespace-pre-wrap">
+          {workItem.description}
+          <ProvenanceNote field="description" provenance={provenance} />
+        </p>
+      )}
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
         <div>
           <dt className="text-xs opacity-60">Status</dt>
-          <dd className="font-medium">{workItem.status}</dd>
+          <dd className="font-medium">
+            {workItem.status}
+            <ProvenanceNote field="status" provenance={provenance} />
+          </dd>
           <dd className="text-xs opacity-50">{STATUS_EXPLANATION[workItem.status]}</dd>
         </div>
         <div>
