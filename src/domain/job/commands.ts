@@ -2,6 +2,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { Prisma, type Job, type JobType } from "@/generated/prisma/client";
 
+type DbClient = typeof db | Prisma.TransactionClient;
+
 const enqueueJobSchema = z.object({
   type: z.string().min(1),
   payload: z.record(z.string(), z.unknown()),
@@ -20,15 +22,27 @@ export function computeBackoffDelayMs(attempts: number): number {
  * second enqueue with the same key returns the already-queued/running/finished
  * job instead of creating a duplicate or erroring, so a caller can safely
  * re-request the same logical work (e.g. retrying its own enqueue call).
+ *
+ * Accepts an optional transaction client so a caller can enqueue atomically
+ * with the state transition that precedes it (e.g. draftStage's PENDING ->
+ * AI_DRAFTING write) — without that, a crash between "commit the status
+ * change" and "enqueue the job" would leave a stage/Constitution stuck in a
+ * drafting state with no job ever created to move it out, defeating the
+ * crash-durability this job runtime exists for.
  */
-export async function enqueueJob(type: JobType, payload: Record<string, unknown>, idempotencyKey: string): Promise<Job> {
+export async function enqueueJob(
+  type: JobType,
+  payload: Record<string, unknown>,
+  idempotencyKey: string,
+  client: DbClient = db
+): Promise<Job> {
   const input = enqueueJobSchema.parse({ type, payload, idempotencyKey });
 
-  const existing = await db.job.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+  const existing = await client.job.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
   if (existing) return existing;
 
   try {
-    return await db.job.create({
+    return await client.job.create({
       data: {
         type: input.type as JobType,
         payload: input.payload as Prisma.InputJsonValue,
@@ -38,7 +52,7 @@ export async function enqueueJob(type: JobType, payload: Record<string, unknown>
   } catch (err) {
     // Race: another caller created the same idempotencyKey between our findUnique and create.
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      const raceWinner = await db.job.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
+      const raceWinner = await client.job.findUnique({ where: { idempotencyKey: input.idempotencyKey } });
       if (raceWinner) return raceWinner;
     }
     throw err;

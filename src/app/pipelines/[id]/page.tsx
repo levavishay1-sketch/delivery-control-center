@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getPipelineDetail } from "@/domain/pipeline/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
-import { loadWorkflow } from "@/lib/config";
+import { getStageConfigOrFallback } from "@/lib/config";
 import { StageBadge } from "@/components/StageBadge";
 import { DraftButton } from "@/components/DraftButton";
 import { ApprovalGate } from "@/components/ApprovalGate";
@@ -21,7 +21,11 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
 
   if (!pipeline) notFound();
 
-  const workflow = loadWorkflow();
+  // Reads the pipeline's own snapshotted stageSequence, never the live config file — an edit
+  // to config/workflow.yaml must never change how an existing pipeline renders (design.md
+  // Decision 3). getStageConfigOrFallback tolerates a type retired from the live config (e.g.
+  // CONSTITUTION) so older pipelines' history still displays instead of crashing.
+  const workflow = pipeline.stageSequence.map(getStageConfigOrFallback);
   const stagesByType = new Map(pipeline.stages.map((s) => [s.type, s]));
 
   return (

@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
 import { getNextStageTypeInSequence, getStageConfig, loadWorkflow } from "@/lib/config";
 import { recordAuditEvent } from "@/lib/audit";
-import { getAgentExecutor } from "@/lib/agents";
 import { getApprovedConstitution } from "@/domain/constitution/queries";
+import { enqueueJob } from "@/domain/job/commands";
 import type { Prisma, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
@@ -95,18 +95,17 @@ async function advancePipelinePastStage(
 }
 
 /**
- * Runs the AI executor against a stage that's PENDING or REJECTED. The stage is moved to the
- * observable AI_DRAFTING state before the executor call (a real network request when a model
- * provider is configured) and out of it after — deliberately outside any DB transaction while
- * the call is in flight, see design.md in openspec/changes/real-ai-stage-drafting for why. The
- * write below re-checks the stage's status so a concurrent approval/rejection during the call
- * can't be silently overwritten. If the stage's configuration doesn't require approval, it
- * completes automatically and the pipeline advances as if a human had approved it.
+ * Moves a PENDING or REJECTED stage to AI_DRAFTING and enqueues a DRAFT_STAGE job for the
+ * worker in the same transaction — so a crash between the two can never leave the stage
+ * stuck in AI_DRAFTING with no job to move it out (see design.md Decisions 1/2 and Task
+ * Group 5). Returns as soon as the job is queued, not once drafted; the worker performs the
+ * actual executor call via getStageForDrafting/completeStageDraft/revertStageDraftFailure
+ * below. (CLARIFY's AWAITING_CLARIFICATION branch is added in Task Group 6.)
  */
 export async function draftStage(ctx: AuthContext, stageId: string) {
   const stage = await db.stage.findUniqueOrThrow({
     where: { id: stageId },
-    include: { pipeline: { include: { workItem: { include: { project: true } }, stages: true } } },
+    include: { pipeline: { include: { workItem: { include: { project: true } } } } },
   });
   requireClientRole(ctx, stage.pipeline.workItem.project.clientId, WRITE_ROLES);
 
@@ -114,43 +113,53 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
     throw new Error(`Stage is ${stage.status}; only PENDING or REJECTED stages can be drafted.`);
   }
 
-  await db.stage.update({
-    where: { id: stage.id },
-    data: { status: "AI_DRAFTING", startedAt: stage.startedAt ?? new Date() },
-  });
-
-  const previousStage = stage.pipeline.stages
-    .filter((s) => s.type !== stage.type)
-    .find((s) => s.status === "DONE" || s.status === "APPROVED");
-
-  let result;
-  try {
-    result = await getAgentExecutor().executeStage(stage.type, {
-      workItemTitle: stage.pipeline.workItem.title,
-      workItemDescription: stage.pipeline.workItem.description ?? "",
-      workItemSource: stage.pipeline.workItem.source,
-      workItemExternalId: stage.pipeline.workItem.externalId,
-      previousStageContent: previousStage?.content ?? undefined,
-    });
-  } catch (err) {
-    // Don't leave the stage stuck in AI_DRAFTING if the executor call fails — only revert if
-    // it's still AI_DRAFTING (a concurrent approval/rejection may have already moved it on).
-    await db.stage.updateMany({
-      where: { id: stage.id, status: "AI_DRAFTING" },
-      data: { status: stage.status },
-    });
-    throw err;
-  }
-
   return db.$transaction(async (tx) => {
-    const current = await tx.stage.findUniqueOrThrow({ where: { id: stage.id } });
+    const updated = await tx.stage.update({
+      where: { id: stage.id },
+      data: { status: "AI_DRAFTING", startedAt: stage.startedAt ?? new Date() },
+    });
+
+    // Date.now() suffix: a stage is redrafted many times across its life (PENDING/REJECTED ->
+    // AI_DRAFTING, repeatedly) and a stable key would collide with a prior attempt's job.
+    await enqueueJob("DRAFT_STAGE", { stageId: stage.id }, `draft-stage-${stage.id}-${Date.now()}`, tx);
+
+    return updated;
+  });
+}
+
+/** Worker-side: loads what's needed to run the AI executor for a queued DRAFT_STAGE job. */
+export async function getStageForDrafting(stageId: string) {
+  return db.stage.findUniqueOrThrow({
+    where: { id: stageId },
+    include: { pipeline: { include: { workItem: { include: { project: true } }, stages: true } } },
+  });
+}
+
+export interface StageDraftResult {
+  content: string;
+  aiModel: string;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+}
+
+/**
+ * Worker-side completion: writes the executor's result, records an append-only
+ * StageVersion (design.md Decision 5) alongside Stage's own "latest" columns, and — if the
+ * stage doesn't require approval — auto-advances the pipeline. Re-checks the stage is still
+ * AI_DRAFTING first (a concurrent approval/rejection during the call can't be silently
+ * overwritten), same as the old synchronous path did.
+ */
+export async function completeStageDraft(stageId: string, result: StageDraftResult) {
+  return db.$transaction(async (tx) => {
+    const current = await tx.stage.findUniqueOrThrow({ where: { id: stageId }, include: { pipeline: true } });
     if (current.status !== "AI_DRAFTING") {
       throw new Error(`Stage changed to ${current.status} while drafting; discarding this draft.`);
     }
 
-    const requiresApproval = getStageConfig(stage.type).requiresApproval;
+    const requiresApproval = getStageConfig(current.type).requiresApproval;
     const updated = await tx.stage.update({
-      where: { id: stage.id },
+      where: { id: stageId },
       data: {
         status: requiresApproval ? "PENDING_APPROVAL" : "DONE",
         content: result.content,
@@ -162,16 +171,30 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
       },
     });
 
-    if (stage.pipeline.status === "BLOCKED") {
-      await tx.pipeline.update({ where: { id: stage.pipeline.id }, data: { status: "ACTIVE" } });
+    const priorVersionCount = await tx.stageVersion.count({ where: { stageId } });
+    await tx.stageVersion.create({
+      data: {
+        stageId,
+        versionNumber: priorVersionCount + 1,
+        content: result.content,
+        aiModel: result.aiModel,
+        promptTokens: result.promptTokens,
+        completionTokens: result.completionTokens,
+        costUsd: result.costUsd,
+        createdAsResultOf: priorVersionCount === 0 ? "DRAFT" : "REDRAFT",
+      },
+    });
+
+    if (current.pipeline.status === "BLOCKED") {
+      await tx.pipeline.update({ where: { id: current.pipeline.id }, data: { status: "ACTIVE" } });
     }
 
     await recordAuditEvent(tx, {
-      pipelineId: stage.pipeline.id,
-      stageId: stage.id,
+      pipelineId: current.pipeline.id,
+      stageId,
       actor: "AI",
       actorName: result.aiModel,
-      action: `AI drafted ${getStageConfig(stage.type).label}`,
+      action: `AI drafted ${getStageConfig(current.type).label}`,
       detail: {
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
@@ -181,15 +204,42 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
 
     if (!requiresApproval) {
       await recordAuditEvent(tx, {
-        pipelineId: stage.pipeline.id,
-        stageId: stage.id,
+        pipelineId: current.pipeline.id,
+        stageId,
         actor: "SYSTEM",
-        action: `${getStageConfig(stage.type).label} completed automatically (no approval required)`,
+        action: `${getStageConfig(current.type).label} completed automatically (no approval required)`,
       });
-      await advancePipelinePastStage(tx, stage.pipeline.id, stage.pipeline.stageSequence, stage.type);
+      await advancePipelinePastStage(tx, current.pipeline.id, current.pipeline.stageSequence, current.type);
     }
 
     return updated;
+  });
+}
+
+/**
+ * Worker-side failure handling, called only once the job's retries are exhausted (not on
+ * every attempt — a mid-retry job shouldn't make the stage look freely re-draftable while
+ * still retrying in the background; same choice as constitution/commands.ts). Reuses
+ * REJECTED rather than inventing a new status (per tasks.md 5.3) — a human sees it exactly
+ * as they'd see any other rejected stage and redrafts it the same way — and blocks the
+ * pipeline the same way a human rejection does. A no-op if the stage already moved on.
+ */
+export async function revertStageDraftFailure(stageId: string, error: string): Promise<void> {
+  await db.$transaction(async (tx) => {
+    const reverted = await tx.stage.updateMany({
+      where: { id: stageId, status: "AI_DRAFTING" },
+      data: { status: "REJECTED" },
+    });
+    if (reverted.count === 0) return;
+
+    const stage = await tx.stage.findUniqueOrThrow({ where: { id: stageId } });
+    await tx.pipeline.update({ where: { id: stage.pipelineId }, data: { status: "BLOCKED" } });
+    await recordAuditEvent(tx, {
+      pipelineId: stage.pipelineId,
+      stageId,
+      actor: "SYSTEM",
+      action: `${getStageConfig(stage.type).label} drafting failed after exhausting retries: ${error}`,
+    });
   });
 }
 

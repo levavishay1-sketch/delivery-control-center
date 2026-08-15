@@ -41,6 +41,22 @@ export function getStageConfig(type: StageType): WorkflowStageConfig {
 }
 
 /**
+ * Like getStageConfig, but tolerant of a type that no longer has a live config
+ * entry — e.g. CONSTITUTION, retired from config/workflow.yaml's stage list in
+ * Slice 2 but still present in older pipelines' backfilled stageSequence and
+ * their historical Stage rows. For *display* call sites reading an existing
+ * pipeline's own stageSequence (which must never depend on the live config
+ * staying in sync with history — see design.md Decision 3), not for anything
+ * that drafts or gates a stage: a config that no longer exists must not be
+ * silently draftable, only silently displayable.
+ */
+export function getStageConfigOrFallback(type: StageType): WorkflowStageConfig {
+  const stage = loadWorkflow().find((s) => s.type === type);
+  if (stage) return stage;
+  return { type, label: `${type} (retired)`, description: "This stage type is no longer part of the configured pipeline.", promptTemplate: "", requiresApproval: true };
+}
+
+/**
  * Returns the stage type that follows `current` within a pipeline's own
  * snapshotted `stageSequence`, or null if `current` is the last stage.
  * Deliberately takes the sequence as a parameter rather than reading

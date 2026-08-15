@@ -8,11 +8,12 @@ import type { Constitution } from "@/generated/prisma/client";
 
 /**
  * Starts drafting a project's Constitution: transitions/creates the
- * Constitution row to AI_DRAFTING (committed before the job is enqueued, so
- * a worker that picks the job up immediately always finds a committed row —
- * mirrors draftStage's existing AI_DRAFTING-before-executor-call ordering),
- * then enqueues a DRAFT_CONSTITUTION job for the worker (see design.md
- * Decision 4a). Returns as soon as the job is queued, not once drafted.
+ * Constitution row to AI_DRAFTING and enqueues a DRAFT_CONSTITUTION job for
+ * the worker in the same transaction (see design.md Decision 4a) — so a
+ * crash between the two can never happen; either both commit or neither
+ * does, and a stage/Constitution never gets stuck in a drafting state with
+ * no job to move it out. Returns as soon as the job is queued, not once
+ * drafted.
  *
  * Draft-vs-new-version policy: no existing Constitution -> version 1;
  * latest is DRAFT (never submitted) -> reused in place; latest is
@@ -55,10 +56,13 @@ export async function draftConstitution(ctx: AuthContext, projectId: string): Pr
       action: `Requested Constitution v${result.version} draft`,
     });
 
+    // Date.now() suffix: the DRAFT-reused-in-place path drafts the same row more than once
+    // (e.g. after a reverted failure), and a stable key would collide with that row's prior
+    // job, returning stale state instead of enqueueing fresh work.
+    await enqueueJob("DRAFT_CONSTITUTION", { constitutionId: result.id }, `constitution-${result.id}-${Date.now()}`, tx);
+
     return result;
   });
-
-  await enqueueJob("DRAFT_CONSTITUTION", { constitutionId: constitution.id }, `constitution-${constitution.id}`);
 
   return constitution;
 }

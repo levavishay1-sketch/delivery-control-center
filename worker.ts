@@ -6,6 +6,7 @@ import {
   getConstitutionForDrafting,
   revertConstitutionDraftFailure,
 } from "@/domain/constitution/commands";
+import { completeStageDraft, getStageForDrafting, revertStageDraftFailure } from "@/domain/pipeline/commands";
 import { getAgentExecutor } from "@/lib/agents";
 import type { Job } from "@/generated/prisma/client";
 
@@ -21,15 +22,28 @@ interface JobTypeHandlers {
   onExhausted?: (payload: JobPayload, error: string) => Promise<void>;
 }
 
-/**
- * DRAFT_STAGE's real handling (calling the AI executor, writing the
- * resulting StageVersion, advancing the pipeline) is wired up in Task
- * Group 5 once draftStage enqueues instead of running synchronously.
- * Nothing enqueues a DRAFT_STAGE job before then, so this placeholder is
- * never exercised until that wiring lands.
- */
-async function handleDraftStageJob(_payload: JobPayload): Promise<void> {
-  throw new Error("DRAFT_STAGE job handling is not wired up yet (see Task Group 5)");
+async function handleDraftStageJob(payload: JobPayload): Promise<void> {
+  const stageId = payload.stageId as string;
+  const stage = await getStageForDrafting(stageId);
+
+  const previousStage = stage.pipeline.stages
+    .filter((s) => s.type !== stage.type)
+    .find((s) => s.status === "DONE" || s.status === "APPROVED");
+
+  const result = await getAgentExecutor().executeStage(stage.type, {
+    workItemTitle: stage.pipeline.workItem.title,
+    workItemDescription: stage.pipeline.workItem.description ?? "",
+    workItemSource: stage.pipeline.workItem.source,
+    workItemExternalId: stage.pipeline.workItem.externalId,
+    previousStageContent: previousStage?.content ?? undefined,
+  });
+
+  await completeStageDraft(stageId, result);
+}
+
+async function handleDraftStageExhausted(payload: JobPayload, error: string): Promise<void> {
+  const stageId = payload.stageId as string;
+  await revertStageDraftFailure(stageId, error);
 }
 
 async function handleDraftConstitutionJob(payload: JobPayload): Promise<void> {
@@ -48,7 +62,7 @@ async function handleDraftConstitutionExhausted(payload: JobPayload, error: stri
 }
 
 const handlers: Partial<Record<Job["type"], JobTypeHandlers>> = {
-  DRAFT_STAGE: { run: handleDraftStageJob },
+  DRAFT_STAGE: { run: handleDraftStageJob, onExhausted: handleDraftStageExhausted },
   DRAFT_CONSTITUTION: { run: handleDraftConstitutionJob, onExhausted: handleDraftConstitutionExhausted },
 };
 

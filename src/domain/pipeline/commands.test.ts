@@ -2,7 +2,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { db } from "@/lib/db";
-import { startPipeline } from "./commands";
+import {
+  approveStage,
+  completeStageDraft,
+  draftStage,
+  getStageForDrafting,
+  rejectStage,
+  revertStageDraftFailure,
+  startPipeline,
+} from "./commands";
 import { createWorkItem } from "@/domain/work-item/commands";
 import type { AuthContext } from "@/domain/shared/context";
 import { ConflictError, ValidationError } from "@/domain/shared/errors";
@@ -47,7 +55,16 @@ beforeAll(async () => {
   managerCtx = { userId: managerUserId, displayName: "Pipeline Manager", isOrgAdmin: false, memberships: [{ clientId, role: "MANAGER" }] };
 });
 
+const draftedStageIds: string[] = [];
+
 afterAll(async () => {
+  // draftStage enqueues a real Job row that isn't reachable via any FK cascade from
+  // Organization/Project, so it has to be cleaned up explicitly.
+  if (draftedStageIds.length > 0) {
+    await db.job.deleteMany({
+      where: { OR: draftedStageIds.map((id) => ({ idempotencyKey: { startsWith: `draft-stage-${id}-` } })) },
+    });
+  }
   await db.organization.deleteMany({ where: { id: { in: orgIds } } });
 });
 
@@ -100,5 +117,121 @@ describe("startPipeline", () => {
     } finally {
       fs.writeFileSync(configPath, originalConfig);
     }
+  });
+});
+
+/** Wraps draftStage so its enqueued Job row is tracked for afterAll cleanup. */
+async function draft(ctx: AuthContext, stageId: string) {
+  const stage = await draftStage(ctx, stageId);
+  draftedStageIds.push(stageId);
+  return stage;
+}
+
+/** Simulates what worker.ts's DRAFT_STAGE handler does, without running the poll loop. */
+async function runStageDraftJob(stageId: string, content: string) {
+  const stage = await getStageForDrafting(stageId);
+  expect(stage.pipeline).not.toBeNull();
+  return completeStageDraft(stageId, {
+    content,
+    aiModel: "mock-agent-v1",
+    promptTokens: 10,
+    completionTokens: 20,
+    costUsd: 0.001,
+  });
+}
+
+describe("draftStage / completeStageDraft / revertStageDraftFailure", () => {
+  it("enqueues a DRAFT_STAGE job and returns the stage in AI_DRAFTING without drafting content synchronously", async () => {
+    const project = await createProjectWithApprovedConstitution("Draft Job Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Draftable" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const firstStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+
+    const drafting = await draft(managerCtx, firstStage.id);
+    expect(drafting.status).toBe("AI_DRAFTING");
+    expect(drafting.content).toBeNull();
+
+    const job = await db.job.findFirst({ where: { idempotencyKey: { startsWith: `draft-stage-${firstStage.id}-` } } });
+    expect(job).not.toBeNull();
+    expect(job!.type).toBe("DRAFT_STAGE");
+    expect(job!.status).toBe("QUEUED");
+  });
+
+  it("worker completion writes content, creates a StageVersion, and moves an approval-required stage to PENDING_APPROVAL", async () => {
+    const project = await createProjectWithApprovedConstitution("Completion Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Completable" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const firstStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+
+    await draft(managerCtx, firstStage.id);
+    const completed = await runStageDraftJob(firstStage.id, "# Draft v1");
+
+    expect(completed.status).toBe("PENDING_APPROVAL");
+    expect(completed.content).toBe("# Draft v1");
+
+    const versions = await db.stageVersion.findMany({ where: { stageId: firstStage.id }, orderBy: { versionNumber: "asc" } });
+    expect(versions).toHaveLength(1);
+    expect(versions[0].versionNumber).toBe(1);
+    expect(versions[0].content).toBe("# Draft v1");
+    expect(versions[0].createdAsResultOf).toBe("DRAFT");
+  });
+
+  it("a redraft after rejection creates a second StageVersion (REDRAFT), preserving the first", async () => {
+    const project = await createProjectWithApprovedConstitution("Redraft Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Redraftable" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const firstStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+
+    await draft(managerCtx, firstStage.id);
+    const firstDraft = await runStageDraftJob(firstStage.id, "# Draft v1");
+    await rejectStage(managerCtx, firstDraft.id, "needs more detail");
+
+    await draft(managerCtx, firstStage.id);
+    const secondDraft = await runStageDraftJob(firstStage.id, "# Draft v2, addressing feedback");
+    expect(secondDraft.content).toBe("# Draft v2, addressing feedback");
+
+    const versions = await db.stageVersion.findMany({ where: { stageId: firstStage.id }, orderBy: { versionNumber: "asc" } });
+    expect(versions).toHaveLength(2);
+    expect(versions[0].createdAsResultOf).toBe("DRAFT");
+    expect(versions[0].content).toBe("# Draft v1");
+    expect(versions[1].createdAsResultOf).toBe("REDRAFT");
+    expect(versions[1].content).toBe("# Draft v2, addressing feedback");
+  });
+
+  it("exhausted retries leave the stage REJECTED (visibly failed, not stuck) and block the pipeline", async () => {
+    const project = await createProjectWithApprovedConstitution("Exhaustion Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Fails to draft" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const firstStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+
+    await draft(managerCtx, firstStage.id);
+    await revertStageDraftFailure(firstStage.id, "executor unavailable");
+
+    const reverted = await db.stage.findUniqueOrThrow({ where: { id: firstStage.id } });
+    expect(reverted.status).toBe("REJECTED");
+
+    const reloadedPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(reloadedPipeline.status).toBe("BLOCKED");
+
+    const events = await db.auditEvent.findMany({ where: { stageId: firstStage.id, actor: "SYSTEM" } });
+    expect(events.some((e) => e.action.includes("exhausting retries"))).toBe(true);
+
+    // Visibly failed, not stuck: the stage can be drafted again (REJECTED is a valid draftStage entry point).
+    const redrafted = await draft(managerCtx, firstStage.id);
+    expect(redrafted.status).toBe("AI_DRAFTING");
+  });
+
+  it("approveStage advances the pipeline to the next configured stage", async () => {
+    const project = await createProjectWithApprovedConstitution("Advance Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Advances" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const firstStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+
+    await draft(managerCtx, firstStage.id);
+    const completed = await runStageDraftJob(firstStage.id, "# Draft");
+    const advanced = await approveStage(managerCtx, completed.id);
+
+    expect(advanced.currentStage).not.toBe(pipeline.stageSequence[0]);
+    expect(advanced.stages.some((s) => s.type === advanced.currentStage)).toBe(true);
   });
 });

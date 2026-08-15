@@ -49,13 +49,15 @@ beforeAll(async () => {
   viewerCtx = { userId: viewerUserId, displayName: "Test Viewer", isOrgAdmin: false, memberships: [{ clientId, role: "VIEWER" }] };
 });
 
-const enqueuedJobIdempotencyKeys: string[] = [];
+const enqueuedForConstitutionIds: string[] = [];
 
 afterAll(async () => {
   // draftConstitution enqueues a real Job row that isn't reachable via any FK cascade
   // from Organization/Project, so it has to be cleaned up explicitly.
-  if (enqueuedJobIdempotencyKeys.length > 0) {
-    await db.job.deleteMany({ where: { idempotencyKey: { in: enqueuedJobIdempotencyKeys } } });
+  if (enqueuedForConstitutionIds.length > 0) {
+    await db.job.deleteMany({
+      where: { OR: enqueuedForConstitutionIds.map((id) => ({ idempotencyKey: { startsWith: `constitution-${id}-` } })) },
+    });
   }
   await db.organization.deleteMany({ where: { clients: { some: { id: clientId } } } });
   await db.user.deleteMany({ where: { id: { in: [managerUserId, viewerUserId] } } });
@@ -64,7 +66,7 @@ afterAll(async () => {
 /** Wraps draftConstitution so its enqueued Job row is tracked for afterAll cleanup. */
 async function draft(ctx: AuthContext, forProjectId: string) {
   const constitution = await draftConstitution(ctx, forProjectId);
-  enqueuedJobIdempotencyKeys.push(`constitution-${constitution.id}`);
+  enqueuedForConstitutionIds.push(constitution.id);
   return constitution;
 }
 
@@ -87,7 +89,7 @@ describe("draftConstitution", () => {
     expect(constitution.version).toBe(1);
     expect(constitution.status).toBe("AI_DRAFTING");
 
-    const job = await db.job.findUnique({ where: { idempotencyKey: `constitution-${constitution.id}` } });
+    const job = await db.job.findFirst({ where: { idempotencyKey: { startsWith: `constitution-${constitution.id}-` } } });
     expect(job).not.toBeNull();
     expect(job!.type).toBe("DRAFT_CONSTITUTION");
     expect(job!.status).toBe("QUEUED");

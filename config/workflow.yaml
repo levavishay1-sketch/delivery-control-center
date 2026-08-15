@@ -4,13 +4,14 @@
 # the app code hardcodes stage order or gate rules — lib/config.ts loads this
 # at runtime, so changing the pipeline means editing this file, not the code.
 
+# Slice 2 — CONSTITUTION is deliberately not a stage here: it's promoted to a
+# project-scoped, versioned artifact drafted/approved once per project (see
+# src/domain/constitution/), referenced by every pipeline started under it via
+# Pipeline.constitutionVersion, rather than drafted per work item. CLARIFY and
+# ANALYZE join this list in Task Groups 6/7 once their prompt templates and
+# worker-side handling exist; adding their StageType here before then would
+# create stages the worker can't actually draft.
 stages:
-  - type: CONSTITUTION
-    label: Constitution
-    description: Non-negotiable principles and constraints the delivery must respect.
-    promptTemplate: constitution.md
-    requiresApproval: true
-
   - type: SPEC
     label: Specification
     description: What is being built and why, from the work item's intent.
