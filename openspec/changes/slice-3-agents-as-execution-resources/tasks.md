@@ -37,9 +37,9 @@ established pattern).
 
 ## Task Group 4: Cost Rollups (3 tasks)
 
-- [ ] 4.1 `src/domain/agent/queries.ts`: `getWorkItemAiCost(workItemId)`, `getProjectAiCost(projectId)`, `getClientAiCost(clientId)` — sum `AgentRun.costUsd` joined through `Stage`/`Constitution` up to the requested scope.
-- [ ] 4.2 API routes or extend existing detail-page loaders (360° Record, project view) to surface the rollup — read-only, `ALL_ROLES` access (cost summary is visible to read-only roles per design.md's permissioned-detail requirement; only raw run detail is write-gated).
-- [ ] 4.3 Tests: rollup sums match the sum of underlying `AgentRun.costUsd` across multiple stages/redrafts/constitution versions; a work item/project/client with no runs yet returns zero, not an error.
+- [x] 4.1 `src/domain/agent/queries.ts`: `getWorkItemAiCost(workItemId)`, `getProjectAiCost(projectId)`, `getClientAiCost(clientId)` — sum `AgentRun.costUsd` joined through `Stage`/`Constitution` up to the requested scope.
+- [x] 4.2 API routes or extend existing detail-page loaders (360° Record, project view) to surface the rollup — read-only, `ALL_ROLES` access (cost summary is visible to read-only roles per design.md's permissioned-detail requirement; only raw run detail is write-gated).
+- [x] 4.3 Tests: rollup sums match the sum of underlying `AgentRun.costUsd` across multiple stages/redrafts/constitution versions; a work item/project/client with no runs yet returns zero, not an error.
 
 ## Task Group 5: Budget Enforcement & Override (5 tasks)
 

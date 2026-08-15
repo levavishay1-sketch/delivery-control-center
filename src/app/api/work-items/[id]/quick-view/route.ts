@@ -4,6 +4,7 @@ import { getActiveBlockers } from "@/domain/blocker/queries";
 import { getWorkItemDecisions } from "@/domain/decision/queries";
 import { getWorkItemDependencies } from "@/domain/dependency/queries";
 import { getWorkItemAuditEvents } from "@/domain/audit/queries";
+import { getWorkItemAiCost } from "@/domain/agent/queries";
 import { listClientMembers } from "@/domain/client/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { WRITE_ROLES } from "@/domain/shared/authz";
@@ -25,13 +26,14 @@ export async function GET(request: Request, routeCtx: RouteContext<"/api/work-it
     const workItem = await getWorkItemDetail(ctx, id);
     if (!workItem) throw new NotFoundError("Work item not found");
 
-    const [activeBlockers, pendingDecisions, dependencies, timeline, members, siblingItems] = await Promise.all([
+    const [activeBlockers, pendingDecisions, dependencies, timeline, members, siblingItems, aiCost] = await Promise.all([
       getActiveBlockers(workItem.id),
       getWorkItemDecisions(workItem.id),
       getWorkItemDependencies(workItem.id),
       getWorkItemAuditEvents(ctx, workItem.id, 1, 20),
       listClientMembers(ctx, workItem.project.clientId),
       listWorkItems(ctx, workItem.projectId, { pageSize: 200 }),
+      getWorkItemAiCost(workItem.id),
     ]);
 
     const manage = canAct(workItem.project.clientId, ctx.memberships, ctx.isOrgAdmin);
@@ -91,7 +93,7 @@ export async function GET(request: Request, routeCtx: RouteContext<"/api/work-it
         owner: c.owner ? { id: c.owner.id, name: c.owner.name, email: c.owner.email } : null,
         pipelineId: c.pipeline?.id ?? null,
       })),
-      aiCost: workItem.aiCost.toString(),
+      aiCost: aiCost.toString(),
       stageCosts: workItem.pipeline?.stages.map((s) => ({ type: s.type, costUsd: s.costUsd ? s.costUsd.toString() : null })) ?? [],
       dependencies: {
         upstream: dependencies.upstream.map((d) => ({

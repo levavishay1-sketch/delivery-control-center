@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getProjectConstitutionDetail } from "@/domain/constitution/queries";
+import { getProjectAiCost } from "@/domain/agent/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { StageBadge } from "@/components/StageBadge";
@@ -22,6 +23,7 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
 
   if (!detail) notFound();
   const { project, latest, history } = detail;
+  const aiCost = await getProjectAiCost(project.id);
 
   return (
     <div className="flex flex-col gap-6">
@@ -30,6 +32,7 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
         <h1 className="text-xl font-semibold">
           {project.name} <span className="opacity-50">({project.key})</span>
         </h1>
+        <p className="mt-1 text-xs opacity-60">Total AI drafting cost: ${aiCost.toString()}</p>
         <Link href="/" className="mt-1 inline-block text-xs underline opacity-70 hover:opacity-100">
           ← Back to Dashboard
         </Link>
