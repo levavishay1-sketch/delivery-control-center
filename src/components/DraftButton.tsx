@@ -5,9 +5,10 @@ import { useState } from "react";
 import { pollUntilStatusLeaves } from "@/lib/pollStatus";
 
 interface BudgetExceeded {
-  scope: "client" | "project";
+  scope: "client" | "project" | "organization";
   clientId: string;
   projectId: string;
+  organizationId: string | null;
 }
 
 /** `canApprove` (WRITE_ROLES) controls whether a budget-exceeded refusal offers "Approve & retry" — computed server-side and passed down, same pattern as this page's other role-gated UI. */
@@ -37,7 +38,12 @@ export function DraftButton({ stageId, label, canApprove = false }: { stageId: s
   async function approveAndRetry() {
     if (!budgetExceeded) return;
     setPending(true);
-    const path = budgetExceeded.scope === "project" ? `/api/projects/${budgetExceeded.projectId}` : `/api/clients/${budgetExceeded.clientId}`;
+    const path =
+      budgetExceeded.scope === "project"
+        ? `/api/projects/${budgetExceeded.projectId}`
+        : budgetExceeded.scope === "organization"
+          ? `/api/organizations/${budgetExceeded.organizationId}`
+          : `/api/clients/${budgetExceeded.clientId}`;
     const res = await fetch(`${path}/budget-override`, { method: "POST" });
     if (!res.ok) {
       setPending(false);

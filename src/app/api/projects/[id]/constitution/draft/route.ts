@@ -13,7 +13,7 @@ export async function POST(_req: Request, routeCtx: RouteContext<"/api/projects/
   } catch (err) {
     if (err instanceof BudgetExceededError) {
       return NextResponse.json(
-        { error: err.message, budgetExceeded: { scope: err.scope, clientId: err.clientId, projectId: err.projectId } },
+        { error: err.message, budgetExceeded: { scope: err.scope, clientId: err.clientId, projectId: err.projectId, organizationId: err.organizationId } },
         { status: err.status }
       );
     }

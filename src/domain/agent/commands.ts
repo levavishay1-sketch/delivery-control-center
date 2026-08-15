@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
 import { loadAgents } from "@/lib/config";
-import { getAgentById, getClientAiCost, getDefaultAgent, getProjectAiCost } from "@/domain/agent/queries";
+import { getAgentById, getClientAiCost, getDefaultAgent, getOrganizationAiCost, getProjectAiCost } from "@/domain/agent/queries";
 import { recordAuditEvent } from "@/lib/audit";
 import type { AuthContext } from "@/domain/shared/context";
-import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
+import { requireClientRole, requireOrgAdmin, WRITE_ROLES } from "@/domain/shared/authz";
 import { ValidationError } from "@/domain/shared/errors";
 import { Prisma, type StageType } from "@/generated/prisma/client";
 
@@ -118,7 +118,9 @@ export async function failAgentRun(
 export interface BudgetCheckResult {
   allowed: boolean;
   /** Which threshold was checked — null when the scope has no budget configured at all (always allowed). */
-  scope: "client" | "project" | null;
+  scope: "client" | "project" | "organization" | null;
+  /** The id of the checked scope's own row (organizationId/clientId/projectId) — null when scope is null. Callers already know the client/project id; this exists so an "organization" scope's id (not otherwise passed in) is recoverable. */
+  scopeId: string | null;
   budgetUsd: Prisma.Decimal | null;
   accruedUsd: Prisma.Decimal | null;
 }
@@ -126,10 +128,10 @@ export interface BudgetCheckResult {
 /**
  * Atomically claims one unconsumed BudgetOverride for the given scope, the same claim pattern
  * Job.claimJobs already uses (UPDATE ... WHERE consumed = false ... RETURNING) — so two
- * concurrent requests past budget can never both consume the same grant. `column` is one of two
+ * concurrent requests past budget can never both consume the same grant. `column` is one of three
  * fixed literals this module controls, never user input.
  */
-async function claimBudgetOverride(column: "clientId" | "projectId", scopeId: string): Promise<boolean> {
+async function claimBudgetOverride(column: "organizationId" | "clientId" | "projectId", scopeId: string): Promise<boolean> {
   const rows = await db.$queryRaw<{ id: string }[]>(Prisma.sql`
     UPDATE "BudgetOverride"
     SET consumed = true, "consumedAt" = now()
@@ -147,10 +149,11 @@ async function claimBudgetOverride(column: "clientId" | "projectId", scopeId: st
 
 /**
  * Resolves the effective budget for a scope — the project's aiBudgetUsd if set, else the
- * client's, else unbounded (design.md Decision 4: project overrides client, not the stricter of
- * the two) — and checks accrued AgentRun cost against it. If exceeded, atomically consumes a
- * matching unconsumed BudgetOverride if one exists; otherwise refuses. A scope with no budget
- * configured at either level is never blocked.
+ * client's, else the organization's (Slice 6), else unbounded (design.md Decision 4: a more
+ * specific scope overrides a broader one, not the stricter of the two) — and checks accrued
+ * AgentRun cost against it. If exceeded, atomically consumes a matching unconsumed
+ * BudgetOverride if one exists; otherwise refuses. A scope with no budget configured at any
+ * level is never blocked.
  */
 export async function checkBudget(clientId: string, projectId: string): Promise<BudgetCheckResult> {
   const [client, project] = await Promise.all([
@@ -158,47 +161,69 @@ export async function checkBudget(clientId: string, projectId: string): Promise<
     db.project.findUniqueOrThrow({ where: { id: projectId } }),
   ]);
 
-  const scope: "client" | "project" | null =
-    project.aiBudgetUsd !== null ? "project" : client.aiBudgetUsd !== null ? "client" : null;
-  if (!scope) {
-    return { allowed: true, scope: null, budgetUsd: null, accruedUsd: null };
+  if (project.aiBudgetUsd !== null) {
+    return checkBudgetAtScope("project", projectId, project.aiBudgetUsd);
+  }
+  if (client.aiBudgetUsd !== null) {
+    return checkBudgetAtScope("client", clientId, client.aiBudgetUsd);
   }
 
-  const budgetUsd = scope === "project" ? project.aiBudgetUsd! : client.aiBudgetUsd!;
-  const accruedUsd = scope === "project" ? await getProjectAiCost(projectId) : await getClientAiCost(clientId);
+  const organization = await db.organization.findUniqueOrThrow({ where: { id: client.organizationId } });
+  if (organization.aiBudgetUsd !== null) {
+    return checkBudgetAtScope("organization", organization.id, organization.aiBudgetUsd);
+  }
+
+  return { allowed: true, scope: null, scopeId: null, budgetUsd: null, accruedUsd: null };
+}
+
+async function checkBudgetAtScope(
+  scope: "client" | "project" | "organization",
+  scopeId: string,
+  budgetUsd: Prisma.Decimal
+): Promise<BudgetCheckResult> {
+  const accruedUsd =
+    scope === "project" ? await getProjectAiCost(scopeId) : scope === "client" ? await getClientAiCost(scopeId) : await getOrganizationAiCost(scopeId);
 
   if (accruedUsd.lessThan(budgetUsd)) {
-    return { allowed: true, scope, budgetUsd, accruedUsd };
+    return { allowed: true, scope, scopeId, budgetUsd, accruedUsd };
   }
 
-  const consumed = await claimBudgetOverride(
-    scope === "project" ? "projectId" : "clientId",
-    scope === "project" ? projectId : clientId
-  );
-  return { allowed: consumed, scope, budgetUsd, accruedUsd };
+  const column = scope === "project" ? "projectId" : scope === "client" ? "clientId" : "organizationId";
+  const consumed = await claimBudgetOverride(column, scopeId);
+  return { allowed: consumed, scope, scopeId, budgetUsd, accruedUsd };
 }
 
 /**
  * Grants a single-use approval to draft past an exceeded budget (design.md Decision 5): a
- * WRITE_ROLES-gated, audited action — not a config toggle that silently raises the limit.
- * Exactly one of clientId/projectId must be set, mirroring checkBudget's own scope precedence.
+ * WRITE_ROLES-gated (org-admin for the Organization scope, Slice 6), audited action — not a
+ * config toggle that silently raises the limit. Exactly one of organizationId/clientId/projectId
+ * must be set, mirroring checkBudget's own scope precedence.
  */
 export async function approveBudgetOverride(
   ctx: AuthContext,
-  scope: { clientId?: string; projectId?: string }
+  scope: { organizationId?: string; clientId?: string; projectId?: string }
 ) {
-  if ((scope.clientId ? 1 : 0) + (scope.projectId ? 1 : 0) !== 1) {
-    throw new ValidationError("approveBudgetOverride requires exactly one of clientId or projectId.");
+  const scopeCount = (scope.organizationId ? 1 : 0) + (scope.clientId ? 1 : 0) + (scope.projectId ? 1 : 0);
+  if (scopeCount !== 1) {
+    throw new ValidationError("approveBudgetOverride requires exactly one of organizationId, clientId, or projectId.");
   }
 
-  const clientIdForAuth = scope.projectId
-    ? (await db.project.findUniqueOrThrow({ where: { id: scope.projectId } })).clientId
-    : scope.clientId!;
-  requireClientRole(ctx, clientIdForAuth, WRITE_ROLES);
+  let clientIdForAuth: string | null = null;
+  if (scope.organizationId) {
+    requireOrgAdmin(ctx);
+  } else {
+    clientIdForAuth = scope.projectId
+      ? (await db.project.findUniqueOrThrow({ where: { id: scope.projectId } })).clientId
+      : scope.clientId!;
+    requireClientRole(ctx, clientIdForAuth, WRITE_ROLES);
+  }
+
+  const scopeLabel = scope.projectId ? "this project" : scope.clientId ? "this client" : "this organization";
 
   return db.$transaction(async (tx) => {
     const override = await tx.budgetOverride.create({
       data: {
+        organizationId: scope.organizationId ?? null,
         clientId: scope.clientId ?? null,
         projectId: scope.projectId ?? null,
         approvedByUserId: ctx.userId,
@@ -210,8 +235,13 @@ export async function approveBudgetOverride(
       actor: "USER",
       userId: ctx.userId,
       actorName: ctx.displayName,
-      action: `${ctx.displayName} approved an AI budget override for ${scope.projectId ? "this project" : "this client"}`,
-      detail: { clientId: scope.clientId ?? clientIdForAuth, projectId: scope.projectId ?? null, budgetOverrideId: override.id },
+      action: `${ctx.displayName} approved an AI budget override for ${scopeLabel}`,
+      detail: {
+        organizationId: scope.organizationId ?? null,
+        clientId: scope.clientId ?? clientIdForAuth,
+        projectId: scope.projectId ?? null,
+        budgetOverrideId: override.id,
+      },
     });
 
     return override;

@@ -184,7 +184,8 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
       `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`,
       budgetCheck.scope!,
       stage.pipeline.workItem.project.clientId,
-      stage.pipeline.workItem.projectId
+      stage.pipeline.workItem.projectId,
+      budgetCheck.scope === "organization" ? budgetCheck.scopeId : null
     );
   }
 

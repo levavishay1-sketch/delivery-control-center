@@ -37,7 +37,8 @@ export async function draftConstitution(ctx: AuthContext, projectId: string): Pr
       `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`,
       budgetCheck.scope!,
       project.clientId,
-      projectId
+      projectId,
+      budgetCheck.scope === "organization" ? budgetCheck.scopeId : null
     );
   }
 

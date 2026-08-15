@@ -46,9 +46,11 @@ export class ConflictError extends DomainError {
 export class BudgetExceededError extends ConflictError {
   constructor(
     message: string,
-    public readonly scope: "client" | "project",
+    public readonly scope: "client" | "project" | "organization",
     public readonly clientId: string,
-    public readonly projectId: string
+    public readonly projectId: string,
+    /** Set only when scope is "organization" — the organization's own id, needed to approve an override at that scope (Slice 6). */
+    public readonly organizationId: string | null = null
   ) {
     super(message);
     this.name = "BudgetExceededError";

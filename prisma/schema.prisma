@@ -251,6 +251,7 @@ model User {
   manualFieldEdits             FieldProvenance[]     @relation("FieldProvenanceActor")
   resolvedSyncConflicts        SyncConflict[]        @relation("SyncConflictResolvedBy")
   approvedCompletionExceptions CompletionException[] @relation("CompletionExceptionApprover")
+  configChangesMade            ConfigChange[]        @relation("ConfigChangeChangedBy")
 }
 
 model Account {
@@ -309,13 +310,18 @@ model ClientMembership {
 }
 
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  // Slice 6 — top of the AI-budget inheritance chain (Organization -> Client -> Project);
+  // unset means no spending limit at this scope, same convention as Client/Project.
+  aiBudgetUsd Decimal? @db.Decimal(10, 4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  clients Client[]
+  clients         Client[]
+  configChanges   ConfigChange[]
+  budgetOverrides BudgetOverride[]
 }
 
 model Client {
@@ -335,6 +341,7 @@ model Client {
   projects        Project[]
   memberships     ClientMembership[]
   budgetOverrides BudgetOverride[]
+  configChanges   ConfigChange[]
 
   @@unique([organizationId, slug])
 }
@@ -354,6 +361,7 @@ model Project {
   auditEvents     AuditEvent[]
   constitutions   Constitution[]
   budgetOverrides BudgetOverride[]
+  configChanges   ConfigChange[]
   // Slice 4 — nullable only during the migration window between the additive
   // migration and the backfill (see design.md Migration Plan); every Project
   // has exactly one Connector once the backfill has run.
@@ -674,21 +682,56 @@ model AgentRun {
 // request claims it first (UPDATE ... WHERE consumed = false RETURNING,
 // same pattern as Job.claimJobs).
 model BudgetOverride {
-  id               String    @id @default(cuid())
+  id               String        @id @default(cuid())
+  // Slice 6 — the Organization fallback tier's own-use override; nullable like
+  // clientId/projectId, exactly one of the three set per row (see checkBudget).
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   clientId         String?
-  client           Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  client           Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
   projectId        String?
-  project          Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project          Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   approvedByUserId String
-  approvedByUser   User      @relation("BudgetOverrideApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
-  approvedAt       DateTime  @default(now())
-  consumed         Boolean   @default(false)
+  approvedByUser   User          @relation("BudgetOverrideApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  approvedAt       DateTime      @default(now())
+  consumed         Boolean       @default(false)
   consumedAt       DateTime?
-  consumedByRunId  String?   @unique
-  consumedByRun    AgentRun? @relation(fields: [consumedByRunId], references: [id], onDelete: SetNull)
+  consumedByRunId  String?       @unique
+  consumedByRun    AgentRun?     @relation(fields: [consumedByRunId], references: [id], onDelete: SetNull)
 
+  @@index([organizationId, consumed])
   @@index([clientId, consumed])
   @@index([projectId, consumed])
+}
+
+// Slice 6 — append-only version history for a configurable value change at
+// any scope in the hierarchy (design.md decision 2: a dedicated table, not
+// folded into AuditEvent, since AuditEvent has no Organization/Client FK).
+enum ConfigScope {
+  ORGANIZATION
+  CLIENT
+  PROJECT
+}
+
+model ConfigChange {
+  id              String        @id @default(cuid())
+  scope           ConfigScope
+  organizationId  String?
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId        String?
+  client          Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  field           String
+  oldValueUsd     Decimal?      @db.Decimal(10, 4)
+  newValueUsd     Decimal?      @db.Decimal(10, 4)
+  changedByUserId String
+  changedByUser   User          @relation("ConfigChangeChangedBy", fields: [changedByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+
+  @@index([scope, organizationId])
+  @@index([scope, clientId])
+  @@index([scope, projectId])
 }
 
 // Slice 4 — a project's connection to one external work-item tracker,

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { approveBudgetOverride, checkBudget, resolveDefaultAgentId, startAgentRun } from "./commands";
 import { createWorkItem } from "@/domain/work-item/commands";
 import { startPipeline, draftStage, completeStageDraft, rejectStage } from "@/domain/pipeline/commands";
-import { ConflictError } from "@/domain/shared/errors";
+import { ConflictError, ForbiddenError } from "@/domain/shared/errors";
 import type { AuthContext } from "@/domain/shared/context";
 
 /**
@@ -11,8 +11,10 @@ import type { AuthContext } from "@/domain/shared/context";
  * other domain test suites in this project.
  */
 
+let organizationId: string;
 let clientId: string;
 let managerCtx: AuthContext;
+let orgAdminCtx: AuthContext;
 
 const orgIds: string[] = [];
 const jobIds: string[] = [];
@@ -52,12 +54,16 @@ async function draftAndCompleteStage(stageId: string, costUsd: number) {
 beforeAll(async () => {
   const org = await db.organization.create({ data: { name: "Budget Test Org", slug: `budget-test-org-${Date.now()}` } });
   orgIds.push(org.id);
+  organizationId = org.id;
   const client = await db.client.create({ data: { organizationId: org.id, name: "Budget Test Client", slug: "budget-test" } });
   clientId = client.id;
 
   const manager = await db.user.create({ data: { email: `budget-manager-${Date.now()}@test.local`, name: "Budget Manager" } });
   await db.clientMembership.create({ data: { userId: manager.id, clientId, role: "MANAGER" } });
   managerCtx = { userId: manager.id, displayName: "Budget Manager", isOrgAdmin: false, memberships: [{ clientId, role: "MANAGER" }] };
+
+  const orgAdmin = await db.user.create({ data: { email: `budget-org-admin-${Date.now()}@test.local`, name: "Budget Org Admin", isOrgAdmin: true } });
+  orgAdminCtx = { userId: orgAdmin.id, displayName: "Budget Org Admin", isOrgAdmin: true, memberships: [] };
 });
 
 afterAll(async () => {
@@ -105,6 +111,65 @@ describe("checkBudget", () => {
     } finally {
       await db.client.update({ where: { id: clientId }, data: { aiBudgetUsd: null } });
     }
+  });
+
+  it("falls through to the organization when neither project nor client has a budget configured", async () => {
+    await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: 1000 } });
+    try {
+      const project = await createProjectWithApprovedConstitution("Org Fallback Project");
+      const result = await checkBudget(clientId, project.id);
+      expect(result.scope).toBe("organization");
+      expect(result.allowed).toBe(true);
+      expect(result.scopeId).toBe(organizationId);
+    } finally {
+      await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: null } });
+    }
+  });
+
+  it("a client-level budget overrides the organization's", async () => {
+    await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: 1000 } });
+    await db.client.update({ where: { id: clientId }, data: { aiBudgetUsd: 500 } });
+    try {
+      const project = await createProjectWithApprovedConstitution("Client Overrides Org Project");
+      const result = await checkBudget(clientId, project.id);
+      expect(result.scope).toBe("client");
+    } finally {
+      await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: null } });
+      await db.client.update({ where: { id: clientId }, data: { aiBudgetUsd: null } });
+    }
+  });
+
+  it("blocks drafting once the organization's accrued cost meets its budget", async () => {
+    // Earlier tests in this file already drafted under this same organization, so its
+    // accrued cost is already > 0 — a tiny threshold is already exceeded without drafting
+    // anything new here (organization-level accrual is org-wide, unlike the project-scoped
+    // tests above which each start from a fresh project).
+    await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: 0.000001 } });
+    try {
+      const project = await createProjectWithApprovedConstitution("Org Budget Exceeded Project");
+      const result = await checkBudget(clientId, project.id);
+      expect(result.scope).toBe("organization");
+      expect(result.allowed).toBe(false);
+    } finally {
+      await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: null } });
+    }
+  });
+});
+
+describe("approveBudgetOverride at organization scope", () => {
+  it("requires org-admin, not just a client WRITE_ROLES membership", async () => {
+    await expect(approveBudgetOverride(managerCtx, { organizationId })).rejects.toThrow(ForbiddenError);
+  });
+
+  it("an org admin can approve an organization-scope override", async () => {
+    const override = await approveBudgetOverride(orgAdminCtx, { organizationId });
+    expect(override.organizationId).toBe(organizationId);
+    expect(override.consumed).toBe(false);
+  });
+
+  it("requires exactly one of organizationId/clientId/projectId", async () => {
+    const project = await createProjectWithApprovedConstitution("Org Scope Both Set Project");
+    await expect(approveBudgetOverride(orgAdminCtx, { organizationId, projectId: project.id })).rejects.toThrow();
   });
 });
 

@@ -54,6 +54,21 @@ export async function getProjectAiCost(projectId: string) {
   return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD);
 }
 
+/** Total AI drafting cost across every project under every client in an organization (Slice 6 — the fallback budget scope above Client). */
+export async function getOrganizationAiCost(organizationId: string) {
+  const [stages, constitutions] = await Promise.all([
+    db.agentRun.aggregate({
+      where: { stageVersions: { some: { stage: { pipeline: { workItem: { project: { client: { organizationId } } } } } } } },
+      _sum: { costUsd: true },
+    }),
+    db.agentRun.aggregate({
+      where: { constitutions: { some: { project: { client: { organizationId } } } } },
+      _sum: { costUsd: true },
+    }),
+  ]);
+  return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD);
+}
+
 /**
  * Loads an AgentRun and the client that owns it, for authorization. Ownership is normally
  * resolved through whichever Stage/Constitution the run's StageVersion/Constitution row
