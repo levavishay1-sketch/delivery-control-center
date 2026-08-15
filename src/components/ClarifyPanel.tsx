@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { pollUntilDraftingFinishes } from "@/lib/pollStageStatus";
+import { pollUntilStatusLeaves } from "@/lib/pollStatus";
 
 export interface ClarifyQuestionItem {
   id: string;
@@ -39,7 +39,7 @@ export function ClarifyPanel({ stageId, questions }: { stageId: string; question
 
     const { resumedDrafting } = (await res.json()) as { resumedDrafting: boolean };
     if (resumedDrafting) {
-      await pollUntilDraftingFinishes(stageId);
+      await pollUntilStatusLeaves(`/api/stages/${stageId}`, "AI_DRAFTING");
     }
     setPendingId(null);
     router.refresh();

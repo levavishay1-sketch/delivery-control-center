@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function ApprovalGate({ stageId }: { stageId: string }) {
+export function ConstitutionApprovalGate({ constitutionId }: { constitutionId: string }) {
   const router = useRouter();
   const [comment, setComment] = useState("");
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
@@ -12,7 +12,7 @@ export function ApprovalGate({ stageId }: { stageId: string }) {
   async function decide(decision: "approve" | "reject") {
     setPending(decision);
     setError(null);
-    const res = await fetch(`/api/stages/${stageId}/${decision}`, {
+    const res = await fetch(`/api/constitutions/${constitutionId}/${decision}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ comment: comment || undefined }),

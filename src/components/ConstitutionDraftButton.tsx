@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { pollUntilStatusLeaves } from "@/lib/pollStatus";
 
-export function DraftButton({ stageId, label }: { stageId: string; label: string }) {
+export function ConstitutionDraftButton({ projectId, label }: { projectId: string; label: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,13 +12,14 @@ export function DraftButton({ stageId, label }: { stageId: string; label: string
   async function onClick() {
     setPending(true);
     setError(null);
-    const res = await fetch(`/api/stages/${stageId}/draft`, { method: "POST" });
+    const res = await fetch(`/api/projects/${projectId}/constitution/draft`, { method: "POST" });
     if (!res.ok) {
       setPending(false);
-      setError((await res.json()).error ?? "Failed to draft stage");
+      setError((await res.json()).error ?? "Failed to draft Constitution");
       return;
     }
-    await pollUntilStatusLeaves(`/api/stages/${stageId}`, "AI_DRAFTING");
+    const constitution = (await res.json()) as { id: string };
+    await pollUntilStatusLeaves(`/api/constitutions/${constitution.id}`, "AI_DRAFTING");
     setPending(false);
     router.refresh();
   }

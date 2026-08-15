@@ -80,9 +80,9 @@ established pattern).
 
 ## Task Group 10: Pipeline Detail Page & Constitution UI (3 tasks)
 
-- [ ] 10.1 Constitution UI: a project-level page or section (new route, e.g. `/projects/[id]/constitution`) to draft/approve/reject and view version history — the first UI surface for a capability that isn't per-work-item.
-- [ ] 10.2 Pipeline detail page (`/pipelines/[id]`): stage version history (expandable, from `StageVersion`), the Clarify Q&A panel (Task Group 6.4), the Analyze findings panel (Task Group 7.4), role-based gate messaging (show which roles can act when the current user cannot), the "Start SDD" entry point (Task Group 4.4) for work items with no pipeline yet.
-- [ ] 10.3 Responsive/accessible pass on all new UI (matches Slice 1's established bar): semantic sections, `aria-label`s on interactive elements, keyboard navigation on the version-history expand/collapse and Q&A form. Commit: "Build Constitution and enriched pipeline-detail UI"
+- [x] 10.1 Constitution UI: a project-level page or section (new route, e.g. `/projects/[id]/constitution`) to draft/approve/reject and view version history — the first UI surface for a capability that isn't per-work-item.
+- [x] 10.2 Pipeline detail page (`/pipelines/[id]`): stage version history (expandable, from `StageVersion`), the Clarify Q&A panel (Task Group 6.4), the Analyze findings panel (Task Group 7.4), role-based gate messaging (show which roles can act when the current user cannot), the "Start SDD" entry point (Task Group 4.4) for work items with no pipeline yet.
+- [x] 10.3 Responsive/accessible pass on all new UI (matches Slice 1's established bar): semantic sections, `aria-label`s on interactive elements, keyboard navigation on the version-history expand/collapse and Q&A form. Commit: "Build Constitution and enriched pipeline-detail UI"
 
 ## Task Group 11: End-to-End Test Scenario (1 task)
 

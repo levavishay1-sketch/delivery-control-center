@@ -539,4 +539,29 @@ describe("role-based gate policy (approverRoles)", () => {
     const rejected = await rejectStage(projectManagerCtx, completed.id, "needs rework");
     expect(rejected.status).toBe("REJECTED");
   });
+
+  it("still returns ForbiddenError (not a crash) approving a stage type retired from the live config", async () => {
+    // A pre-Slice-2 pipeline's CONSTITUTION-type Stage row has no entry in the live
+    // config/workflow.yaml — getStageConfig(type) throws for it. Regression test for a real bug:
+    // resolving approverRoles for such a stage must never crash before authorization is even
+    // checked (see getApproverRolesSafe's doc comment in commands.ts).
+    const project = await createProjectWithApprovedConstitution("Retired Stage Type Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Retired stage type" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+
+    // Repoint this stage's type to CONSTITUTION (retired from config/workflow.yaml) to simulate
+    // a historical stage, and put it in PENDING_APPROVAL so approveStage's role check runs.
+    await db.stage.update({ where: { id: specStage.id }, data: { type: "CONSTITUTION", status: "PENDING_APPROVAL" } });
+
+    // VIEWER isn't in WRITE_ROLES (the fallback for a retired stage type) — no DB fixture
+    // needed, requireClientRole only reads ctx.memberships in-memory.
+    const viewerCtx: AuthContext = { userId: "n/a", displayName: "Viewer", isOrgAdmin: false, memberships: [{ clientId, role: "VIEWER" }] };
+    await expect(approveStage(viewerCtx, specStage.id)).rejects.toThrow(ForbiddenError);
+
+    // EXECUTOR *is* in WRITE_ROLES, so it succeeds — and the resulting audit-log label lookup
+    // for the retired type must not crash either (getStageConfigOrFallback, not getStageConfig).
+    const advanced = await approveStage(executorCtx, specStage.id);
+    expect(advanced.stages.find((s) => s.id === specStage.id)?.status).toBe("DONE");
+  });
 });

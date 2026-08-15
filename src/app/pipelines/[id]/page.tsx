@@ -9,6 +9,7 @@ import { DraftButton } from "@/components/DraftButton";
 import { ApprovalGate } from "@/components/ApprovalGate";
 import { ClarifyPanel } from "@/components/ClarifyPanel";
 import { AnalyzeFindingsPanel } from "@/components/AnalyzeFindingsPanel";
+import { StageVersionHistory } from "@/components/StageVersionHistory";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +41,11 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
       ? analyzeStage.analysisFindings.filter((f) => f.severity === "CRITICAL").map((f) => f.relatedStageType)
       : []
   );
+
+  // Role-based gate messaging (Task Group 10.2): the current user's role on this client, so a
+  // PENDING_APPROVAL stage can explain who *can* act when the viewer can't — approverRoles is
+  // per stage type (Task Group 8), not uniform, so this is computed per stage below.
+  const userRole = ctx.memberships.find((m) => m.clientId === pipeline.workItem.project.clientId)?.role;
 
   return (
     <div className="flex flex-col gap-6">
@@ -83,6 +89,19 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
                 <pre className="mt-3 whitespace-pre-wrap rounded bg-black/[.03] dark:bg-white/[.05] p-3 text-xs font-mono">
                   {stage.content}
                 </pre>
+              )}
+
+              {stage && (
+                <StageVersionHistory
+                  versions={stage.versions.map((v) => ({
+                    id: v.id,
+                    versionNumber: v.versionNumber,
+                    content: v.content,
+                    createdAsResultOf: v.createdAsResultOf,
+                    createdAt: v.createdAt,
+                    aiModel: v.aiModel,
+                  }))}
+                />
               )}
 
               {stage && (stage.status === "PENDING_APPROVAL" || stage.status === "DONE") && (
@@ -129,7 +148,13 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
 
               {isCurrent && stage && stage.status === "PENDING_APPROVAL" && (
                 <div className="mt-3">
-                  <ApprovalGate stageId={stage.id} />
+                  {ctx.isOrgAdmin || (userRole && stageConfig.approverRoles?.includes(userRole)) ? (
+                    <ApprovalGate stageId={stage.id} />
+                  ) : (
+                    <p className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400">
+                      Awaiting gate approval — only {(stageConfig.approverRoles ?? []).join(" or ")} can approve this stage.
+                    </p>
+                  )}
                 </div>
               )}
 

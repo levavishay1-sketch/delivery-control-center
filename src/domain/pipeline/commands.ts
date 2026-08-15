@@ -1,12 +1,29 @@
 import { db } from "@/lib/db";
-import { getNextStageTypeInSequence, getStageConfig, loadWorkflow } from "@/lib/config";
+import { getNextStageTypeInSequence, getStageConfig, getStageConfigOrFallback, loadWorkflow } from "@/lib/config";
 import { recordAuditEvent } from "@/lib/audit";
 import { getApprovedConstitution } from "@/domain/constitution/queries";
 import { enqueueJob } from "@/domain/job/commands";
-import type { FindingSeverity, Prisma, StageType } from "@/generated/prisma/client";
+import type { FindingSeverity, Prisma, Role, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 import { ConflictError, ValidationError } from "@/domain/shared/errors";
+
+/**
+ * Resolves a stage type's approverRoles without ever throwing — getStageConfig throws for a
+ * type retired from the live config (e.g. CONSTITUTION on a pre-Slice-2 pipeline; see
+ * getStageConfigOrFallback's own doc comment on why that fallback isn't used for gating).
+ * approveStage/rejectStage need authorization to be checkable before anything else, including
+ * before a live-config lookup that could fail for an old stage type — falling back to the
+ * pre-Task-Group-8 uniform WRITE_ROLES check here preserves that for stages predating
+ * approverRoles entirely, rather than crashing the request.
+ */
+function getApproverRolesSafe(type: StageType): Role[] {
+  try {
+    return getStageConfig(type).approverRoles ?? WRITE_ROLES;
+  } catch {
+    return WRITE_ROLES;
+  }
+}
 
 /**
  * Explicitly starts a Pipeline for a work item: requires the project to
@@ -91,7 +108,7 @@ async function advancePipelinePastStage(
     await recordAuditEvent(tx, {
       pipelineId,
       actor: "SYSTEM",
-      action: `Pipeline advanced to ${getStageConfig(nextType).label}`,
+      action: `Pipeline advanced to ${getStageConfigOrFallback(nextType).label}`,
     });
   } else {
     await tx.pipeline.update({ where: { id: pipelineId }, data: { status: "COMPLETED" } });
@@ -223,7 +240,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
         stageId,
         actor: "AI",
         actorName: result.aiModel,
-        action: `AI asked ${result.clarifyQuestions.length} clarifying question(s) on ${getStageConfig(current.type).label}`,
+        action: `AI asked ${result.clarifyQuestions.length} clarifying question(s) on ${getStageConfigOrFallback(current.type).label}`,
         detail: { questions: result.clarifyQuestions },
       });
       return updated;
@@ -338,7 +355,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
       stageId,
       actor: "AI",
       actorName: result.aiModel,
-      action: `AI drafted ${getStageConfig(current.type).label}`,
+      action: `AI drafted ${getStageConfigOrFallback(current.type).label}`,
       detail: {
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
@@ -351,7 +368,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
         pipelineId: current.pipeline.id,
         stageId,
         actor: "SYSTEM",
-        action: `${getStageConfig(current.type).label} completed automatically (no approval required)`,
+        action: `${getStageConfigOrFallback(current.type).label} completed automatically (no approval required)`,
       });
       await advancePipelinePastStage(
         tx,
@@ -388,7 +405,7 @@ export async function revertStageDraftFailure(stageId: string, error: string): P
       pipelineId: stage.pipelineId,
       stageId,
       actor: "SYSTEM",
-      action: `${getStageConfig(stage.type).label} drafting failed after exhausting retries: ${error}`,
+      action: `${getStageConfigOrFallback(stage.type).label} drafting failed after exhausting retries: ${error}`,
     });
   });
 }
@@ -406,7 +423,7 @@ export async function approveStage(ctx: AuthContext, stageId: string, comment?: 
       where: { id: stageId },
       include: { pipeline: { include: { workItem: { include: { project: true } } } } },
     });
-    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, getStageConfig(stage.type).approverRoles ?? WRITE_ROLES);
+    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, getApproverRolesSafe(stage.type));
     if (stage.status !== "PENDING_APPROVAL") {
       throw new Error(`Stage is ${stage.status}; only PENDING_APPROVAL stages can be approved.`);
     }
@@ -421,7 +438,7 @@ export async function approveStage(ctx: AuthContext, stageId: string, comment?: 
       actor: "USER",
       userId: ctx.userId,
       actorName: ctx.displayName,
-      action: `${ctx.displayName} approved the ${getStageConfig(stage.type).label} gate`,
+      action: `${ctx.displayName} approved the ${getStageConfigOrFallback(stage.type).label} gate`,
       detail: comment ? { comment } : undefined,
     });
 
@@ -442,7 +459,7 @@ export async function rejectStage(ctx: AuthContext, stageId: string, comment?: s
       where: { id: stageId },
       include: { pipeline: { include: { workItem: { include: { project: true } } } } },
     });
-    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, getStageConfig(stage.type).approverRoles ?? WRITE_ROLES);
+    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, getApproverRolesSafe(stage.type));
     if (stage.status !== "PENDING_APPROVAL") {
       throw new Error(`Stage is ${stage.status}; only PENDING_APPROVAL stages can be rejected.`);
     }
@@ -458,7 +475,7 @@ export async function rejectStage(ctx: AuthContext, stageId: string, comment?: s
       actor: "USER",
       userId: ctx.userId,
       actorName: ctx.displayName,
-      action: `${ctx.displayName} rejected the ${getStageConfig(stage.type).label} gate`,
+      action: `${ctx.displayName} rejected the ${getStageConfigOrFallback(stage.type).label} gate`,
       detail: comment ? { comment } : undefined,
     });
 
