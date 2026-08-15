@@ -14,6 +14,7 @@ enum IntegrationType {
   MANUAL
   JIRA
   AZURE_DEVOPS
+  GITHUB
 }
 
 enum StageType {
@@ -50,6 +51,7 @@ enum StageStatus {
 enum JobType {
   DRAFT_STAGE
   DRAFT_CONSTITUTION
+  SYNC_PROJECT
 }
 
 enum JobStatus {
@@ -87,6 +89,44 @@ enum FindingSeverity {
   MEDIUM
   HIGH
   CRITICAL
+}
+
+// Slice 4 — see openspec/changes/slice-4-connector-framework/design.md.
+enum ConnectorMode {
+  PULL
+  PUSH
+  BOTH
+}
+
+// SCHEDULED is recorded as data only in this slice — no scheduler runs syncs
+// on a timer yet (see design.md Non-Goals).
+enum SyncMode {
+  MANUAL
+  SCHEDULED
+}
+
+enum ConnectorStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+// One row per Job attempt-cycle, same granularity rule as AgentRunStatus
+// (design.md decision 2).
+enum SyncRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ProvenanceSource {
+  SYNC
+  MANUAL
+}
+
+enum ConflictResolution {
+  KEPT_MANUAL
+  ACCEPTED_INCOMING
 }
 
 enum PipelineStatus {
@@ -183,6 +223,8 @@ model User {
   decidedDecisions         Decision[]        @relation("DecisionApprover")
   answeredClarifyQuestions ClarifyQuestion[] @relation("ClarifyQuestionAnsweredBy")
   approvedBudgetOverrides  BudgetOverride[]  @relation("BudgetOverrideApprovedBy")
+  manualFieldEdits         FieldProvenance[] @relation("FieldProvenanceActor")
+  resolvedSyncConflicts    SyncConflict[]    @relation("SyncConflictResolvedBy")
 }
 
 model Account {
@@ -288,6 +330,10 @@ model Project {
   auditEvents     AuditEvent[]
   constitutions   Constitution[]
   budgetOverrides BudgetOverride[]
+  // Slice 4 — nullable only during the migration window between the additive
+  // migration and the backfill (see design.md Migration Plan); every Project
+  // has exactly one Connector once the backfill has run.
+  connector       Connector?
 
   @@unique([clientId, key])
 }
@@ -354,6 +400,10 @@ model WorkItem {
   dependsOn    Dependency[] @relation("DependentWorkItem")
   dependedOnBy Dependency[] @relation("DependencyTarget")
   auditEvents  AuditEvent[]
+
+  // Slice 4 — per-field sync/manual-edit tracking and open sync conflicts.
+  fieldProvenance FieldProvenance[]
+  syncConflicts   SyncConflict[]
 
   @@unique([projectId, source, externalId])
   @@index([projectId, status])
@@ -541,6 +591,7 @@ model Job {
   updatedAt      DateTime  @updatedAt
 
   agentRuns AgentRun[]
+  syncRuns  SyncRun[]
 
   @@index([status, scheduledAt])
 }
@@ -610,6 +661,106 @@ model BudgetOverride {
 
   @@index([clientId, consumed])
   @@index([projectId, consumed])
+}
+
+// Slice 4 — a project's connection to one external work-item tracker,
+// replacing the bare Project.integrationType/integrationConfig fields as
+// the source of truth (see design.md decision 1: 1:1 with Project, backfilled
+// from those fields then superseding them).
+model Connector {
+  id           String          @id @default(cuid())
+  projectId    String          @unique
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type         IntegrationType @default(MANUAL)
+  mode         ConnectorMode   @default(PULL)
+  authType     String
+  syncMode     SyncMode        @default(MANUAL)
+  capabilities Json            @default("[]")
+  config       Json?
+  status       ConnectorStatus @default(DISCONNECTED)
+  lastSyncAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  syncRuns          SyncRun[]
+  webhookDeliveries WebhookDelivery[]
+  syncConflicts     SyncConflict[]
+}
+
+// Slice 4 — one row per sync attempt-cycle (one Job's full retry lifecycle),
+// same granularity rule Slice 3 established for AgentRun (design.md decision 2).
+model SyncRun {
+  id              String        @id @default(cuid())
+  connectorId     String
+  connector       Connector     @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  jobId           String?
+  job             Job?          @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  status          SyncRunStatus @default(RUNNING)
+  itemsCreated    Int           @default(0)
+  itemsUpdated    Int           @default(0)
+  itemsConflicted Int           @default(0)
+  error           String?
+  startedAt       DateTime      @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([connectorId, status])
+}
+
+// Slice 4 — the current source/actor/timestamp behind one work-item field's
+// value. One row per (workItem, field); a later write (sync or manual)
+// overwrites the previous provenance rather than appending, since this
+// answers "who set the value that's there now," not a full history.
+model FieldProvenance {
+  id          String           @id @default(cuid())
+  workItemId  String
+  workItem    WorkItem         @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  field       String
+  source      ProvenanceSource
+  externalId  String?
+  actorUserId String?
+  actorUser   User?            @relation("FieldProvenanceActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([workItemId, field])
+}
+
+// Slice 4 — an open disagreement between a human-edited field's current
+// value and a sync's incoming value (design.md decision 3: manual-wins by
+// default, surfaced instead of applied). Upserted, not append-only
+// (design.md decision 4): resolving closes the row; a later sync while one
+// is still open updates incomingValue in place rather than duplicating it.
+model SyncConflict {
+  id               String              @id @default(cuid())
+  workItemId       String
+  workItem         WorkItem            @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  field            String
+  currentValue     String
+  incomingValue    String
+  connectorId      String
+  connector        Connector           @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  resolvedByUser   User?               @relation("SyncConflictResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  resolution       ConflictResolution?
+  createdAt        DateTime            @default(now())
+
+  @@unique([workItemId, field])
+  @@index([connectorId, resolvedAt])
+}
+
+// Slice 4 — dedup receipt for inbound webhook deliveries (design.md
+// decision 5). A delivery id is unique per connector; the webhook route
+// inserts before doing any work and only proceeds if the insert wasn't a
+// no-op, so a redelivered id never triggers a second sync.
+model WebhookDelivery {
+  id          String    @id @default(cuid())
+  connectorId String
+  connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  deliveryId  String
+  receivedAt  DateTime  @default(now())
+
+  @@unique([connectorId, deliveryId])
 }
 
 model Approval {
