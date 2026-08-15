@@ -57,3 +57,8 @@ right." Verify touched error paths live too, not only the happy path. Use
 - **npm install-scripts gate**: a new dependency with a postinstall script
   needs `npm install-scripts approve <pkg>` (after reviewing it) or it's
   silently skipped.
+- **Job worker (Slice 2+)**: `DRAFT_STAGE` (and future async job types) run
+  in a separate long-lived process, not inside the Next.js request/response
+  cycle. Local dev needs both `npm run dev` and `npm run worker` running at
+  once — a `Job` row enqueued via the app sits `QUEUED` forever if the
+  worker isn't also running.

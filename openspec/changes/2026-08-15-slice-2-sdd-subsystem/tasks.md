@@ -24,11 +24,11 @@ established pattern).
 
 ## Task Group 2: Job Runtime (5 tasks)
 
-- [ ] 2.1 `src/domain/job/commands.ts`: `enqueueJob(type, payload, idempotencyKey)` — insert with `status='QUEUED'`; if `idempotencyKey` already exists, return the existing job instead of erroring (enqueue is idempotent, per design.md).
-- [ ] 2.2 `claimJobs(workerId, batchSize)`: atomic `UPDATE ... SET status='RUNNING', lockedAt=now(), lockedBy=$workerId WHERE status='QUEUED' AND scheduledAt <= now() ORDER BY scheduledAt LIMIT $batchSize RETURNING *`. Tests: two concurrent claims never return overlapping job sets (simulate via two calls racing against the same seeded queued jobs).
-- [ ] 2.3 `completeJob(jobId)` / `failJob(jobId, error)`: on failure, if `attempts + 1 < maxAttempts`, increment `attempts`, set `lastError`, reschedule `scheduledAt` with exponential backoff (`status` back to `QUEUED`); otherwise set `status='FAILED'` permanently.
-- [ ] 2.4 `worker.ts` (project root, run via a new `npm run worker` script): polls `claimJobs` on an interval, dispatches by `type` (only `DRAFT_STAGE` for now — see Task Group 5), calls `completeJob`/`failJob`. Document the two-process dev setup (`npm run dev` + `npm run worker`) in `CLAUDE.md`'s Project lessons section.
-- [ ] 2.5 Tests: enqueue/claim/complete/fail lifecycle, idempotent re-enqueue, backoff scheduling math, exhausted-retries terminal state. Commit: "Implement job runtime: persisted queue, worker, retry with backoff"
+- [x] 2.1 `src/domain/job/commands.ts`: `enqueueJob(type, payload, idempotencyKey)` — insert with `status='QUEUED'`; if `idempotencyKey` already exists, return the existing job instead of erroring (enqueue is idempotent, per design.md).
+- [x] 2.2 `claimJobs(workerId, batchSize)`: atomic `UPDATE ... SET status='RUNNING', lockedAt=now(), lockedBy=$workerId WHERE status='QUEUED' AND scheduledAt <= now() ORDER BY scheduledAt LIMIT $batchSize RETURNING *`. Tests: two concurrent claims never return overlapping job sets (simulate via two calls racing against the same seeded queued jobs).
+- [x] 2.3 `completeJob(jobId)` / `failJob(jobId, error)`: on failure, if `attempts + 1 < maxAttempts`, increment `attempts`, set `lastError`, reschedule `scheduledAt` with exponential backoff (`status` back to `QUEUED`); otherwise set `status='FAILED'` permanently.
+- [x] 2.4 `worker.ts` (project root, run via a new `npm run worker` script): polls `claimJobs` on an interval, dispatches by `type` (only `DRAFT_STAGE` for now — see Task Group 5), calls `completeJob`/`failJob`. Document the two-process dev setup (`npm run dev` + `npm run worker`) in `CLAUDE.md`'s Project lessons section.
+- [x] 2.5 Tests: enqueue/claim/complete/fail lifecycle, idempotent re-enqueue, backoff scheduling math, exhausted-retries terminal state. Commit: "Implement job runtime: persisted queue, worker, retry with backoff"
 
 ## Task Group 3: Constitution Versioning (4 tasks)
 
