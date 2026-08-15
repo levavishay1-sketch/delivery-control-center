@@ -19,5 +19,18 @@ export default defineConfig({
     timeout: 60_000,
     env: { ...process.env, ANTHROPIC_API_KEY: "" },
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    {
+      name: "chromium",
+      use: {
+        ...devices["Desktop Chrome"],
+        // The pinned @playwright/test version expects a headless-shell binary that
+        // isn't installed in this environment; fall back to the pre-installed full
+        // Chromium instead of triggering a download.
+        launchOptions: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE
+          ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
+          : undefined,
+      },
+    },
+  ],
 });

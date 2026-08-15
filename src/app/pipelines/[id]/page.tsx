@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { getPipelineDetail } from "@/domain/pipeline/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
@@ -34,8 +35,11 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
         {pipeline.workItem.description && (
           <p className="mt-1 text-sm opacity-70 whitespace-pre-wrap">{pipeline.workItem.description}</p>
         )}
-        <div className="mt-2">
+        <div className="mt-2 flex items-center gap-3">
           <StageBadge status={pipeline.status} />
+          <Link href={`/work-items/${pipeline.workItem.id}/360`} className="text-xs underline opacity-70 hover:opacity-100">
+            360° Record →
+          </Link>
         </div>
       </div>
 

@@ -112,23 +112,17 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 12: End-to-End Test Scenario (1 task)
+## Task Group 12: End-to-End Test Scenario (1 task) — ✅ DONE
 
-**12.1** Implement Playwright E2E test: create client → create project → create work items → add dependency → create blocker → appears in Attention Center → open Quick View → resolve blocker → verify timeline and audit trail reflect the change.
-- Steps:
-  1. Log in as authenticated user.
-  2. Create a new client (inherited from Slice 0).
-  3. Create a new project in that client.
-  4. Create two work items (e.g., "Backend API" and "Database Schema").
-  5. Add a dependency: Backend API depends on Database Schema.
-  6. Create a blocker on Backend API: "Waiting for DBA review".
-  7. Navigate to Attention Center, verify blocker is shown with reason.
-  8. Click on the work item to open Quick View, verify blocker panel is displayed.
-  9. Resolve the blocker via Quick View.
-  10. Verify timeline shows the blocker resolution event.
-  11. Verify audit trail shows the blocker creation and resolution events.
-- Tests: all steps execute, data is persistent, no console errors.
-- Commit: "Add E2E test for Slice 1 end-to-end scenario"
+- [x] 12.1 Implemented `e2e/slice1-delivery-model.spec.ts`, driving the full scenario through real UI interactions (not API calls): login → create project → create two work items ("Backend API", "Database Schema") → navigate to Backend API's 360° Record → add a dependency (Backend API depends on Database Schema) → create a blocker ("Waiting for DBA review...") → navigate to Attention Center and verify the blocker row shows the reason → open Quick View from that row and verify the blocker panel → resolve the blocker from inside the drawer and verify it disappears **without a page reload** → verify the drawer's own Timeline shows the resolution event → navigate to Audit Trail and verify both the creation and resolution events appear → assert zero console/page errors across the whole run.
+
+  **Deviation — step 2 ("create a new client") was dropped, using the seeded Default Client instead**: this codebase has no client-creation UI or API route at all (`GET /api/clients` is the only client endpoint that exists) — Slice 0 never built a create-client flow. Building one now would be scope creep into an earlier slice's gap for the sake of one E2E step wording; the existing `smoke.spec.ts` already relies on the same seeded client for its project-creation flow, so this doesn't lower coverage of anything Slice 1 actually owns.
+
+  **Gap found and fixed while writing this test**: there was no way to reach `/work-items/[id]/360` from anywhere in the UI except an Attention Center row — not from the Dashboard, not from the pipeline detail page (`/pipelines/[id]`), which is the only click-through from a work item on the Home page. Added a "360° Record →" link to the pipeline detail page header (`src/app/pipelines/[id]/page.tsx`, using `pipeline.workItem.id` already in scope), which is also what makes Home → work item → 360° Record a real, drivable path for any user, not just this test.
+
+  **Environment issue found and fixed**: this sandbox's pre-installed browser is a full Chromium binary (`/opt/pw-browsers/chromium-1194/...`), but the pinned `@playwright/test@^1.62.1` defaults to launching a `chromium_headless_shell` binary that isn't installed here — every e2e test (including the pre-existing `smoke.spec.ts` and `isolation.spec.ts`) failed with "Executable doesn't exist" before this fix. Added an opt-in `PLAYWRIGHT_CHROMIUM_EXECUTABLE` env var to `playwright.config.ts`'s launch options (default `undefined`, so environments where the expected binary exists are unaffected) rather than hardcoding a sandbox-specific path into the committed config.
+
+  Verified: `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome npx playwright test` — all 5 e2e tests pass (3 pre-existing + this new one), confirming the config fix didn't regress anything and actually unblocked the whole suite. Build/Lint/Tests: `npm run build` ✓, `npm run lint` ✓, `npm test` (78/78 passing, unaffected). Commit: "Add E2E test for Slice 1 end-to-end scenario".
 
 ---
 
