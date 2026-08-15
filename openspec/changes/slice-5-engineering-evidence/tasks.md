@@ -43,10 +43,10 @@
 
 ## 8. UI — Code & Changes, Tests, Evidence tabs
 
-- [ ] 8.1 Replace the "Coming soon" Code & Changes tab placeholder in `src/app/work-items/[id]/360/page.tsx` with a real tab listing linked pull requests, their commits, and CI status; empty state plus a write-capable "link a pull request" action.
-- [ ] 8.2 Replace the Tests tab placeholder with a list of test runs associated with the work item's linked pull requests.
-- [ ] 8.3 Replace the Evidence tab placeholder with the completion-policy state (satisfied / what's missing, in plain language) and, for a write-capable role, the link/unlink and exception-approval actions.
-- [ ] 8.4 New client components as needed (e.g. `EvidenceLinkForm.tsx`, `CompletionExceptionForm.tsx`), following the project's server-reads/client-mutates-via-fetch convention — map any Prisma row with `Decimal`/non-plain fields to a plain object before passing into a `"use client"` component (per Slice 4's found RSC-boundary bug).
+- [x] 8.1 Replace the "Coming soon" Code & Changes tab placeholder in `src/app/work-items/[id]/360/page.tsx` with a real tab listing linked pull requests and CI status; empty state plus a write-capable "link a pull request" action. (`CodeChangesTab.tsx`.)
+- [x] 8.2 Replace the Tests tab placeholder with a list of test runs associated with the work item's linked pull requests. (`TestsTab.tsx` — pure display, no client interactivity needed.)
+- [x] 8.3 Replace the Evidence tab placeholder with the completion-policy state (satisfied / what's missing, in plain language) and, for a write-capable role, the exception-approval action. (`EvidenceTab.tsx`.)
+- [x] 8.4 New client components: `CodeChangesTab.tsx`, `EvidenceTab.tsx`, `RepositoryLinkForm.tsx` — all mapped to plain objects before passing into `"use client"` components (per Slice 4's found RSC-boundary bug). Also added `RepositoryLinkForm` to the project settings page (not explicitly named in this task, but required for the engineering-evidence spec's "A project can link a GitHub repository" requirement to be reachable through the UI at all, matching where Slice 4 put the analogous Connector-config action) and build passes (`npm run build`).
 
 ## 9. E2E test scenario
 

@@ -6,6 +6,8 @@ import { getWorkItemDependencies, getWorkItemDependencyGraph } from "@/domain/de
 import { getWorkItemAuditEvents } from "@/domain/audit/queries";
 import { getWorkItemAiCost } from "@/domain/agent/queries";
 import { listClientMembers } from "@/domain/client/queries";
+import { getEvidenceForWorkItem, getCompletionException, getRepositoryForProject, listPullRequestsForRepository } from "@/domain/evidence/queries";
+import { checkCompletionPolicy } from "@/domain/evidence/completion";
 import { requireAuthContext } from "@/domain/shared/session";
 import { WRITE_ROLES } from "@/domain/shared/authz";
 import { ForbiddenError } from "@/domain/shared/errors";
@@ -14,6 +16,9 @@ import { WorkItemTabs } from "@/components/WorkItemTabs";
 import { OverviewTab, ProvenanceNote } from "@/components/OverviewTab";
 import { DependenciesTab } from "@/components/DependenciesTab";
 import { TimelineTab } from "@/components/TimelineTab";
+import { CodeChangesTab } from "@/components/CodeChangesTab";
+import { TestsTab } from "@/components/TestsTab";
+import { EvidenceTab } from "@/components/EvidenceTab";
 
 export const dynamic = "force-dynamic";
 
@@ -33,16 +38,22 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
   });
   if (!workItem) notFound();
 
-  const [activeBlockers, pendingDecisions, dependencies, dependencyGraph, timeline, members, siblingItems, aiCost] = await Promise.all([
-    getActiveBlockers(workItem.id),
-    getWorkItemDecisions(workItem.id),
-    getWorkItemDependencies(workItem.id),
-    getWorkItemDependencyGraph(workItem.id),
-    getWorkItemAuditEvents(ctx, workItem.id, 1, 20),
-    listClientMembers(ctx, workItem.project.clientId),
-    listWorkItems(ctx, workItem.projectId, { pageSize: 200 }),
-    getWorkItemAiCost(workItem.id),
-  ]);
+  const [activeBlockers, pendingDecisions, dependencies, dependencyGraph, timeline, members, siblingItems, aiCost, evidence, policy, completionException, repository] =
+    await Promise.all([
+      getActiveBlockers(workItem.id),
+      getWorkItemDecisions(workItem.id),
+      getWorkItemDependencies(workItem.id),
+      getWorkItemDependencyGraph(workItem.id),
+      getWorkItemAuditEvents(ctx, workItem.id, 1, 20),
+      listClientMembers(ctx, workItem.project.clientId),
+      listWorkItems(ctx, workItem.projectId, { pageSize: 200 }),
+      getWorkItemAiCost(workItem.id),
+      getEvidenceForWorkItem(workItem.id),
+      checkCompletionPolicy(workItem.id),
+      getCompletionException(workItem.id),
+      getRepositoryForProject(workItem.projectId),
+    ]);
+  const candidatePullRequests = repository ? await listPullRequestsForRepository(repository.id) : [];
 
   const now = serverNow();
   const manage = canAct(workItem.project.clientId, ctx.memberships, ctx.isOrgAdmin);
@@ -181,9 +192,48 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
         />
       ),
     },
-    { id: "code", label: "Code", content: <p className="text-sm opacity-50">Coming soon — trace work item to code changes.</p> },
-    { id: "tests", label: "Tests", content: <p className="text-sm opacity-50">Coming soon — view associated test runs.</p> },
-    { id: "evidence", label: "Evidence", content: <p className="text-sm opacity-50">Coming soon — view evidence of completion.</p> },
+    {
+      id: "code",
+      label: "Code",
+      content: (
+        <CodeChangesTab
+          workItemId={workItem.id}
+          evidence={evidence.map((e) => ({
+            evidenceId: e.id,
+            id: e.pullRequest.id,
+            number: e.pullRequest.number,
+            title: e.pullRequest.title,
+            state: e.pullRequest.state,
+            merged: e.pullRequest.merged,
+            url: e.pullRequest.url,
+            testRuns: e.pullRequest.testRuns.map((t) => ({ id: t.id, name: t.name, status: t.status })),
+          }))}
+          candidatePullRequests={candidatePullRequests
+            .filter((pr) => !evidence.some((e) => e.pullRequestId === pr.id))
+            .map((pr) => ({ id: pr.id, number: pr.number, title: pr.title, state: pr.state, merged: pr.merged, url: pr.url }))}
+          canManage={manage}
+        />
+      ),
+    },
+    {
+      id: "tests",
+      label: "Tests",
+      content: (
+        <TestsTab
+          pullRequests={evidence.map((e) => ({
+            id: e.pullRequest.id,
+            number: e.pullRequest.number,
+            title: e.pullRequest.title,
+            testRuns: e.pullRequest.testRuns.map((t) => ({ id: t.id, name: t.name, status: t.status })),
+          }))}
+        />
+      ),
+    },
+    {
+      id: "evidence",
+      label: "Evidence",
+      content: <EvidenceTab workItemId={workItem.id} policy={policy} hasException={!!completionException} canManage={manage} />,
+    },
     { id: "configuration", label: "Configuration", content: <p className="text-sm opacity-50">Coming soon — view configuration and overrides.</p> },
   ];
 

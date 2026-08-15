@@ -4,12 +4,14 @@ import { getProjectByIdForUser } from "@/domain/project/queries";
 import { getOrCreateConnectorForProject } from "@/domain/connector/commands";
 import { listSyncRuns } from "@/domain/connector/queries";
 import { listOpenConflicts } from "@/domain/connector/conflicts";
+import { getRepositoryForProject } from "@/domain/evidence/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { WRITE_ROLES } from "@/domain/shared/authz";
 import { ConnectorConfigForm } from "@/components/ConnectorConfigForm";
 import { ConflictResolutionPanel } from "@/components/ConflictResolutionPanel";
 import { SyncButton } from "@/components/SyncButton";
+import { RepositoryLinkForm } from "@/components/RepositoryLinkForm";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +32,11 @@ export default async function ProjectSettingsPage({ params }: PageProps<"/projec
   if (!project) notFound();
 
   const connector = await getOrCreateConnectorForProject(project.id);
-  const [syncRuns, openConflicts] = await Promise.all([listSyncRuns(connector.id), listOpenConflicts(ctx, project.id)]);
+  const [syncRuns, openConflicts, repository] = await Promise.all([
+    listSyncRuns(connector.id),
+    listOpenConflicts(ctx, project.id),
+    getRepositoryForProject(project.id),
+  ]);
 
   const userRole = ctx.memberships.find((m) => m.clientId === project.clientId)?.role;
   const canManage = ctx.isOrgAdmin || (!!userRole && (WRITE_ROLES as string[]).includes(userRole));
@@ -78,6 +84,20 @@ export default async function ProjectSettingsPage({ params }: PageProps<"/projec
           </div>
         )}
       </section>
+
+      {connector.type === "GITHUB" && (
+        <section aria-labelledby="repository-heading" className="rounded-lg border border-black/10 dark:border-white/15 p-4">
+          <h2 id="repository-heading" className="font-medium">
+            Repository
+          </h2>
+          <p className="mt-1 text-xs opacity-60">Engineering evidence (commits, pull requests, test runs) is populated from a linked GitHub repository.</p>
+          {canManage ? (
+            <RepositoryLinkForm projectId={project.id} repository={repository ? { id: repository.id, owner: repository.owner, name: repository.name } : null} />
+          ) : (
+            <p className="mt-2 text-xs opacity-60">{repository ? `Linked: ${repository.owner}/${repository.name}` : "No repository linked."}</p>
+          )}
+        </section>
+      )}
 
       {syncRuns.length > 0 && (
         <section aria-labelledby="sync-history-heading" className="flex flex-col gap-2">

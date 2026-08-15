@@ -5,18 +5,21 @@ interface GithubConfig {
   owner: string;
   repo: string;
   token: string;
+  baseUrl: string;
 }
 
+/** baseUrl defaults to the real GitHub API; a config override lets tests point it at a local stub, mirroring jira.ts's baseUrl field. */
 function resolveConfig(config: Record<string, unknown> | null): GithubConfig {
   const owner = (config?.owner as string) || process.env.GITHUB_REPO_OWNER || "";
   const repo = (config?.repo as string) || process.env.GITHUB_REPO_NAME || "";
   const token = (config?.token as string) || process.env.GITHUB_TOKEN || "";
+  const baseUrl = (config?.baseUrl as string) || process.env.GITHUB_API_BASE_URL || "https://api.github.com";
   if (!owner || !repo || !token) {
     throw new Error(
       "GitHub integration is not configured. Set GITHUB_REPO_OWNER, GITHUB_REPO_NAME and GITHUB_TOKEN (or the connector's config)."
     );
   }
-  return { owner, repo, token };
+  return { owner, repo, token, baseUrl };
 }
 
 interface GithubIssue {
@@ -31,8 +34,8 @@ interface GithubIssue {
 export const githubAdapter: IntegrationAdapter = {
   type: "GITHUB",
   async fetchWorkItems(config) {
-    const { owner, repo, token } = resolveConfig(config);
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues?state=all&per_page=100`, {
+    const { owner, repo, token, baseUrl } = resolveConfig(config);
+    const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/issues?state=all&per_page=100`, {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github+json",
@@ -92,7 +95,6 @@ export interface FetchedCheckRun {
   completedAt: string | null;
 }
 
-const GITHUB_API = "https://api.github.com";
 const CATCH_UP_PAGE_SIZE = 30;
 
 function githubHeaders(token: string): Record<string, string> {
@@ -103,8 +105,8 @@ function githubHeaders(token: string): Record<string, string> {
   };
 }
 
-async function githubGet(path: string, token: string): Promise<unknown> {
-  const res = await fetch(`${GITHUB_API}${path}`, { headers: githubHeaders(token) });
+async function githubGet(baseUrl: string, path: string, token: string): Promise<unknown> {
+  const res = await fetch(`${baseUrl}${path}`, { headers: githubHeaders(token) });
   if (!res.ok) {
     throw new Error(`GitHub request failed: ${res.status} ${res.statusText} — ${await res.text()}`);
   }
@@ -112,14 +114,14 @@ async function githubGet(path: string, token: string): Promise<unknown> {
 }
 
 export async function fetchRepository(config: Record<string, unknown> | null): Promise<FetchedRepository> {
-  const { owner, repo, token } = resolveConfig(config);
-  const data = (await githubGet(`/repos/${owner}/${repo}`, token)) as { id: number; name: string; owner: { login: string } };
+  const { owner, repo, token, baseUrl } = resolveConfig(config);
+  const data = (await githubGet(baseUrl, `/repos/${owner}/${repo}`, token)) as { id: number; name: string; owner: { login: string } };
   return { externalId: String(data.id), owner: data.owner.login, name: data.name };
 }
 
 export async function fetchCommits(config: Record<string, unknown> | null): Promise<FetchedCommit[]> {
-  const { owner, repo, token } = resolveConfig(config);
-  const data = (await githubGet(`/repos/${owner}/${repo}/commits?per_page=${CATCH_UP_PAGE_SIZE}`, token)) as Array<{
+  const { owner, repo, token, baseUrl } = resolveConfig(config);
+  const data = (await githubGet(baseUrl, `/repos/${owner}/${repo}/commits?per_page=${CATCH_UP_PAGE_SIZE}`, token)) as Array<{
     sha: string;
     html_url: string;
     commit: { message: string; author: { name: string; date: string } | null };
@@ -134,8 +136,8 @@ export async function fetchCommits(config: Record<string, unknown> | null): Prom
 }
 
 export async function fetchPullRequests(config: Record<string, unknown> | null): Promise<FetchedPullRequest[]> {
-  const { owner, repo, token } = resolveConfig(config);
-  const data = (await githubGet(`/repos/${owner}/${repo}/pulls?state=all&per_page=${CATCH_UP_PAGE_SIZE}`, token)) as Array<{
+  const { owner, repo, token, baseUrl } = resolveConfig(config);
+  const data = (await githubGet(baseUrl, `/repos/${owner}/${repo}/pulls?state=all&per_page=${CATCH_UP_PAGE_SIZE}`, token)) as Array<{
     number: number;
     title: string;
     state: string;
@@ -155,8 +157,8 @@ export async function fetchPullRequests(config: Record<string, unknown> | null):
 }
 
 export async function fetchCheckRuns(config: Record<string, unknown> | null, ref: string): Promise<FetchedCheckRun[]> {
-  const { owner, repo, token } = resolveConfig(config);
-  const data = (await githubGet(`/repos/${owner}/${repo}/commits/${ref}/check-runs?per_page=${CATCH_UP_PAGE_SIZE}`, token)) as {
+  const { owner, repo, token, baseUrl } = resolveConfig(config);
+  const data = (await githubGet(baseUrl, `/repos/${owner}/${repo}/commits/${ref}/check-runs?per_page=${CATCH_UP_PAGE_SIZE}`, token)) as {
     check_runs: Array<{
       id: number;
       name: string;

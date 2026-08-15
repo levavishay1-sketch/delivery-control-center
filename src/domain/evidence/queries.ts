@@ -32,3 +32,8 @@ export function getEvidenceForWorkItem(workItemId: string) {
     orderBy: { createdAt: "desc" },
   });
 }
+
+/** Whether a work item has an approved completion exception — determines whether checkCompletionPolicy's `satisfied: true` came from evidence or from an exception. */
+export function getCompletionException(workItemId: string) {
+  return db.completionException.findFirst({ where: { workItemId } });
+}
