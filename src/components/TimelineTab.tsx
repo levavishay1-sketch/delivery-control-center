@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { useLocale, useT } from "@/lib/i18n/LocaleProvider";
+import { formatDateTime, formatMessage } from "@/lib/i18n/format";
 
 const ACTOR_ICON: Record<string, string> = { SYSTEM: "⚙️", AI: "🤖", USER: "🧑" };
 
@@ -14,6 +16,8 @@ interface AuditEventRow {
 }
 
 export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workItemId: string; initialEvents: AuditEventRow[]; initialTotal: number }) {
+  const t = useT();
+  const { locale } = useLocale();
   const [page, setPage] = useState(1);
   const [events, setEvents] = useState(initialEvents);
   const [total, setTotal] = useState(initialTotal);
@@ -35,7 +39,7 @@ export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workI
   }
 
   if (total === 0) {
-    return <p className="text-sm opacity-50">No activity recorded for this work item yet.</p>;
+    return <p className="text-sm opacity-50">{t.timeline.noActivity}</p>;
   }
 
   return (
@@ -49,12 +53,12 @@ export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workI
               </span>
               <time
                 className="shrink-0 text-xs opacity-50"
-                title={new Date(event.createdAt).toLocaleString()}
+                title={formatDateTime(event.createdAt, locale)}
               >
-                {new Date(event.createdAt).toLocaleString()}
+                {formatDateTime(event.createdAt, locale)}
               </time>
             </div>
-            {event.actorName && <span className="text-xs opacity-50">by {event.actorName}</span>}
+            {event.actorName && <span className="text-xs opacity-50">{formatMessage(t.common.byActor, { name: event.actorName })}</span>}
             {event.detail !== null && event.detail !== undefined && (
               <pre className="mt-1 whitespace-pre-wrap rounded bg-surface-muted p-2 text-xs font-mono">
                 {JSON.stringify(event.detail)}
@@ -70,17 +74,15 @@ export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workI
             disabled={page <= 1 || loading}
             className="rounded border border-border-hairline px-2 py-1 disabled:opacity-40"
           >
-            Previous
+            {t.timeline.previous}
           </button>
-          <span className="opacity-60">
-            Page {page} of {totalPages}
-          </span>
+          <span className="opacity-60">{formatMessage(t.timeline.pageOf, { page, total: totalPages })}</span>
           <button
             onClick={() => goToPage(Math.min(totalPages, page + 1))}
             disabled={page >= totalPages || loading}
             className="rounded border border-border-hairline px-2 py-1 disabled:opacity-40"
           >
-            Next
+            {t.timeline.next}
           </button>
         </div>
       )}

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { OverviewTab } from "@/components/OverviewTab";
 import { DependenciesTab } from "@/components/DependenciesTab";
 import { TimelineTab } from "@/components/TimelineTab";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
 type QuickViewData = Omit<React.ComponentProps<typeof OverviewTab>, "canEdit"> & {
   dependencies: { upstream: React.ComponentProps<typeof DependenciesTab>["upstream"]; downstream: React.ComponentProps<typeof DependenciesTab>["downstream"] };
@@ -21,6 +22,7 @@ type QuickViewData = Omit<React.ComponentProps<typeof OverviewTab>, "canEdit"> &
  * cycle regardless of which page linked into it).
  */
 export function QuickViewDrawer() {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -103,22 +105,22 @@ export function QuickViewDrawer() {
       <div
         role="dialog"
         aria-modal="true"
-        aria-label={current ? current.workItem.title : "Work item quick view"}
-        className="animate-drawer-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border-hairline bg-surface p-4 shadow-(--shadow-floating) sm:w-[400px]"
+        aria-label={current ? current.workItem.title : t.quickView.dialogFallbackLabel}
+        className="animate-drawer-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-s border-border-hairline bg-surface p-4 shadow-(--shadow-floating) sm:w-[400px]"
       >
         <div className="flex items-start justify-between gap-2">
-          <h2 className="text-lg font-semibold">{current ? current.workItem.title : "Loading…"}</h2>
+          <h2 className="text-lg font-semibold">{current ? current.workItem.title : t.quickView.loading}</h2>
           <button
             ref={closeButtonRef}
             onClick={close}
-            aria-label="Close"
+            aria-label={t.quickView.close}
             className="rounded-md p-1 text-xl leading-none text-neutral-500 hover:bg-surface-muted hover:text-foreground"
           >
             ×
           </button>
         </div>
 
-        {!current && !error && <p className="mt-4 text-sm text-neutral-500">Loading…</p>}
+        {!current && !error && <p className="mt-4 text-sm text-neutral-500">{t.quickView.loading}</p>}
         {error && <p className="mt-4 text-sm text-status-critical">{error}</p>}
 
         {current && (
@@ -141,7 +143,7 @@ export function QuickViewDrawer() {
 
             <section>
               <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Dependencies
+                {t.quickView.dependenciesHeading}
               </h3>
               <div className="mt-2">
                 <DependenciesTab
@@ -157,7 +159,7 @@ export function QuickViewDrawer() {
 
             <section>
               <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-                Timeline
+                {t.quickView.timelineHeading}
               </h3>
               <div className="mt-2">
                 <TimelineTab
@@ -170,7 +172,7 @@ export function QuickViewDrawer() {
             </section>
 
             <Link href={current.fullRecordHref} className="text-sm text-accent hover:underline">
-              Open full 360° Record →
+              {t.quickView.openFullRecord}
             </Link>
           </div>
         )}

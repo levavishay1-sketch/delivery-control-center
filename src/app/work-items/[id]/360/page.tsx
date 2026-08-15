@@ -20,6 +20,8 @@ import { CodeChangesTab } from "@/components/CodeChangesTab";
 import { TestsTab } from "@/components/TestsTab";
 import { EvidenceTab } from "@/components/EvidenceTab";
 import { PanelEmpty } from "@/components/ui/Panel";
+import { getServerLocale } from "@/lib/i18n/server";
+import { getDictionary } from "@/lib/i18n/dictionaries";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +34,8 @@ function canAct(clientId: string, memberships: { clientId: string; role: string 
 export default async function WorkItem360Page({ params }: PageProps<"/work-items/[id]/360">) {
   const { id } = await params;
   const ctx = await requireAuthContext();
+  const locale = await getServerLocale();
+  const t = getDictionary(locale);
 
   const workItem = await getWorkItemDetail(ctx, id).catch((err) => {
     if (err instanceof ForbiddenError) return null;
@@ -77,7 +81,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
   const tabs = [
     {
       id: "overview",
-      label: "Overview",
+      label: t.workItem360.tabs.overview,
       content: (
         <OverviewTab
           workItem={{
@@ -143,7 +147,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
     },
     {
       id: "dependencies",
-      label: "Dependencies",
+      label: t.workItem360.tabs.dependencies,
       content: (
         <DependenciesTab
           upstream={dependencies.upstream.map((d) => ({
@@ -177,12 +181,12 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
     },
     {
       id: "evidence",
-      label: "Evidence",
+      label: t.workItem360.tabs.evidence,
       content: <EvidenceTab workItemId={workItem.id} policy={policy} hasException={!!completionException} canManage={manage} />,
     },
     {
       id: "code",
-      label: "Code",
+      label: t.workItem360.tabs.code,
       content: (
         <CodeChangesTab
           workItemId={workItem.id}
@@ -205,7 +209,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
     },
     {
       id: "tests",
-      label: "Tests",
+      label: t.workItem360.tabs.tests,
       content: (
         <TestsTab
           pullRequests={evidence.map((e) => ({
@@ -219,7 +223,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
     },
     {
       id: "timeline",
-      label: "Timeline",
+      label: t.workItem360.tabs.timeline,
       content: (
         <TimelineTab
           workItemId={workItem.id}
@@ -237,7 +241,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
     },
     {
       id: "configuration",
-      label: "Configuration",
+      label: t.workItem360.tabs.configuration,
       content: (
         <PanelEmpty>
           Not configured at the work-item level — this tab is scoped to Organization/Client/Project

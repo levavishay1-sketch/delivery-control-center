@@ -19,24 +19,30 @@ import { WRITE_ROLES } from "@/domain/shared/authz";
 import { Panel } from "@/components/ui/Panel";
 import { Row, RowList, RowEmpty } from "@/components/ui/Row";
 import { CheckCircle2 } from "lucide-react";
+import { getServerLocale } from "@/lib/i18n/server";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { formatMessage, pluralize } from "@/lib/i18n/format";
+import type { Translations } from "@/lib/i18n/en";
 
 export const dynamic = "force-dynamic";
 
 const ACTOR_ICON: Record<string, string> = { SYSTEM: "⚙️", AI: "🤖", USER: "🧑" };
 
-function relativeTime(date: Date, now: number) {
+function relativeTime(date: Date, now: number, t: Translations) {
   const diffMs = now - date.getTime();
   const diffMin = Math.round(diffMs / 60_000);
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffMin < 1) return t.common.justNow;
+  if (diffMin < 60) return formatMessage(t.common.minutesAgo, { n: diffMin });
   const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffHr < 24) return formatMessage(t.common.hoursAgo, { n: diffHr });
   const diffDay = Math.round(diffHr / 24);
-  return `${diffDay}d ago`;
+  return formatMessage(t.common.daysAgo, { n: diffDay });
 }
 
 export default async function HomePage() {
   const ctx = await requireAuthContext();
+  const locale = await getServerLocale();
+  const t = getDictionary(locale);
   const [projects, clients, attention, recentEvents, organizations] = await Promise.all([
     listProjectsForHome(ctx),
     listClients(ctx),
@@ -98,7 +104,7 @@ export default async function HomePage() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">Dashboard</h1>
+        <h1 className="text-xl font-semibold">{t.dashboard.heading}</h1>
         {ctx.isOrgAdmin && organizations.length > 0 && (
           <div className="flex items-center gap-3 text-xs">
             {organizations.map((org) => (
@@ -116,19 +122,19 @@ export default async function HomePage() {
 
       <section aria-labelledby="attention-summary-heading" className="flex flex-col gap-3">
         <h2 id="attention-summary-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-          Attention Summary
+          {t.dashboard.attentionSummaryHeading}
         </h2>
         {allClear ? (
           <div className="flex items-center gap-2 rounded-full bg-status-healthy-bg px-3 py-1.5 text-status-healthy w-fit">
             <CheckCircle2 className="h-4 w-4" />
-            <span className="text-sm font-medium">All clear — no attention needed.</span>
+            <span className="text-sm font-medium">{t.dashboard.allClear}</span>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <SummaryChip label="Decisions" count={summary.decisions} href="/attention#decisions" />
-            <SummaryChip label="Blockers" count={summary.blockers} href="/attention#blockers" />
-            <SummaryChip label="Risks" count={summary.risks} href="/attention#risks" />
-            <SummaryChip label="Deadlines" count={summary.deadlines} href="/attention#deadlines" />
+            <SummaryChip label={t.common.decisions} count={summary.decisions} href="/attention#decisions" />
+            <SummaryChip label={t.common.blockers} count={summary.blockers} href="/attention#blockers" />
+            <SummaryChip label={t.common.risks} count={summary.risks} href="/attention#risks" />
+            <SummaryChip label={t.common.deadlines} count={summary.deadlines} href="/attention#deadlines" />
           </div>
         )}
       </section>
@@ -136,9 +142,9 @@ export default async function HomePage() {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section aria-labelledby="quick-access-heading" className="flex flex-col gap-3">
           <h2 id="quick-access-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-            Project Quick Access
+            {t.dashboard.quickAccessHeading}
           </h2>
-          {quickAccessProjects.length === 0 && <p className="text-sm text-neutral-500">No projects yet.</p>}
+          {quickAccessProjects.length === 0 && <p className="text-sm text-neutral-500">{t.dashboard.noProjects}</p>}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {quickAccessProjects.map((project) => {
               const client = clients.find((c) => c.id === project.clientId);
@@ -154,8 +160,8 @@ export default async function HomePage() {
                   </p>
                   <p className="text-xs text-neutral-500">{client?.name}</p>
                   <p className="mt-1 text-xs text-neutral-400">
-                    {project.workItems.length} work item{project.workItems.length === 1 ? "" : "s"}
-                    {lastActivity && ` · updated ${relativeTime(lastActivity, now)}`}
+                    {pluralize(locale, project.workItems.length, t.dashboard.workItemCount)}
+                    {lastActivity && ` · ${formatMessage(t.dashboard.updatedRelative, { time: relativeTime(lastActivity, now, t) })}`}
                   </p>
                 </a>
               );
@@ -165,11 +171,11 @@ export default async function HomePage() {
 
         <section aria-labelledby="recent-activity-heading" className="flex flex-col gap-3">
           <h2 id="recent-activity-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-            Recent Activity
+            {t.dashboard.recentActivityHeading}
           </h2>
           {recentEvents.length === 0 ? (
             <RowList>
-              <RowEmpty>No activity yet.</RowEmpty>
+              <RowEmpty>{t.dashboard.noActivity}</RowEmpty>
             </RowList>
           ) : (
             <RowList>
@@ -179,10 +185,10 @@ export default async function HomePage() {
                     <span className="text-sm">
                       {ACTOR_ICON[event.actor]} {event.action}
                     </span>
-                    <time className="shrink-0 text-xs text-neutral-400">{relativeTime(event.createdAt, now)}</time>
+                    <time className="shrink-0 text-xs text-neutral-400">{relativeTime(event.createdAt, now, t)}</time>
                   </div>
                   <div className="flex flex-wrap gap-2 text-xs text-neutral-500">
-                    {event.actorName && <span>by {event.actorName}</span>}
+                    {event.actorName && <span>{formatMessage(t.common.byActor, { name: event.actorName })}</span>}
                     {event.workItem?.pipeline && (
                       <Link href={`/pipelines/${event.workItem.pipeline.id}`} className="text-accent hover:underline">
                         {event.workItem.title}

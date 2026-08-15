@@ -8,10 +8,13 @@ import { QuickViewLink } from "@/components/QuickViewLink";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { RowList } from "@/components/ui/Row";
 import { CheckCircle2 } from "lucide-react";
+import { getServerLocale } from "@/lib/i18n/server";
+import { getDictionary } from "@/lib/i18n/dictionaries";
+import { formatMessage, formatDate as formatDateIntl, pluralize } from "@/lib/i18n/format";
+import type { Translations } from "@/lib/i18n/en";
+import type { Locale } from "@/lib/i18n/locales";
 
 export const dynamic = "force-dynamic";
-
-const RISK_LABEL: Record<string, string> = { HIGH: "High", CRITICAL: "Critical" };
 
 function canAct(clientId: string, memberships: { clientId: string; role: string }[], isOrgAdmin: boolean) {
   if (isOrgAdmin) return true;
@@ -23,13 +26,15 @@ function isOverdue(date: Date | null, now: number) {
   return !!date && date.getTime() < now;
 }
 
-function formatDate(date: Date | null) {
+function formatDate(date: Date | null, locale: Locale) {
   if (!date) return null;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  return formatDateIntl(date, locale);
 }
 
 export default async function AttentionCenterPage() {
   const ctx = await requireAuthContext();
+  const locale = await getServerLocale();
+  const t = getDictionary(locale);
   const { decisions, blockers, risks, deadlines, approvalGates, pausedClarifications, syncConflicts, summary, now } =
     await getItemsNeedingAttention(ctx);
 
@@ -45,51 +50,50 @@ export default async function AttentionCenterPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-xl font-semibold">Attention Center</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">
-          Everything needing a human decision, in one place — with the reason always visible.
-        </p>
+        <h1 className="text-xl font-semibold">{t.attentionCenter.heading}</h1>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">{t.attentionCenter.subtitle}</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <SummaryChip label="Decisions" count={summary.decisions} href="#decisions" />
-        <SummaryChip label="Blockers" count={summary.blockers} href="#blockers" />
-        <SummaryChip label="Risks" count={summary.risks} href="#risks" />
-        <SummaryChip label="Deadlines" count={summary.deadlines} href="#deadlines" />
-        <SummaryChip label="Approval Gates" count={summary.approvalGates} href="#approval-gates" />
-        <SummaryChip label="Clarifications" count={summary.pausedClarifications} href="#clarifications" />
-        <SummaryChip label="Sync Conflicts" count={summary.syncConflicts} href="#sync-conflicts" />
+        <SummaryChip label={t.common.decisions} count={summary.decisions} href="#decisions" />
+        <SummaryChip label={t.common.blockers} count={summary.blockers} href="#blockers" />
+        <SummaryChip label={t.common.risks} count={summary.risks} href="#risks" />
+        <SummaryChip label={t.common.deadlines} count={summary.deadlines} href="#deadlines" />
+        <SummaryChip label={t.attentionCenter.approvalGates} count={summary.approvalGates} href="#approval-gates" />
+        <SummaryChip label={t.attentionCenter.clarifications} count={summary.pausedClarifications} href="#clarifications" />
+        <SummaryChip label={t.attentionCenter.syncConflicts} count={summary.syncConflicts} href="#sync-conflicts" />
       </div>
 
       {allClear && (
         <div className="flex items-center justify-center gap-2 rounded-lg bg-status-healthy-bg p-6 text-status-healthy">
           <CheckCircle2 className="h-5 w-5" />
-          <span className="text-sm font-medium">All clear — nothing needs your attention.</span>
+          <span className="text-sm font-medium">{t.attentionCenter.allClear}</span>
         </div>
       )}
 
       {summary.decisions > 0 && (
-        <Section id="decisions" title="Decisions" count={summary.decisions}>
+        <Section id="decisions" title={t.attentionCenter.decisionsGroupTitle} count={summary.decisions}>
           {decisions.map((d) => {
             const overdue = isOverdue(d.deadline, now);
             return (
               <Row key={d.id}>
-                <StatusBadge tone="warning" label="Decision required" reason={d.question} />
+                <StatusBadge tone="warning" label={t.attentionCenter.decisionRequired} reason={d.question} />
                 <RowMeta workItem={d.workItem} />
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">{d.reason}</p>
                 {d.aiRecommendation && (
                   <p className="flex items-center gap-1 text-xs text-status-ai">
-                    AI recommends: {d.aiRecommendation}
-                    {d.aiConfidence !== null && ` (${d.aiConfidence.toString()}% confidence)`}
+                    {formatMessage(t.attentionCenter.aiRecommends, { recommendation: d.aiRecommendation })}
+                    {d.aiConfidence !== null && formatMessage(t.attentionCenter.aiConfidence, { confidence: d.aiConfidence.toString() })}
                   </p>
                 )}
                 {d.deadline && (
                   <p className={`text-xs ${overdue ? "font-medium text-status-critical" : "text-neutral-400"}`}>
-                    Deadline: {formatDate(d.deadline)} {overdue && "(overdue)"}
+                    {formatMessage(t.attentionCenter.deadlineLabel, { date: formatDate(d.deadline, locale) ?? "" })}{" "}
+                    {overdue && t.attentionCenter.overdue}
                   </p>
                 )}
                 <QuickViewLink workItemId={d.workItem.id} className="w-fit text-xs text-accent hover:underline">
-                  Quick View
+                  {t.common.quickView}
                 </QuickViewLink>
                 {canAct(d.workItem.projectId, ctx.memberships, ctx.isOrgAdmin) && <DecisionActions decisionId={d.id} />}
               </Row>
@@ -99,16 +103,20 @@ export default async function AttentionCenterPage() {
       )}
 
       {summary.blockers > 0 && (
-        <Section id="blockers" title="Blockers" count={summary.blockers}>
+        <Section id="blockers" title={t.attentionCenter.blockersGroupTitle} count={summary.blockers}>
           {blockers.map((b) => (
             <Row key={b.id}>
-              <StatusBadge tone="critical" label="Blocked" reason={b.reason} />
+              <StatusBadge tone="critical" label={t.attentionCenter.blocked} reason={b.reason} />
               <RowMeta workItem={b.blockingItem} />
-              <p className="text-xs text-neutral-500 dark:text-neutral-400">Owner: {b.owner.name ?? b.owner.email}</p>
-              <p className="text-sm text-neutral-500 dark:text-neutral-400">Required action: {b.requiredAction}</p>
-              {b.impact && <p className="text-xs text-neutral-400">Impact: {b.impact}</p>}
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                {formatMessage(t.common.ownerLabel, { name: b.owner.name ?? b.owner.email })}
+              </p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                {formatMessage(t.common.requiredActionLabel, { action: b.requiredAction })}
+              </p>
+              {b.impact && <p className="text-xs text-neutral-400">{formatMessage(t.attentionCenter.impactLabel, { impact: b.impact })}</p>}
               <QuickViewLink workItemId={b.blockingItem.id} className="w-fit text-xs text-accent hover:underline">
-                Quick View
+                {t.common.quickView}
               </QuickViewLink>
               {(canAct(b.blockingItem.projectId, ctx.memberships, ctx.isOrgAdmin) || b.ownerId === ctx.userId) && (
                 <ResolveBlockerButton blockerId={b.id} />
@@ -119,34 +127,37 @@ export default async function AttentionCenterPage() {
       )}
 
       {summary.risks > 0 && (
-        <Section id="risks" title="Risks" count={summary.risks}>
-          {risks.map((item) => (
-            <Row key={item.id}>
-              <StatusBadge
-                tone="critical"
-                label={`${RISK_LABEL[item.risk] ?? item.risk} risk`}
-                reason={`${item.title} is flagged ${(RISK_LABEL[item.risk] ?? item.risk).toLowerCase()} risk`}
-              />
-              <RowMeta workItem={item} />
-              <WorkItemLink workItemId={item.id} />
-            </Row>
-          ))}
+        <Section id="risks" title={t.attentionCenter.risksGroupTitle} count={summary.risks}>
+          {risks.map((item) => {
+            const riskLabel = item.risk === "HIGH" ? t.attentionCenter.riskHigh : item.risk === "CRITICAL" ? t.attentionCenter.riskCritical : item.risk;
+            return (
+              <Row key={item.id}>
+                <StatusBadge
+                  tone="critical"
+                  label={formatMessage(t.attentionCenter.riskLabelSuffix, { level: riskLabel })}
+                  reason={formatMessage(t.attentionCenter.riskReason, { title: item.title, level: riskLabel.toLowerCase() })}
+                />
+                <RowMeta workItem={item} />
+                <WorkItemLink workItemId={item.id} t={t} />
+              </Row>
+            );
+          })}
         </Section>
       )}
 
       {summary.deadlines > 0 && (
-        <Section id="deadlines" title="Deadlines" count={summary.deadlines}>
+        <Section id="deadlines" title={t.attentionCenter.deadlinesGroupTitle} count={summary.deadlines}>
           {deadlines.map((item) => {
             const dueSoon = item.dueDate && item.dueDate.getTime() - now < 24 * 60 * 60 * 1000;
             return (
               <Row key={item.id}>
                 <StatusBadge
                   tone={dueSoon ? "critical" : "warning"}
-                  label={`Due ${formatDate(item.dueDate)}`}
-                  reason={dueSoon ? "Due within 24 hours" : "Upcoming deadline"}
+                  label={formatMessage(t.attentionCenter.dueLabel, { date: formatDate(item.dueDate, locale) ?? "" })}
+                  reason={dueSoon ? t.attentionCenter.dueSoonReason : t.attentionCenter.upcomingDeadlineReason}
                 />
                 <RowMeta workItem={item} />
-                <WorkItemLink workItemId={item.id} />
+                <WorkItemLink workItemId={item.id} t={t} />
               </Row>
             );
           })}
@@ -154,25 +165,25 @@ export default async function AttentionCenterPage() {
       )}
 
       {summary.approvalGates > 0 && (
-        <Section id="approval-gates" title="Approval Gates" count={summary.approvalGates}>
+        <Section id="approval-gates" title={t.attentionCenter.approvalGatesGroupTitle} count={summary.approvalGates}>
           {approvalGates.map((item) => (
             <Row key={item.id}>
-              <StatusBadge tone="active" label="Awaiting approval" reason="This stage is waiting on a human gate approval" />
+              <StatusBadge tone="active" label={t.attentionCenter.awaitingApproval} reason={t.attentionCenter.awaitingApprovalReason} />
               <RowMeta workItem={item} />
-              <WorkItemLink workItemId={item.id} />
+              <WorkItemLink workItemId={item.id} t={t} />
             </Row>
           ))}
         </Section>
       )}
 
       {summary.pausedClarifications > 0 && (
-        <Section id="clarifications" title="Clarifications" count={summary.pausedClarifications}>
+        <Section id="clarifications" title={t.attentionCenter.clarificationsGroupTitle} count={summary.pausedClarifications}>
           {pausedClarifications.map((stage) => (
             <Row key={stage.id}>
               <StatusBadge
                 tone="warning"
-                label="Clarification needed"
-                reason={`${stage.clarifyQuestions.length} question${stage.clarifyQuestions.length === 1 ? "" : "s"} outstanding on the ${stage.type} stage`}
+                label={t.attentionCenter.clarificationNeeded}
+                reason={pluralize(locale, stage.clarifyQuestions.length, t.attentionCenter.questionsOutstanding, { stage: stage.type })}
               />
               <RowMeta workItem={stage.pipeline.workItem} />
               <ul className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -181,7 +192,7 @@ export default async function AttentionCenterPage() {
                 ))}
               </ul>
               <Link href={`/pipelines/${stage.pipelineId}`} className="w-fit text-xs text-accent hover:underline">
-                Answer on the pipeline page
+                {t.attentionCenter.answerOnPipeline}
               </Link>
             </Row>
           ))}
@@ -189,20 +200,20 @@ export default async function AttentionCenterPage() {
       )}
 
       {summary.syncConflicts > 0 && (
-        <Section id="sync-conflicts" title="Sync Conflicts" count={summary.syncConflicts}>
+        <Section id="sync-conflicts" title={t.attentionCenter.syncConflictsGroupTitle} count={summary.syncConflicts}>
           {syncConflicts.map((conflict) => (
             <Row key={conflict.id}>
               <StatusBadge
                 tone="warning"
-                label="Sync conflict"
-                reason={`A sync would overwrite a manually-edited "${conflict.field}" with a different value`}
+                label={t.attentionCenter.syncConflict}
+                reason={formatMessage(t.attentionCenter.syncConflictReason, { field: conflict.field })}
               />
               <RowMeta workItem={conflict.workItem} />
               <Link
                 href={`/projects/${conflict.workItem.projectId}/settings`}
                 className="w-fit text-xs text-accent hover:underline"
               >
-                Review on the project settings page
+                {t.attentionCenter.reviewOnSettings}
               </Link>
             </Row>
           ))}
@@ -248,14 +259,14 @@ function RowMeta({ workItem }: { workItem: { title: string; type: string; projec
   );
 }
 
-function WorkItemLink({ workItemId }: { workItemId: string }) {
+function WorkItemLink({ workItemId, t }: { workItemId: string; t: Translations }) {
   return (
     <span className="flex gap-3">
       <Link href={`/work-items/${workItemId}/360`} className="text-xs text-accent hover:underline">
-        View work item
+        {t.common.viewWorkItem}
       </Link>
       <QuickViewLink workItemId={workItemId} className="text-xs text-accent hover:underline">
-        Quick View
+        {t.common.quickView}
       </QuickViewLink>
     </span>
   );

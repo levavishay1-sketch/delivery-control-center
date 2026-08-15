@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { useLocale } from "@/lib/i18n/LocaleProvider";
 
 export interface TabDef {
   id: string;
@@ -8,15 +9,23 @@ export interface TabDef {
   content: React.ReactNode;
 }
 
-/** Accessible tabs: role="tablist", arrow-key navigation between tabs, Tab into panel content. */
+/**
+ * Accessible tabs: role="tablist", arrow-key navigation between tabs, Tab
+ * into panel content. Arrow-key direction follows logical reading order —
+ * ArrowRight advances to the next tab under LTR, but under RTL the visual
+ * "next" direction is to the left, so the two keys swap (see the modified
+ * delivery-record-360 spec's RTL keyboard-navigation requirement).
+ */
 export function WorkItemTabs({ tabs, initialTabId }: { tabs: TabDef[]; initialTabId?: string }) {
   const [activeId, setActiveId] = useState(initialTabId ?? tabs[0]?.id);
   const baseId = useId();
+  const { dir } = useLocale();
 
   function onKeyDown(e: React.KeyboardEvent, index: number) {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
     e.preventDefault();
-    const nextIndex = e.key === "ArrowRight" ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
+    const forwardKey = dir === "rtl" ? "ArrowLeft" : "ArrowRight";
+    const nextIndex = e.key === forwardKey ? (index + 1) % tabs.length : (index - 1 + tabs.length) % tabs.length;
     const next = tabs[nextIndex];
     setActiveId(next.id);
     document.getElementById(`${baseId}-tab-${next.id}`)?.focus();

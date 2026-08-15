@@ -9,25 +9,8 @@ import { ResolveBlockerButton } from "@/components/ResolveBlockerButton";
 import { DecisionActions } from "@/components/DecisionActions";
 import { StartPipelineButton } from "@/components/StartPipelineButton";
 import { StatusBadge } from "@/components/ui/StatusBadge";
-
-const STATUS_EXPLANATION: Record<string, string> = {
-  DRAFT: "Not yet started.",
-  OPEN: "Ready to be worked on.",
-  IN_PROGRESS: "Currently being worked on.",
-  DECISION_REQUIRED: "Waiting on a decision before work can continue.",
-  BLOCKED: "Blocked — see the Blocker Status below.",
-  REVIEW: "Awaiting review approval.",
-  APPROVED: "Reviewed and approved.",
-  COMPLETED: "Work is finished.",
-  CLOSED: "Closed — no further action expected.",
-};
-
-const RISK_EXPLANATION: Record<string, string> = {
-  LOW: "Low risk — unlikely to cause delivery issues.",
-  MEDIUM: "Moderate risk — worth monitoring.",
-  HIGH: "High risk — likely to affect delivery if unaddressed.",
-  CRITICAL: "Critical risk — needs immediate attention.",
-};
+import { useLocale, useT } from "@/lib/i18n/LocaleProvider";
+import { formatDate, formatMessage } from "@/lib/i18n/format";
 
 interface Member {
   id: string;
@@ -134,6 +117,8 @@ export function OverviewTab({
   /** If given (e.g. by the Quick View drawer, whose data isn't a Server Component), called after a mutation instead of the default router.refresh(). */
   onChanged?: () => void;
 }) {
+  const t = useT();
+  const { locale } = useLocale();
   const provenance = fieldProvenance ?? [];
   const [editing, setEditing] = useState(false);
 
@@ -174,11 +159,13 @@ export function OverviewTab({
     <div className="flex flex-col gap-4">
       {activeBlocker && (
         <div data-testid="blocker-panel" className="rounded-lg bg-status-critical-bg p-3">
-          <StatusBadge tone="critical" label="Blocked" reason={activeBlocker.reason} />
+          <StatusBadge tone="critical" label={t.overview.blockedLabel} reason={activeBlocker.reason} />
           <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
-            Owner: {activeBlocker.owner.name ?? activeBlocker.owner.email}
+            {formatMessage(t.overview.ownerSuffix, { name: activeBlocker.owner.name ?? activeBlocker.owner.email })}
           </p>
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">Required action: {activeBlocker.requiredAction}</p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+            {formatMessage(t.overview.requiredActionSuffix, { action: activeBlocker.requiredAction })}
+          </p>
           {(canManage || isBlockerOwner) && (
             <div className="mt-2">
               <ResolveBlockerButton blockerId={activeBlocker.id} onResolved={onChanged} />
@@ -189,12 +176,12 @@ export function OverviewTab({
 
       {pendingDecision && (
         <div className="rounded-lg bg-status-warning-bg p-3">
-          <StatusBadge tone="warning" label="Decision needed" reason={pendingDecision.question} />
+          <StatusBadge tone="warning" label={t.overview.decisionNeededLabel} reason={pendingDecision.question} />
           <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">{pendingDecision.reason}</p>
           {pendingDecision.aiRecommendation && (
             <p className="text-xs text-status-ai">
-              AI recommends: {pendingDecision.aiRecommendation}
-              {pendingDecision.aiConfidence !== null && ` (${pendingDecision.aiConfidence}% confidence)`}
+              {formatMessage(t.overview.aiRecommends, { recommendation: pendingDecision.aiRecommendation })}
+              {pendingDecision.aiConfidence !== null && formatMessage(t.overview.aiConfidence, { confidence: pendingDecision.aiConfidence })}
             </p>
           )}
           <div className="mt-2">
@@ -212,50 +199,54 @@ export function OverviewTab({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Status</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">{t.overview.statusLabel}</dt>
           <dd className="font-medium">
             {workItem.status}
             <ProvenanceNote field="status" provenance={provenance} />
           </dd>
-          <dd className="text-xs text-neutral-400">{STATUS_EXPLANATION[workItem.status]}</dd>
+          <dd className="text-xs text-neutral-400">{t.overview.statusExplanation[workItem.status as keyof typeof t.overview.statusExplanation]}</dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Owner</dt>
-          <dd>{workItem.owner ? workItem.owner.name ?? workItem.owner.email : "Unassigned"}</dd>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">{t.overview.ownerLabel}</dt>
+          <dd>{workItem.owner ? workItem.owner.name ?? workItem.owner.email : t.overview.unassigned}</dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Executor</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">{t.overview.executorLabel}</dt>
           <dd>
             {workItem.executorType === "AI_AGENT"
-              ? "AI Agent"
+              ? t.overview.aiAgent
               : workItem.executorType === "UNASSIGNED"
-                ? "Unassigned"
+                ? t.overview.unassigned
                 : workItem.executor
                   ? workItem.executor.name ?? workItem.executor.email
                   : workItem.executorType}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Due date</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">{t.overview.dueDateLabel}</dt>
           <dd className={dueColor}>
-            {due ? due.toLocaleDateString() : "None"}
-            {dueDays !== null && (dueDays < 0 ? ` (overdue by ${Math.abs(dueDays)}d)` : ` (in ${dueDays}d)`)}
+            {due ? formatDate(due, locale) : t.overview.none}
+            {dueDays !== null &&
+              " " +
+                (dueDays < 0
+                  ? formatMessage(t.overview.overdueBy, { n: Math.abs(dueDays) })
+                  : formatMessage(t.overview.inDays, { n: dueDays }))}
           </dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Risk</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">{t.overview.riskLabel}</dt>
           <dd className="font-medium">{workItem.risk}</dd>
-          <dd className="text-xs text-neutral-400">{RISK_EXPLANATION[workItem.risk]}</dd>
+          <dd className="text-xs text-neutral-400">{t.overview.riskExplanation[workItem.risk as keyof typeof t.overview.riskExplanation]}</dd>
         </div>
         <div>
-          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Priority</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">{t.overview.priorityLabel}</dt>
           <dd className="font-medium">{workItem.priority}</dd>
         </div>
       </dl>
 
       <div>
         <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
-          <span>Progress</span>
+          <span>{t.overview.progressLabel}</span>
           <span>{workItem.progress}%</span>
         </div>
         <div className="mt-1 h-1.5 w-full rounded-full bg-surface-muted">
@@ -265,8 +256,8 @@ export function OverviewTab({
 
       {(Number(aiCost) > 0 || stageCosts.some((s) => s.costUsd)) && (
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">AI Cost</h3>
-          <p className="text-sm">Total: ${aiCost}</p>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">{t.overview.aiCostHeading}</h3>
+          <p className="text-sm">{formatMessage(t.overview.totalCost, { cost: aiCost })}</p>
           {stageCosts.length > 0 && (
             <ul className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
               {stageCosts.filter((s) => s.costUsd).map((s) => (
@@ -281,7 +272,7 @@ export function OverviewTab({
         <div className="flex flex-col gap-2">
           {parent && (
             <p className="text-sm">
-              Parent:{" "}
+              {t.overview.parentLabel}{" "}
               {parent.pipelineId ? (
                 <Link href={`/pipelines/${parent.pipelineId}`} className="text-accent hover:underline">
                   {parent.title}
@@ -293,7 +284,7 @@ export function OverviewTab({
           )}
           {childItems.length > 0 && (
             <div>
-              <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Children</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">{t.overview.childrenHeading}</h3>
               <ul className="mt-1 flex flex-col gap-1">
                 {childItems.map((c) => (
                   <li key={c.id} className="text-sm">
@@ -305,7 +296,7 @@ export function OverviewTab({
                       c.title
                     )}{" "}
                     <span className="text-xs text-neutral-400">
-                      · {c.status} · {c.owner ? c.owner.name ?? c.owner.email : "Unassigned"}
+                      · {c.status} · {c.owner ? c.owner.name ?? c.owner.email : t.overview.unassigned}
                     </span>
                   </li>
                 ))}
@@ -321,7 +312,7 @@ export function OverviewTab({
             onClick={() => setEditing(true)}
             className="rounded-md border border-border-hairline px-3 py-1.5 text-sm hover:bg-surface-muted"
           >
-            Edit
+            {t.overview.editButton}
           </button>
         )}
         {canManage && !activeBlocker && (

@@ -203,7 +203,7 @@ re-litigate:
 | 5 | Engineering evidence | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | `openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/` |
 | 6 | Configuration Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | `openspec/changes/archive/2026-08-15-slice-6-configuration-center/` |
 | 7 | Design system foundation & premium UI refresh | **Done** | `2026-08-15-design-system-direction.md` | `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/` |
-| 8 | i18n readiness & RTL support (Hebrew/English) | **Scoped — not started** | `2026-08-15-i18n-rtl-support.md` | — |
+| 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -362,29 +362,49 @@ every page, closing that gap as a side effect. Full detail: source §
 above; as-built detail:
 `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/`.
 
-### Slice 8 — i18n readiness & RTL support (Hebrew/English) — **Scoped, not started**
+### Slice 8 — i18n readiness & RTL support (Hebrew/English) — **Done**
 
 *(Source: `docs/roadmap-sources/2026-08-15-i18n-rtl-support.md` — a direct
 user requirement given in conversation immediately after Slice 7 shipped.
-Not part of the original master prompt / gap analysis. The source file is
-authoritative if this summary drifts from it.)*
+Not part of the original master prompt / gap analysis.)*
 
-- The product must be i18n-ready from day one, with Hebrew and English as
-  the initial supported languages.
-- Hebrew is a true RTL experience, not translated strings over an LTR
-  layout: the nav rail, drawers, tabs, tables, forms, icons, spacing,
-  alignment, and date/number formatting all need to mirror correctly under
-  `dir="rtl"`, not just read right-to-left text.
-- Lightweight implementation, no unnecessary localization machinery;
-  architecture should make adding a third language later straightforward
-  (translation keys, not hardcoded strings; logical CSS properties over
-  physical ones so RTL mirroring is automatic rather than duplicated
-  per-component).
-- Builds on top of Slice 7's design-token/component layer (`NavRail`,
-  `StatusBadge`, `Row`/`Panel`, Quick View drawer, 360° Record tabs) rather
-  than replacing it — no domain, entity, or backend architecture changes.
-
-Ready for an OpenSpec proposal; no plan written or approved yet.
+Added a lightweight locale mechanism (`src/lib/i18n/`: plain TypeScript
+`en.ts`/`he.ts` dictionaries typed against each other so a missing Hebrew
+key is a compile error, `LocaleProvider`/`useLocale()`/`useT()` for client
+components, `getServerLocale()`/`getDictionary()` for Server Components,
+`formatMessage`/`pluralize`/`formatDate`/`formatNumber` wrapping native
+`Intl` — no new npm dependency) with English and Hebrew as the initial
+locales. Locale is a browser-local cookie (`POST /api/locale`), not a
+domain/backend concept — `RootLayout` reads it server-side via
+`next/headers` and sets `<html lang dir>` before first paint, so there is
+no LTR-then-RTL flash. RTL comes from the browser's native `dir` handling
+plus Tailwind v4's logical CSS properties (`border-e`/`border-s`) and
+built-in `rtl:`/`ltr:` variants, not a custom mirroring layer; most of
+Slice 7's components (`StatusBadge`, `Row`/`RowList`, `Panel`) needed zero
+CSS changes because their flexbox layout already followed reading
+direction natively — only `NavRail` and `QuickViewDrawer`'s single
+physical border each needed converting. `WorkItemTabs`' arrow-key
+navigation reverses direction under RTL so "next tab" stays a logical
+concept. Full Hebrew translation applied to Slice 7's four core surfaces
+(Dashboard's attention-summary/quick-access/recent-activity sections,
+Attention Center, Quick View drawer, 360° Record's Overview/Dependencies/
+Timeline tabs and tab labels) plus the persistent nav rail and sign-out
+button (global chrome, added beyond the literal task list since leaving
+always-visible chrome in English would have undermined the point of a
+"true RTL experience" — disclosed, not silent). Two scope decisions
+(cookie-based locale over URL-prefixed routing; four-surface translation
+coverage over whole-app) confirmed via the user deferring to "best
+practice," reasoned in `proposal.md`. Known limitations, disclosed rather
+than hidden: the Hebrew dictionary is hand-authored by the agent, not
+reviewed by a native speaker; pluralization is a simplified one/other
+split via `Intl.PluralRules`, not full Hebrew CLDR grammar; deeper
+interactive sub-forms nested in the four surfaces (`AddDependencyForm`,
+`CreateBlockerForm`, etc.) stay English-only, matching `tasks.md`'s
+explicit file-level scope; pages outside the four surfaces (Audit Trail,
+Configuration Center, pipeline detail, login) keep English strings but
+inherit RTL-safe layout for free from the shared components. Full detail:
+source above; as-built detail:
+`openspec/changes/archive/2026-08-15-i18n-rtl-support/`.
 
 ## Definition of Done, for every future slice (source: `§6`)
 

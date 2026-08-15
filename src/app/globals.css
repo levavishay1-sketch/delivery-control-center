@@ -141,7 +141,7 @@ body {
 
 @keyframes drawer-in {
   from {
-    transform: translateX(16px);
+    transform: translateX(var(--drawer-slide-offset, 16px));
     opacity: 0;
   }
   to {
@@ -152,4 +152,11 @@ body {
 
 .animate-drawer-in {
   animation: drawer-in 180ms ease-out;
+}
+
+/* The drawer opens from its inline-end edge (right under LTR, left under
+   RTL — see design.md decision 3). Its subtle slide-in offset must move
+   inward from that same edge, so the sign flips under RTL. */
+:dir(rtl) .animate-drawer-in {
+  --drawer-slide-offset: -16px;
 }

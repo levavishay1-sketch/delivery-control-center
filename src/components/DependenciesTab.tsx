@@ -1,7 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { AddDependencyForm } from "@/components/AddDependencyForm";
 import { RemoveDependencyButton } from "@/components/RemoveDependencyButton";
 import { DependencyGraph } from "@/components/DependencyGraph";
+import { useT } from "@/lib/i18n/LocaleProvider";
 
 interface DepItem {
   id: string;
@@ -47,11 +50,12 @@ export function DependenciesTab({
   /** Full connected dependency neighborhood for the graph visualization. Omitted in compact contexts (the Quick View drawer) — a "Coming soon" note shows instead. */
   graph?: GraphData;
 }) {
+  const t = useT();
   return (
     <div className="flex flex-col gap-6">
       <section>
-        <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Depends on</h3>
-        {upstream.length === 0 && <p className="mt-1 text-sm opacity-50">No upstream dependencies.</p>}
+        <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">{t.dependencies.dependsOnHeading}</h3>
+        {upstream.length === 0 && <p className="mt-1 text-sm opacity-50">{t.dependencies.noUpstream}</p>}
         <div className="mt-2 flex flex-col divide-y divide-border-hairline rounded-lg border border-border-hairline">
           {upstream.map((dep) => (
             <div key={dep.id} className="flex items-center justify-between gap-2 px-3 py-2">
@@ -79,8 +83,8 @@ export function DependenciesTab({
       </section>
 
       <section>
-        <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Depended on by</h3>
-        {downstream.length === 0 && <p className="mt-1 text-sm opacity-50">No downstream dependents.</p>}
+        <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">{t.dependencies.dependedOnByHeading}</h3>
+        {downstream.length === 0 && <p className="mt-1 text-sm opacity-50">{t.dependencies.noDownstream}</p>}
         <div className="mt-2 flex flex-col divide-y divide-border-hairline rounded-lg border border-border-hairline">
           {downstream.map((dep) => (
             <div key={dep.id} className="px-3 py-2">
@@ -100,15 +104,15 @@ export function DependenciesTab({
       </section>
 
       <section>
-        <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Dependency Graph</h3>
+        <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">{t.dependencies.dependencyGraphHeading}</h3>
         {graph && graph.nodes.length > 1 ? (
           <div className="mt-2">
             <DependencyGraph nodes={graph.nodes} edges={graph.edges} focusNodeId={workItemId} truncated={graph.truncated} />
           </div>
         ) : graph ? (
-          <p className="mt-1 text-sm opacity-50">No connected dependencies to visualize yet.</p>
+          <p className="mt-1 text-sm opacity-50">{t.dependencies.noConnectedGraph}</p>
         ) : (
-          <p className="mt-1 text-sm opacity-50">Coming soon — visual dependency graph.</p>
+          <p className="mt-1 text-sm opacity-50">{t.dependencies.comingSoonGraph}</p>
         )}
       </section>
     </div>
