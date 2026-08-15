@@ -12,10 +12,10 @@
 
 ## 3. Configuration domain — effective value & history
 
-- [ ] 3.1 Create `src/domain/config/queries.ts`: `getEffectiveBudget(scope, scopeId)` — walks Project → Client → Organization, returning `{ value, sourceScope, isOverride }`; `listConfigHistory(scope, scopeId)` — most-recent-first `ConfigChange` rows.
-- [ ] 3.2 Create `src/domain/config/commands.ts`: `previewBudgetImpact(scope, scopeId, newValue)` — for `ORGANIZATION`/`CLIENT` scope, counts descendant clients/projects with no override of their own; returns `{ affectedClients, affectedProjects }` (both 0 for `PROJECT` scope).
-- [ ] 3.3 `setBudget(ctx, scope, scopeId, value)` in `src/domain/config/commands.ts` — authz per design.md decision 5 (`requireOrgAdmin` for `ORGANIZATION`, `requireClientRole(WRITE_ROLES)` for `CLIENT`/`PROJECT`), updates the scope's `aiBudgetUsd`, creates a `ConfigChange` row and a `recordAuditEvent`, in one transaction. `resetToInherited(ctx, scope, scopeId)` is `setBudget(..., null)`.
-- [ ] 3.4 Unit tests: effective-value resolution at each scope (own override / inherited from client / inherited from organization / fully unbounded); impact preview counts at Organization and Client scope; `setBudget` authz (org admin required for Organization scope, WRITE_ROLES for Client/Project, rejected otherwise); `ConfigChange` row created on every set/clear; `resetToInherited` clears the override and the scope reports the inherited value afterward.
+- [x] 3.1 Create `src/domain/config/queries.ts`: `getEffectiveBudget(scope, scopeId)` — walks Project → Client → Organization, returning `{ value, sourceScope, isOverride }`; `listConfigHistory(scope, scopeId)` — most-recent-first `ConfigChange` rows.
+- [x] 3.2 Create `src/domain/config/commands.ts`: `previewBudgetImpact(scope, scopeId, newValue)` — for `ORGANIZATION`/`CLIENT` scope, counts descendant clients/projects with no override of their own; returns `{ affectedClients, affectedProjects }` (both 0 for `PROJECT` scope).
+- [x] 3.3 `setBudget(ctx, scope, scopeId, value)` in `src/domain/config/commands.ts` — authz per design.md decision 5 (`requireOrgAdmin` for `ORGANIZATION`, `requireClientRole(WRITE_ROLES)` for `CLIENT`/`PROJECT`), updates the scope's `aiBudgetUsd`, creates a `ConfigChange` row and a `recordAuditEvent`, in one transaction. `resetToInherited(ctx, scope, scopeId)` is `setBudget(..., null)`.
+- [x] 3.4 Unit tests: effective-value resolution at each scope (own override / inherited from client / inherited from organization / fully unbounded); impact preview counts at Organization and Client scope (and Project scope's fixed zero); `setBudget` authz (org admin required for Organization scope, WRITE_ROLES for Client/Project, VIEWER rejected); `ConfigChange` row created on every set/clear, most-recent-first history. 11/11 passing.
 
 ## 4. API routes
 
