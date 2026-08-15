@@ -11,12 +11,19 @@
 # joined this list in Task Group 7, once its prompt template and worker-side
 # handling existed. IMPLEMENT is still pending its own task group — adding its
 # StageType here before then would create a stage the worker can't draft.
+#
+# approverRoles (Task Group 8): an explicit list of roles allowed to
+# approve/reject that stage's gate — not a hierarchy (design.md Decision 6).
+# MANAGER is included in every list by convention. Required (and validated
+# non-empty by lib/config.ts) for every requiresApproval: true stage; omitted
+# for auto-completing stages, which have no human gate to approve.
 stages:
   - type: SPEC
     label: Specification
     description: What is being built and why, from the work item's intent.
     promptTemplate: spec.md
     requiresApproval: true
+    approverRoles: [PROJECT_MANAGER, MANAGER]
 
   - type: CLARIFY
     label: Clarify
@@ -29,12 +36,14 @@ stages:
     description: The technical approach and architecture for implementing the SPEC.
     promptTemplate: plan.md
     requiresApproval: true
+    approverRoles: [TECH_LEAD, MANAGER]
 
   - type: TASKS
     label: Tasks
     description: Concrete, ordered implementation tasks derived from the Plan.
     promptTemplate: tasks.md
     requiresApproval: true
+    approverRoles: [TECH_LEAD, MANAGER]
 
   - type: ANALYZE
     label: Analyze
@@ -47,3 +56,4 @@ stages:
     description: Deployment/rollout record for the completed work.
     promptTemplate: deploy.md
     requiresApproval: true
+    approverRoles: [TECH_LEAD, MANAGER]

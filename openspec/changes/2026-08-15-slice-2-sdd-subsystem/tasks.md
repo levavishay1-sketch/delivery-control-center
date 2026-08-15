@@ -69,9 +69,9 @@ established pattern).
 
 ## Task Group 8: Role-Based Gate Policy (3 tasks)
 
-- [ ] 8.1 `config/workflow.yaml`: add `approverRoles: Role[]` per stage entry (per design.md's decision 6 — an explicit list per stage, `MANAGER` included in every list by convention, no role hierarchy invented). Update `WorkflowStageConfig`/`loadWorkflow()`'s type and parsing (`src/lib/config.ts`).
-- [ ] 8.2 `approveStage`/`rejectStage` (`src/domain/pipeline/commands.ts`): replace the uniform `requireClientRole(ctx, clientId, WRITE_ROLES)` with `requireClientRole(ctx, clientId, stageConfig.approverRoles)`, reading the stage's config from the pipeline's own snapshot mechanism (Task Group 4.3), not the live file.
-- [ ] 8.3 Tests: a role listed for a stage type can approve it; a write-capable role NOT listed for that specific stage type is refused (even though it would pass today's uniform check); a role permitted for one stage type is refused on a different stage type whose list doesn't include it. Commit: "Add role-based, per-stage-type gate policy"
+- [x] 8.1 `config/workflow.yaml`: add `approverRoles: Role[]` per stage entry (per design.md's decision 6 — an explicit list per stage, `MANAGER` included in every list by convention, no role hierarchy invented). Update `WorkflowStageConfig`/`loadWorkflow()`'s type and parsing (`src/lib/config.ts`).
+- [x] 8.2 `approveStage`/`rejectStage` (`src/domain/pipeline/commands.ts`): replace the uniform `requireClientRole(ctx, clientId, WRITE_ROLES)` with `requireClientRole(ctx, clientId, stageConfig.approverRoles)`, reading the stage's config from the pipeline's own snapshot mechanism (Task Group 4.3), not the live file.
+- [x] 8.3 Tests: a role listed for a stage type can approve it; a write-capable role NOT listed for that specific stage type is refused (even though it would pass today's uniform check); a role permitted for one stage type is refused on a different stage type whose list doesn't include it. Commit: "Add role-based, per-stage-type gate policy"
 
 ## Task Group 9: Redraft Feedback (2 tasks)
 

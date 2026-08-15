@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import * as yaml from "js-yaml";
-import type { StageType } from "@/generated/prisma/client";
+import type { Role, StageType } from "@/generated/prisma/client";
 
 export interface WorkflowStageConfig {
   type: StageType;
@@ -9,6 +9,13 @@ export interface WorkflowStageConfig {
   description: string;
   promptTemplate: string;
   requiresApproval: boolean;
+  /**
+   * Roles allowed to approve/reject this stage's gate — an explicit per-stage list, not a role
+   * hierarchy (design.md Decision 6). MANAGER is included in every approval-gated stage's list
+   * by convention. Required (and validated non-empty by loadWorkflow) when requiresApproval is
+   * true; omitted for auto-completing stages, which have no gate to approve.
+   */
+  approverRoles?: Role[];
 }
 
 interface WorkflowFile {
@@ -29,6 +36,11 @@ export function loadWorkflow(): WorkflowStageConfig[] {
   const parsed = yaml.load(raw) as WorkflowFile;
   if (!parsed?.stages?.length) {
     throw new Error("config/workflow.yaml must define at least one stage");
+  }
+  for (const stage of parsed.stages) {
+    if (stage.requiresApproval && (!stage.approverRoles || stage.approverRoles.length === 0)) {
+      throw new Error(`config/workflow.yaml: stage ${stage.type} requires approval but has no approverRoles configured`);
+    }
   }
   cachedWorkflow = parsed.stages;
   return cachedWorkflow;
@@ -53,7 +65,14 @@ export function getStageConfig(type: StageType): WorkflowStageConfig {
 export function getStageConfigOrFallback(type: StageType): WorkflowStageConfig {
   const stage = loadWorkflow().find((s) => s.type === type);
   if (stage) return stage;
-  return { type, label: `${type} (retired)`, description: "This stage type is no longer part of the configured pipeline.", promptTemplate: "", requiresApproval: true };
+  return {
+    type,
+    label: `${type} (retired)`,
+    description: "This stage type is no longer part of the configured pipeline.",
+    promptTemplate: "",
+    requiresApproval: true,
+    approverRoles: ["MANAGER"],
+  };
 }
 
 /**

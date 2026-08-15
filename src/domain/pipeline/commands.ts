@@ -384,14 +384,20 @@ export async function revertStageDraftFailure(stageId: string, error: string): P
   });
 }
 
-/** Approves a stage's gate and advances the pipeline to the next stage (or completes it). Approver identity comes from ctx, never a client-supplied name. */
+/**
+ * Approves a stage's gate and advances the pipeline to the next stage (or completes it).
+ * Approver identity comes from ctx, never a client-supplied name. Gated by the stage type's own
+ * approverRoles (design.md Decision 6), not the uniform WRITE_ROLES check every stage used
+ * before Task Group 8 — a role with general write access can still be refused on a specific
+ * stage type its list doesn't include.
+ */
 export async function approveStage(ctx: AuthContext, stageId: string, comment?: string) {
   return db.$transaction(async (tx) => {
     const stage = await tx.stage.findUniqueOrThrow({
       where: { id: stageId },
       include: { pipeline: { include: { workItem: { include: { project: true } } } } },
     });
-    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, WRITE_ROLES);
+    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, getStageConfig(stage.type).approverRoles ?? WRITE_ROLES);
     if (stage.status !== "PENDING_APPROVAL") {
       throw new Error(`Stage is ${stage.status}; only PENDING_APPROVAL stages can be approved.`);
     }
@@ -416,14 +422,18 @@ export async function approveStage(ctx: AuthContext, stageId: string, comment?: 
   });
 }
 
-/** Rejects a stage's gate; the pipeline is blocked until the stage is redrafted via draftStage. Rejecter identity comes from ctx, never a client-supplied name. */
+/**
+ * Rejects a stage's gate; the pipeline is blocked until the stage is redrafted via draftStage.
+ * Rejecter identity comes from ctx, never a client-supplied name. Gated by the same
+ * approverRoles as approveStage — rejecting is part of the same gate decision as approving.
+ */
 export async function rejectStage(ctx: AuthContext, stageId: string, comment?: string) {
   return db.$transaction(async (tx: Prisma.TransactionClient) => {
     const stage = await tx.stage.findUniqueOrThrow({
       where: { id: stageId },
       include: { pipeline: { include: { workItem: { include: { project: true } } } } },
     });
-    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, WRITE_ROLES);
+    requireClientRole(ctx, stage.pipeline.workItem.project.clientId, getStageConfig(stage.type).approverRoles ?? WRITE_ROLES);
     if (stage.status !== "PENDING_APPROVAL") {
       throw new Error(`Stage is ${stage.status}; only PENDING_APPROVAL stages can be rejected.`);
     }

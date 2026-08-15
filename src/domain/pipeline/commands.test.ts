@@ -13,7 +13,7 @@ import {
 } from "./commands";
 import { createWorkItem } from "@/domain/work-item/commands";
 import type { AuthContext } from "@/domain/shared/context";
-import { ConflictError, ValidationError } from "@/domain/shared/errors";
+import { ConflictError, ForbiddenError, ValidationError } from "@/domain/shared/errors";
 
 /**
  * Integration tests against a real local Postgres — same rationale as the
@@ -24,6 +24,9 @@ let clientId: string;
 let projectId: string;
 let managerUserId: string;
 let managerCtx: AuthContext;
+let projectManagerCtx: AuthContext;
+let techLeadCtx: AuthContext;
+let executorCtx: AuthContext;
 
 async function createProjectWithApprovedConstitution(name: string) {
   const project = await db.project.create({
@@ -53,6 +56,18 @@ beforeAll(async () => {
   await db.clientMembership.create({ data: { userId: manager.id, clientId, role: "MANAGER" } });
 
   managerCtx = { userId: managerUserId, displayName: "Pipeline Manager", isOrgAdmin: false, memberships: [{ clientId, role: "MANAGER" }] };
+
+  const projectManager = await db.user.create({ data: { email: `pipeline-pm-${Date.now()}@test.local`, name: "Pipeline PM" } });
+  await db.clientMembership.create({ data: { userId: projectManager.id, clientId, role: "PROJECT_MANAGER" } });
+  projectManagerCtx = { userId: projectManager.id, displayName: "Pipeline PM", isOrgAdmin: false, memberships: [{ clientId, role: "PROJECT_MANAGER" }] };
+
+  const techLead = await db.user.create({ data: { email: `pipeline-tl-${Date.now()}@test.local`, name: "Pipeline Tech Lead" } });
+  await db.clientMembership.create({ data: { userId: techLead.id, clientId, role: "TECH_LEAD" } });
+  techLeadCtx = { userId: techLead.id, displayName: "Pipeline Tech Lead", isOrgAdmin: false, memberships: [{ clientId, role: "TECH_LEAD" }] };
+
+  const executor = await db.user.create({ data: { email: `pipeline-exec-${Date.now()}@test.local`, name: "Pipeline Executor" } });
+  await db.clientMembership.create({ data: { userId: executor.id, clientId, role: "EXECUTOR" } });
+  executorCtx = { userId: executor.id, displayName: "Pipeline Executor", isOrgAdmin: false, memberships: [{ clientId, role: "EXECUTOR" }] };
 });
 
 const draftedStageIds: string[] = [];
@@ -434,5 +449,75 @@ describe("completeStageDraft with analysisFindings", () => {
     const finalPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
     expect(finalPipeline.currentStage).toBe("DEPLOY");
     expect(finalPipeline.status).toBe("ACTIVE");
+  });
+});
+
+describe("role-based gate policy (approverRoles)", () => {
+  it("a role listed in the stage type's approverRoles can approve it", async () => {
+    const project = await createProjectWithApprovedConstitution("Gate PM Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "PM approves SPEC" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+
+    await draft(managerCtx, specStage.id);
+    const completed = await runStageDraftJob(specStage.id, "# Spec");
+
+    // SPEC's approverRoles ([PROJECT_MANAGER, MANAGER] in config/workflow.yaml) include PROJECT_MANAGER.
+    const advanced = await approveStage(projectManagerCtx, completed.id);
+    expect(advanced.currentStage).not.toBe("SPEC");
+  });
+
+  it("refuses a write-capable role that isn't listed in the stage type's approverRoles", async () => {
+    const project = await createProjectWithApprovedConstitution("Gate Executor Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Executor cannot approve SPEC" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+
+    await draft(managerCtx, specStage.id);
+    const completed = await runStageDraftJob(specStage.id, "# Spec");
+
+    // EXECUTOR has general write access (WRITE_ROLES) but SPEC's approverRoles doesn't list it —
+    // this is the exact distinction Task Group 8 introduces over the old uniform WRITE_ROLES check.
+    await expect(approveStage(executorCtx, completed.id)).rejects.toThrow(ForbiddenError);
+  });
+
+  it("refuses a role permitted on one stage type when acting on a different stage type whose approverRoles doesn't include it", async () => {
+    const project = await createProjectWithApprovedConstitution("Gate Cross-Stage Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "PM approves SPEC but not PLAN" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+    await draft(managerCtx, specStage.id);
+    const completedSpec = await runStageDraftJob(specStage.id, "# Spec");
+    await approveStage(projectManagerCtx, completedSpec.id); // allowed — PROJECT_MANAGER is listed for SPEC
+
+    const clarifyStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "CLARIFY" } });
+    await draft(managerCtx, clarifyStage.id);
+    await runStageDraftJob(clarifyStage.id, "# Clarify — nothing outstanding");
+
+    const planStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "PLAN" } });
+    await draft(managerCtx, planStage.id);
+    const completedPlan = await runStageDraftJob(planStage.id, "# Plan");
+
+    // PROJECT_MANAGER isn't in PLAN's approverRoles ([TECH_LEAD, MANAGER]) even though it was fine for SPEC.
+    await expect(approveStage(projectManagerCtx, completedPlan.id)).rejects.toThrow(ForbiddenError);
+
+    // TECH_LEAD is listed for PLAN and succeeds.
+    const advanced = await approveStage(techLeadCtx, completedPlan.id);
+    expect(advanced.currentStage).not.toBe("PLAN");
+  });
+
+  it("rejectStage is gated by the same approverRoles as approveStage", async () => {
+    const project = await createProjectWithApprovedConstitution("Gate Reject Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Reject gated by approverRoles" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+
+    await draft(managerCtx, specStage.id);
+    const completed = await runStageDraftJob(specStage.id, "# Spec");
+
+    await expect(rejectStage(executorCtx, completed.id)).rejects.toThrow(ForbiddenError);
+    const rejected = await rejectStage(projectManagerCtx, completed.id, "needs rework");
+    expect(rejected.status).toBe("REJECTED");
   });
 });
