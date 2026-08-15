@@ -94,7 +94,13 @@ function estimateTokens(text: string): number {
  */
 export const mockExecutor: AgentExecutor = {
   async executeStage(stageType: StageType, context: StageExecutionContext): Promise<StageExecutionResult> {
-    if (stageType === "CLARIFY") {
+    if (stageType === "CLARIFY" && !context.clarifyAnswers?.length) {
+      // Only check the marker on a fresh draft — once clarifyAnswers is populated, this is the
+      // redraft that resumed after answering, and must not re-ask the same questions again from
+      // the still-present marker (the work item's description isn't consumed/cleared by
+      // answering it — a real model would treat already-answered questions as resolved, not
+      // re-raise them; the mock needs the same guard or a real answer/redraft cycle never
+      // actually completes). See Task Group 11's E2E scenario, which caught this.
       const questions = extractMockClarifyQuestions(context.workItemDescription);
       if (questions) {
         const promptTokens = estimateTokens(context.workItemDescription);

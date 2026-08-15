@@ -100,7 +100,15 @@ function buildWhere(ctx: AuthContext, filters: AuditFilters): Prisma.AuditEventW
 
   const and: Prisma.AuditEventWhereInput[] = [scope];
 
-  if (filters.projectId) and.push({ projectId: filters.projectId });
+  // Mirrors `scope` above: a pipeline/stage-scoped event only has projectId set for
+  // project-level actions (e.g. Constitution) — pipeline/stage events set pipelineId instead, so
+  // a direct `{ projectId }` match alone silently excludes almost every pipeline-related event
+  // from the Project filter (real bug, caught by Task Group 11's E2E scenario asserting on it).
+  if (filters.projectId) {
+    and.push({
+      OR: [{ projectId: filters.projectId }, { pipeline: { workItem: { projectId: filters.projectId } } }],
+    });
+  }
 
   if (filters.actorId === "SYSTEM" || filters.actorId === "AI") {
     and.push({ actor: filters.actorId });

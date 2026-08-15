@@ -121,10 +121,12 @@ describe("startPipeline", () => {
     const configPath = path.join(process.cwd(), "config", "workflow.yaml");
     const originalConfig = fs.readFileSync(configPath, "utf-8");
     try {
+      // Replace the live config with a deliberately different (shorter) stage list — every
+      // StageType is already in use in the real config, so shrinking it (rather than appending
+      // a duplicate type) is what actually changes the "live" shape without a type collision.
       fs.writeFileSync(
         configPath,
-        originalConfig +
-          "\n  - type: IMPLEMENT\n    label: Implement (test-added)\n    description: test\n    promptTemplate: deploy.md\n    requiresApproval: false\n"
+        "stages:\n  - type: SPEC\n    label: Spec (test-edited)\n    description: test\n    promptTemplate: spec.md\n    requiresApproval: true\n    approverRoles: [MANAGER]\n"
       );
 
       const reloaded = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
@@ -377,7 +379,7 @@ describe("completeStageDraft with analysisFindings", () => {
     expect(findings[0].severity).toBe("INFO");
 
     const reloadedPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
-    expect(reloadedPipeline.currentStage).toBe("DEPLOY");
+    expect(reloadedPipeline.currentStage).toBe("IMPLEMENT");
     expect(reloadedPipeline.status).toBe("ACTIVE");
   });
 
@@ -447,6 +449,10 @@ describe("completeStageDraft with analysisFindings", () => {
     // currentStage backward — the pipeline is still sitting at ANALYZE, blocked.
     const midPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
     expect(midPipeline.currentStage).toBe("ANALYZE");
+    // Regression: completing the flagged stage's own draft must not prematurely clear BLOCKED —
+    // only a clean ANALYZE re-run actually resolves the block (caught by the Task Group 11 E2E
+    // scenario, which found the pipeline reporting ACTIVE here even though ANALYZE was untouched).
+    expect(midPipeline.status).toBe("BLOCKED");
     const tasksStages = await db.stage.findMany({ where: { pipelineId: pipeline.id, type: "TASKS" } });
     expect(tasksStages).toHaveLength(1);
 
@@ -466,7 +472,7 @@ describe("completeStageDraft with analysisFindings", () => {
     expect(remainingFindings).toHaveLength(0);
 
     const finalPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
-    expect(finalPipeline.currentStage).toBe("DEPLOY");
+    expect(finalPipeline.currentStage).toBe("IMPLEMENT");
     expect(finalPipeline.status).toBe("ACTIVE");
   });
 });

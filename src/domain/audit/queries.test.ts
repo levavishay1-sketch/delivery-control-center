@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { listAuditEvents, getAuditActors, listRecentAuditEvents } from "./queries";
 import { createWorkItem } from "@/domain/work-item/commands";
 import { createBlocker } from "@/domain/blocker/commands";
+import { startPipeline } from "@/domain/pipeline/commands";
 import type { AuthContext } from "@/domain/shared/context";
 
 /**
@@ -80,6 +81,23 @@ describe("listAuditEvents", () => {
   it("filters by project", async () => {
     const result = await listAuditEvents(managerCtx, { projectId });
     expect(result.events.every((e) => e.projectId === projectId)).toBe(true);
+  });
+
+  it("includes pipeline-scoped events, which only set pipelineId (not projectId directly)", async () => {
+    // Regression: the project filter used to be a direct `{ projectId }` match, which silently
+    // excluded almost every pipeline/stage audit event (drafts, approvals, "started the
+    // pipeline", "Pipeline advanced to X", ...) — found by Task Group 11's E2E scenario
+    // asserting against the Audit Trail page's project filter.
+    await db.constitution.create({
+      data: { projectId, version: 1, status: "APPROVED", content: "# Constitution", approvedAt: new Date() },
+    });
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Pipeline-scoped audit fixture" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+
+    const result = await listAuditEvents(managerCtx, { projectId, pageSize: 500 });
+    const startedEvent = result.events.find((e) => e.pipelineId === pipeline.id && e.action.includes("started the pipeline"));
+    expect(startedEvent).toBeDefined();
+    expect(startedEvent!.projectId).toBeNull();
   });
 
   it("filters by action category", async () => {

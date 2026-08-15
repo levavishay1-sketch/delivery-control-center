@@ -346,7 +346,13 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
       },
     });
 
-    if (current.pipeline.status === "BLOCKED") {
+    // Only clear BLOCKED when the stage that just completed is the pipeline's actual current
+    // stage — a flagged stage's redraft (Task Group 7.3) completes here too, but it isn't what
+    // caused the block (a Critical Analyze finding did) and hasn't resolved it yet; ANALYZE
+    // itself still needs a clean re-run (handled separately above) before the pipeline is truly
+    // unblocked. Without this guard, drafting the flagged stage alone would prematurely clear
+    // BLOCKED while the pipeline is still logically stuck at ANALYZE.
+    if (current.pipeline.status === "BLOCKED" && current.type === current.pipeline.currentStage) {
       await tx.pipeline.update({ where: { id: current.pipeline.id }, data: { status: "ACTIVE" } });
     }
 

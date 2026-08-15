@@ -146,7 +146,13 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
                 />
               )}
 
-              {isCurrent && stage && stage.status === "PENDING_APPROVAL" && (
+              {/* No isCurrent guard: a flagged stage's redraft (see the DraftButton branch above)
+                  reaches PENDING_APPROVAL while the pipeline is still parked at ANALYZE, so it
+                  isn't "current" either — the gate must still render or there's no way to
+                  approve it. In the ordinary flow only the current stage is ever
+                  PENDING_APPROVAL anyway (future stages have no Stage row yet, past ones are
+                  already DONE), so this doesn't change anything there. */}
+              {stage && stage.status === "PENDING_APPROVAL" && (
                 <div className="mt-3">
                   {ctx.isOrgAdmin || (userRole && stageConfig.approverRoles?.includes(userRole)) ? (
                     <ApprovalGate stageId={stage.id} />

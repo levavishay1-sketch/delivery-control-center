@@ -34,6 +34,21 @@ describe("mockExecutor.executeStage(CLARIFY)", () => {
     const withoutAnswers = await mockExecutor.executeStage("CLARIFY", baseContext);
     expect(withAnswers.promptTokens).toBeGreaterThan(withoutAnswers.promptTokens);
   });
+
+  it("does not re-ask the same questions once clarifyAnswers is present, even if the marker is still in the description", async () => {
+    // Regression test: the work item's description isn't cleared by answering — a redraft that
+    // ignored clarifyAnswers and re-checked the marker would ask forever, never completing.
+    const result = await mockExecutor.executeStage("CLARIFY", {
+      ...baseContext,
+      workItemDescription: "Reset flow. [NEEDS_CLARIFICATION: Which email provider? | Is SMS 2FA in scope?]",
+      clarifyAnswers: [
+        { question: "Which email provider?", answer: "SendGrid" },
+        { question: "Is SMS 2FA in scope?", answer: "No" },
+      ],
+    });
+    expect(result.clarifyQuestions).toBeUndefined();
+    expect(result.content).toContain("No outstanding questions");
+  });
 });
 
 describe("mockExecutor.executeStage(ANALYZE)", () => {

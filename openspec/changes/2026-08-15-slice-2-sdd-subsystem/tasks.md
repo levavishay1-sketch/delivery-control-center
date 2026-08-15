@@ -86,7 +86,7 @@ established pattern).
 
 ## Task Group 11: End-to-End Test Scenario (1 task)
 
-- [ ] 11.1 Playwright E2E: draft and approve a project Constitution → start a pipeline → draft SPEC → draft Clarify and answer a question (using a mock-executor path engineered to ask one) → draft Plan and Tasks → draft Analyze with a seeded Critical finding → verify advancement is blocked → redraft the flagged stage → re-run Analyze clean → verify advancement → draft Implement → approve through to pipeline completion → verify the full audit trail and stage version history reflect every step. No console errors.
+- [x] 11.1 Playwright E2E: draft and approve a project Constitution → start a pipeline → draft SPEC → draft Clarify and answer a question (using a mock-executor path engineered to ask one) → draft Plan and Tasks → draft Analyze with a seeded Critical finding → verify advancement is blocked → redraft the flagged stage → re-run Analyze clean → verify advancement → draft Implement → approve through to pipeline completion → verify the full audit trail and stage version history reflect every step. No console errors.
 
 ## Task Group 12: Unit Tests for Domain Logic (2 tasks)
 
