@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getWorkItemDetail, listWorkItems } from "@/domain/work-item/queries";
 import { getActiveBlockers } from "@/domain/blocker/queries";
 import { getWorkItemDecisions } from "@/domain/decision/queries";
-import { getWorkItemDependencies } from "@/domain/dependency/queries";
+import { getWorkItemDependencies, getWorkItemDependencyGraph } from "@/domain/dependency/queries";
 import { getWorkItemAuditEvents } from "@/domain/audit/queries";
 import { listClientMembers } from "@/domain/client/queries";
 import { requireAuthContext } from "@/domain/shared/session";
@@ -32,10 +32,11 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
   });
   if (!workItem) notFound();
 
-  const [activeBlockers, pendingDecisions, dependencies, timeline, members, siblingItems] = await Promise.all([
+  const [activeBlockers, pendingDecisions, dependencies, dependencyGraph, timeline, members, siblingItems] = await Promise.all([
     getActiveBlockers(workItem.id),
     getWorkItemDecisions(workItem.id),
     getWorkItemDependencies(workItem.id),
+    getWorkItemDependencyGraph(workItem.id),
     getWorkItemAuditEvents(ctx, workItem.id, 1, 20),
     listClientMembers(ctx, workItem.project.clientId),
     listWorkItems(ctx, workItem.projectId, { pageSize: 200 }),
@@ -146,6 +147,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
           canManage={manage}
           workItemId={workItem.id}
           candidates={candidates}
+          graph={dependencyGraph}
         />
       ),
     },

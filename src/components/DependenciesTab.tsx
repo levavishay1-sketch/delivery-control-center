@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AddDependencyForm } from "@/components/AddDependencyForm";
 import { RemoveDependencyButton } from "@/components/RemoveDependencyButton";
+import { DependencyGraph } from "@/components/DependencyGraph";
 
 interface DepItem {
   id: string;
@@ -21,6 +22,12 @@ interface DownstreamDep {
   workItem: DepItem & { pipeline: { id: string } | null };
 }
 
+interface GraphData {
+  nodes: { id: string; title: string; type: string; status: string }[];
+  edges: { id: string; workItemId: string; dependsOnWorkItemId: string; reason: string }[];
+  truncated: boolean;
+}
+
 export function DependenciesTab({
   upstream,
   downstream,
@@ -28,6 +35,7 @@ export function DependenciesTab({
   workItemId,
   candidates,
   onChanged,
+  graph,
 }: {
   upstream: UpstreamDep[];
   downstream: DownstreamDep[];
@@ -36,6 +44,8 @@ export function DependenciesTab({
   candidates: { id: string; title: string }[];
   /** If given (e.g. by the Quick View drawer, whose data isn't a Server Component), called after a mutation instead of the default router.refresh(). */
   onChanged?: () => void;
+  /** Full connected dependency neighborhood for the graph visualization. Omitted in compact contexts (the Quick View drawer) — a "Coming soon" note shows instead. */
+  graph?: GraphData;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -91,7 +101,15 @@ export function DependenciesTab({
 
       <section>
         <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Dependency Graph</h3>
-        <p className="mt-1 text-sm opacity-50">Coming soon — visual dependency graph.</p>
+        {graph && graph.nodes.length > 1 ? (
+          <div className="mt-2">
+            <DependencyGraph nodes={graph.nodes} edges={graph.edges} focusNodeId={workItemId} truncated={graph.truncated} />
+          </div>
+        ) : graph ? (
+          <p className="mt-1 text-sm opacity-50">No connected dependencies to visualize yet.</p>
+        ) : (
+          <p className="mt-1 text-sm opacity-50">Coming soon — visual dependency graph.</p>
+        )}
       </section>
     </div>
   );
