@@ -78,13 +78,13 @@ directly from this register; item numbers are referenced there.
 
 | # | Item | State |
 |---|---|---|
-| 20 | Clarify stage | MISSING |
-| 21 | Analyze stage | MISSING |
-| 22 | Constitution as project-scoped versioned artifact | CONFLICT (built per-work-item) |
-| 23 | Final stage = Implement (real code) | CONFLICT (built final stage = Deploy doc) |
-| 24 | Configurable, role-based gate policy | EXTEND (`requiresApproval` read by nothing *(fixed in Slice 0)*) |
-| 25 | Versioned artifacts, pause/resume run state machine | EXTEND (`AI_DRAFTING` was a dead enum *(observability fixed in Slice 0)*) |
-| 26 | Pipeline optional per work item | CONFLICT (auto-created 1:1 today) |
+| 20 | Clarify stage | MISSING *(done in Slice 2)* |
+| 21 | Analyze stage | MISSING *(done in Slice 2)* |
+| 22 | Constitution as project-scoped versioned artifact | CONFLICT (built per-work-item) *(resolved in Slice 2 — new `Constitution` model, project-scoped, versioned, referenced by `Pipeline.constitutionVersion`)* |
+| 23 | Final stage = Implement (real code) | CONFLICT (built final stage = Deploy doc) *(partially resolved in Slice 2 — `IMPLEMENT` now exists in the default stage sequence, ahead of `DEPLOY`, but per design.md's Non-Goals it stays an AI-drafted document, not real code execution; genuinely closing this conflict is still open, likely Slice 5 territory)* |
+| 24 | Configurable, role-based gate policy | EXTEND (`requiresApproval` read by nothing *(fixed in Slice 0)*) *(done in Slice 2 — `approverRoles: Role[]` per stage type in `config/workflow.yaml`, enforced in `approveStage`/`rejectStage`)* |
+| 25 | Versioned artifacts, pause/resume run state machine | EXTEND (`AI_DRAFTING` was a dead enum *(observability fixed in Slice 0)*) *(done in Slice 2 — `StageVersion` (append-only content history) + the `Job`-backed run state machine, which survives a process restart; `AWAITING_CLARIFICATION` is the pause, durable as ordinary rows)* |
+| 26 | Pipeline optional per work item | CONFLICT (auto-created 1:1 today) *(resolved in Slice 2 — `startPipeline` is now an explicit action requiring an approved Constitution; `createWorkItem` no longer auto-creates a `Pipeline`)* |
 
 **AI execution**
 
@@ -92,10 +92,10 @@ directly from this register; item numbers are referenced there.
 |---|---|---|
 | 27 | Agent registry + configurable routing | MISSING |
 | 28 | `AgentRun` entity | MISSING |
-| 29 | AI output → schema → validation → policy → domain command | MISSING |
+| 29 | AI output → schema → validation → policy → domain command | MISSING *(partially done in Slice 2 — `CLARIFY`'s questions and `ANALYZE`'s findings are now Zod-schema-validated before the domain layer treats them as authoritative; every other stage's raw content still isn't schema-validated the same way, so this is partial, not full, closure)* |
 | 30 | Sandboxed coding runtime | MISSING |
 | 31 | AI cost rollups, budgets, thresholds | EXTEND (per-draft cost captured, never summed) |
-| 32 | Retry/backoff on AI/integration calls | MISSING |
+| 32 | Retry/backoff on AI/integration calls | MISSING *(partially done in Slice 2 — AI drafting (Stage and Constitution) now retries with exponential backoff via the Job runtime; Jira/integration sync calls still have no retry, remains Slice 4 territory)* |
 
 **Integrations, config, evidence, platform**
 
@@ -124,11 +124,13 @@ this roadmap after Slice 0 shipped — not present in the original source.)*
 > why, does anyone need to act, what happens next** — across the path from
 > business request to verified delivery.
 
-What's built today (the SDD pipeline: Constitution → SPEC → Plan → Tasks →
-Deploy, gated, audited, AI-drafted) is explicitly named the **"engine
-room"** of that product — correct, and kept — but only a fraction of it.
-Missing: the delivery model, attention, blockers, decisions, dependencies,
-and evidence layers around it.
+What's built today (the SDD pipeline: SPEC → Clarify → Plan → Tasks →
+Analyze → Implement → Deploy, run under a project-scoped versioned
+Constitution, role-gated, audited, AI-drafted, job-backed) is explicitly
+named the **"engine room"** of that product — correct, and kept — but only
+a fraction of it. Missing: the agent-execution, connector, and evidence
+layers around it (Slices 3–5); the delivery model, attention, blockers,
+decisions, and dependencies layers (Slice 1) are done.
 
 ## What must be protected while building the rest (source: `§1`–`§2`)
 
@@ -166,21 +168,25 @@ These are settled decisions, not open questions for a future slice to
 re-litigate:
 
 1. Constitution becomes a project-scoped, versioned artifact (not
-   per-work-item). *(Slice 2.)*
+   per-work-item). *(Done — Slice 2.)*
 2. Default stage list becomes `SPEC → Clarify → Plan → Tasks → Analyze →
-   Implement`, with `Deploy` as an optional final gate. *(Slice 2.)*
+   Implement`, with `Deploy` as an optional final gate. *(Done — Slice 2,
+   with one deviation: `Deploy` ships as the final stage after `Implement`
+   rather than an optional separate gate — no config mechanism for
+   "optional final stage" was built; both are always present in the
+   default sequence.)*
 3. Stage order is snapshotted onto the `Pipeline` at creation — editing
-   `workflow.yaml` must never alter a run already in flight. *(Active bug
-   today; fix lands with Slice 2.)*
+   `workflow.yaml` must never alter a run already in flight. *(Done —
+   Slice 2. `Pipeline.stageSequence`.)*
 4. A pipeline is optional and explicitly started by the user — the current
    1:1 auto-creation is removed (existing rows migrated, not dropped).
-   *(Slice 2.)*
+   *(Done — Slice 2. `startPipeline`.)*
 5. Rejection comments and clarification answers must reach the redraft
-   context — today redraft silently repeats the identical prompt. *(Slice 2.)*
+   context — today redraft silently repeats the identical prompt. *(Done —
+   Slice 2. `rejectionComment`/`clarifyAnswers` on `StageExecutionContext`.)*
 6. `requiresApproval` must actually gate (fixed in Slice 0), and gate policy
    becomes role-based and config-driven (e.g. SPEC→PM, Plan→Tech Lead).
-   *(Full role-based-per-stage-type policy lands in Slice 2; Slice 0 only
-   made the binary flag functional.)*
+   *(Done — Slice 2. `approverRoles: Role[]` per stage type.)*
 
 ## Slices
 
@@ -188,7 +194,7 @@ re-litigate:
 |---|---|---|---|---|
 | 0 | Tenancy, identity, and the cheap fixes | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 0" (retroactively corroborated — built from a session-local plan before this source was persisted; scope matches) | `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/` |
 | 1 | The delivery model and the Attention Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 1" | `openspec/changes/archive/2026-08-14-slice-1-delivery-model/` |
-| 2 | SDD as a subsystem | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 2" | — |
+| 2 | SDD as a subsystem | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 2" | `openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/` |
 | 3 | Agents as real execution resources | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | — |
 | 4 | Connector framework | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | — |
 | 5 | Engineering evidence | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | — |
@@ -235,15 +241,18 @@ from the still-missing 70-section Master Prompt document, or (b) propose
 concrete values as an explicit, clearly-labeled assumption for approval
 before any migration is written — never silently choose values.
 
-### Slice 2 — SDD as a subsystem
+### Slice 2 — SDD as a subsystem — **Done**
 
 Constitution as a versioned project artifact; `Clarify` stage that pauses
 the run and waits for a human answer instead of guessing; `Analyze` stage
 producing severity-rated consistency findings that can block implementation;
 versioned (not overwritten) stage artifacts; a run state machine that
-survives process restarts (built on Slice 0's `Job` model); role-based
-config-driven gate policy; rejection/clarification feedback reaching
-redrafts. Full detail: source §5 "Slice 2".
+survives process restarts (built on a new `Job` model — a
+pre-implementation planning error here previously said "Slice 0's `Job`
+model," but Slice 0 never had one; `Job` was built in Slice 2 itself,
+Task Group 1); role-based config-driven gate policy; rejection/clarification
+feedback reaching redrafts. Full detail: source §5 "Slice 2"; as-built
+detail: `openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/`.
 
 ### Slice 3 — Agents as real execution resources
 

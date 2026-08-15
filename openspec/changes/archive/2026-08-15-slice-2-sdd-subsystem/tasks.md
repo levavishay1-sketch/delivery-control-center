@@ -95,7 +95,7 @@ established pattern).
 
 ## Task Group 13: Documentation & Verification (1 task)
 
-- [ ] 13.1 Update `docs/PRODUCT_SPEC.md` to reflect Slice 2 (job runtime, Constitution versioning, Clarify/Analyze stages, role-based gates, optional pipeline start, versioned stage content, redraft feedback). Update `docs/ROADMAP.md`'s gap register (items #20–26 and the relevant AI-execution items #29/#32 this slice partially addresses) and move Slice 2's row to Done, linked to the archived change. Verify no dead code/unused imports (`npm run lint`, `npx tsc --noEmit`). Full verification: `npm run build`, `npm run lint`, `npm test`, `npx playwright test`, `openspec validate --specs`. Archive this OpenSpec change per `docs/ROADMAP.md`'s own stated process, syncing its delta specs into `openspec/specs/`.
+- [x] 13.1 Update `docs/PRODUCT_SPEC.md` to reflect Slice 2 (job runtime, Constitution versioning, Clarify/Analyze stages, role-based gates, optional pipeline start, versioned stage content, redraft feedback). Update `docs/ROADMAP.md`'s gap register (items #20–26 and the relevant AI-execution items #29/#32 this slice partially addresses) and move Slice 2's row to Done, linked to the archived change. Verify no dead code/unused imports (`npm run lint`, `npx tsc --noEmit`). Full verification: `npm run build`, `npm run lint`, `npm test`, `npx playwright test`, `openspec validate --specs`. Archive this OpenSpec change per `docs/ROADMAP.md`'s own stated process, syncing its delta specs into `openspec/specs/`.
 
 ---
 
@@ -103,15 +103,15 @@ established pattern).
 
 Before marking Slice 2 complete:
 
-- [ ] All migrations run without errors; no data loss; existing pipelines' `stageSequence` correctly backfilled.
-- [ ] A process restart mid-draft does not lose the drafting attempt (job survives; worker or a replacement picks it up).
-- [ ] A process restart mid-Clarify-pause loses nothing (verified directly, not just asserted).
-- [ ] Editing `config/workflow.yaml` after a pipeline starts never changes that pipeline's behavior.
-- [ ] A Critical Analyze finding genuinely blocks advancement; clearing it requires a real redraft, not a bypass.
-- [ ] Role-based gates are enforced per stage type, not uniformly.
-- [ ] Rejection comments and clarification answers are demonstrably present in a redraft's context (not just "wired," verified against a captured mock-executor call).
-- [ ] Constitution versions accumulate; never overwritten in place.
-- [ ] All Slice 0/1 functionality (tenancy, delivery model, Attention Center, Quick View, 360° Record, audit trail, dependency graph) continues to work — full existing test suite passes.
-- [ ] Build succeeds (`npm run build`); lint passes; `tsc --noEmit` clean.
-- [ ] E2E scenario passes against the real dev server and real Postgres, with the worker process actually running (not mocked away).
-- [ ] `PRODUCT_SPEC.md` and `docs/ROADMAP.md` updated; change archived; specs synced.
+- [x] All migrations run without errors; no data loss; existing pipelines' `stageSequence` correctly backfilled.
+- [x] A process restart mid-draft does not lose the drafting attempt (job survives; worker or a replacement picks it up).
+- [x] A process restart mid-Clarify-pause loses nothing (verified directly, not just asserted).
+- [x] Editing `config/workflow.yaml` after a pipeline starts never changes that pipeline's behavior.
+- [x] A Critical Analyze finding genuinely blocks advancement; clearing it requires a real redraft, not a bypass.
+- [x] Role-based gates are enforced per stage type, not uniformly.
+- [x] Rejection comments and clarification answers are demonstrably present in a redraft's context (not just "wired," verified against a captured mock-executor call).
+- [x] Constitution versions accumulate; never overwritten in place.
+- [x] All Slice 0/1 functionality (tenancy, delivery model, Attention Center, Quick View, 360° Record, audit trail, dependency graph) continues to work — full existing test suite passes.
+- [x] Build succeeds (`npm run build`); lint passes; `tsc --noEmit` clean.
+- [x] E2E scenario passes against the real dev server and real Postgres, with the worker process actually running (not mocked away).
+- [x] `PRODUCT_SPEC.md` and `docs/ROADMAP.md` updated; change archived; specs synced.

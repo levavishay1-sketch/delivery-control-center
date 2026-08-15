@@ -1,7 +1,7 @@
 # Delivery Control Center — Product & System Specification
 
-Reverse-engineered from the implementation as of commit `1bdba78` (2026-08-15,
-end of Slice 1). Every claim below is traceable to a file in this repo.
+Reverse-engineered from the implementation as of commit `f13afc5` (2026-08-15,
+end of Slice 2). Every claim below is traceable to a file in this repo.
 Status tags used throughout:
 
 - **Implemented** — working, verified.
@@ -11,13 +11,18 @@ Status tags used throughout:
 - **Missing** — not present at all; noted because the product's own stated
   goals imply it should exist.
 
-This revision folds in **two** shipped slices this document previously
-didn't reflect: **Slice 0** (tenancy, identity, auth — archived at
-`openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/`) and
+This revision folds in **three** shipped slices: **Slice 0** (tenancy,
+identity, auth — archived at
+`openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/`),
 **Slice 1** (the delivery model and the Attention Center — archived at
-`openspec/changes/2026-08-14-slice-1-delivery-model/`). The previous
-revision of this file predated both and described a single-tenant,
-unauthenticated system with a thin `WorkItem` — none of that is still true.
+`openspec/changes/archive/2026-08-14-slice-1-delivery-model/`), and
+**Slice 2** (SDD as a subsystem — Constitution versioning, Clarify/Analyze
+stages, versioned stage artifacts, a durable job-backed run state machine,
+role-based gate policy, redraft feedback — archived at
+`openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/`). The previous
+revision of this file predated Slice 2 and described a fixed five-stage
+pipeline with uniform approval gating and an automatically-created,
+per-work-item Constitution stage — none of that is still true.
 
 ---
 
@@ -26,12 +31,19 @@ unauthenticated system with a thin `WorkItem` — none of that is still true.
 A transparent, gated, audited, multi-client delivery-tracking system. Work
 items — pulled from an external tracker or entered by hand — carry a rich
 delivery model (type, status, risk, priority, owner, executor, due date,
-progress, hierarchy) and are run through a fixed five-stage documentation
-pipeline — **Constitution → SPEC → Plan → Tasks → Deploy** — where each
-stage's content is AI-drafted and then must be explicitly approved by a
-human before the next stage begins. Around that pipeline, Slice 1 added the
-"attention" layer the product's vision names as its core question set: what
-is happening, why, does anyone need to act, what happens next. Every draft,
+progress, hierarchy) and are run through a configurable, seven-stage
+documentation pipeline — **SPEC → Clarify → Plan → Tasks → Analyze →
+Implement → Deploy** *(Slice 2 — was a fixed `Constitution → SPEC → Plan →
+Tasks → Deploy`; Constitution is now a project-scoped versioned artifact
+approved once per project, not a per-work-item stage)* — where each stage's
+content is AI-drafted (now job-backed, surviving a process restart) and
+then must be explicitly approved, by a role-appropriate human, before the
+next stage begins. `Clarify` can pause the run and ask a human instead of
+guessing; `Analyze` can block advancement on a severity-rated consistency
+finding until the flagged stage is redrafted. Around that pipeline, Slice 1
+added the "attention" layer the product's vision names as its core
+question set: what is happening, why, does anyone need to act, what
+happens next. Every draft (and now every *version* of every draft),
 approval, rejection, blocker, decision, dependency change, and cost is
 permanently recorded. Source: `README.md`, `config/workflow.yaml`,
 `openspec/specs/*/spec.md`, `docs/ROADMAP.md`.
@@ -52,8 +64,9 @@ independent of the pipeline.
 | **User** | A real, authenticated identity (`User` model, NextAuth Credentials + JWT). Either an org admin (sees everything) or a `ClientMembership` holder with a `Role` on one or more clients. |
 | **Project** | A container for work items from one integration (Jira, manual, or — declared but unimplemented — Azure DevOps), scoped to one `Client`. |
 | **Work item** | One unit of delivery work — synced from Jira or typed in by hand — with type, status, risk, priority, owner, executor, due date, progress, and optional parent/children (Slice 1). |
-| **Pipeline** | The single, 1:1, always-created instance of the 5-stage documentation process for one work item. |
-| **Stage** | One of the 5 fixed steps (Constitution/SPEC/Plan/Tasks/Deploy); holds AI-drafted Markdown content and its approval state. |
+| **Pipeline** | The single, 1:1 instance of the configured documentation process for one work item — now *explicitly started* (Slice 2's "Start SDD," requires an approved project Constitution), not auto-created; its `stageSequence` is snapshotted at start, immune to later `workflow.yaml` edits. |
+| **Stage** | One step of the pipeline's snapshotted sequence (default: SPEC/Clarify/Plan/Tasks/Analyze/Implement/Deploy); holds AI-drafted Markdown content, an append-only version history (Slice 2), and its approval state. |
+| **Constitution** (Slice 2) | A project-scoped, versioned artifact (governing principles/constraints) drafted and approved once per project — not per work item — and referenced by every pipeline started under it. |
 | **Approval** | A human decision (approve/reject) recorded against a *stage* — the pipeline's own gate, distinct from the work-item-level `Decision` below. |
 | **Blocker** (Slice 1) | A first-class record of why a work item can't proceed: reason, owner, required action, optional impact. Creating one forces the work item to `BLOCKED`; resolving it (when no other active blocker remains) restores it to `OPEN`. |
 | **Decision** (Slice 1) | A first-class record of a question needing a human answer: question, reason, impact, optional AI recommendation/confidence/deadline. Creating one forces the work item to `DECISION_REQUIRED`; approving restores it to `OPEN`, rejecting leaves it `DECISION_REQUIRED`. |
@@ -89,37 +102,63 @@ directly.
 2. **Add a project** — `AddProjectForm.tsx` → `POST /api/projects`.
    Integration type: Manual or Jira (Azure DevOps not offered in the form,
    though the enum exists).
-3. **Sync a Jira project** — `SyncButton.tsx` → `POST
+3. **Draft / approve a project Constitution** *(Slice 2, new — do this
+   before starting any pipeline under the project)* —
+   `/projects/[id]/constitution` → `ConstitutionDraftButton` → `POST
+   /api/projects/[id]/constitution/draft` (job-backed) →
+   `ConstitutionApprovalGate` → `POST /api/constitutions/[id]/approve` or
+   `/reject`. A redraft after `APPROVED`/`REJECTED` creates a new version,
+   never overwriting the old one.
+4. **Sync a Jira project** — `SyncButton.tsx` → `POST
    /api/projects/[id]/sync` → pulls issues, upserts `WorkItem`s (status
-   mapped onto the 9-state `WorkStatus` — see §6), creates a `Pipeline` for
-   any new one.
-4. **Add a work item by hand** — `AddWorkItemForm.tsx` (quick form: title +
+   mapped onto the 9-state `WorkStatus` — see §6). No longer creates a
+   `Pipeline` — see step 6.
+5. **Add a work item by hand** — `AddWorkItemForm.tsx` (quick form: title +
    description) or the fuller `POST /api/work-items` body (type, risk,
-   priority, owner, executor, due date, parent) → creates the `WorkItem` and
-   its `Pipeline` in one call.
-5. **Edit a work item** — 360° Record's Overview tab → `EditWorkItemForm` →
+   priority, owner, executor, due date, parent) → creates the `WorkItem`
+   only. No `Pipeline` yet — see step 6. *(Slice 2 — was one call before.)*
+6. **Start a pipeline** *(Slice 2, new — "Start SDD" button, wherever a
+   work item with no pipeline is listed)* — `StartPipelineButton.tsx` →
+   `POST /api/work-items/[id]/pipeline` → requires the project to have an
+   `APPROVED` Constitution (refused with a clear error otherwise);
+   snapshots the current `stageSequence` and `constitutionVersion` onto the
+   new `Pipeline`.
+7. **Edit a work item** — 360° Record's Overview tab → `EditWorkItemForm` →
    `PATCH /api/work-items/[id]` (title, description, risk, priority, owner,
    executor, due date, progress — **not** status, see §6).
-6. **Change a work item's status** — `PATCH /api/work-items/[id]/status`,
+8. **Change a work item's status** — `PATCH /api/work-items/[id]/status`,
    validated against the state machine (`src/domain/work-item/status.ts`).
-7. **Draft a pipeline stage** — `DraftButton.tsx` → `POST
-   /api/pipelines/[id]/advance` → runs the configured `AgentExecutor`.
-8. **Approve / reject a stage** — `ApprovalGate.tsx` → `POST
-   /api/stages/[id]/approve` or `/reject`.
-9. **Create / resolve a blocker** — `CreateBlockerForm`/`ResolveBlockerButton`
-   → `POST /api/blockers`, `POST /api/blockers/[id]/resolve`. Side effect on
-   the work item's status (see §15).
-10. **Create / approve / reject a decision** — `CreateDecisionForm`/
+9. **Draft a pipeline stage** — `DraftButton.tsx` → `POST
+   /api/stages/[id]/draft` *(Slice 2 — replaces `POST
+   /api/pipelines/[id]/advance`; targets the stage directly, not just
+   "whatever the pipeline's current stage is," since a flagged stage can be
+   redrafted even when it isn't current)* → enqueues a `DRAFT_STAGE` job,
+   returns immediately; the button polls `GET /api/stages/[id]` until the
+   worker (`worker.ts`) finishes.
+10. **Answer a Clarify question** *(Slice 2, new)* — `ClarifyPanel.tsx` →
+    `POST /api/clarify-questions/[id]/answer` → once every outstanding
+    question on the stage is answered, drafting resumes automatically.
+11. **Approve / reject a stage** — `ApprovalGate.tsx` → `POST
+    /api/stages/[id]/approve` or `/reject`. Gated by the stage type's own
+    `approverRoles`, not a uniform check *(Slice 2)*.
+12. **Redraft a stage a Critical Analyze finding names** *(Slice 2, new)* —
+    same `DraftButton`/`POST /api/stages/[id]/draft`, but on a stage the
+    "Flagged by Analyze" notice names — allowed even though that stage is
+    already `DONE` and not the pipeline's current stage.
+13. **Create / resolve a blocker** — `CreateBlockerForm`/`ResolveBlockerButton`
+    → `POST /api/blockers`, `POST /api/blockers/[id]/resolve`. Side effect on
+    the work item's status (see §15).
+14. **Create / approve / reject a decision** — `CreateDecisionForm`/
     `DecisionActions` → `POST /api/decisions`,
     `POST /api/decisions/[id]/approve`, `POST /api/decisions/[id]/reject`.
-11. **Add / remove a dependency** — `AddDependencyForm`/
+15. **Add / remove a dependency** — `AddDependencyForm`/
     `RemoveDependencyButton` → `POST /api/dependencies`,
     `DELETE /api/dependencies/[id]`. Cycle-checked (§15).
-12. **Review the Attention Center** — `/attention`: every decision pending,
-    blocker active, high/critical risk, upcoming deadline, and review-gate
-    item across the user's accessible clients, each with its reason and (if
-    authorized) an action button.
-13. **Quick View** — click "Quick View" anywhere a work item is listed
+16. **Review the Attention Center** — `/attention`: every decision pending,
+    blocker active, high/critical risk, upcoming deadline, review-gate
+    item, and paused Clarify stage *(Slice 2)* across the user's accessible
+    clients, each with its reason and (if authorized) an action button.
+17. **Quick View** — click "Quick View" anywhere a work item is listed
     (Attention Center rows, Dashboard project rows) to open a global side
     drawer (`?quickView=<id>`) with the same blocker/decision/detail/
     dependencies/timeline data as the full record, without navigating away.
@@ -132,18 +171,22 @@ directly.
 
 ## 5. Domain model and entities
 
-Sixteen Prisma models, all in `prisma/schema.prisma`:
+Twenty-two Prisma models, all in `prisma/schema.prisma` (six new in Slice 2:
+`Job`, `Constitution`, `StageVersion`, `ClarifyQuestion`, `AnalysisFinding`,
+plus NextAuth's unwired adapter tables already counted separately below):
 
 ```
 Organization 1───* Client 1───* Project 1───* WorkItem 1───0/1 Pipeline 1───* Stage 1───* Approval
-                       │              │             │
-                       │              │             ├──* Blocker
-                       │              │             ├──* Decision
-                       │              │             ├──* Dependency (self-referential, via dependsOnWorkItemId)
-                       │              │             └──* (self) — parentId / children
-                       └──* ClientMembership ──* User
-                                                        │
+                       │              │  │          │                          │
+                       │              │  │          ├──* Blocker               ├──* StageVersion
+                       │              │  │          ├──* Decision              ├──* ClarifyQuestion
+                       │              │  │          ├──* Dependency (self-referential)
+                       │              │  │          └──* (self) — parentId / children
+                       │              │  └──* Constitution (versioned, project-scoped — not per-WorkItem)
+                       │              └──* ClientMembership ──* User
+                       │
                     AuditEvent ── optional FK to project / pipeline / stage / workItem / user
+                    Job ── standalone, polled by worker.ts (payload references stageId/constitutionId)
 ```
 
 Plus NextAuth's `Account`/`Session`/`VerificationToken` tables (adapter not
@@ -164,15 +207,46 @@ wired — see §12).
   `deadline` (nullable), `approverId`, `status` (`OPEN`/`APPROVED`/`REJECTED`).
 - `Dependency` — `workItemId`, `dependsOnWorkItemId`, `reason`; unique on
   the pair; both FKs cascade-delete.
-- `Pipeline` — `currentStage`, `status`. Unique on `workItemId` (true 1:1).
-- `Stage` — `type`, `status`, `content`, `aiModel`, `promptTokens`,
+- `Pipeline` — `currentStage`, `status`, **`stageSequence` (`StageType[]`,
+  Slice 2 — snapshotted from `workflow.yaml` at `startPipeline`, so a later
+  config edit never changes an in-flight pipeline)**, **`constitutionVersion`
+  (`Int?`, Slice 2 — which approved Constitution version this pipeline
+  started under)**. Unique on `workItemId` (true 1:1, now created explicitly
+  via `startPipeline` rather than automatically — see §14).
+- `Stage` — `type` (`StageType` gained `CLARIFY`/`ANALYZE`/`IMPLEMENT` in
+  Slice 2, additive; `CONSTITUTION` stays for historical rows only —
+  Constitution moved off `Stage` entirely), `status` (`StageStatus` gained
+  `AWAITING_CLARIFICATION`), `content`, `aiModel`, `promptTokens`,
   `completionTokens`, `costUsd`, `startedAt`, `completedAt`.
 - `Approval` — `decision`, `approverName`, `comment`, `decidedAt`.
+- **`StageVersion`** *(Slice 2, new)* — `stageId`, `versionNumber`,
+  `content`, `aiModel`/token/cost fields, `createdAsResultOf`
+  (`DRAFT`/`REDRAFT`). Append-only history alongside `Stage`'s own columns
+  (which remain "the latest version" — no existing read site changed).
+- **`ClarifyQuestion`** *(Slice 2, new)* — `stageId`, `question`, `answer`
+  (nullable), `answeredByUserId` (nullable FK), `answeredAt` (nullable). A
+  `CLARIFY` stage's pause is *this row existing unanswered*, not in-memory
+  state — survives a process restart for free.
+- **`AnalysisFinding`** *(Slice 2, new)* — `stageId` (the `ANALYZE` stage),
+  `severity` (`FindingSeverity`: `INFO`/`WARNING`/`MEDIUM`/`HIGH`/`CRITICAL`),
+  `message`, `relatedStageType`. Replaced (not accumulated) on every
+  `ANALYZE` redraft — only the latest run's findings count.
+- **`Constitution`** *(Slice 2, new)* — `projectId`, `version` (Int, never
+  overwritten — a redraft always creates a new version once the latest is
+  `APPROVED`/`REJECTED`), `content`, `status` (`ConstitutionStatus`:
+  `DRAFT`/`AI_DRAFTING`/`PENDING_APPROVAL`/`APPROVED`/`REJECTED`), cost
+  fields, `approvedAt`. Project-scoped, not per-`WorkItem` — this is the
+  resolution of gap-register item #22.
+- **`Job`** *(Slice 2, new)* — `type` (`DRAFT_STAGE`/`DRAFT_CONSTITUTION`),
+  `payload` (JSON), `status` (`QUEUED`/`RUNNING`/`SUCCEEDED`/`FAILED`),
+  `attempts`/`maxAttempts`/`lastError`, `scheduledAt`/`lockedAt`/`lockedBy`,
+  `idempotencyKey` (unique). The durable run state machine behind
+  drafting — see §13/§14/§26.
 - `AuditEvent` — `actor`, `userId` (nullable FK), `actorName`, `action`
   (free text), `detail` (JSON), optional `projectId`/`pipelineId`/
   `stageId`/`workItemId`.
 
-All IDs are `cuid()`. Six migrations exist (see §10); `20260814065231_init`
+All IDs are `cuid()`. Nine migrations exist (see §10); `20260814065231_init`
 is never reset per `docs/ROADMAP.md`'s protected invariants.
 
 ## 6. Work item model
@@ -272,20 +346,21 @@ fonts.
 
 ## 9. Backend architecture
 
-21 route files under `src/app/api/` (up from 6), all thin wrappers calling
-into `src/domain/<aggregate>/`:
+28 route files under `src/app/api/` (up from 21 in Slice 1), all thin
+wrappers calling into `src/domain/<aggregate>/`:
 
 | Aggregate | Routes |
 |---|---|
 | Auth | `/api/auth/[...nextauth]` (NextAuth handler) |
-| Projects | `GET`/`POST /api/projects`, `POST /api/projects/[id]/sync` |
+| Projects | `GET`/`POST /api/projects`, `POST /api/projects/[id]/sync`, `POST /api/projects/[id]/constitution/draft` *(Slice 2)* |
 | Clients | `GET /api/clients` (read-only, no create route exists — see §12's gap note and Task Group 12's E2E-test deviation) |
-| Work items | `POST /api/work-items`, `GET`/`PATCH /api/work-items/[id]`, `PATCH /api/work-items/[id]/status`, `PATCH /api/work-items/[id]/parent`, `GET /api/work-items/[id]/audit` (paginated per-item timeline), `GET /api/work-items/[id]/quick-view` (drawer aggregate) |
+| Work items | `POST /api/work-items`, `GET`/`PATCH /api/work-items/[id]`, `PATCH /api/work-items/[id]/status`, `PATCH /api/work-items/[id]/parent`, `POST /api/work-items/[id]/pipeline` *(Slice 2 — explicit pipeline start, replaces auto-creation)*, `GET /api/work-items/[id]/audit` (paginated per-item timeline), `GET /api/work-items/[id]/quick-view` (drawer aggregate) |
 | Blockers | `POST /api/blockers`, `PATCH /api/blockers/[id]`, `POST /api/blockers/[id]/resolve` |
 | Decisions | `POST /api/decisions`, `POST /api/decisions/[id]/approve`, `POST /api/decisions/[id]/reject` |
 | Dependencies | `POST /api/dependencies`, `DELETE /api/dependencies/[id]` |
-| Pipeline | `POST /api/pipelines/[id]/advance` |
-| Stages | `POST /api/stages/[id]/approve`, `POST /api/stages/[id]/reject` |
+| Stages | `GET /api/stages/[id]` (status poll), `POST /api/stages/[id]/draft` *(Slice 2 — replaces `POST /api/pipelines/[id]/advance`; targets a specific stage directly, not just the pipeline's current one, since a Critical-Analyze-flagged stage can be redrafted even when it isn't current)*, `POST /api/stages/[id]/approve`, `POST /api/stages/[id]/reject` |
+| Clarify | `POST /api/clarify-questions/[id]/answer` *(Slice 2)* |
+| Constitutions | `GET /api/constitutions/[id]` (status poll), `POST /api/constitutions/[id]/approve`, `POST /api/constitutions/[id]/reject` *(Slice 2)* |
 
 Still no `DELETE` on `WorkItem` — deliberately: hard-deleting a work item
 would cascade through `Pipeline` to `AuditEvent` (via `pipelineId`'s
@@ -301,25 +376,46 @@ transaction → typed result) plus `src/lib/`:
 - `pipeline.ts` — the stage/pipeline state machine.
 - `audit.ts` — `recordAuditEvent()`, still the single write path for
   `AuditEvent`.
-- `config.ts` — loads `config/workflow.yaml` and `config/prompts/*.md`.
+- `config.ts` — loads `config/workflow.yaml` and `config/prompts/*.md`;
+  Slice 2 adds `approverRoles` parsing/validation and the pipeline-scoped
+  `getNextStageTypeInSequence`.
 - `agents/` — `AgentExecutor` interface + `mockExecutor.ts` +
-  `claudeExecutor.ts` + `index.ts` selector.
+  `claudeExecutor.ts` + `index.ts` selector. Slice 2 adds
+  `executeConstitution` (project-scoped, separate context shape from
+  `executeStage`) and Zod-schema-validated structured output
+  (`clarifyQuestionsSchema`, `analysisFindingsSchema`) for `CLARIFY`/
+  `ANALYZE` — the AI never gets to write `AWAITING_CLARIFICATION` state or
+  an `AnalysisFinding` row directly from unvalidated output.
 - `integrations/` — `IntegrationAdapter` interface + `manual.ts` +
   `jira.ts` + `index.ts` selector.
+- **`worker.ts`** *(Slice 2, new — project root, run via `npm run worker`,
+  a second long-lived process alongside `next dev`/`next start`)* — polls
+  `Job` on a 2s interval, dispatches `DRAFT_STAGE`/`DRAFT_CONSTITUTION` to
+  the matching executor call, retries with exponential backoff on failure,
+  reverts to a visibly-failed state (reusing `REJECTED`, not a new status)
+  once retries are exhausted. See §26.
 
 ## 10. Database / data model
 
 Postgres via `@prisma/adapter-pg` (Prisma 7 — no `url` in `schema.prisma`'s
-`datasource`). **Six migrations** (up from one):
+`datasource`). **Nine migrations** (up from six in Slice 1):
 `20260814065231_init` → `..._add_organization_client` →
 `..._project_client_scoped` → `..._auth_and_roles` →
-`..._approval_audit_user_refs` → `..._slice1_delivery_model`. One seed
+`..._approval_audit_user_refs` → `..._slice1_delivery_model` →
+`..._slice2_data_models` (additive: `Job`/`Constitution`/`StageVersion`/
+`ClarifyQuestion`/`AnalysisFinding`, new enum values, `Pipeline.stageSequence`
+nullable + a same-migration backfill of every existing row to
+`['CONSTITUTION','SPEC','PLAN','TASKS','DEPLOY']` — the list they actually
+ran under) → `..._pipeline_stage_sequence_not_null` (separate follow-up,
+per design.md's migration plan) → `..._constitution_job_types`. One seed
 script (`prisma/seed.ts`), idempotent.
 
-No soft-delete, no versioning/history on any row besides `Stage`/`Approval`
-naturally accumulating across redrafts. Row-level tenancy now exists
-(`Client` → `Project` → everything else), fixing the gap the previous
-revision of this document flagged.
+No soft-delete. Versioning/history now exists for two artifact types:
+`StageVersion` (append-only per `Stage`) and `Constitution` (append-only
+per `Project`, by version number) — both new in Slice 2, alongside
+`Stage`/`Approval`'s pre-existing natural accumulation across redrafts.
+Row-level tenancy (`Client` → `Project` → everything else) unchanged from
+Slice 1.
 
 ## 11. APIs and integrations
 
@@ -327,7 +423,7 @@ revision of this document flagged.
 |---|---|---|
 | Jira Cloud | **Implemented**, read-only | Unchanged from before Slice 1 — `src/lib/integrations/jira.ts`, REST API v3, Basic Auth. Pull-only. |
 | Azure DevOps | **Missing** (declared only) | Unchanged — enum exists, aliased to the manual adapter, not offered in the UI. |
-| Anthropic Claude | **Implemented** | Unchanged — `claude-sonnet-5`, single-turn, real usage-based cost. |
+| Anthropic Claude | **Implemented** | `claude-sonnet-5`, single-turn, real usage-based cost. **Slice 2**: calls now run inside the job worker with retry/backoff, not synchronously in the HTTP request; `CLARIFY`/`ANALYZE` calls parse Zod-validated structured output from the response. |
 | Inbound webhooks | **Missing** | Sync is still pull-only. |
 | Outbound notifications | **Missing** | No email/Slack/webhook on any event — including the new Attention Center's items, which currently require a user to visit `/attention` or `/` to discover. |
 | Public read API | **Missing**, mostly | `GET /api/clients`, `GET /api/work-items/[id]`, and `GET /api/work-items/[id]/quick-view`/`audit` exist, but there's no general project/work-item listing API — Server Components still read Prisma directly for the primary UI. |
@@ -352,16 +448,90 @@ step ("create a new client") has no UI path to drive.
 
 ## 13. AI / agent capabilities
 
-Unchanged from before Slice 1. `AgentExecutor` interface
+**Extended in Slice 2.** `AgentExecutor` interface
 (`src/lib/agents/types.ts`), `mockExecutor.ts` / `claudeExecutor.ts`,
-global env-gated switch (not per-project/client/stage).
+global env-gated switch (not per-project/client/stage — still Slice 3
+scope, gap-register item #27).
+
+- AI drafting is now job-backed (`Job` model + `worker.ts`), not a
+  synchronous call inside the HTTP request — survives a process crash
+  mid-call; a stage never gets silently stuck in `AI_DRAFTING` with
+  nothing to pick it back up. Retries with exponential backoff up to
+  `maxAttempts`, then reverts to a visibly-failed state a human can act
+  on. This is gap-register item #32 ("retry/backoff on AI calls"), closed
+  for AI drafting specifically — Jira sync calls still have none (Slice 4
+  territory).
+- `CLARIFY` and `ANALYZE` drafts can return structured output instead of
+  (or alongside) prose content — a list of clarification questions, or a
+  list of severity-rated findings — validated by a Zod schema
+  (`clarifyQuestionsSchema`/`analysisFindingsSchema`) before the domain
+  layer ever treats it as authoritative. This is gap-register item #29
+  ("AI output → schema → validation → policy → domain command"), now
+  real for these two stage types; the *general* case (every stage's raw
+  content) still isn't schema-validated the same way, so item #29 is
+  partially, not fully, closed.
+- `executeConstitution` is a second entry point on `AgentExecutor`,
+  alongside `executeStage` — Constitution is project-scoped
+  (`projectName`/`projectKey`), not work-item-scoped, so it needed its own
+  context shape rather than stretching `StageExecutionContext`.
+- A redraft's context now includes the prior rejection's comment
+  (`rejectionComment`) and any answered Clarify questions
+  (`clarifyAnswers`) — resolves the "redraft silently repeats the
+  identical prompt" gap named in `docs/ROADMAP.md`'s resolved-conflicts
+  list.
 
 ## 14. SDD / specification workflow
 
-Unchanged. Two unrelated SDD-like layers — the product's own
-Constitution→SPEC→Plan→Tasks→Deploy pipeline, and OpenSpec
-(`openspec/`), the tooling used to manage development of *this codebase*.
-See `CLAUDE.md`.
+**Reshaped in Slice 2.** Two unrelated SDD-like layers remain — the
+product's own pipeline, and OpenSpec (`openspec/`), the tooling used to
+manage development of *this codebase*. See `CLAUDE.md`.
+
+The product's own pipeline is no longer `Constitution→SPEC→Plan→Tasks→Deploy`:
+
+- **Constitution is no longer a pipeline stage.** It's a project-scoped,
+  versioned artifact (`src/domain/constitution/`, new `/projects/[id]/constitution`
+  page) drafted/approved once per project, referenced by every pipeline
+  started under it via `Pipeline.constitutionVersion` — not redrafted per
+  work item. `CONSTITUTION` remains in the `StageType` enum only for
+  historical `Stage` rows from before this shipped.
+- **Default stage sequence** (`config/workflow.yaml`) is now
+  `SPEC → CLARIFY → PLAN → TASKS → ANALYZE → IMPLEMENT → DEPLOY`. Each
+  pipeline snapshots this list onto `Pipeline.stageSequence` at
+  `startPipeline` — editing `workflow.yaml` afterward never changes an
+  in-flight pipeline (closes the "unsnapshotted config" gap §30 used to
+  flag).
+- **`CLARIFY`** — pauses the run and asks a human instead of guessing when
+  information is missing. A draft can return questions
+  (`ClarifyQuestion` rows) instead of content; the stage moves to
+  `AWAITING_CLARIFICATION`, durable as ordinary rows (no in-memory
+  state — survives a restart). Answering the last outstanding question
+  re-enqueues drafting with the Q&A folded into context.
+- **`ANALYZE`** — a read-only consistency check across the Spec/Plan/Tasks
+  produced so far. Always completes (it isn't a gate itself), but a
+  `CRITICAL`-severity finding blocks `advancePipelinePastStage` until the
+  stage it names is redrafted (allowed even though that stage is already
+  `DONE` and no longer "current") and `ANALYZE` is drafted again clean —
+  findings are replaced, not accumulated, on every `ANALYZE` redraft.
+- **`IMPLEMENT`** — a record of what was built per Task, once `ANALYZE` is
+  clean. Stays an AI-drafted Markdown document, not real code
+  execution — gap-register item #23 ("Implement = real code") remains
+  open by design; genuine code execution is out of scope for this slice
+  (and likely several more).
+- **Pipeline start is now explicit** (`POST /api/work-items/[id]/pipeline`,
+  "Start SDD" button) — `createWorkItem` no longer auto-creates a
+  `Pipeline`. Requires the project to have an `APPROVED` Constitution
+  first. The `WorkItem 1—0/1 Pipeline` cardinality is unchanged; only
+  *when* it's created is different. Resolves gap-register item #26.
+- **Stage content is now versioned**, not overwritten — every draft/redraft
+  appends a `StageVersion` row alongside updating `Stage`'s own "latest"
+  columns; the pipeline detail page shows an expandable per-stage history.
+  Resolves half of gap-register item #25 (the other half, pause/resume,
+  is `AWAITING_CLARIFICATION` + the `Job` model above).
+- **Gate policy is role-based per stage type**
+  (`config/workflow.yaml`'s `approverRoles: Role[]`), not the old uniform
+  "any write-capable role" check — `approveStage`/`rejectStage` now read
+  the stage type's own list; `MANAGER` is included in every list by
+  convention. Resolves gap-register item #24.
 
 ## 15. Dependencies and blockers
 
@@ -398,12 +568,14 @@ not create a `Blocker` row, and vice versa.
 
 **Two decision concepts now coexist, deliberately not merged**:
 
-1. **Pipeline stage gates** (`Approval`) — unchanged from before Slice 1:
-   every stage requires exactly one recorded approve/reject before the
-   pipeline can advance, tied to the real approving `User` via
-   `approverId` (Slice 0). No per-stage-type role gating (any write-capable
-   role may approve any stage) and no multi-approver/quorum — both remain
-   Slice 2 scope.
+1. **Pipeline stage gates** (`Approval`) — every stage requiring approval
+   still needs exactly one recorded approve/reject before the pipeline can
+   advance, tied to the real approving `User` via `approverId` (Slice 0).
+   **Slice 2**: gating is now per-stage-type role-based
+   (`config/workflow.yaml`'s `approverRoles`), not "any write-capable
+   role" — a role permitted to approve one stage type can be refused on
+   another whose list doesn't include it. No multi-approver/quorum still
+   (explicit Non-Goal in Slice 2's design, not invented).
 2. **Work-item `Decision`** (Slice 1, new) — a first-class object with
    `question`/`reason`/`impact`/optional `aiRecommendation`+`aiConfidence`+
    `deadline`. `approveDecision`/`rejectDecision` can be called by *any*
@@ -426,13 +598,23 @@ separate concern from the product.
 
 **Implemented**, tests (was "Missing" before Slice 0). Vitest
 (`vitest.config.ts`) for domain-layer integration tests against a real
-local Postgres — **88 tests across 12 files** as of this revision, one per
-domain aggregate plus the Attention/Dashboard/Audit aggregation queries.
-Playwright (`playwright.config.ts`, `e2e/`) for end-to-end scenarios — 5
+local Postgres — **149 tests across 17 files** as of this revision (up
+from 88/12 in Slice 1), one per domain aggregate plus the
+Attention/Dashboard/Audit aggregation queries; Slice 2 added `job`,
+`constitution`, and `clarify` files plus extensive coverage in
+`pipeline/commands.test.ts` (21 tests — the most-covered file in the app).
+`fileParallelism: false` (Slice 2) — two test files temporarily swap the
+real `config/workflow.yaml` on disk and restore it after, which raced
+under Vitest's default parallel-file execution; sequential execution is
+the simpler fix over mocking the filesystem out of `loadWorkflow()`.
+Playwright (`playwright.config.ts`, `e2e/`) for end-to-end scenarios — 6
 tests: tenancy/role isolation (`isolation.spec.ts`), the pipeline happy
-path (`smoke.spec.ts`), and Slice 1's full delivery-model scenario
+path (`smoke.spec.ts`), Slice 1's full delivery-model scenario
 (`slice1-delivery-model.spec.ts`: dependency → blocker → Attention Center
-→ Quick View → resolve → timeline → audit trail).
+→ Quick View → resolve → timeline → audit trail), and Slice 2's full SDD
+lifecycle (`slice2-sdd-lifecycle.spec.ts`: Constitution → Clarify
+pause/answer/resume → Analyze block/redraft/resolve → completion), which
+caught 4 real bugs during development (see §30, §13, §14, §20).
 
 Still **no CI configuration** and **no deployment configuration** — the app
 only runs via `npm run dev` / `next build` + `next start`. "Verification"
@@ -471,6 +653,16 @@ is now used **only** for the Dashboard's intentionally-small "top 10"
 recent-activity preview — the old hard cap is out of the audit trail's own
 data path entirely.
 
+**Bug found and fixed in Slice 2**: `/audit`'s project filter matched
+`AuditEvent.projectId` directly — but that column is only set on
+project-level events (e.g. Constitution draft/approve); every
+pipeline/stage event sets `pipelineId`/`stageId` instead, so filtering by
+project silently excluded almost all of them (drafts, approvals,
+"started the pipeline," "Pipeline advanced to X," ...). `buildWhere` now
+mirrors the client-scope filter's existing OR-join pattern
+(`{ OR: [{ projectId }, { pipeline: { workItem: { projectId } } }] }`).
+Found by Slice 2's own E2E scenario asserting against the filtered page.
+
 ## 21. Configuration and inheritance
 
 Unchanged. Global `config/workflow.yaml` + `config/prompts/*.md`, no
@@ -486,10 +678,14 @@ pipeline itself.
 
 - **Attention Center** (`/attention`): aggregates, across every client the
   user can access, open decisions, active blockers, high/critical-risk
-  items, upcoming deadlines (within 7 days), and review-gate items. Each
-  group sorted by urgency (oldest/soonest first); every row states *why*
-  it's there.
-- **Dashboard** (`/`): an attention-summary card (4 counts linking into
+  items, upcoming deadlines (within 7 days), review-gate items, and
+  (**Slice 2**) paused Clarify stages (`AWAITING_CLARIFICATION`, with
+  their unanswered questions) — its own group, not folded into the
+  `Decision` shape, since a paused Clarify stage resumes automatically
+  once every question is answered rather than needing a single
+  approve/reject. Each group sorted by urgency (oldest/soonest first);
+  every row states *why* it's there.
+- **Dashboard** (`/`): an attention-summary card (counts linking into
   `/attention#section`, or an "All clear" state), a project quick-access
   grid, and a 10-event recent-activity feed — sits above the original
   project-management UI (kept, not replaced; see §7's deviation note).
@@ -525,14 +721,38 @@ red error text near the triggering control remains the pattern).
 
 ## 25. Important business rules
 
-Unchanged rules from before Slice 1, plus new ones:
+Unchanged rules from before Slice 1, plus new ones (Slice 1 and Slice 2):
 
-- A stage drafts only from `PENDING` or `REJECTED`; approves/rejects only
-  from `PENDING_APPROVAL`.
+- A stage drafts only from `PENDING` or `REJECTED` — **plus one Slice 2
+  exception**: a `DONE` stage a Critical Analyze finding currently names
+  can also be drafted, since the pipeline may have already moved on to
+  `ANALYZE` by the time a human resolves the block. Approves/rejects only
+  from `PENDING_APPROVAL`, gated by the stage type's own `approverRoles`
+  *(Slice 2 — was any write-capable role)*.
 - Approving the final configured stage completes the pipeline; approving
-  any other stage advances to the next one. Rejecting blocks the pipeline;
-  redrafting the rejected stage unblocks it.
-- A work item has at most one pipeline, ever.
+  any other stage advances to the next one — **only when that stage is
+  the pipeline's actual current stage** *(Slice 2)*: approving a flagged
+  stage's redraft (the exception above) updates that stage but does not
+  advance the pipeline or move `currentStage`, since the pipeline is still
+  logically at `ANALYZE`. Rejecting blocks the pipeline; redrafting the
+  rejected stage unblocks it — but completing *any other* stage's own
+  draft does not clear a block caused by a Critical Analyze finding; only
+  a clean `ANALYZE` re-run does *(Slice 2 — a real bug this slice's own
+  E2E test caught and fixed)*.
+- A work item has at most one pipeline, ever — now created only via an
+  explicit `startPipeline` call, requiring an `APPROVED` project
+  Constitution first *(Slice 2 — was automatic on work-item creation)*.
+- A pipeline's `stageSequence` is fixed at creation (snapshotted from
+  `config/workflow.yaml`) — editing the config file never changes a
+  pipeline already in flight *(Slice 2)*.
+- A Constitution redraft while the latest version is `DRAFT` reuses that
+  same row in place; while `APPROVED`/`REJECTED`, it creates a new version
+  instead — never overwritten. Refused entirely while the latest is
+  `PENDING_APPROVAL`/`AI_DRAFTING` *(Slice 2)*.
+- An `ANALYZE` draft always completes (it's a read-only check, not a
+  gate); a `CRITICAL`-severity finding marks the stage itself `REJECTED`
+  and blocks the pipeline instead of auto-advancing. Findings are
+  replaced, not accumulated, on every `ANALYZE` redraft *(Slice 2)*.
 - Work-item identity for sync/upsert: `(projectId, source, externalId)`.
 - `Project.key` is unique **per client** (fixed in Slice 0 — was globally
   unique before).
@@ -553,27 +773,70 @@ Unchanged rules from before Slice 1, plus new ones:
 
 ## 26. State machines and lifecycle transitions
 
-Pipeline/Stage diagrams unchanged from before Slice 1:
+**Stage state machine — extended in Slice 2** (drafting is now job-backed,
+and a `CLARIFY` draft can pause instead of completing):
 
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING: stage created
-    PENDING --> AI_DRAFTING: draft starts
-    REJECTED --> AI_DRAFTING: redraft starts
-    AI_DRAFTING --> PENDING_APPROVAL: draft completes, gated
-    AI_DRAFTING --> DONE: draft completes, requiresApproval=false
+    PENDING --> AI_DRAFTING: draftStage enqueues a DRAFT_STAGE job
+    REJECTED --> AI_DRAFTING: redraft enqueues a job
+    DONE --> AI_DRAFTING: redraft of a stage a Critical Analyze finding names (Task Group 7.3 only)
+    AI_DRAFTING --> PENDING_APPROVAL: worker completes draft, gated
+    AI_DRAFTING --> DONE: worker completes draft, requiresApproval=false
+    AI_DRAFTING --> AWAITING_CLARIFICATION: CLARIFY draft returns questions
+    AI_DRAFTING --> REJECTED: job retries exhausted (visibly failed, not stuck)
+    AWAITING_CLARIFICATION --> AI_DRAFTING: last outstanding question answered
     PENDING_APPROVAL --> DONE: approve
     PENDING_APPROVAL --> REJECTED: reject
+    DONE --> REJECTED: ANALYZE draft finds a CRITICAL finding (marks itself, not the flagged stage)
     DONE --> [*]
+```
+
+`Job`'s own lifecycle (new in Slice 2 — `src/domain/job/commands.ts`,
+polled by `worker.ts`):
+
+```mermaid
+stateDiagram-v2
+    [*] --> QUEUED: enqueueJob (idempotent on idempotencyKey)
+    QUEUED --> RUNNING: claimJobs (atomic UPDATE ... RETURNING)
+    RUNNING --> SUCCEEDED: completeJob
+    RUNNING --> QUEUED: failJob, attempts < maxAttempts (exponential backoff)
+    RUNNING --> FAILED: failJob, attempts exhausted
+    SUCCEEDED --> [*]
+    FAILED --> [*]
 ```
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ACTIVE: pipeline created
-    ACTIVE --> BLOCKED: current stage rejected
-    BLOCKED --> ACTIVE: rejected stage redrafted
+    [*] --> ACTIVE: pipeline created (startPipeline, now explicit)
+    ACTIVE --> BLOCKED: current stage rejected, or ANALYZE finds a Critical finding
+    BLOCKED --> ACTIVE: rejected stage redrafted and completes as the pipeline's current stage
     ACTIVE --> COMPLETED: final stage approved
     COMPLETED --> [*]
+    note right of BLOCKED
+      Slice 2: completing a flagged (but not
+      current) stage's own draft does NOT
+      clear BLOCKED — only the pipeline's
+      actual current stage completing does.
+      A Critical-Analyze block specifically
+      clears only via a clean ANALYZE redraft.
+    end note
+```
+
+`Constitution`'s own lifecycle (new in Slice 2 —
+`src/domain/constitution/commands.ts`), independent of any `Pipeline`:
+
+```mermaid
+stateDiagram-v2
+    [*] --> DRAFT: version 1 created, or latest DRAFT reused in place
+    DRAFT --> AI_DRAFTING: draftConstitution enqueues a DRAFT_CONSTITUTION job
+    AI_DRAFTING --> PENDING_APPROVAL: worker completes draft
+    AI_DRAFTING --> DRAFT: job retries exhausted (reverts in place, not REJECTED)
+    PENDING_APPROVAL --> APPROVED: approve
+    PENDING_APPROVAL --> REJECTED: reject
+    APPROVED --> [*]: still draftable again (creates a NEW version, never overwritten)
+    REJECTED --> [*]: still draftable again (creates a NEW version, never overwritten)
 ```
 
 **New** (Slice 1) — the `WorkItem.status` state machine
@@ -635,7 +898,15 @@ provenance, not infrastructure observability.
 Fixed since the previous revision of this document (kept here as a record,
 not a re-flagged risk): no-auth, global tenancy, `Project.key` global
 uniqueness, `requiresApproval` dead flag, 200-row audit truncation, no
-tests.
+tests. **Fixed in Slice 2** (same treatment): config snapshotting (stage
+sequence now frozen per-pipeline at `startPipeline`), no retry/backoff on
+AI drafting calls (now job-backed with exponential backoff), uniform
+(non-role-based) approval gating, Constitution drafted per-work-item
+instead of versioned per-project, pipeline auto-created instead of
+explicitly started, stage content overwritten instead of versioned, and
+the Audit Trail's project filter silently excluding pipeline/stage-scoped
+events (matched `AuditEvent.projectId` directly, which only project-level
+actions like Constitution set — found by Slice 2's own E2E test).
 
 Still outstanding:
 
@@ -648,15 +919,26 @@ Still outstanding:
 - No client-creation UI/API (§12, §28).
 - No `DELETE` on `WorkItem` (§9) — needs a schema change to avoid
   destroying immutable audit history via cascade.
-- `Dependency` critical-path analysis is a stub (§15) — Slice 2 scope.
+- `Dependency` critical-path analysis is a stub (§15) — still unscoped;
+  Slice 2 addressed the *other* SDD-engine gaps (#20–26) but not this one
+  (#7), which was never actually part of Slice 2's own scope (source
+  document scoping error carried over from the original gap register —
+  see the "still outstanding" list once more below).
 - No pagination on the Dashboard's project/work-item lists (only `/audit`
   and the 360° Record's Timeline have it).
 - No push notifications for Attention Center items (§22).
-- No config snapshotting — editing `workflow.yaml` retroactively affects
-  pipelines already mid-flight.
 - Global, single-tenant AI/Jira credentials despite per-client isolation
   existing at the schema level.
-- No retry/backoff on external API calls (Jira, Claude).
+- No retry/backoff on Jira sync calls (AI drafting now has it — see §13).
+- `IMPLEMENT` stays an AI-drafted document, not real code execution
+  (gap-register item #23, deliberately left open — see §14).
+- Two more `Job`-runtime edge cases worth naming even though they didn't
+  block Slice 2: no `SELECT ... FOR UPDATE SKIP LOCKED` on job claims
+  (the current atomic `UPDATE ... RETURNING` is correct at this scale, per
+  design.md's own risk note, but wouldn't be the first thing reached for
+  under real concurrent-worker throughput); and a Critical Analyze
+  finding has no dismiss/override path — the only way to clear one is a
+  real redraft of the stage it names (explicit Non-Goal, not an oversight).
 - No CI, no deployment configuration.
 
 ---
@@ -666,15 +948,16 @@ Still outstanding:
 ```mermaid
 flowchart TB
     subgraph Client["Browser"]
-        SC["Server-rendered pages<br/>(/, /attention, /work-items/[id]/360,<br/>/pipelines/[id], /audit)"]
+        SC["Server-rendered pages<br/>(/, /attention, /work-items/[id]/360,<br/>/pipelines/[id], /projects/[id]/constitution, /audit)"]
         CI["Client islands<br/>(forms, buttons)"]
         QV["QuickViewDrawer<br/>(global, URL-param-driven)"]
     end
-    subgraph App["Next.js 16 App Router (single process)"]
-        Routes["API routes<br/>(mutations + the quick-view aggregate read)"]
-        Domain["src/domain/*<br/>work-item · blocker · decision · dependency ·<br/>attention · audit · pipeline · authz"]
-        Lib["src/lib/*<br/>pipeline · audit · config · agents · integrations"]
+    subgraph App["Next.js 16 App Router (request/response process)"]
+        Routes["API routes<br/>(mutations + status polls + the quick-view aggregate read)"]
+        Domain["src/domain/*<br/>work-item · blocker · decision · dependency ·<br/>attention · audit · pipeline · constitution · clarify · job · authz"]
+        Lib["src/lib/*<br/>pipeline config · audit · config · agents · integrations"]
     end
+    Worker["worker.ts<br/>(Slice 2 — separate long-lived process,<br/>npm run worker)"]
     DB[("Postgres<br/>via Prisma 7 + adapter-pg")]
     Jira["Jira Cloud REST v3<br/>(read-only)"]
     Claude["Anthropic Claude API<br/>(claude-sonnet-5)"]
@@ -684,16 +967,20 @@ flowchart TB
     QV -- "GET + local refetch()" --> Routes
     Routes --> Domain
     Domain --> Lib
+    Domain -- "enqueueJob (Stage/Constitution drafts)" --> DB
     Domain --> DB
     Lib -- "pull, on-demand" --> Jira
-    Lib -- "draft stage" --> Claude
+    Worker -- "claimJobs, poll every 2s" --> DB
+    Worker -- "executeStage / executeConstitution" --> Claude
 ```
 
 ## Domain model
 
-See §5's diagram. Sixteen models: the tenancy chain
+See §5's diagram. Twenty-two models: the tenancy chain
 (`Organization → Client → Project`), the delivery model
-(`WorkItem → {Pipeline → Stage → Approval, Blocker, Decision, Dependency}`),
+(`WorkItem → {Pipeline → Stage → Approval/StageVersion/ClarifyQuestion/AnalysisFinding, Blocker, Decision, Dependency}`),
+the Constitution artifact (`Project → Constitution`, versioned,
+independent of any `WorkItem`), the job runtime (`Job`, standalone),
 identity (`User`/`ClientMembership`), and `AuditEvent` hanging off
 `Project`/`Pipeline`/`Stage`/`WorkItem` independently.
 
@@ -706,24 +993,40 @@ identity (`User`/`ClientMembership`), and `AuditEvent` hanging off
 | Client | ClientMembership | 1—* | cascade delete |
 | User | ClientMembership | 1—* | cascade delete |
 | Project | WorkItem | 1—* | cascade delete |
-| WorkItem | Pipeline | 1—0/1 | true 1:1, cascade delete |
+| Project | Constitution | 1—* | cascade delete, versioned, unique per `(project, version)` — *Slice 2* |
+| WorkItem | Pipeline | 1—0/1 | true 1:1, cascade delete, now explicitly started (`startPipeline`) not auto-created |
 | WorkItem | Blocker/Decision/Dependency | 1—* each | cascade delete |
 | WorkItem | WorkItem (parent/children) | 1—* | `SET NULL` on parent delete |
 | Pipeline | Stage | 1—* | cascade delete, unique per `(pipeline, type)` |
 | Stage | Approval | 1—* | cascade delete, history accumulates |
+| Stage | StageVersion | 1—* | cascade delete, append-only — *Slice 2* |
+| Stage | ClarifyQuestion | 1—* | cascade delete — *Slice 2* |
+| Stage | AnalysisFinding | 1—* | cascade delete, replaced (not accumulated) per `ANALYZE` redraft — *Slice 2* |
 | Project/Pipeline/Stage/WorkItem | AuditEvent | 1—* (optional) | Project/Pipeline cascade; Stage/WorkItem set null |
+| *(none — standalone)* | Job | — | polled by `worker.ts`, payload references a `stageId`/`constitutionId` — *Slice 2* |
 
 ## Major user journeys
 
-1. Stand up a client and project → sync or hand-enter work → walk every
-   item through 5 AI-drafted, human-gated stages → completed. *(unchanged
-   engine room)*
+1. Stand up a client and project → **draft and approve a project
+   Constitution** *(Slice 2 — once per project, not per work item)* →
+   sync or hand-enter work → **explicitly start a pipeline** *(Slice 2 —
+   "Start SDD," requires the approved Constitution)* → walk every item
+   through `SPEC → CLARIFY → PLAN → TASKS → ANALYZE → IMPLEMENT → DEPLOY`,
+   AI-drafted (now job-backed, surviving a process restart) and
+   human-gated by role → completed.
 2. **New (Slice 1)**: work stalls → create a blocker or decision on it →
    it surfaces in the Attention Center with its reason → resolved via Quick
    View or the full 360° Record → timeline and audit trail both reflect it.
-3. Redraft loop: reject a stage → pipeline blocks → redraft → gate again.
-4. Audit review: `/audit`, now filterable and paginated — no more silent
-   200-row cutoff.
+3. Redraft loop: reject a stage → pipeline blocks → redraft (now sees the
+   rejection comment) → gate again.
+4. **New (Slice 2)**: AI lacks information → `CLARIFY` pauses and asks →
+   human answers → drafting resumes automatically. `ANALYZE` finds a
+   Critical inconsistency → pipeline blocks → the flagged stage (even if
+   already `DONE`) is redrafted → `ANALYZE` re-run clean → advancement
+   resumes.
+5. Audit review: `/audit`, now filterable and paginated — no more silent
+   200-row cutoff, and (Slice 2) the project filter now actually includes
+   pipeline/stage-scoped events, not just project-level ones.
 
 ## Main state transitions
 
@@ -735,7 +1038,24 @@ Covered in §25.
 
 ## Current capabilities (implemented, verified)
 
-- Config-driven, 5-stage documentation pipeline with human approval gates.
+- Config-driven, 7-stage (`SPEC → CLARIFY → PLAN → TASKS → ANALYZE →
+  IMPLEMENT → DEPLOY`) documentation pipeline with role-based human
+  approval gates. *(Slice 2 — was a fixed 5 stages with uniform gating.)*
+- Project-scoped, versioned Constitution — drafted/approved once per
+  project, referenced by every pipeline via `constitutionVersion`, never
+  overwritten on redraft. *(Slice 2.)*
+- Durable, job-backed AI drafting (`Job` + `worker.ts`) — survives a
+  process restart mid-draft, retries with exponential backoff, reverts to
+  a visibly-failed state once exhausted. *(Slice 2.)*
+- `CLARIFY`: pauses a run and asks a human when information is missing,
+  durable across restarts, resumes drafting automatically once answered.
+  *(Slice 2.)*
+- `ANALYZE`: severity-rated consistency findings across prior stages; a
+  Critical finding blocks advancement until the stage it names is
+  redrafted and `ANALYZE` re-runs clean. *(Slice 2.)*
+- Append-only stage-content versioning (`StageVersion`) and rejection
+  comments/clarification answers reaching a redraft's prompt context.
+  *(Slice 2.)*
 - Real AI drafting via Claude (with a working mock fallback).
 - Jira read-only sync with upsert-safe re-sync, status-mapped onto the
   9-state `WorkStatus`.
@@ -753,18 +1073,23 @@ Covered in §25.
 - Dashboard command-center summary + Quick View global drawer.
 - 360° Delivery Record with a hand-rolled, interactive dependency graph
   visualization.
-- Filtered, paginated audit trail with no silent truncation.
+- Filtered, paginated audit trail with no silent truncation, and (Slice 2)
+  a project filter that correctly includes pipeline/stage-scoped events.
 - Full, transactionally-consistent, append-only audit trail (now
   work-item-scoped, not just pipeline/project-scoped).
 - Real per-draft token/cost tracking.
-- 88 domain-layer integration tests, 5 Playwright E2E tests.
+- 149 domain-layer integration tests, 6 Playwright E2E tests (up from 88
+  and 5 — Slice 2 added ~60 unit tests and a full end-to-end lifecycle
+  scenario, which itself caught and fixed 4 real bugs before shipping).
 
 ## Missing capabilities
 
 - Client-creation UI/API (§12, §28) — the one concrete gap Slice 1's own
   E2E test surfaced while implementing it.
 - Notifications/push mechanism for Attention Center items.
-- Critical-path analysis over dependencies (stub only).
+- Critical-path analysis over dependencies (stub only — not part of
+  Slice 2's own scope, despite living in the same "SDD engine" gap-register
+  section as the items Slice 2 did close).
 - `DELETE` on work items (blocked by the audit-immutability constraint —
   needs a schema decision).
 - Azure DevOps integration (declared, not built).
@@ -775,6 +1100,10 @@ Covered in §25.
 - Per-client AI/Jira credential isolation actually wired to the fallback
   path (schema supports it, nothing sets it from the UI).
 - Ctrl+K command palette / global search.
+- Real code execution for `IMPLEMENT` (stays an AI-drafted document —
+  Slice 2 deliberately left this open; see §14).
+- Agent registry, `AgentRun` entity, per-project/client/stage executor
+  routing, AI cost rollups/budgets (Slice 3 territory).
 
 ## Inconsistencies between UI, backend, and domain model
 
@@ -798,35 +1127,34 @@ Covered in §25.
 - **Global config + global AI/Jira credentials** still won't survive real
   multi-client use without further work, despite the schema now supporting
   per-client override.
-- **Unsnapshotted workflow config** — a `workflow.yaml` edit can still
-  silently change the behavior of pipelines already mid-flight.
 - **No CI** means test regressions only surface when someone runs
   `npm test`/`npx playwright test` locally.
 - **`AuditEvent.action` as free text** means the audit trail's Action
   filter can silently miss a *new* action template added later without a
   matching entry in `ACTION_CATEGORIES` — the substring-classifier
   approach requires remembering to update it.
+- **A Critical Analyze finding has no dismiss/override** — a false
+  positive the team judges incorrect still has to go through a real
+  redraft to clear (Slice 2's explicit Non-Goal, not an oversight; worth
+  revisiting if it proves too rigid in practice).
 
 ## Prioritized roadmap
 
 Per `docs/ROADMAP.md`'s slice sequence (source of truth — this section
 summarizes, doesn't override it):
 
-1. **Slice 2 — SDD as a subsystem**: Constitution as a versioned
-   project-scoped artifact, `Clarify`/`Analyze` stages, versioned stage
-   artifacts, a durable run state machine, role-based per-stage-type gate
-   policy, rejection/clarification feedback reaching redrafts.
-2. **Slice 3 — Agents as real execution resources**: agent registry,
+1. **Slice 3 — Agents as real execution resources**: agent registry,
    `AgentRun` entity, retry/backoff, cost rollups with budgets.
-3. **Slice 4 — Connector framework**: `Connector`/`SyncRun` entities,
+2. **Slice 4 — Connector framework**: `Connector`/`SyncRun` entities,
    field-level provenance, conflict handling, Azure DevOps/GitHub adapters.
-4. **Slice 5 — Engineering evidence**: repository/commit/PR/test-run
+3. **Slice 5 — Engineering evidence**: repository/commit/PR/test-run
    entities, Code & Changes / Tests tabs, evidence-driven completion.
-5. **Slice 6 — Configuration Center**: hierarchical config with
+4. **Slice 6 — Configuration Center**: hierarchical config with
    inheritance, impact preview, versioning.
-6. Cheap, high-clarity fixes that don't need a full slice: client-creation
+5. Cheap, high-clarity fixes that don't need a full slice: client-creation
    UI/API; a `WorkItem` delete path (once the audit-immutability question
-   is resolved); push notifications for the Attention Center.
+   is resolved); push notifications for the Attention Center;
+   critical-path analysis over dependencies.
 
 ---
 
@@ -836,22 +1164,31 @@ summarizes, doesn't override it):
 authenticated, config-driven governance and attention-management tool that
 runs individual work items — carrying a full delivery model of status,
 risk, priority, ownership, dependencies, blockers, and decisions — through
-a fixed, five-stage, AI-drafted, human-approved documentation pipeline
-(Constitution → SPEC → Plan → Tasks → Deploy), recording every draft,
-decision, blocker, dependency change, and cost in an immutable,
-work-item-traceable audit trail.** It answers the product vision's four
-core questions — what is happening, why, does anyone need to act, what
-happens next — through the Attention Center, Quick View drawer, and 360°
-Delivery Record, all built in Slice 1. It is not yet a code/deployment
-system (Slice 5), and several real gaps remain: no client-creation path, no
-work-item deletion, no push notifications, no critical-path analysis. Its
-strongest, most fully-realized property remains provenance — the audit
-trail is real, transactionally consistent, tenant-scoped, and now
-work-item-traceable. Its access-control story, weak in the previous
-revision of this document, is now solid: real authentication, real
-per-client roles, and every domain command gated. The product's
+a configurable, seven-stage, AI-drafted, role-gated documentation pipeline
+(SPEC → Clarify → Plan → Tasks → Analyze → Implement → Deploy, run under a
+project-scoped, versioned Constitution approved once per project rather
+than drafted per work item), with a durable, job-backed run state machine
+that survives process restarts, recording every draft, decision, blocker,
+dependency change, and cost in an immutable, work-item-traceable audit
+trail.** It answers the product vision's four core questions — what is
+happening, why, does anyone need to act, what happens next — through the
+Attention Center, Quick View drawer, and 360° Delivery Record (Slice 1),
+now joined by a Clarify Q&A panel and Analyze findings panel on the
+pipeline detail page and a dedicated Constitution page (Slice 2). It is not
+yet a code/deployment system (Slice 5) — `IMPLEMENT` stays an AI-drafted
+document, not real execution — and several real gaps remain: no
+client-creation path, no work-item deletion, no push notifications, no
+critical-path analysis, no agent registry or per-project AI routing (Slice
+3). Its strongest, most fully-realized property remains provenance — the
+audit trail is real, transactionally consistent, tenant-scoped,
+work-item-traceable, and (Slice 2) its project filter now actually
+includes pipeline/stage-scoped events, a real bug fixed along the way. Its
+access-control story is solid and got sharper in Slice 2: gate approval is
+now role-based per stage type, not a single uniform check. The product's
 architecture (swappable `AgentExecutor`/`IntegrationAdapter`, config-driven
-pipeline shape, the `src/domain/<aggregate>/` command/query pattern) has
-proven itself capable of absorbing a slice this large (14 task groups, 6
-new entities, 5 new pages, 88 tests) without a rewrite — a reasonable
+pipeline shape, the `src/domain/<aggregate>/` command/query pattern, and
+now the `Job`-backed durable-execution pattern) has proven itself capable
+of absorbing two slices this large in a row (Slice 2: 13 task groups, 5 new
+entities, 1 new page, ~60 new tests, a full E2E lifecycle scenario that
+caught 4 real bugs before they shipped) without a rewrite — a reasonable
 signal for the slices still ahead.
