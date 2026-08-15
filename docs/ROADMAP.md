@@ -204,6 +204,7 @@ re-litigate:
 | 6 | Configuration Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | `openspec/changes/archive/2026-08-15-slice-6-configuration-center/` |
 | 7 | Design system foundation & premium UI refresh | **Done** | `2026-08-15-design-system-direction.md` | `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/` |
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
+| 9 | Dashboard motifs refresh (budget donut, real global search, nav polish) | **Scoped — not started** | `2026-08-15-dashboard-motifs-direction.md` | — |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -405,6 +406,33 @@ Configuration Center, pipeline detail, login) keep English strings but
 inherit RTL-safe layout for free from the shared components. Full detail:
 source above; as-built detail:
 `openspec/changes/archive/2026-08-15-i18n-rtl-support/`.
+
+### Slice 9 — Dashboard motifs refresh — **Scoped, not started**
+
+*(Source: `docs/roadmap-sources/2026-08-15-dashboard-motifs-direction.md`
+— the agent's design-direction analysis of a user-provided consumer
+cloud-storage dashboard reference, confirmed by the user. Not part of the
+original master prompt / gap analysis. The source file is authoritative
+if this summary drifts from it.)*
+
+Adapts six motifs from the reference to real entities, keeping Slice 7's
+one-accent-color and status-color rules intact (explicitly rejecting the
+reference's literal multi-hue decorative cards and vanity trend charts):
+
+- An AI-budget-usage donut chart (Dashboard and/or Configuration Center),
+  built on existing `AI Cost`/`aiBudgetUsd` data (Slices 3, 6) — not a
+  new metric.
+- A solid accent-colored pill for `NavRail`'s active-item state (same
+  single accent color, stronger active affordance).
+- A real global search / Ctrl+K command palette — closing the roadmap gap
+  register's item #16 ("still not built"), not a decorative search bar.
+- Avatar stacks showing "who's involved" on project cards / Attention
+  Center rows, from existing member data.
+- A persistent primary CTA in the header (e.g. "+ New Work Item"),
+  instead of an action buried in page-body forms.
+- Roomier spacing / slightly larger corner radius on primary surfaces.
+
+Ready for an OpenSpec proposal; no plan written or approved yet.
 
 ## Definition of Done, for every future slice (source: `§6`)
 
