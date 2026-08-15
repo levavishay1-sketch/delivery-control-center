@@ -17,9 +17,9 @@
 
 ## 4. Webhook event handling
 
-- [ ] 4.1 Extend `src/app/api/webhooks/github/[connectorId]/route.ts` to branch on `X-GitHub-Event` (`push`, `pull_request`, `check_run`, `check_suite`, `deployment_status`) in addition to the existing sync-trigger path, after the same signature verification and `WebhookDelivery` dedup insert.
-- [ ] 4.2 Add `recordPushEvent`, `recordPullRequestEvent`, `recordCheckRunEvent`, `recordDeploymentStatusEvent` to `src/domain/evidence/commands.ts` — each upserts by GitHub's stable id, tolerating a not-yet-existing parent row per design.md risk 2 (create a minimal placeholder, let a later event fill it in).
-- [ ] 4.3 Unit tests for each event handler, including out-of-order arrival (check_run before its pull_request).
+- [x] 4.1 Extend `src/app/api/webhooks/github/[connectorId]/route.ts` to branch on `X-GitHub-Event` (`push`, `pull_request`, `check_run`, `deployment_status`) in addition to the existing sync-trigger path, after the same signature verification and `WebhookDelivery` dedup insert. (`check_suite` deferred — GitHub's `check_run` event alone covers this slice's test-run tracking; `receiveWebhook` gained a `triggerSync` flag so evidence-only event types skip the SYNC_PROJECT trigger.)
+- [x] 4.2 Add `recordPushEvent`, `recordPullRequestEvent`, `recordCheckRunEvent`, `recordDeploymentStatusEvent` to `src/domain/evidence/commands.ts` — each upserts by GitHub's stable id, tolerating a not-yet-existing parent row per design.md risk 2 (create a minimal placeholder, let a later event fill it in).
+- [x] 4.3 Unit tests for each event handler, including out-of-order arrival (check_run before its pull_request).
 
 ## 5. Manual work item ↔ evidence linking
 

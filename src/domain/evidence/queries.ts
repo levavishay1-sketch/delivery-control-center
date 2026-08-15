@@ -5,6 +5,11 @@ export async function getRepositoryForProject(projectId: string) {
   return db.repository.findFirst({ where: { connector: { projectId } } });
 }
 
+/** A connector's linked repository, if any — used by the webhook route, which addresses a connector directly. */
+export function getRepositoryByConnectorId(connectorId: string) {
+  return db.repository.findUnique({ where: { connectorId } });
+}
+
 /** A repository's recorded commits, most recent first. */
 export function listCommitsForRepository(repositoryId: string) {
   return db.commit.findMany({ where: { repositoryId }, orderBy: { authoredAt: "desc" } });
