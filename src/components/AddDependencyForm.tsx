@@ -8,7 +8,15 @@ interface ProjectItem {
   title: string;
 }
 
-export function AddDependencyForm({ workItemId, candidates }: { workItemId: string; candidates: ProjectItem[] }) {
+export function AddDependencyForm({
+  workItemId,
+  candidates,
+  onAdded,
+}: {
+  workItemId: string;
+  candidates: ProjectItem[];
+  onAdded?: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [dependsOnWorkItemId, setDependsOnWorkItemId] = useState(candidates[0]?.id ?? "");
@@ -32,7 +40,8 @@ export function AddDependencyForm({ workItemId, candidates }: { workItemId: stri
     }
     setOpen(false);
     setReason("");
-    router.refresh();
+    if (onAdded) onAdded();
+    else router.refresh();
   }
 
   if (candidates.length === 0) return null;

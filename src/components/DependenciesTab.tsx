@@ -27,12 +27,15 @@ export function DependenciesTab({
   canManage,
   workItemId,
   candidates,
+  onChanged,
 }: {
   upstream: UpstreamDep[];
   downstream: DownstreamDep[];
   canManage: boolean;
   workItemId: string;
   candidates: { id: string; title: string }[];
+  /** If given (e.g. by the Quick View drawer, whose data isn't a Server Component), called after a mutation instead of the default router.refresh(). */
+  onChanged?: () => void;
 }) {
   return (
     <div className="flex flex-col gap-6">
@@ -54,13 +57,13 @@ export function DependenciesTab({
                   {dep.dependsOnWorkItem.type} · {dep.dependsOnWorkItem.status} · {dep.reason}
                 </p>
               </div>
-              {canManage && <RemoveDependencyButton dependencyId={dep.id} />}
+              {canManage && <RemoveDependencyButton dependencyId={dep.id} onRemoved={onChanged} />}
             </div>
           ))}
         </div>
         {canManage && (
           <div className="mt-2">
-            <AddDependencyForm workItemId={workItemId} candidates={candidates} />
+            <AddDependencyForm workItemId={workItemId} candidates={candidates} onAdded={onChanged} />
           </div>
         )}
       </section>

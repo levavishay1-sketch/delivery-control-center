@@ -8,6 +8,7 @@ import { AddProjectForm } from "@/components/AddProjectForm";
 import { AddWorkItemForm } from "@/components/AddWorkItemForm";
 import { SyncButton } from "@/components/SyncButton";
 import { StageBadge } from "@/components/StageBadge";
+import { QuickViewLink } from "@/components/QuickViewLink";
 
 export const dynamic = "force-dynamic";
 
@@ -167,22 +168,24 @@ export default async function HomePage() {
 
                   <div className="mt-4 flex flex-col gap-2">
                     {project.workItems.map((item) => (
-                      <Link
+                      <div
                         key={item.id}
-                        href={item.pipeline ? `/pipelines/${item.pipeline.id}` : "#"}
                         className="flex items-center justify-between rounded border border-black/10 dark:border-white/10 px-3 py-2 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]"
                       >
-                        <span className="flex items-center gap-2">
+                        <Link href={item.pipeline ? `/pipelines/${item.pipeline.id}` : "#"} className="flex items-center gap-2">
                           {item.title}
                           <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">
                             {item.status}
                           </span>
-                        </span>
-                        <span className="flex items-center gap-2">
+                        </Link>
+                        <span className="flex items-center gap-3">
                           <span className="opacity-50">{item.pipeline?.currentStage}</span>
                           {item.pipeline && <StageBadge status={item.pipeline.status} />}
+                          <QuickViewLink workItemId={item.id} className="text-xs underline opacity-60 hover:opacity-100">
+                            Quick View
+                          </QuickViewLink>
                         </span>
-                      </Link>
+                      </div>
                     ))}
                     {project.workItems.length === 0 && (
                       <p className="text-sm opacity-50">No work items yet.</p>

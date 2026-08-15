@@ -73,6 +73,7 @@ export function OverviewTab({
   aiCost,
   stageCosts,
   now,
+  onChanged,
 }: {
   workItem: {
     id: string;
@@ -101,6 +102,8 @@ export function OverviewTab({
   aiCost: string;
   stageCosts: { type: string; costUsd: string | null }[];
   now: number;
+  /** If given (e.g. by the Quick View drawer, whose data isn't a Server Component), called after a mutation instead of the default router.refresh(). */
+  onChanged?: () => void;
 }) {
   const [editing, setEditing] = useState(false);
 
@@ -125,6 +128,7 @@ export function OverviewTab({
         }}
         members={members}
         onDone={() => setEditing(false)}
+        onChanged={onChanged}
       />
     );
   }
@@ -190,7 +194,7 @@ export function OverviewTab({
           <p className="text-xs opacity-70">Required action: {activeBlocker.requiredAction}</p>
           {(canManage || isBlockerOwner) && (
             <div className="mt-2">
-              <ResolveBlockerButton blockerId={activeBlocker.id} />
+              <ResolveBlockerButton blockerId={activeBlocker.id} onResolved={onChanged} />
             </div>
           )}
         </div>
@@ -207,7 +211,7 @@ export function OverviewTab({
             </p>
           )}
           <div className="mt-2">
-            <DecisionActions decisionId={pendingDecision.id} />
+            <DecisionActions decisionId={pendingDecision.id} onDecided={onChanged} />
           </div>
         </div>
       )}
@@ -270,8 +274,10 @@ export function OverviewTab({
             Edit
           </button>
         )}
-        {canManage && !activeBlocker && <CreateBlockerForm workItemId={workItem.id} members={members} defaultOwnerId={workItem.ownerId ?? members[0]?.id ?? ""} />}
-        {canManage && !pendingDecision && <CreateDecisionForm workItemId={workItem.id} />}
+        {canManage && !activeBlocker && (
+          <CreateBlockerForm workItemId={workItem.id} members={members} defaultOwnerId={workItem.ownerId ?? members[0]?.id ?? ""} onCreated={onChanged} />
+        )}
+        {canManage && !pendingDecision && <CreateDecisionForm workItemId={workItem.id} onCreated={onChanged} />}
       </div>
     </div>
   );

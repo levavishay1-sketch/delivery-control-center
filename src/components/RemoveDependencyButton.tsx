@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function RemoveDependencyButton({ dependencyId }: { dependencyId: string }) {
+export function RemoveDependencyButton({ dependencyId, onRemoved }: { dependencyId: string; onRemoved?: () => void }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +17,8 @@ export function RemoveDependencyButton({ dependencyId }: { dependencyId: string 
       setError((await res.json()).error ?? "Failed to remove");
       return;
     }
-    router.refresh();
+    if (onRemoved) onRemoved();
+    else router.refresh();
   }
 
   return (

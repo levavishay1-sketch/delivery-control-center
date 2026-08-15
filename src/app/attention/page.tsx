@@ -4,6 +4,7 @@ import { requireAuthContext } from "@/domain/shared/session";
 import { WRITE_ROLES } from "@/domain/shared/authz";
 import { DecisionActions } from "@/components/DecisionActions";
 import { ResolveBlockerButton } from "@/components/ResolveBlockerButton";
+import { QuickViewLink } from "@/components/QuickViewLink";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,9 @@ export default async function AttentionCenterPage() {
                     Deadline: {formatDate(d.deadline)} {overdue && "(overdue)"}
                   </p>
                 )}
+                <QuickViewLink workItemId={d.workItem.id} className="text-xs underline opacity-70 w-fit">
+                  Quick View
+                </QuickViewLink>
                 {canAct(d.workItem.projectId, ctx.memberships, ctx.isOrgAdmin) && <DecisionActions decisionId={d.id} />}
               </Row>
             );
@@ -88,6 +92,9 @@ export default async function AttentionCenterPage() {
               <p className="text-xs opacity-60">Owner: {b.owner.name ?? b.owner.email}</p>
               <p className="text-sm opacity-70">Required action: {b.requiredAction}</p>
               {b.impact && <p className="text-xs opacity-50">Impact: {b.impact}</p>}
+              <QuickViewLink workItemId={b.blockingItem.id} className="text-xs underline opacity-70 w-fit">
+                Quick View
+              </QuickViewLink>
               {(canAct(b.blockingItem.projectId, ctx.memberships, ctx.isOrgAdmin) || b.ownerId === ctx.userId) && (
                 <ResolveBlockerButton blockerId={b.id} />
               )}
@@ -104,7 +111,7 @@ export default async function AttentionCenterPage() {
                 {RISK_LABEL[item.risk] ?? item.risk}
               </span>
               <RowMeta workItem={item} />
-              <WorkItemLink pipelineId={item.pipeline?.id} />
+              <WorkItemLink workItemId={item.id} />
             </Row>
           ))}
         </Section>
@@ -118,7 +125,7 @@ export default async function AttentionCenterPage() {
               <Row key={item.id}>
                 <p className={`font-medium ${dueSoon ? "text-red-500" : ""}`}>Due {formatDate(item.dueDate)}</p>
                 <RowMeta workItem={item} />
-                <WorkItemLink pipelineId={item.pipeline?.id} />
+                <WorkItemLink workItemId={item.id} />
               </Row>
             );
           })}
@@ -131,7 +138,7 @@ export default async function AttentionCenterPage() {
             <Row key={item.id}>
               <p className="font-medium">Awaiting approval</p>
               <RowMeta workItem={item} />
-              <WorkItemLink pipelineId={item.pipeline?.id} />
+              <WorkItemLink workItemId={item.id} />
             </Row>
           ))}
         </Section>
@@ -178,12 +185,15 @@ function RowMeta({ workItem }: { workItem: { title: string; type: string; projec
   );
 }
 
-/** Links to the pipeline detail page — the only work-item-detail route that exists until Task Group 9 (360° Record) ships. */
-function WorkItemLink({ pipelineId }: { pipelineId?: string }) {
-  if (!pipelineId) return null;
+function WorkItemLink({ workItemId }: { workItemId: string }) {
   return (
-    <Link href={`/pipelines/${pipelineId}`} className="text-xs underline opacity-70">
-      View work item
-    </Link>
+    <span className="flex gap-3">
+      <Link href={`/work-items/${workItemId}/360`} className="text-xs underline opacity-70">
+        View work item
+      </Link>
+      <QuickViewLink workItemId={workItemId} className="text-xs underline opacity-70">
+        Quick View
+      </QuickViewLink>
+    </span>
   );
 }

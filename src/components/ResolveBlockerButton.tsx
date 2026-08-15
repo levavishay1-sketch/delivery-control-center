@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function ResolveBlockerButton({ blockerId }: { blockerId: string }) {
+/** onResolved, if given (e.g. the Quick View drawer, whose data isn't a Server Component), is called instead of router.refresh(). */
+export function ResolveBlockerButton({ blockerId, onResolved }: { blockerId: string; onResolved?: () => void }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +18,8 @@ export function ResolveBlockerButton({ blockerId }: { blockerId: string }) {
       setError((await res.json()).error ?? "Failed to resolve");
       return;
     }
-    router.refresh();
+    if (onResolved) onResolved();
+    else router.refresh();
   }
 
   return (

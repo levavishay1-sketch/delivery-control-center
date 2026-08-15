@@ -14,6 +14,7 @@ export function EditWorkItemForm({
   initial,
   members,
   onDone,
+  onChanged,
 }: {
   workItemId: string;
   initial: {
@@ -29,6 +30,8 @@ export function EditWorkItemForm({
   };
   members: Member[];
   onDone: () => void;
+  /** If given (e.g. by the Quick View drawer, whose data isn't a Server Component), called after a save instead of the default router.refresh(). */
+  onChanged?: () => void;
 }) {
   const router = useRouter();
   const [title, setTitle] = useState(initial.title);
@@ -68,7 +71,8 @@ export function EditWorkItemForm({
       return;
     }
     onDone();
-    router.refresh();
+    if (onChanged) onChanged();
+    else router.refresh();
   }
 
   return (

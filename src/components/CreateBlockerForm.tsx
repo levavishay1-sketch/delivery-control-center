@@ -9,7 +9,17 @@ interface Member {
   email: string;
 }
 
-export function CreateBlockerForm({ workItemId, members, defaultOwnerId }: { workItemId: string; members: Member[]; defaultOwnerId: string }) {
+export function CreateBlockerForm({
+  workItemId,
+  members,
+  defaultOwnerId,
+  onCreated,
+}: {
+  workItemId: string;
+  members: Member[];
+  defaultOwnerId: string;
+  onCreated?: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -37,7 +47,8 @@ export function CreateBlockerForm({ workItemId, members, defaultOwnerId }: { wor
     setReason("");
     setRequiredAction("");
     setImpact("");
-    router.refresh();
+    if (onCreated) onCreated();
+    else router.refresh();
   }
 
   if (!open) {

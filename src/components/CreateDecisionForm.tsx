@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function CreateDecisionForm({ workItemId }: { workItemId: string }) {
+export function CreateDecisionForm({ workItemId, onCreated }: { workItemId: string; onCreated?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [question, setQuestion] = useState("");
@@ -32,7 +32,8 @@ export function CreateDecisionForm({ workItemId }: { workItemId: string }) {
     setReason("");
     setImpact("");
     setDeadline("");
-    router.refresh();
+    if (onCreated) onCreated();
+    else router.refresh();
   }
 
   if (!open) {

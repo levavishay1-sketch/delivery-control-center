@@ -3,7 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export function DecisionActions({ decisionId }: { decisionId: string }) {
+/** onDecided, if given (e.g. the Quick View drawer, whose data isn't a Server Component), is called instead of router.refresh(). */
+export function DecisionActions({ decisionId, onDecided }: { decisionId: string; onDecided?: () => void }) {
   const router = useRouter();
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +18,8 @@ export function DecisionActions({ decisionId }: { decisionId: string }) {
       setError((await res.json()).error ?? `Failed to ${decision}`);
       return;
     }
-    router.refresh();
+    if (onDecided) onDecided();
+    else router.refresh();
   }
 
   return (

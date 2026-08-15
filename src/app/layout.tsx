@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { auth, signOut } from "@/auth";
+import { QuickViewDrawer } from "@/components/QuickViewDrawer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -59,6 +61,11 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           </nav>
         </header>
         <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+        {session?.user && (
+          <Suspense fallback={null}>
+            <QuickViewDrawer />
+          </Suspense>
+        )}
       </body>
     </html>
   );
