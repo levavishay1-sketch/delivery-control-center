@@ -103,6 +103,46 @@ describe("startPipeline", () => {
     expect(stages[0].type).toBe(pipeline.stageSequence[0]);
   });
 
+  it("snapshots an agentRouting entry for every configured stage type, resolved to a real Agent id", async () => {
+    const project = await createProjectWithApprovedConstitution("Agent Routing Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Routed" });
+
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const routing = pipeline.agentRouting as Record<string, string>;
+
+    expect(Object.keys(routing).sort()).toEqual([...pipeline.stageSequence].sort());
+    const defaultAgent = await db.agent.findFirstOrThrow({ where: { isDefault: true } });
+    for (const stageType of pipeline.stageSequence) {
+      const agent = await db.agent.findUnique({ where: { id: routing[stageType] } });
+      expect(agent).not.toBeNull();
+    }
+    // None of the real config's stages currently set an explicit `agent:` override, so every
+    // stage type routes to the registry's default agent.
+    expect(Object.values(routing).every((id) => id === defaultAgent.id)).toBe(true);
+  });
+
+  it("does not change an existing pipeline's agentRouting when workflow.yaml's registry is edited afterward", async () => {
+    const project = await createProjectWithApprovedConstitution("Agent Routing Immutable Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Routing isolated from config edits" });
+
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const originalRouting = pipeline.agentRouting;
+
+    const configPath = path.join(process.cwd(), "config", "workflow.yaml");
+    const originalConfig = fs.readFileSync(configPath, "utf-8");
+    try {
+      fs.writeFileSync(
+        configPath,
+        "stages:\n  - type: SPEC\n    label: Spec (test-edited)\n    description: test\n    promptTemplate: spec.md\n    requiresApproval: true\n    approverRoles: [MANAGER]\n    agent: edited-agent\nagents:\n  - name: edited-agent\n    provider: mock\n    model: edited-agent\n    default: true\n"
+      );
+
+      const reloaded = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+      expect(reloaded.agentRouting).toEqual(originalRouting);
+    } finally {
+      fs.writeFileSync(configPath, originalConfig);
+    }
+  });
+
   it("refuses to start a second pipeline for a work item that already has one", async () => {
     const project = await createProjectWithApprovedConstitution("Double Start Project");
     const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Only one pipeline" });

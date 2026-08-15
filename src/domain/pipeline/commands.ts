@@ -3,6 +3,7 @@ import { getNextStageTypeInSequence, getStageConfig, getStageConfigOrFallback, l
 import { recordAuditEvent } from "@/lib/audit";
 import { getApprovedConstitution } from "@/domain/constitution/queries";
 import { enqueueJob } from "@/domain/job/commands";
+import { syncAgentRegistry } from "@/domain/agent/commands";
 import type { FindingSeverity, Prisma, Role, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
@@ -52,8 +53,24 @@ export async function startPipeline(ctx: AuthContext, workItemId: string) {
     );
   }
 
-  const stageSequence = loadWorkflow().map((s) => s.type);
+  const workflowStages = loadWorkflow();
+  const stageSequence = workflowStages.map((s) => s.type);
   const firstStage = stageSequence[0];
+
+  // Slice 3 — resolve each configured stage's routed agent (falling back to
+  // the registry default) and snapshot it onto the pipeline alongside
+  // stageSequence, so editing config/workflow.yaml's routing later never
+  // changes an in-flight pipeline's behavior (design.md Decision 3).
+  const agents = await syncAgentRegistry();
+  const defaultAgent = agents.find((a) => a.isDefault);
+  if (!defaultAgent) {
+    throw new Error("config/workflow.yaml's agents: list must mark exactly one default agent.");
+  }
+  const agentRouting: Record<string, string> = {};
+  for (const stage of workflowStages) {
+    const routed = stage.agent ? agents.find((a) => a.name === stage.agent) : undefined;
+    agentRouting[stage.type] = (routed ?? defaultAgent).id;
+  }
 
   return db.$transaction(async (tx) => {
     const pipeline = await tx.pipeline.create({
@@ -62,6 +79,7 @@ export async function startPipeline(ctx: AuthContext, workItemId: string) {
         currentStage: firstStage,
         stageSequence,
         constitutionVersion: constitution.version,
+        agentRouting,
         stages: { create: { type: firstStage } },
       },
       include: { stages: true },
@@ -74,7 +92,7 @@ export async function startPipeline(ctx: AuthContext, workItemId: string) {
       userId: ctx.userId,
       actorName: ctx.displayName,
       action: `${ctx.displayName} started the pipeline for "${workItem.title}"`,
-      detail: { firstStage, constitutionVersion: constitution.version, stageSequence },
+      detail: { firstStage, constitutionVersion: constitution.version, stageSequence, agentRouting },
     });
 
     return pipeline;

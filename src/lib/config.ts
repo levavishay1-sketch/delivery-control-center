@@ -16,15 +16,34 @@ export interface WorkflowStageConfig {
    * true; omitted for auto-completing stages, which have no gate to approve.
    */
   approverRoles?: Role[];
+  /** Slice 3 — names an entry in the `agents:` registry below. Unset means "use the default agent". */
+  agent?: string;
+}
+
+/** Slice 3 — an `agents:` registry entry (design.md Decision 3). */
+export interface AgentConfig {
+  name: string;
+  provider: string;
+  model: string;
+  isDefault: boolean;
+}
+
+interface AgentConfigRaw {
+  name: string;
+  provider: string;
+  model: string;
+  default?: boolean;
 }
 
 interface WorkflowFile {
   stages: WorkflowStageConfig[];
+  agents?: AgentConfigRaw[];
 }
 
 const CONFIG_DIR = path.join(process.cwd(), "config");
 
 let cachedWorkflow: WorkflowStageConfig[] | null = null;
+let cachedAgents: AgentConfig[] | null = null;
 const promptTemplateCache = new Map<string, string>();
 
 /** Loads config/workflow.yaml. Re-reads from disk on every call in dev so edits show up without a restart. */
@@ -44,6 +63,36 @@ export function loadWorkflow(): WorkflowStageConfig[] {
   }
   cachedWorkflow = parsed.stages;
   return cachedWorkflow;
+}
+
+/**
+ * Loads config/workflow.yaml's `agents:` registry. Validates exactly one
+ * default at load time (mirroring loadWorkflow's approverRoles-non-empty
+ * validation) — a config with zero or multiple defaults is a configuration
+ * error, not a runtime fallback decision.
+ */
+export function loadAgents(): AgentConfig[] {
+  if (cachedAgents && process.env.NODE_ENV === "production") {
+    return cachedAgents;
+  }
+  const raw = fs.readFileSync(path.join(CONFIG_DIR, "workflow.yaml"), "utf-8");
+  const parsed = yaml.load(raw) as WorkflowFile;
+  const agents = parsed?.agents ?? [];
+  if (agents.length === 0) {
+    throw new Error("config/workflow.yaml must define at least one agent under `agents:`");
+  }
+  const defaults = agents.filter((a) => a.default);
+  if (defaults.length !== 1) {
+    throw new Error(
+      `config/workflow.yaml must have exactly one agent marked \`default: true\`, found ${defaults.length}`
+    );
+  }
+  cachedAgents = agents.map((a) => ({ name: a.name, provider: a.provider, model: a.model, isDefault: !!a.default }));
+  return cachedAgents;
+}
+
+export function getDefaultAgentConfig(): AgentConfig {
+  return loadAgents().find((a) => a.isDefault)!;
 }
 
 export function getStageConfig(type: StageType): WorkflowStageConfig {

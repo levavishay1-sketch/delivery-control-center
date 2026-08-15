@@ -22,10 +22,10 @@ established pattern).
 
 ## Task Group 2: Agent Registry & Routing (4 tasks)
 
-- [ ] 2.1 `src/domain/agent/queries.ts`: `getDefaultAgent()`, `getAgentById(id)`, `listAgents()`.
-- [ ] 2.2 `config/agents.yaml` (new file, same loading pattern as `config/workflow.yaml`) or an `agents:` top-level key added to `config/workflow.yaml` (pick one — prefer reusing `workflow.yaml` per design.md Decision 3's "no new config file" framing unless it makes the file unwieldy): each entry seeds/matches an `Agent` row by name; exactly one marked default. `src/lib/config.ts` gains `loadAgents()` and validates exactly one default at load time (mirroring the `approverRoles`-non-empty validation Slice 2 added).
-- [ ] 2.3 Extend `WorkflowStageConfig` with an optional `agent?: string` (registry entry name). `startPipeline` (`src/domain/pipeline/commands.ts`) resolves each configured stage's agent (falling back to the default) into `Pipeline.agentRouting` in the same transaction that snapshots `stageSequence`.
-- [ ] 2.4 Tests: `loadAgents()` rejects a config with zero or multiple defaults; `startPipeline` snapshots the correct `agentRouting` map; editing `config/workflow.yaml`'s agent routing after a pipeline starts doesn't change that pipeline's `agentRouting` (same pattern as the existing `stageSequence`-immutability test). Commit: "Add the Agent registry and per-stage-type routing, snapshotted per pipeline"
+- [x] 2.1 `src/domain/agent/queries.ts`: `getDefaultAgent()`, `getAgentById(id)`, `listAgents()`.
+- [x] 2.2 `config/agents.yaml` (new file, same loading pattern as `config/workflow.yaml`) or an `agents:` top-level key added to `config/workflow.yaml` (pick one — prefer reusing `workflow.yaml` per design.md Decision 3's "no new config file" framing unless it makes the file unwieldy): each entry seeds/matches an `Agent` row by name; exactly one marked default. `src/lib/config.ts` gains `loadAgents()` and validates exactly one default at load time (mirroring the `approverRoles`-non-empty validation Slice 2 added).
+- [x] 2.3 Extend `WorkflowStageConfig` with an optional `agent?: string` (registry entry name). `startPipeline` (`src/domain/pipeline/commands.ts`) resolves each configured stage's agent (falling back to the default) into `Pipeline.agentRouting` in the same transaction that snapshots `stageSequence`.
+- [x] 2.4 Tests: `loadAgents()` rejects a config with zero or multiple defaults; `startPipeline` snapshots the correct `agentRouting` map; editing `config/workflow.yaml`'s agent routing after a pipeline starts doesn't change that pipeline's `agentRouting` (same pattern as the existing `stageSequence`-immutability test). Commit: "Add the Agent registry and per-stage-type routing, snapshotted per pipeline"
 
 ## Task Group 3: AgentRun Recording (5 tasks)
 

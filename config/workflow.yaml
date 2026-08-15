@@ -17,6 +17,13 @@
 # MANAGER is included in every list by convention. Required (and validated
 # non-empty by lib/config.ts) for every requiresApproval: true stage; omitted
 # for auto-completing stages, which have no human gate to approve.
+#
+# Slice 3 — each stage's optional `agent` key names an entry from the
+# `agents:` registry below, routing that stage type to a specific configured
+# agent (design.md Decision 3). Unset means "use the default agent" — every
+# stage below is currently unset, so an un-migrated pipeline's behavior is
+# unchanged (this file's `agents:` default entry already matches today's
+# env-driven executor choice — see the registry's own comment).
 stages:
   - type: SPEC
     label: Specification
@@ -64,3 +71,22 @@ stages:
     promptTemplate: deploy.md
     requiresApproval: true
     approverRoles: [TECH_LEAD, MANAGER]
+
+# Slice 3 — the Agent registry (design.md Decision 3). Each entry seeds/
+# matches an Agent row by name (src/domain/agent/commands.ts's
+# syncAgentRegistry). Exactly one entry must have `default: true`, validated
+# at config-load time (lib/config.ts's loadAgents). "mock-agent-v1" is the
+# default here because that's this codebase's actual current fallback
+# behavior with no ANTHROPIC_API_KEY configured — the same executor every
+# existing seeded/test draft in this repo was already produced by, so
+# treating it as the default keeps an un-migrated pipeline's behavior
+# unchanged (Migration Plan step 3).
+agents:
+  - name: mock-agent-v1
+    provider: mock
+    model: mock-agent-v1
+    default: true
+
+  - name: claude-sonnet-5
+    provider: claude
+    model: claude-sonnet-5
