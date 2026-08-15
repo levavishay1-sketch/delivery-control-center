@@ -96,20 +96,11 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 10: Fixed Audit Trail (2 tasks)
+## Task Group 10: Fixed Audit Trail (2 tasks) — ✅ DONE
 
-**10.1** Update `GET /audit` Server Component with filters and pagination.
-- Filter inputs: project, actor, action, date range.
-- Pagination: 20/50/100 rows per page (user-selectable).
-- Remove hard 200-row truncation.
-- Each row: timestamp, actor, action, object, link.
-- Tests: filters work, pagination works, authorization enforced.
+- [x] 10.1 Implemented `listAuditEvents(ctx, filters)` (`src/domain/audit/queries.ts`) with project/actor/action-category/date-range filters and real `skip`/`take` pagination — the old `listRecentAuditEvents(ctx, limit=200)` hard cap is gone from the page's data path entirely (kept only for the Dashboard's "top 10" recent-activity feed, an intentionally-small preview, not the full trail). **Deviation — "Action" is a category dropdown over free text, not a stored enum**: `AuditEvent.action` has always been a free-text sentence (e.g. `"Alice created work item \"Fix login bug\""`, one of ~19 unique interpolated templates across the domain layer, predating Slice 1 — not an enum like the spec's example values `WORK_ITEM_CREATED`/`BLOCKER_CREATED` assume). Rather than leave "Action" unfilterable or expose ~19 near-duplicate free-text options, added an `ACTION_CATEGORIES` table mapping each template to a distinctive substring (e.g. `'created blocker on "'` → "Blocker Created") and filtering via `contains`. Reworking `recordAuditEvent()` and every call site to write a stored action code is a schema/write-path change out of scope for a filtering UI task — flagged here rather than silently worked around. "Actor" dropdown (`getAuditActors`) is dynamic per the spec: distinct real users with events in scope, narrowed to the selected project when one is chosen, plus System/AI pseudo-actors only when such events actually exist in scope. Filters are GET query params on a plain `<form method="GET">` — no client JS needed, matching the app's existing server-rendered-form convention (`AddProjectForm` aside, which is genuinely interactive). Tests: `src/domain/audit/queries.test.ts`, 8 integration tests — critically, one creates 205 events for one project (more than the old 200-row cap) and asserts every page beyond it is reachable, proving the truncation bug is actually fixed rather than just "code looks right"; plus project/actor/action/date-range filtering and cross-client authorization scoping.
 
-**10.2** Responsive design for audit trail.
-- Desktop: table layout.
-- Mobile: card layout.
-- Accessible: ARIA labels, keyboard navigation.
-- Commit: "Fix audit trail with filters and pagination"
+- [x] 10.2 Each row shows timestamp (absolute, with the raw ISO string in a `title` attribute for hover per the spec's "absolute on hover"), actor icon, the action sentence, actor name, and a link to the affected work item/pipeline where one exists. Layout: the existing card-list pattern already used by every other Slice 1 page (Attention Center, Dashboard, 360 Timeline) rather than a literal `<table>` — this app has no HTML table anywhere; introducing one only here would be inconsistent, and the card layout already satisfies the spec's semantic/ARIA/mobile-responsive requirements without a media-query breakpoint switch. Pagination: Previous/Next links (disabled state via a plain `<span>` at the boundaries) plus "Showing X–Y of Z events (filtered)" and "Page N of M", all preserving the active filters in the query string. "Clear Filters" link appears only when a filter is active. Build/Lint/Tests: `npm run build` ✓, `npm run lint` ✓, `npm test` (76/76 passing, 8 new). **Live verification** (real Postgres, running dev server): loaded `/audit`, confirmed "Showing 1–20 of 23 events" and a working `page=2` link ("21–23 of 23", "Page 2 of 2"); filtered by `action=blocker_created` and confirmed exactly the blocker-creation events matched (0 "created work item" events leaked through). Commit: "Fix audit trail with filters and pagination".
 
 ---
 
