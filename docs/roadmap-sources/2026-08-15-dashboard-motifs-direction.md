@@ -86,3 +86,25 @@ reference's purple — no accent-color change is actually needed.
 The user confirmed the synthesized direction above (six adoptions,
 mapped to real entities; status-color and one-accent-color rules stay
 intact) rather than the literal colorful-card look.
+
+## Superseding instruction — broader design mandate
+
+Immediately after confirming the above, the user gave this instruction
+verbatim, which widens the brief from "adopt these six fixed items under
+Slice 7's existing rules" to a genuine design-judgment mandate — the
+agent's own synthesis below (not yet written at the time this note was
+added) supersedes the fixed six-item list where they diverge:
+
+> I don't want to copy this reference literally. I want you to learn its
+> visual language and apply the same level of polish, hierarchy, color,
+> spacing, cards, navigation and overall SaaS feel to Delivery Control
+> Center. Use your understanding of our product to decide which elements
+> translate well and which don't. The goal is a beautiful, modern,
+> premium product — not a generic internal tool. Do not blindly follow
+> either the reference or the previous design spec; use your design
+> judgment to create the best fit for our product.
+
+This explicitly releases the agent from treating Slice 7's design-system
+spec as unquestionable — it may be revised, not just extended, if the
+agent's design judgment calls for it. The revised direction will be
+appended to this file once produced and confirmed.
