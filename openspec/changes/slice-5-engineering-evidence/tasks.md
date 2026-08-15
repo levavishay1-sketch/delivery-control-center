@@ -36,10 +36,10 @@
 
 ## 7. API routes
 
-- [ ] 7.1 `POST /api/projects/[id]/repository` (link), `DELETE /api/projects/[id]/repository` (unlink).
-- [ ] 7.2 `POST /api/work-items/[id]/evidence` (link a PR), `DELETE /api/evidence/[id]` (unlink).
-- [ ] 7.3 `POST /api/work-items/[id]/completion-exception` (approve an exception).
-- [ ] 7.4 `GET /api/work-items/[id]/evidence` (evidence + policy state, for the Evidence tab).
+- [x] 7.1 `POST /api/projects/[id]/repository` (link), `DELETE /api/projects/[id]/repository` (unlink).
+- [x] 7.2 `POST /api/work-items/[id]/evidence` (link a PR), `DELETE /api/evidence/[id]` (unlink).
+- [x] 7.3 `POST /api/work-items/[id]/completion-exception` (approve an exception).
+- [x] 7.4 `GET /api/work-items/[id]/evidence` (evidence + policy state, for the Evidence tab). (Combined into the same route file as 7.2's POST, matching the project's convention of one route.ts per resource path with multiple HTTP method exports.)
 
 ## 8. UI — Code & Changes, Tests, Evidence tabs
 
