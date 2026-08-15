@@ -154,11 +154,20 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
   });
 }
 
-/** Worker-side: loads what's needed to run the AI executor for a queued DRAFT_STAGE job. clarifyQuestions is included so a CLARIFY redraft after answering can fold Q&A into context. */
+/**
+ * Worker-side: loads what's needed to run the AI executor for a queued DRAFT_STAGE job.
+ * clarifyQuestions is included so a CLARIFY redraft after answering can fold Q&A into context.
+ * approvals (most recent first, one row) is included so a redraft after a human rejection can
+ * fold the rejection comment into context — see Task Group 9.
+ */
 export async function getStageForDrafting(stageId: string) {
   return db.stage.findUniqueOrThrow({
     where: { id: stageId },
-    include: { pipeline: { include: { workItem: { include: { project: true } }, stages: true } }, clarifyQuestions: true },
+    include: {
+      pipeline: { include: { workItem: { include: { project: true } }, stages: true } },
+      clarifyQuestions: true,
+      approvals: { orderBy: { decidedAt: "desc" }, take: 1 },
+    },
   });
 }
 

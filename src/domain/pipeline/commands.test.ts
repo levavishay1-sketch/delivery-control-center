@@ -213,6 +213,25 @@ describe("draftStage / completeStageDraft / revertStageDraftFailure", () => {
     expect(versions[1].content).toBe("# Draft v2, addressing feedback");
   });
 
+  it("a redraft's recorded context (getStageForDrafting) includes the prior rejection comment", async () => {
+    const project = await createProjectWithApprovedConstitution("Rejection Context Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Feeds rejection feedback forward" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const firstStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+
+    await draft(managerCtx, firstStage.id);
+    const firstDraft = await runStageDraftJob(firstStage.id, "# Draft v1");
+    await rejectStage(managerCtx, firstDraft.id, "Missing a rollback plan for the migration step.");
+
+    await draft(managerCtx, firstStage.id);
+    // Same query the worker's DRAFT_STAGE handler uses to build executor context (Task Group 9) —
+    // its most recent Approval row is the rejection that caused this redraft.
+    const forDrafting = await getStageForDrafting(firstStage.id);
+    expect(forDrafting.approvals).toHaveLength(1);
+    expect(forDrafting.approvals[0].decision).toBe("REJECTED");
+    expect(forDrafting.approvals[0].comment).toBe("Missing a rollback plan for the migration step.");
+  });
+
   it("exhausted retries leave the stage REJECTED (visibly failed, not stuck) and block the pipeline", async () => {
     const project = await createProjectWithApprovedConstitution("Exhaustion Project");
     const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Fails to draft" });

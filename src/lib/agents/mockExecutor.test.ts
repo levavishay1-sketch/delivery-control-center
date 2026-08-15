@@ -68,3 +68,16 @@ describe("mockExecutor.executeStage(ANALYZE)", () => {
     expect(withPriorStages.promptTokens).toBeGreaterThan(withoutPriorStages.promptTokens);
   });
 });
+
+describe("mockExecutor.executeStage — redraft feedback (Task Group 9)", () => {
+  it("folds a rejection comment into the filled instructions the mock drafts from", async () => {
+    const withRejection = await mockExecutor.executeStage("PLAN", {
+      ...baseContext,
+      rejectionComment: "Missing a rollback plan for the migration step.",
+    });
+    const withoutRejection = await mockExecutor.executeStage("PLAN", baseContext);
+    // The mock's cost/token estimate is derived from the filled instructions text, so folding
+    // in the rejection comment should measurably increase the estimated prompt tokens.
+    expect(withRejection.promptTokens).toBeGreaterThan(withoutRejection.promptTokens);
+  });
+});

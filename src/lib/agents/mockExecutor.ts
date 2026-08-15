@@ -18,7 +18,7 @@ function formatPriorStagesContent(priorStagesContent?: { type: StageType; conten
 }
 
 function fillTemplate(template: string, context: StageExecutionContext): string {
-  const filled = template
+  let filled = template
     .replaceAll("{{title}}", context.workItemTitle)
     .replaceAll("{{description}}", context.workItemDescription || "(no description provided)")
     .replaceAll("{{source}}", context.workItemSource)
@@ -26,9 +26,16 @@ function fillTemplate(template: string, context: StageExecutionContext): string 
     .replaceAll("{{previousStageContent}}", context.previousStageContent || "(none)")
     .replaceAll("{{priorStagesContent}}", formatPriorStagesContent(context.priorStagesContent));
 
-  if (!context.clarifyAnswers?.length) return filled;
-  const answers = context.clarifyAnswers.map((qa) => `- Q: ${qa.question}\n  A: ${qa.answer}`).join("\n");
-  return `${filled}\n\nPreviously asked clarification questions and their answers:\n${answers}`;
+  if (context.clarifyAnswers?.length) {
+    const answers = context.clarifyAnswers.map((qa) => `- Q: ${qa.question}\n  A: ${qa.answer}`).join("\n");
+    filled = `${filled}\n\nPreviously asked clarification questions and their answers:\n${answers}`;
+  }
+
+  if (context.rejectionComment) {
+    filled = `${filled}\n\nThis stage was previously rejected with this feedback — address it in this draft:\n${context.rejectionComment}`;
+  }
+
+  return filled;
 }
 
 /**

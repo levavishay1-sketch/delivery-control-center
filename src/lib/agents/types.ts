@@ -40,6 +40,8 @@ export interface StageExecutionContext {
   clarifyAnswers?: { question: string; answer: string }[];
   /** Every prior DONE/APPROVED stage's content, present only when drafting ANALYZE — its cross-artifact consistency check needs more than just the immediately preceding stage. See Task Group 7. */
   priorStagesContent?: { type: StageType; content: string }[];
+  /** The comment from the most recent human rejection of this exact stage, present only when redrafting after a REJECTED gate decision — see Task Group 9. */
+  rejectionComment?: string;
 }
 
 export interface StageExecutionResult {

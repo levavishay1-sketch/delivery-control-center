@@ -75,8 +75,8 @@ established pattern).
 
 ## Task Group 9: Redraft Feedback (2 tasks)
 
-- [ ] 9.1 Extend the drafting job's context-building step (wherever `previousStageContent` is assembled today) to also include: the most recent `Approval` row's `comment` for this stage if it was a rejection, and any `ClarifyQuestion`/`answer` pairs recorded during this run — passed to `getAgentExecutor().executeStage()` as additional context fields.
-- [ ] 9.2 Update `mockExecutor.ts` and `claudeExecutor.ts` (and the `StageExecutionContext` interface) to accept and use the new context fields. Tests: a redraft's recorded context includes the prior rejection comment; a mock-executor test asserts the comment reaches the "prompt" the mock fills from. Commit: "Feed rejection comments and clarification answers into redrafts"
+- [x] 9.1 Extend the drafting job's context-building step (wherever `previousStageContent` is assembled today) to also include: the most recent `Approval` row's `comment` for this stage if it was a rejection, and any `ClarifyQuestion`/`answer` pairs recorded during this run — passed to `getAgentExecutor().executeStage()` as additional context fields.
+- [x] 9.2 Update `mockExecutor.ts` and `claudeExecutor.ts` (and the `StageExecutionContext` interface) to accept and use the new context fields. Tests: a redraft's recorded context includes the prior rejection comment; a mock-executor test asserts the comment reaches the "prompt" the mock fills from. Commit: "Feed rejection comments and clarification answers into redrafts"
 
 ## Task Group 10: Pipeline Detail Page & Constitution UI (3 tasks)
 

@@ -43,6 +43,14 @@ async function handleDraftStageJob(payload: JobPayload): Promise<void> {
           .map((s) => ({ type: s.type, content: s.content! }))
       : undefined;
 
+  // A redraft after a human rejection should see why it was rejected, not guess again from
+  // scratch — see Task Group 9. The most recent Approval row on this stage is only relevant
+  // here if it was a REJECTED decision (an earlier APPROVED decision would mean this is a
+  // flagged-stage redraft after the fact, not a rejection redraft).
+  const latestApproval = stage.approvals[0];
+  const rejectionComment =
+    latestApproval?.decision === "REJECTED" && latestApproval.comment ? latestApproval.comment : undefined;
+
   const result = await getAgentExecutor().executeStage(stage.type, {
     workItemTitle: stage.pipeline.workItem.title,
     workItemDescription: stage.pipeline.workItem.description ?? "",
@@ -51,6 +59,7 @@ async function handleDraftStageJob(payload: JobPayload): Promise<void> {
     previousStageContent: previousStage?.content ?? undefined,
     clarifyAnswers: answeredClarifyQuestions.length > 0 ? answeredClarifyQuestions : undefined,
     priorStagesContent,
+    rejectionComment,
   });
 
   await completeStageDraft(stageId, result);
