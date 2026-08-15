@@ -106,5 +106,67 @@ added) supersedes the fixed six-item list where they diverge:
 
 This explicitly releases the agent from treating Slice 7's design-system
 spec as unquestionable — it may be revised, not just extended, if the
-agent's design judgment calls for it. The revised direction will be
-appended to this file once produced and confirmed.
+agent's design judgment calls for it.
+
+## Second superseding instruction — visual energy, not just restraint
+
+In response to the agent's first synthesis (Linear/Stripe/Vercel-style
+restrained premium direction), the user gave this instruction verbatim,
+correcting the direction toward more visual energy while still rejecting
+literal copying:
+
+> Go ahead, but one important clarification: I don't want the result to
+> be merely "premium/minimal SaaS." I want it to carry the same visual
+> energy and liveliness as the reference — rich cards, visible color,
+> layered/tinted surfaces, gradients where appropriate, strong visual
+> hierarchy, depth, motion and personality. Learn the reference's visual
+> language and emotional impact, not just its restraint. The product
+> should feel alive at first glance while remaining professional and
+> operationally focused. Do not copy the reference literally. Use design
+> judgment to translate that visual energy into Delivery Control Center.
+
+The agent's final synthesis, reconciling this with the earlier
+"meaningful color only, no arbitrary decoration" position, is recorded
+below.
+
+## Final synthesis
+
+**The reconciliation**: richness comes from using the product's *real*
+categorical dimensions as color more generously and vividly — not from
+adding meaningless decoration. Two dimensions already exist and were
+under-used: (1) status/health (5-value palette, already built, used only
+in small badges so far) and (2) work-item type (`project`/`task`/`bug`/
+`change` — a small, fixed, real enum, structurally identical to the
+reference's Documents/Photos/Videos/Audios categories). A third,
+optional dimension — a stable per-project/per-client identity color
+(hash-derived from a curated palette, for fast visual scanning across
+many projects) — is the same pattern calendar apps and Notion use for
+workspace/page identity, and is likewise tied to a real, stable identity
+rather than arbitrary.
+
+**Concretely, beyond the first synthesis's token/spacing/hierarchy
+revisions:**
+- Status and type colors get to be *bigger and bolder* — gradient-filled
+  icon badges (not flat low-opacity tints), colored card accents/left
+  borders, colored section washes — not just small pill badges.
+- A per-project/client identity color for quick visual scanning on the
+  Dashboard's project cards, structurally parallel to the reference's
+  folder colors but tied to real project identity, not arbitrary
+  assignment.
+- Gradients on primary buttons, stat-tile icon badges, and AI-related
+  surfaces (leaning into the existing violet "ai" status color).
+- Layered, two-tier shadows and soft color glows behind badges/cards for
+  real depth, not flat single-shadow elevation.
+- Motion: staggered entrance animation for dashboard cards/stat tiles,
+  hover lift/scale on interactive cards, animated count-up on stat-tile
+  numbers, skeleton shimmer loading states — building on the drawer's
+  existing entrance animation rather than introducing a new pattern.
+- A subtle gradient-mesh background wash behind hero/summary sections
+  (Dashboard header, Attention Center header) for atmosphere, kept out
+  of dense data areas (tables, rows) where it would hurt scannability.
+
+**Still held from the earlier synthesis**: no arbitrary/meaningless
+color, no vanity engagement charts, no upsell card, status always ships
+with a stated reason, RTL/i18n from Slice 8 unaffected. The difference
+from the first synthesis is *how generously* the product's real semantic
+color dimensions get to show up, not *whether* color needs a reason.
