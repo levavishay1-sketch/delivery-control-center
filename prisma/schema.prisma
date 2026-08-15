@@ -314,17 +314,15 @@ model Client {
 }
 
 model Project {
-  id                String          @id @default(cuid())
-  clientId          String
-  client            Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  name              String
-  key               String
-  integrationType   IntegrationType @default(MANUAL)
-  integrationConfig Json?
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name        String
+  key         String
   // Slice 3 — unset means "use the client's budget" (see Client.aiBudgetUsd).
-  aiBudgetUsd       Decimal?        @db.Decimal(10, 4)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  aiBudgetUsd Decimal? @db.Decimal(10, 4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   workItems       WorkItem[]
   auditEvents     AuditEvent[]

@@ -22,11 +22,13 @@ export const DEFAULT_AUTH_TYPE: Record<IntegrationType, string> = {
 };
 
 /**
- * Every project has exactly one Connector (design.md decision 1). Existing projects were
- * backfilled by migration; this covers a project created after the backfill ran, or any other
- * gap — idempotent, so a second call for the same project is a no-op that returns the existing row.
- * Accepts an optional transaction client so createProject can create the Connector atomically
- * alongside the Project (design.md decision 1's "the same moment a Project is created").
+ * Every project has exactly one Connector (design.md decision 1), created the same moment the
+ * Project is (see createProject) or backfilled by migration for pre-Slice-4 projects. This is a
+ * defensive fallback for any project somehow missing one (e.g. a row inserted directly, bypassing
+ * createProject) — idempotent, so a second call for the same project is a no-op that returns the
+ * existing row. Falls back to MANUAL/DISCONNECTED rather than reading Project's own columns:
+ * Project.integrationType/integrationConfig were dropped once Connector became the sole source of
+ * truth (design.md Migration Plan step 4).
  */
 export async function getOrCreateConnectorForProject(projectId: string, client: DbClient = db) {
   const existing = await client.connector.findUnique({ where: { projectId } });
@@ -38,13 +40,12 @@ export async function getOrCreateConnectorForProject(projectId: string, client: 
   return client.connector.create({
     data: {
       projectId,
-      type: project.integrationType,
+      type: "MANUAL",
       mode: "PULL",
-      authType: DEFAULT_AUTH_TYPE[project.integrationType],
+      authType: DEFAULT_AUTH_TYPE.MANUAL,
       syncMode: "MANUAL",
       capabilities: [],
-      config: project.integrationConfig ?? undefined,
-      status: project.integrationType === "MANUAL" ? "DISCONNECTED" : "CONNECTED",
+      status: "DISCONNECTED",
     },
   });
 }

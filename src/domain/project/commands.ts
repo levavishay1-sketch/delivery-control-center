@@ -1,9 +1,9 @@
 import { db } from "@/lib/db";
-import type { IntegrationType, Prisma } from "@/generated/prisma/client";
+import { Prisma, type IntegrationType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 import { encryptIntegrationConfig } from "@/lib/integrations";
-import { getOrCreateConnectorForProject } from "@/domain/connector/commands";
+import { DEFAULT_AUTH_TYPE } from "@/domain/connector/commands";
 
 export interface CreateProjectInput {
   clientId: string;
@@ -13,23 +13,32 @@ export interface CreateProjectInput {
   integrationConfig?: Record<string, unknown>;
 }
 
+/**
+ * Creates the Project and its Connector together, in the same transaction (design.md decision 1
+ * — every Project has exactly one Connector "the same moment it's created"). The connector, not
+ * Project, is the sole source of truth for how this project's external tracker is reached
+ * (design.md Migration Plan step 4 — Project.integrationType/integrationConfig were dropped once
+ * the cutover was verified).
+ */
 export async function createProject(ctx: AuthContext, input: CreateProjectInput) {
   requireClientRole(ctx, input.clientId, WRITE_ROLES);
   const integrationType = input.integrationType ?? "MANUAL";
   return db.$transaction(async (tx) => {
     const project = await tx.project.create({
+      data: { clientId: input.clientId, name: input.name, key: input.key },
+    });
+    await tx.connector.create({
       data: {
-        clientId: input.clientId,
-        name: input.name,
-        key: input.key,
-        integrationType,
-        integrationConfig: encryptIntegrationConfig(integrationType, input.integrationConfig) as
-          | Prisma.InputJsonValue
-          | undefined,
+        projectId: project.id,
+        type: integrationType,
+        mode: "PULL",
+        authType: DEFAULT_AUTH_TYPE[integrationType],
+        syncMode: "MANUAL",
+        capabilities: [],
+        config: encryptIntegrationConfig(integrationType, input.integrationConfig) as Prisma.InputJsonValue | undefined,
+        status: integrationType === "MANUAL" ? "DISCONNECTED" : "CONNECTED",
       },
     });
-    // Slice 4 — every Project gets a Connector the same moment it's created (design.md decision 1).
-    await getOrCreateConnectorForProject(project.id, tx);
     return project;
   });
 }

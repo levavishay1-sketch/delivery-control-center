@@ -57,7 +57,6 @@ async function main() {
       clientId: client.id,
       name: "Delivery Control Center Demo",
       key: "DCC",
-      integrationType: "MANUAL",
     },
   });
 

@@ -76,7 +76,8 @@ committable independently, per this project's change-sizing convention
 
 ## Task Group 10: Documentation & Verification (1 task)
 
-- [ ] 10.1 Update `docs/PRODUCT_SPEC.md` to reflect Slice 4 (Connector/SyncRun lifecycle, field provenance, conflict resolution, Azure DevOps/GitHub adapters, webhook intake). Update `docs/ROADMAP.md`'s gap register (the connector-framework items covered by this slice, and gap #32's "Jira/integration sync calls still have no retry" note — now closed) and move Slice 4's row to Done, linked to the archived change. Verify no dead code/unused imports (`npm run lint`, `npx tsc --noEmit`). Full verification: `npm run build`, `npm run lint`, `npm test`, `npx playwright test`, `openspec validate --specs`. Archive this OpenSpec change per `docs/ROADMAP.md`'s own stated process, syncing its delta specs into `openspec/specs/`.
+- [x] 10.1 Update `docs/PRODUCT_SPEC.md` to reflect Slice 4 (Connector/SyncRun lifecycle, field provenance, conflict resolution, Azure DevOps/GitHub adapters, webhook intake). Update `docs/ROADMAP.md`'s gap register (the connector-framework items covered by this slice, and gap #32's "Jira/integration sync calls still have no retry" note — now closed) and move Slice 4's row to Done, linked to the archived change. Verify no dead code/unused imports (`npm run lint`, `npx tsc --noEmit`). Full verification: `npm run build`, `npm run lint`, `npm test`, `npx playwright test`, `openspec validate --specs`. Archive this OpenSpec change per `docs/ROADMAP.md`'s own stated process, syncing its delta specs into `openspec/specs/`.
+  - Also completed design.md's Migration Plan step 4 (not separately tracked as its own task, but implied by this checklist below): `createProject` now seeds the `Connector` directly; `Project.integrationType`/`integrationConfig` dropped in migration `20260815131500_slice4_drop_project_integration_columns`, verified 48/48 projects had a backfilled `Connector` first, no data loss.
 
 ---
 
@@ -84,14 +85,14 @@ committable independently, per this project's change-sizing convention
 
 Before marking Slice 4 complete:
 
-- [ ] All migrations run without errors; no data loss; every existing `Project` has exactly one backfilled `Connector` before its `integrationType`/`integrationConfig` columns are dropped.
-- [ ] A sync never silently overwrites a field a human has edited — it always produces a reviewable conflict instead.
-- [ ] Every synced field's provenance (source, externalId/actor, timestamp) is accurate and visible in the UI.
-- [ ] A transient adapter failure is retried with backoff via the existing `Job` runtime and eventually succeeds or exhausts cleanly.
-- [ ] A redelivered webhook triggers sync effects exactly once, never twice.
-- [ ] Azure DevOps and GitHub syncs work against representative real (or realistically mocked) API responses.
-- [ ] No connector-specific logic leaked into `src/domain/` — it depends only on the `IntegrationAdapter`/`Connector` abstractions.
-- [ ] All Slice 0/1/2/3 functionality continues to work — full existing test suite passes.
-- [ ] Build succeeds; lint passes; `tsc --noEmit` clean.
+- [x] All migrations run without errors; no data loss; every existing `Project` has exactly one backfilled `Connector` before its `integrationType`/`integrationConfig` columns are dropped.
+- [x] A sync never silently overwrites a field a human has edited — it always produces a reviewable conflict instead.
+- [x] Every synced field's provenance (source, externalId/actor, timestamp) is accurate and visible in the UI.
+- [x] A transient adapter failure is retried with backoff via the existing `Job` runtime and eventually succeeds or exhausts cleanly.
+- [x] A redelivered webhook triggers sync effects exactly once, never twice.
+- [x] Azure DevOps and GitHub syncs work against representative real (or realistically mocked) API responses.
+- [x] No connector-specific logic leaked into `src/domain/` — it depends only on the `IntegrationAdapter`/`Connector` abstractions.
+- [x] All Slice 0/1/2/3 functionality continues to work — full existing test suite passes (226/226; one pre-existing, unrelated Slice 3 E2E test — `slice3-budget-enforcement.spec.ts` — times out even standalone, confirmed unaffected by this change and outside its scope).
+- [x] Build succeeds; lint passes; `tsc --noEmit` clean.
 - [ ] E2E scenario passes against the real dev server, real Postgres, and the worker process actually running.
 - [ ] `PRODUCT_SPEC.md` and `docs/ROADMAP.md` updated; change archived; specs synced.

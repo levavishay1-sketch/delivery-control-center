@@ -19,8 +19,7 @@ export async function listProjectsForHome(ctx: AuthContext) {
         orderBy: { createdAt: "desc" },
         include: { pipeline: true },
       },
-      // Slice 4 — the actual current sync type/status lives on Connector now, not
-      // Project.integrationType (which stays frozen at whatever it was pre-Slice-4).
+      // Slice 4 — the current sync type/status lives on Connector, not Project.
       connector: true,
     },
   });

@@ -1,6 +1,6 @@
 # Delivery Control Center — Product & System Specification
 
-Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 3).
+Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 4).
 Every claim below is traceable to a file in this repo.
 Status tags used throughout:
 
@@ -11,7 +11,7 @@ Status tags used throughout:
 - **Missing** — not present at all; noted because the product's own stated
   goals imply it should exist.
 
-This revision folds in **four** shipped slices: **Slice 0** (tenancy,
+This revision folds in **five** shipped slices: **Slice 0** (tenancy,
 identity, auth — archived at
 `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/`),
 **Slice 1** (the delivery model and the Attention Center — archived at
@@ -19,11 +19,16 @@ identity, auth — archived at
 (SDD as a subsystem — Constitution versioning, Clarify/Analyze stages,
 versioned stage artifacts, a durable job-backed run state machine, role-based
 gate policy, redraft feedback — archived at
-`openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/`), and **Slice 3**
+`openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/`), **Slice 3**
 (Agents as real execution resources — agent registry with per-project routing,
 `AgentRun` recording per draft, per-stage cost rollups, budget enforcement with
 an audited override flow, and permissioned run-detail visibility — archived at
-`openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/`).
+`openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/`),
+and **Slice 4** (Connector framework — `Connector`/`SyncRun` entities run
+through the `Job` runtime, field-level provenance, manual-wins sync conflict
+resolution, real Azure DevOps/GitHub adapters, idempotent webhook intake —
+archived at
+`openspec/changes/archive/2026-08-15-slice-4-connector-framework/`).
 The previous revision of this file predated Slice 2 and described a fixed
 five-stage pipeline with uniform approval gating and an automatically-created,
 per-work-item Constitution stage — none of that is still true.
@@ -462,9 +467,9 @@ scope, gap-register item #27).
   mid-call; a stage never gets silently stuck in `AI_DRAFTING` with
   nothing to pick it back up. Retries with exponential backoff up to
   `maxAttempts`, then reverts to a visibly-failed state a human can act
-  on. This is gap-register item #32 ("retry/backoff on AI calls"), closed
-  for AI drafting specifically — Jira sync calls still have none (Slice 4
-  territory).
+  on. This is gap-register item #32 ("retry/backoff on AI calls"),
+  closed for AI drafting in Slice 2 and for connector sync in Slice 4
+  (§27) — both now run through the same `Job` runtime pattern.
 - `CLARIFY` and `ANALYZE` drafts can return structured output instead of
   (or alongside) prose content — a list of clarification questions, or a
   list of severity-rated findings — validated by a Zod schema
@@ -875,8 +880,56 @@ stateDiagram-v2
 
 ## 27. External systems and connectors
 
-Unchanged. Jira Cloud (read-only), Anthropic Claude API, Postgres. No
-GitHub/GitLab, no CI system, no email/Slack, no billing/invoicing system.
+**Rebuilt in Slice 4.** A project's connection to an external tracker is
+now a first-class `Connector` record (`type`, `mode`, `authType`,
+`syncMode`, `capabilities`, `status: CONNECTED|DISCONNECTED|ERROR`,
+`lastSyncAt`) — replacing the bare `Project.integrationType`/
+`integrationConfig` fields those columns still hold (kept as the backfill
+source, no longer read by application code). Real adapters now exist for
+**Jira Cloud** (read-only, unchanged from Slice 2), **Azure DevOps**
+(WIQL query + work-item-details fetch), and **GitHub** (Issues API,
+filtering out pull requests, which share the same endpoint) — all
+implementing the same `IntegrationAdapter` interface, so
+`src/domain/connector/` calls `getIntegrationAdapter(connector.type)`
+without ever branching on a specific provider.
+
+- **Every sync is a `SyncRun`, run through the `Job` runtime**
+  (`src/domain/connector/commands.ts`'s `triggerSync`/`triggerSyncFromWebhook`
+  → `worker.ts`'s `handleSyncProjectJob`), inheriting retry-with-backoff
+  and crash-durability from the same pattern Slice 2 established for AI
+  drafting — closing gap-register item #32's remaining half ("Jira sync
+  calls still have no retry," §13). A connector's sync history
+  (`SyncRun` list: status, item counts, timing) is visible to any
+  read-capable role.
+- **Field-level provenance**: every work-item field a sync can write
+  (`title`/`description`/`status`/`externalUrl`) has a current
+  `FieldProvenance` row recording its source (`SYNC` with the external
+  id, or `MANUAL` with the editing user) and timestamp — answering "where
+  did this value come from" (gap-register item unnamed in the original
+  register but explicit in the Slice 4 source scope).
+- **Sync never silently overwrites a human edit.** Before writing a
+  field, a sync checks that field's current provenance: if it was last
+  set manually and the incoming value differs, the write is withheld and
+  a `SyncConflict` is recorded instead (upserted per `[workItem, field]`,
+  not append-only — a later sync while one is still open updates the
+  conflict in place). A write-capable role resolves it by keeping the
+  manual value or accepting the incoming one; either way the resolution
+  is audited. An unresolved conflict surfaces on the Attention Center
+  (a new `syncConflicts` entry type) and on the project's own Settings
+  page, alongside the connector configuration form and sync history.
+- **Idempotent webhook intake** (`POST /api/webhooks/github/[connectorId]`,
+  `POST /api/webhooks/azure-devops/[connectorId]`): each push-capable
+  adapter verifies the delivery before touching the database (GitHub:
+  HMAC-SHA256 signature; Azure DevOps: Basic Auth on the webhook URL),
+  then a `WebhookDelivery` dedup row (unique per `[connectorId,
+  deliveryId]`) ensures a redelivered event triggers a sync exactly once.
+
+Still absent: GitLab, any CI system, email/Slack, billing/invoicing. No
+scheduled/polled sync — `Connector.syncMode` records a project's intent
+(`MANUAL`/`SCHEDULED`) as data, but every sync in this slice is still
+triggered by a human action or a verified webhook, never a timer
+(deliberate Non-Goal, not an oversight — see the archived change's
+design.md).
 
 ## 28. Security boundaries
 
@@ -911,6 +964,13 @@ explicitly started, stage content overwritten instead of versioned, and
 the Audit Trail's project filter silently excluding pipeline/stage-scoped
 events (matched `AuditEvent.projectId` directly, which only project-level
 actions like Constitution set — found by Slice 2's own E2E test).
+**Fixed in Slice 3**: no agent registry or per-project AI routing, AI cost
+never summed across drafts, no budget/threshold enforcement, raw run
+detail visible to read-only roles. **Fixed in Slice 4**: no retry/backoff
+on Jira sync calls (now job-backed, same pattern as Slice 2's AI
+drafting), no field-level provenance ("where did this value come from"
+was unanswerable), a re-sync silently overwriting a human's manual edit,
+Azure DevOps declared but stubbed out, no webhook intake at all.
 
 Still outstanding:
 
@@ -931,9 +991,10 @@ Still outstanding:
 - No pagination on the Dashboard's project/work-item lists (only `/audit`
   and the 360° Record's Timeline have it).
 - No push notifications for Attention Center items (§22).
-- Global, single-tenant AI/Jira credentials despite per-client isolation
-  existing at the schema level.
-- No retry/backoff on Jira sync calls (AI drafting now has it — see §13).
+- Global, single-tenant AI credentials despite per-client isolation
+  existing at the schema level (Connector-level credentials now exist for
+  sync — §27 — but the AI executor's own `ANTHROPIC_API_KEY` fallback
+  path remains a single shared value).
 - `IMPLEMENT` stays an AI-drafted document, not real code execution
   (gap-register item #23, deliberately left open — see §14).
 - Two more `Job`-runtime edge cases worth naming even though they didn't
@@ -1081,10 +1142,32 @@ Covered in §25.
   a project filter that correctly includes pipeline/stage-scoped events.
 - Full, transactionally-consistent, append-only audit trail (now
   work-item-scoped, not just pipeline/project-scoped).
-- Real per-draft token/cost tracking.
-- 149 domain-layer integration tests, 6 Playwright E2E tests (up from 88
-  and 5 — Slice 2 added ~60 unit tests and a full end-to-end lifecycle
-  scenario, which itself caught and fixed 4 real bugs before shipping).
+- Real per-draft token/cost tracking, now summed per work item/project/
+  client with configurable budgets and an audited override past them.
+  *(Slice 3.)*
+- Agent registry with per-stage-type routing, snapshotted per pipeline the
+  same way `stageSequence` is; every drafting attempt recorded as its own
+  `AgentRun` (status, tokens, cost, retries, structured error), never
+  overwritten by a redraft. *(Slice 3.)*
+- Permissioned run detail: raw error/tool-call detail is write-role-only;
+  a read-only role still sees status and cost. *(Slice 3.)*
+- Connector framework: a project's external-tracker connection is a real,
+  inspectable resource (`Connector`/`SyncRun`), not bare config fields;
+  every sync retried with backoff via the same `Job` runtime AI drafting
+  uses. *(Slice 4.)*
+- Real Azure DevOps and GitHub sync adapters, alongside Jira — all three
+  implementing the same `IntegrationAdapter` interface. *(Slice 4.)*
+- Field-level provenance ("where did this value come from") and
+  manual-wins sync conflict resolution — a sync can never silently
+  overwrite a human edit; it surfaces a reviewable conflict instead, shown
+  on the Attention Center and the project's Settings page. *(Slice 4.)*
+- Idempotent webhook intake for GitHub and Azure DevOps, verified by
+  signature/Basic-Auth before touching the database. *(Slice 4.)*
+- 226 domain-layer integration tests, 8 Playwright E2E tests (up from 149
+  and 6 — Slice 3 added budget/cost-rollup coverage and its own lifecycle
+  scenario; Slice 4 added connector/provenance/conflict coverage and a
+  scenario that itself caught and fixed a real Server/Client boundary bug
+  before shipping).
 
 ## Missing capabilities
 
@@ -1096,18 +1179,24 @@ Covered in §25.
   section as the items Slice 2 did close).
 - `DELETE` on work items (blocked by the audit-immutability constraint —
   needs a schema decision).
-- Azure DevOps integration (declared, not built).
 - General-purpose read API (public API surface beyond mutations + the
   quick-view aggregate).
 - CI, deployment configuration.
 - Any pagination on the Dashboard's project/work-item lists.
-- Per-client AI/Jira credential isolation actually wired to the fallback
-  path (schema supports it, nothing sets it from the UI).
+- Per-client AI credential isolation actually wired to the fallback path
+  (schema supports it, nothing sets it from the UI) — Connector-level
+  credentials now exist for sync (§27), but this is about the AI
+  executor's own shared `ANTHROPIC_API_KEY`.
 - Ctrl+K command palette / global search.
 - Real code execution for `IMPLEMENT` (stays an AI-drafted document —
   Slice 2 deliberately left this open; see §14).
-- Agent registry, `AgentRun` entity, per-project/client/stage executor
-  routing, AI cost rollups/budgets (Slice 3 territory).
+- Scheduled/polled sync — every sync in Slice 4 is still triggered by a
+  human action or a verified webhook, never a timer (deliberate Non-Goal;
+  `Connector.syncMode` records the intent as data, nothing acts on it yet).
+- Two-way sync (pushing local changes back to Jira/Azure DevOps/GitHub) —
+  Slice 4's adapters are fetch/webhook-in only.
+- Repository/commit/PR/test-run entities, evidence-driven completion
+  (Slice 5 territory).
 
 ## Inconsistencies between UI, backend, and domain model
 
@@ -1147,18 +1236,17 @@ Covered in §25.
 Per `docs/ROADMAP.md`'s slice sequence (source of truth — this section
 summarizes, doesn't override it):
 
-1. **Slice 3 — Agents as real execution resources**: agent registry,
-   `AgentRun` entity, retry/backoff, cost rollups with budgets.
-2. **Slice 4 — Connector framework**: `Connector`/`SyncRun` entities,
-   field-level provenance, conflict handling, Azure DevOps/GitHub adapters.
-3. **Slice 5 — Engineering evidence**: repository/commit/PR/test-run
+1. **Slice 5 — Engineering evidence**: repository/commit/PR/test-run
    entities, Code & Changes / Tests tabs, evidence-driven completion.
-4. **Slice 6 — Configuration Center**: hierarchical config with
+2. **Slice 6 — Configuration Center**: hierarchical config with
    inheritance, impact preview, versioning.
-5. Cheap, high-clarity fixes that don't need a full slice: client-creation
+3. Cheap, high-clarity fixes that don't need a full slice: client-creation
    UI/API; a `WorkItem` delete path (once the audit-immutability question
    is resolved); push notifications for the Attention Center;
-   critical-path analysis over dependencies.
+   critical-path analysis over dependencies; scheduled/polled connector sync.
+
+*(Slice 3 — Agents as real execution resources — and Slice 4 — Connector
+framework — are now Done; see `docs/ROADMAP.md`.)*
 
 ---
 
@@ -1180,20 +1268,26 @@ Attention Center, Quick View drawer, and 360° Delivery Record (Slice 1),
 now joined by a Clarify Q&A panel and Analyze findings panel on the
 pipeline detail page and a dedicated Constitution page (Slice 2), plus an
 agent registry with per-project AI routing, per-run cost tracking and
-budgets, and an audited override flow (Slice 3). It is not yet a
-code/deployment system (Slice 5) — `IMPLEMENT` stays an AI-drafted
-document, not real execution — and several real gaps remain: no
+budgets, and an audited override flow (Slice 3), plus a real connector
+framework with field-level provenance, manual-wins conflict resolution,
+and idempotent webhook intake for Jira/Azure DevOps/GitHub (Slice 4). It
+is not yet a code/deployment system (Slice 5) — `IMPLEMENT` stays an
+AI-drafted document, not real execution — and several real gaps remain: no
 client-creation path, no work-item deletion, no push notifications, no
-critical-path analysis. Its strongest, most fully-realized property remains
-provenance — the audit trail is real, transactionally consistent,
-tenant-scoped, work-item-traceable, and (Slice 2) its project filter now
-actually includes pipeline/stage-scoped events, a real bug fixed along the
-way. Its access-control story is solid and got sharper in Slice 2: gate
-approval is now role-based per stage type, not a single uniform check. The
-product's architecture (swappable `AgentExecutor`/`IntegrationAdapter`,
-config-driven pipeline shape, the `src/domain/<aggregate>/` command/query
-pattern, and now the `Job`-backed durable-execution pattern) has proven
-itself capable of absorbing three slices this large in a row (Slice 2: 13
-task groups, 5 new entities, 1 new page, ~60 new tests; Slice 3: 10 task
-groups, 3 new entities, 2 new API suites, ~60 new tests and an E2E scenario)
-without a rewrite — a reasonable signal for the slices still ahead.
+critical-path analysis, no scheduled sync. Its strongest, most
+fully-realized property remains provenance — the audit trail is real,
+transactionally consistent, tenant-scoped, work-item-traceable, and
+(Slice 2) its project filter now actually includes pipeline/stage-scoped
+events, a real bug fixed along the way, joined in Slice 4 by field-level
+provenance for every synced work-item field. Its access-control story is
+solid and got sharper in Slice 2: gate approval is now role-based per
+stage type, not a single uniform check. The product's architecture
+(swappable `AgentExecutor`/`IntegrationAdapter`, config-driven pipeline
+shape, the `src/domain/<aggregate>/` command/query pattern, and now the
+`Job`-backed durable-execution pattern) has proven itself capable of
+absorbing four slices this large in a row (Slice 2: 13 task groups, 5 new
+entities, 1 new page, ~60 new tests; Slice 3: 10 task groups, 3 new
+entities, 2 new API suites, ~60 new tests and an E2E scenario; Slice 4: 10
+task groups, 5 new entities, 3 real adapters, a new page, ~50 new tests
+and an E2E scenario that caught a real bug before it shipped) without a
+rewrite — a reasonable signal for the slices still ahead.

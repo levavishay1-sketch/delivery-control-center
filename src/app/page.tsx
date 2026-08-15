@@ -184,7 +184,7 @@ export default async function HomePage() {
                       <h3 className="font-medium">
                         {project.name} <span className="opacity-50">({project.key})</span>
                       </h3>
-                      <p className="text-xs opacity-60">{project.connector?.type ?? project.integrationType}</p>
+                      <p className="text-xs opacity-60">{project.connector?.type ?? "MANUAL"}</p>
                     </div>
                     <div className="flex items-center gap-2">
                       <Link href={`/projects/${project.id}/constitution`} className="text-xs underline opacity-70 hover:opacity-100">

@@ -95,16 +95,16 @@ directly from this register; item numbers are referenced there.
 | 29 | AI output → schema → validation → policy → domain command | MISSING *(partially done in Slice 2 — `CLARIFY`'s questions and `ANALYZE`'s findings are now Zod-schema-validated before the domain layer treats them as authoritative; every other stage's raw content still isn't schema-validated the same way, so this is partial, not full, closure)* |
 | 30 | Sandboxed coding runtime | MISSING |
 | 31 | AI cost rollups, budgets, thresholds | KEEP (✓ Slice 3) |
-| 32 | Retry/backoff on AI/integration calls | MISSING *(partially done in Slice 2 — AI drafting (Stage and Constitution) now retries with exponential backoff via the Job runtime; Jira/integration sync calls still have no retry, remains Slice 4 territory)* |
+| 32 | Retry/backoff on AI/integration calls | KEEP (✓ Slice 2 for AI drafting, ✓ Slice 4 for connector sync — both now run through the same `Job` runtime) |
 
 **Integrations, config, evidence, platform**
 
 | # | Item | State |
 |---|---|---|
-| 33 | Connector/SyncRun entities | EXTEND (`IntegrationAdapter` interface exists) |
-| 34 | Conflict handling (manual wins, surfaced) | MISSING |
-| 35 | Field-level provenance | EXTEND (row-level only) |
-| 36 | Azure DevOps adapter | MISSING *(now explicitly rejected rather than silently aliased, Slice 0)* |
+| 33 | Connector/SyncRun entities | KEEP (✓ Slice 4) |
+| 34 | Conflict handling (manual wins, surfaced) | KEEP (✓ Slice 4) |
+| 35 | Field-level provenance | KEEP (✓ Slice 4) |
+| 36 | Azure DevOps adapter | KEEP (✓ Slice 4 — real adapter; GitHub adapter also added, not separately numbered here) |
 | 37 | Repositories/git/PRs/commits/tests awareness | MISSING |
 | 38 | Evidence-driven completion | MISSING |
 | 39 | Hierarchical config, impact preview, versioning | MISSING |
@@ -196,7 +196,7 @@ re-litigate:
 | 1 | The delivery model and the Attention Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 1" | `openspec/changes/archive/2026-08-14-slice-1-delivery-model/` |
 | 2 | SDD as a subsystem | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 2" | `openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/` |
 | 3 | Agents as real execution resources | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | `openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/` |
-| 4 | Connector framework | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | — |
+| 4 | Connector framework | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | `openspec/changes/archive/2026-08-15-slice-4-connector-framework/` |
 | 5 | Engineering evidence | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | — |
 | 6 | Configuration Center | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | — |
 
@@ -254,21 +254,26 @@ Task Group 1); role-based config-driven gate policy; rejection/clarification
 feedback reaching redrafts. Full detail: source §5 "Slice 2"; as-built
 detail: `openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/`.
 
-### Slice 3 — Agents as real execution resources
+### Slice 3 — Agents as real execution resources — **Done**
 
 `Agent` registry with configurable routing; `AgentRun` entity (runtime,
 model, status, tool calls, tokens, cost, retries, error) replacing the
 per-stage cost fields without losing history; retry with backoff; AI cost
 rollups with budgets and hard stops; permissioned visibility of run detail.
-Full detail: source §5 "Slice 3".
+Full detail: source §5 "Slice 3". Archive detail:
+`openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/`.
 
-### Slice 4 — Connector framework
+### Slice 4 — Connector framework — **Done**
 
-`Connector`/`SyncRun` entities; field-level provenance (source, externalId,
-actor, timestamp per value); conflict handling where manual edits win by
-default and conflicts surface for review; Azure DevOps and GitHub adapters;
-idempotent webhook intake; no connector-specific logic inside the core
-domain. Full detail: source §5 "Slice 4".
+`Connector`/`SyncRun` entities, run through the same `Job` runtime AI
+drafting uses (retry with backoff, crash-durable); field-level provenance
+(source, externalId, actor, timestamp per value); conflict handling where
+manual edits win by default and conflicts surface for review — on the
+Attention Center and a new project Settings page; real Azure DevOps and
+GitHub adapters alongside Jira; idempotent webhook intake for both; no
+connector-specific logic inside the core domain. Full detail: source §5
+"Slice 4". Archive detail:
+`openspec/changes/archive/2026-08-15-slice-4-connector-framework/`.
 
 ### Slice 5 — Engineering evidence
 
