@@ -76,10 +76,12 @@ entirely and sees every client. `AuditEvent.userId` now links to the real
 `User` row for `USER`-actor events (`actorName` remains an immutable
 display-name snapshot, also used for the nameless `SYSTEM`/`AI` actors).
 
-`Approval.approverName` is still free text (a pipeline-gate decision isn't
-tied to `Approval.userId` — there is no such column) — this is a narrower,
-pre-existing gap that Slice 1 didn't touch, not evidence that auth is
-missing overall.
+`Approval.approverId` links to the real `User` row (Slice 0); `approverName`
+is kept alongside it as an immutable display-name snapshot, the same
+pattern as `AuditEvent`. A pipeline-gate decision is tied to a verified
+identity, not free text — an earlier revision of this document claimed
+otherwise; corrected here after checking `src/domain/pipeline/commands.ts`
+directly.
 
 ## 4. Main workflows
 
@@ -398,8 +400,10 @@ not create a `Blocker` row, and vice versa.
 
 1. **Pipeline stage gates** (`Approval`) — unchanged from before Slice 1:
    every stage requires exactly one recorded approve/reject before the
-   pipeline can advance. Free-text `approverName`, no roles gating who may
-   decide, no multi-approver/quorum.
+   pipeline can advance, tied to the real approving `User` via
+   `approverId` (Slice 0). No per-stage-type role gating (any write-capable
+   role may approve any stage) and no multi-approver/quorum — both remain
+   Slice 2 scope.
 2. **Work-item `Decision`** (Slice 1, new) — a first-class object with
    `question`/`reason`/`impact`/optional `aiRecommendation`+`aiConfidence`+
    `deadline`. `approveDecision`/`rejectDecision` can be called by *any*
@@ -554,8 +558,10 @@ Pipeline/Stage diagrams unchanged from before Slice 1:
 ```mermaid
 stateDiagram-v2
     [*] --> PENDING: stage created
-    PENDING --> PENDING_APPROVAL: draft (AI executes)
-    REJECTED --> PENDING_APPROVAL: redraft
+    PENDING --> AI_DRAFTING: draft starts
+    REJECTED --> AI_DRAFTING: redraft starts
+    AI_DRAFTING --> PENDING_APPROVAL: draft completes, gated
+    AI_DRAFTING --> DONE: draft completes, requiresApproval=false
     PENDING_APPROVAL --> DONE: approve
     PENDING_APPROVAL --> REJECTED: reject
     DONE --> [*]
@@ -633,10 +639,12 @@ tests.
 
 Still outstanding:
 
-- Dead `StageStatus` values (`AI_DRAFTING`, `APPROVED`) — never assigned.
-- `WorkItem.status` is now displayed everywhere in Slice 1's UI (fixed) —
-  but `Approval.approverName` (pipeline gates) is still free text, not tied
-  to a real `User` row.
+- `StageStatus.APPROVED` remains a dead enum value — `approveStage` sets
+  `DONE` directly, never `APPROVED`. `AI_DRAFTING`, by contrast, is real
+  and assigned (fixed in Slice 0's `real-ai-stage-drafting` change): a
+  drafting stage is set to `AI_DRAFTING` before the executor call and
+  resolved after — this document's previous revision claimed otherwise;
+  corrected here.
 - No client-creation UI/API (§12, §28).
 - No `DELETE` on `WorkItem` (§9) — needs a schema change to avoid
   destroying immutable audit history via cascade.
@@ -770,11 +778,8 @@ Covered in §25.
 
 ## Inconsistencies between UI, backend, and domain model
 
-- `StageStatus.AI_DRAFTING` / `APPROVED` (schema) vs. never reached (code)
-  — unchanged, still dead enum values.
-- `Approval.approverName` (free text) vs. real `User` identity existing
-  everywhere else in the system now — pipeline gates are the one place
-  that still doesn't use a verified identity for the decision itself.
+- `StageStatus.APPROVED` (schema) vs. never reached (code) — still a dead
+  enum value; `AI_DRAFTING` is not (§30).
 - Azure DevOps as a first-class `IntegrationType` (schema/enum) vs.
   silently aliased to the manual adapter (behavior) vs. not offered at all
   (UI) — unchanged.
