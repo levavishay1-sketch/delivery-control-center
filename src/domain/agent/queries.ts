@@ -1,5 +1,7 @@
 import { db } from "@/lib/db";
 import { Prisma } from "@/generated/prisma/client";
+import type { AuthContext } from "@/domain/shared/context";
+import { requireClientRole, ALL_ROLES, WRITE_ROLES } from "@/domain/shared/authz";
 
 /** The registry's current default agent — the one config/workflow.yaml's `agents:` list marks `default: true`. */
 export function getDefaultAgent() {
@@ -50,6 +52,108 @@ export async function getProjectAiCost(projectId: string) {
     }),
   ]);
   return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD);
+}
+
+/**
+ * Loads an AgentRun and the client that owns it, for authorization. Ownership is normally
+ * resolved through whichever Stage/Constitution the run's StageVersion/Constitution row
+ * references — but a still-RUNNING run has neither yet (those links are only written on
+ * completion), so this falls back to the owning Job's payload (stageId/constitutionId) to
+ * resolve ownership even mid-draft.
+ */
+async function loadAgentRunWithClientId(runId: string) {
+  const run = await db.agentRun.findUnique({
+    where: { id: runId },
+    include: {
+      agent: true,
+      job: true,
+      stageVersions: {
+        take: 1,
+        include: { stage: { include: { pipeline: { include: { workItem: { include: { project: true } } } } } } },
+      },
+      constitutions: { take: 1, include: { project: true } },
+    },
+  });
+  if (!run) return null;
+
+  let clientId: string | null =
+    run.stageVersions[0]?.stage.pipeline.workItem.project.clientId ?? run.constitutions[0]?.project.clientId ?? null;
+
+  if (!clientId && run.job) {
+    const payload = run.job.payload as { stageId?: string; constitutionId?: string };
+    if (payload.stageId) {
+      const stage = await db.stage.findUnique({
+        where: { id: payload.stageId },
+        include: { pipeline: { include: { workItem: { include: { project: true } } } } },
+      });
+      clientId = stage?.pipeline.workItem.project.clientId ?? null;
+    } else if (payload.constitutionId) {
+      const constitution = await db.constitution.findUnique({
+        where: { id: payload.constitutionId },
+        include: { project: true },
+      });
+      clientId = constitution?.project.clientId ?? null;
+    }
+  }
+
+  return { run, clientId };
+}
+
+/**
+ * Full AgentRun detail — structured error, token breakdown, everything — restricted to
+ * write-capable roles (design.md's permissioned-visibility requirement). Returns null for a
+ * run that doesn't exist; throws ForbiddenError (via requireClientRole) for a run a caller
+ * lacks write access to.
+ */
+export async function getAgentRunDetail(ctx: AuthContext, runId: string) {
+  const loaded = await loadAgentRunWithClientId(runId);
+  if (!loaded) return null;
+  if (loaded.clientId) requireClientRole(ctx, loaded.clientId, WRITE_ROLES);
+  const {
+    id,
+    agentId,
+    agent,
+    jobId,
+    status,
+    promptTokens,
+    completionTokens,
+    costUsd,
+    retryCount,
+    lastError,
+    toolCalls,
+    startedAt,
+    completedAt,
+    createdAt,
+  } = loaded.run;
+  return {
+    id,
+    agentId,
+    agent,
+    jobId,
+    status,
+    promptTokens,
+    completionTokens,
+    costUsd,
+    retryCount,
+    lastError,
+    toolCalls,
+    startedAt,
+    completedAt,
+    createdAt,
+  };
+}
+
+/**
+ * Status/cost summary only — no structured error, no tool calls — visible to any role with at
+ * least read access to the owning client. What a read-only viewer sees instead of full detail.
+ */
+export async function getAgentRunSummary(ctx: AuthContext, runId: string) {
+  const loaded = await loadAgentRunWithClientId(runId);
+  if (!loaded) return null;
+  if (loaded.clientId) requireClientRole(ctx, loaded.clientId, ALL_ROLES);
+  const { id, agentId, agent, status, promptTokens, completionTokens, costUsd, startedAt, completedAt, createdAt } =
+    loaded.run;
+  return { id, agentId, agent, status, promptTokens, completionTokens, costUsd, startedAt, completedAt, createdAt };
 }
 
 /** Total AI drafting cost across every project under a client. */

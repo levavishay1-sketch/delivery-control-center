@@ -51,8 +51,8 @@ established pattern).
 
 ## Task Group 6: Permissioned Run Detail Visibility (2 tasks)
 
-- [ ] 6.1 `src/domain/agent/queries.ts`: `getAgentRunDetail(ctx, runId)` — `WRITE_ROLES`-gated (full detail including `lastError`/`toolCalls`); a separate `getAgentRunSummary(ctx, runId)` — `ALL_ROLES`-gated (status/cost only, no error/tool detail), used wherever a read-only role needs to see "did this succeed and what did it cost" without the raw failure detail.
-- [ ] 6.2 Tests: a read-only role calling `getAgentRunDetail` is refused (`ForbiddenError`); the same role's `getAgentRunSummary` call succeeds and omits `lastError`/`toolCalls`; a write-capable role's `getAgentRunDetail` call returns full detail.
+- [x] 6.1 `src/domain/agent/queries.ts`: `getAgentRunDetail(ctx, runId)` — `WRITE_ROLES`-gated (full detail including `lastError`/`toolCalls`); a separate `getAgentRunSummary(ctx, runId)` — `ALL_ROLES`-gated (status/cost only, no error/tool detail), used wherever a read-only role needs to see "did this succeed and what did it cost" without the raw failure detail.
+- [x] 6.2 Tests: a read-only role calling `getAgentRunDetail` is refused (`ForbiddenError`); the same role's `getAgentRunSummary` call succeeds and omits `lastError`/`toolCalls`; a write-capable role's `getAgentRunDetail` call returns full detail.
 
 ## Task Group 7: UI (4 tasks)
 
