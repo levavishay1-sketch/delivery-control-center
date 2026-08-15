@@ -3,7 +3,7 @@ import { getNextStageTypeInSequence, getStageConfig, getStageConfigOrFallback, l
 import { recordAuditEvent } from "@/lib/audit";
 import { getApprovedConstitution } from "@/domain/constitution/queries";
 import { enqueueJob } from "@/domain/job/commands";
-import { completeAgentRun, failAgentRun, syncAgentRegistry } from "@/domain/agent/commands";
+import { checkBudget, completeAgentRun, failAgentRun, syncAgentRegistry } from "@/domain/agent/commands";
 import type { FindingSeverity, Prisma, Role, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
@@ -173,6 +173,16 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
 
   if (stage.status !== "PENDING" && stage.status !== "REJECTED" && !flaggedByCriticalAnalyze) {
     throw new Error(`Stage is ${stage.status}; only PENDING or REJECTED stages can be drafted.`);
+  }
+
+  // Checked before enqueueing, not mid-job (design.md Decision 4): a refusal here means no Job
+  // row is ever created, rather than one silently never running after the caller already got a
+  // "queued" response.
+  const budgetCheck = await checkBudget(stage.pipeline.workItem.project.clientId, stage.pipeline.workItem.projectId);
+  if (!budgetCheck.allowed) {
+    throw new ConflictError(
+      `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`
+    );
   }
 
   return db.$transaction(async (tx) => {

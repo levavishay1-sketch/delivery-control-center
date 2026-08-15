@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueJob } from "@/domain/job/commands";
-import { completeAgentRun, failAgentRun } from "@/domain/agent/commands";
+import { checkBudget, completeAgentRun, failAgentRun } from "@/domain/agent/commands";
 import { NotFoundError, ConflictError } from "@/domain/shared/errors";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
@@ -30,6 +30,13 @@ export async function draftConstitution(ctx: AuthContext, projectId: string): Pr
   const project = await db.project.findUnique({ where: { id: projectId } });
   if (!project) throw new NotFoundError("Project not found");
   requireClientRole(ctx, project.clientId, WRITE_ROLES);
+
+  const budgetCheck = await checkBudget(project.clientId, projectId);
+  if (!budgetCheck.allowed) {
+    throw new ConflictError(
+      `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`
+    );
+  }
 
   const constitution = await db.$transaction(async (tx) => {
     const latest = await tx.constitution.findFirst({ where: { projectId }, orderBy: { version: "desc" } });

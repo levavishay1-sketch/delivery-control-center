@@ -27,3 +27,10 @@ export async function createProject(ctx: AuthContext, input: CreateProjectInput)
     },
   });
 }
+
+/** Sets or clears a project's AI spending limit — overrides its client's if set (design.md Decision 4). `null` means no project-level limit. */
+export async function setProjectAiBudget(ctx: AuthContext, projectId: string, budgetUsd: number | null) {
+  const project = await db.project.findUniqueOrThrow({ where: { id: projectId } });
+  requireClientRole(ctx, project.clientId, WRITE_ROLES);
+  return db.project.update({ where: { id: projectId }, data: { aiBudgetUsd: budgetUsd } });
+}
