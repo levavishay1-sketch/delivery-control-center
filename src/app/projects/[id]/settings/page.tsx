@@ -108,7 +108,15 @@ export default async function ProjectSettingsPage({ params }: PageProps<"/projec
             Open Sync Conflicts
           </h2>
           {canManage ? (
-            <ConflictResolutionPanel conflicts={openConflicts} />
+            <ConflictResolutionPanel
+              conflicts={openConflicts.map((c) => ({
+                id: c.id,
+                field: c.field,
+                currentValue: c.currentValue,
+                incomingValue: c.incomingValue,
+                workItem: { id: c.workItem.id, title: c.workItem.title },
+              }))}
+            />
           ) : (
             <p className="text-xs opacity-60">
               {openConflicts.length} field{openConflicts.length === 1 ? "" : "s"} need a write-capable role to resolve.

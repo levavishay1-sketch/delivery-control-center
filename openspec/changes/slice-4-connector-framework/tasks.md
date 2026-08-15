@@ -67,7 +67,7 @@ committable independently, per this project's change-sizing convention
 
 ## Task Group 8: End-to-End Test Scenario (1 task)
 
-- [ ] 8.1 Playwright E2E: configure a project's connector (mock/manual-capable adapter for determinism) → trigger a sync → verify work items are created with provenance recorded → manually edit a synced field → trigger a second sync with a differing incoming value for that field → verify the field is unchanged and a conflict appears in the UI → resolve the conflict by keeping the manual value → verify it stays unchanged and the conflict clears → trigger a third sync with a new differing value → resolve by accepting the incoming value → verify the field updates and its provenance now shows sync as the source → verify sync history shows every `SyncRun` with correct item counts. No console errors.
+- [x] 8.1 Playwright E2E: configure a project's connector (mock/manual-capable adapter for determinism) → trigger a sync → verify work items are created with provenance recorded → manually edit a synced field → trigger a second sync with a differing incoming value for that field → verify the field is unchanged and a conflict appears in the UI → resolve the conflict by keeping the manual value → verify it stays unchanged and the conflict clears → trigger a third sync with a new differing value → resolve by accepting the incoming value → verify the field updates and its provenance now shows sync as the source → verify sync history shows every `SyncRun` with correct item counts. No console errors.
 
 ## Task Group 9: Unit Tests for Domain Logic (2 tasks)
 
