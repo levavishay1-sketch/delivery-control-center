@@ -24,7 +24,7 @@ export function WorkItemTabs({ tabs, initialTabId }: { tabs: TabDef[]; initialTa
 
   return (
     <div>
-      <div role="tablist" aria-label="Work item detail" className="flex gap-1 overflow-x-auto border-b border-black/10 dark:border-white/15">
+      <div role="tablist" aria-label="Work item detail" className="flex gap-1 overflow-x-auto border-b border-border-hairline">
         {tabs.map((tab, index) => (
           <button
             key={tab.id}
@@ -38,8 +38,8 @@ export function WorkItemTabs({ tabs, initialTabId }: { tabs: TabDef[]; initialTa
             onKeyDown={(e) => onKeyDown(e, index)}
             className={`shrink-0 whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
               activeId === tab.id
-                ? "border-foreground opacity-100"
-                : "border-transparent opacity-60 hover:opacity-90"
+                ? "border-accent text-accent"
+                : "border-transparent text-neutral-500 hover:text-foreground dark:text-neutral-400"
             }`}
           >
             {tab.label}

@@ -28,7 +28,7 @@ export function TestsTab({ pullRequests }: { pullRequests: PullRequestWithTests[
   return (
     <div className="flex flex-col gap-3">
       {withTests.map((pr) => (
-        <div key={pr.id} className="rounded border border-black/10 dark:border-white/10 p-3 text-sm">
+        <div key={pr.id} className="rounded border border-border-hairline p-3 text-sm">
           <p className="font-medium">
             #{pr.number} {pr.title}
           </p>

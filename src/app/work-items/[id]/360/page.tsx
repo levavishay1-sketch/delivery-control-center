@@ -19,6 +19,7 @@ import { TimelineTab } from "@/components/TimelineTab";
 import { CodeChangesTab } from "@/components/CodeChangesTab";
 import { TestsTab } from "@/components/TestsTab";
 import { EvidenceTab } from "@/components/EvidenceTab";
+import { PanelEmpty } from "@/components/ui/Panel";
 
 export const dynamic = "force-dynamic";
 
@@ -175,22 +176,9 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
       ),
     },
     {
-      id: "timeline",
-      label: "Timeline",
-      content: (
-        <TimelineTab
-          workItemId={workItem.id}
-          initialEvents={timeline.events.map((e) => ({
-            id: e.id,
-            actor: e.actor,
-            actorName: e.actorName,
-            action: e.action,
-            detail: e.detail,
-            createdAt: e.createdAt.toISOString(),
-          }))}
-          initialTotal={timeline.total}
-        />
-      ),
+      id: "evidence",
+      label: "Evidence",
+      content: <EvidenceTab workItemId={workItem.id} policy={policy} hasException={!!completionException} canManage={manage} />,
     },
     {
       id: "code",
@@ -230,17 +218,39 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
       ),
     },
     {
-      id: "evidence",
-      label: "Evidence",
-      content: <EvidenceTab workItemId={workItem.id} policy={policy} hasException={!!completionException} canManage={manage} />,
+      id: "timeline",
+      label: "Timeline",
+      content: (
+        <TimelineTab
+          workItemId={workItem.id}
+          initialEvents={timeline.events.map((e) => ({
+            id: e.id,
+            actor: e.actor,
+            actorName: e.actorName,
+            action: e.action,
+            detail: e.detail,
+            createdAt: e.createdAt.toISOString(),
+          }))}
+          initialTotal={timeline.total}
+        />
+      ),
     },
-    { id: "configuration", label: "Configuration", content: <p className="text-sm opacity-50">Coming soon — view configuration and overrides.</p> },
+    {
+      id: "configuration",
+      label: "Configuration",
+      content: (
+        <PanelEmpty>
+          Not configured at the work-item level — this tab is scoped to Organization/Client/Project
+          configuration only (Slice 6). A work item inherits its effective AI budget from its Project.
+        </PanelEmpty>
+      ),
+    },
   ];
 
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-xs opacity-60">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
           {workItem.project.name} ({workItem.project.key})
         </p>
         <div className="flex items-center gap-2">
@@ -248,7 +258,9 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
             {workItem.title}
             <ProvenanceNote field="title" provenance={fieldProvenance} />
           </h1>
-          <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">{workItem.type}</span>
+          <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-neutral-500 dark:text-neutral-400">
+            {workItem.type}
+          </span>
         </div>
       </div>
 

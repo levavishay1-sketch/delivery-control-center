@@ -79,7 +79,7 @@ export function EvidenceTab({
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Reason this work item can complete without qualifying evidence"
-            className="rounded border border-black/15 dark:border-white/20 bg-transparent p-2 text-xs"
+            className="rounded border border-border-hairline bg-transparent p-2 text-xs"
             rows={2}
           />
           <button

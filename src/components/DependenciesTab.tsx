@@ -52,7 +52,7 @@ export function DependenciesTab({
       <section>
         <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Depends on</h3>
         {upstream.length === 0 && <p className="mt-1 text-sm opacity-50">No upstream dependencies.</p>}
-        <div className="mt-2 flex flex-col divide-y divide-black/10 dark:divide-white/10 rounded-lg border border-black/10 dark:border-white/15">
+        <div className="mt-2 flex flex-col divide-y divide-border-hairline rounded-lg border border-border-hairline">
           {upstream.map((dep) => (
             <div key={dep.id} className="flex items-center justify-between gap-2 px-3 py-2">
               <div>
@@ -81,7 +81,7 @@ export function DependenciesTab({
       <section>
         <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Depended on by</h3>
         {downstream.length === 0 && <p className="mt-1 text-sm opacity-50">No downstream dependents.</p>}
-        <div className="mt-2 flex flex-col divide-y divide-black/10 dark:divide-white/10 rounded-lg border border-black/10 dark:border-white/15">
+        <div className="mt-2 flex flex-col divide-y divide-border-hairline rounded-lg border border-border-hairline">
           {downstream.map((dep) => (
             <div key={dep.id} className="px-3 py-2">
               {dep.workItem.pipeline ? (

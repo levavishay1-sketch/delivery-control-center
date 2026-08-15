@@ -40,7 +40,7 @@ export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workI
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col divide-y divide-black/10 dark:divide-white/10 rounded-lg border border-black/10 dark:border-white/15">
+      <div className="flex flex-col divide-y divide-border-hairline rounded-lg border border-border-hairline">
         {events.map((event) => (
           <div key={event.id} className="flex flex-col gap-1 px-4 py-3">
             <div className="flex items-center justify-between gap-2">
@@ -56,7 +56,7 @@ export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workI
             </div>
             {event.actorName && <span className="text-xs opacity-50">by {event.actorName}</span>}
             {event.detail !== null && event.detail !== undefined && (
-              <pre className="mt-1 whitespace-pre-wrap rounded bg-black/[.03] dark:bg-white/[.05] p-2 text-xs font-mono">
+              <pre className="mt-1 whitespace-pre-wrap rounded bg-surface-muted p-2 text-xs font-mono">
                 {JSON.stringify(event.detail)}
               </pre>
             )}
@@ -68,7 +68,7 @@ export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workI
           <button
             onClick={() => goToPage(Math.max(1, page - 1))}
             disabled={page <= 1 || loading}
-            className="rounded border border-black/15 dark:border-white/20 px-2 py-1 disabled:opacity-40"
+            className="rounded border border-border-hairline px-2 py-1 disabled:opacity-40"
           >
             Previous
           </button>
@@ -78,7 +78,7 @@ export function TimelineTab({ workItemId, initialEvents, initialTotal }: { workI
           <button
             onClick={() => goToPage(Math.min(totalPages, page + 1))}
             disabled={page >= totalPages || loading}
-            className="rounded border border-black/15 dark:border-white/20 px-2 py-1 disabled:opacity-40"
+            className="rounded border border-border-hairline px-2 py-1 disabled:opacity-40"
           >
             Next
           </button>

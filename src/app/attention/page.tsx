@@ -5,6 +5,9 @@ import { WRITE_ROLES } from "@/domain/shared/authz";
 import { DecisionActions } from "@/components/DecisionActions";
 import { ResolveBlockerButton } from "@/components/ResolveBlockerButton";
 import { QuickViewLink } from "@/components/QuickViewLink";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { RowList } from "@/components/ui/Row";
+import { CheckCircle2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -43,22 +46,25 @@ export default async function AttentionCenterPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-xl font-semibold">Attention Center</h1>
-        <p className="text-sm opacity-60">Everything needing a human decision, in one place — with the reason always visible.</p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          Everything needing a human decision, in one place — with the reason always visible.
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-7">
-        <SummaryCard label="Decisions" count={summary.decisions} href="#decisions" />
-        <SummaryCard label="Blockers" count={summary.blockers} href="#blockers" />
-        <SummaryCard label="Risks" count={summary.risks} href="#risks" />
-        <SummaryCard label="Deadlines" count={summary.deadlines} href="#deadlines" />
-        <SummaryCard label="Approval Gates" count={summary.approvalGates} href="#approval-gates" />
-        <SummaryCard label="Clarifications" count={summary.pausedClarifications} href="#clarifications" />
-        <SummaryCard label="Sync Conflicts" count={summary.syncConflicts} href="#sync-conflicts" />
+      <div className="flex flex-wrap gap-2">
+        <SummaryChip label="Decisions" count={summary.decisions} href="#decisions" />
+        <SummaryChip label="Blockers" count={summary.blockers} href="#blockers" />
+        <SummaryChip label="Risks" count={summary.risks} href="#risks" />
+        <SummaryChip label="Deadlines" count={summary.deadlines} href="#deadlines" />
+        <SummaryChip label="Approval Gates" count={summary.approvalGates} href="#approval-gates" />
+        <SummaryChip label="Clarifications" count={summary.pausedClarifications} href="#clarifications" />
+        <SummaryChip label="Sync Conflicts" count={summary.syncConflicts} href="#sync-conflicts" />
       </div>
 
       {allClear && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-6 text-center">
-          <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">All clear — nothing needs your attention.</p>
+        <div className="flex items-center justify-center gap-2 rounded-lg bg-status-healthy-bg p-6 text-status-healthy">
+          <CheckCircle2 className="h-5 w-5" />
+          <span className="text-sm font-medium">All clear — nothing needs your attention.</span>
         </div>
       )}
 
@@ -68,21 +74,21 @@ export default async function AttentionCenterPage() {
             const overdue = isOverdue(d.deadline, now);
             return (
               <Row key={d.id}>
-                <p className="font-medium">{d.question}</p>
+                <StatusBadge tone="warning" label="Decision required" reason={d.question} />
                 <RowMeta workItem={d.workItem} />
-                <p className="text-sm opacity-70">{d.reason}</p>
+                <p className="text-sm text-neutral-500 dark:text-neutral-400">{d.reason}</p>
                 {d.aiRecommendation && (
-                  <p className="text-xs opacity-60">
+                  <p className="flex items-center gap-1 text-xs text-status-ai">
                     AI recommends: {d.aiRecommendation}
                     {d.aiConfidence !== null && ` (${d.aiConfidence.toString()}% confidence)`}
                   </p>
                 )}
                 {d.deadline && (
-                  <p className={`text-xs ${overdue ? "text-red-500 font-medium" : "opacity-50"}`}>
+                  <p className={`text-xs ${overdue ? "font-medium text-status-critical" : "text-neutral-400"}`}>
                     Deadline: {formatDate(d.deadline)} {overdue && "(overdue)"}
                   </p>
                 )}
-                <QuickViewLink workItemId={d.workItem.id} className="text-xs underline opacity-70 w-fit">
+                <QuickViewLink workItemId={d.workItem.id} className="w-fit text-xs text-accent hover:underline">
                   Quick View
                 </QuickViewLink>
                 {canAct(d.workItem.projectId, ctx.memberships, ctx.isOrgAdmin) && <DecisionActions decisionId={d.id} />}
@@ -96,12 +102,12 @@ export default async function AttentionCenterPage() {
         <Section id="blockers" title="Blockers" count={summary.blockers}>
           {blockers.map((b) => (
             <Row key={b.id}>
-              <p className="font-medium">Blocked — {b.reason}</p>
+              <StatusBadge tone="critical" label="Blocked" reason={b.reason} />
               <RowMeta workItem={b.blockingItem} />
-              <p className="text-xs opacity-60">Owner: {b.owner.name ?? b.owner.email}</p>
-              <p className="text-sm opacity-70">Required action: {b.requiredAction}</p>
-              {b.impact && <p className="text-xs opacity-50">Impact: {b.impact}</p>}
-              <QuickViewLink workItemId={b.blockingItem.id} className="text-xs underline opacity-70 w-fit">
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">Owner: {b.owner.name ?? b.owner.email}</p>
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">Required action: {b.requiredAction}</p>
+              {b.impact && <p className="text-xs text-neutral-400">Impact: {b.impact}</p>}
+              <QuickViewLink workItemId={b.blockingItem.id} className="w-fit text-xs text-accent hover:underline">
                 Quick View
               </QuickViewLink>
               {(canAct(b.blockingItem.projectId, ctx.memberships, ctx.isOrgAdmin) || b.ownerId === ctx.userId) && (
@@ -116,9 +122,11 @@ export default async function AttentionCenterPage() {
         <Section id="risks" title="Risks" count={summary.risks}>
           {risks.map((item) => (
             <Row key={item.id}>
-              <span className="inline-block w-fit rounded bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-600 dark:text-red-400">
-                {RISK_LABEL[item.risk] ?? item.risk}
-              </span>
+              <StatusBadge
+                tone="critical"
+                label={`${RISK_LABEL[item.risk] ?? item.risk} risk`}
+                reason={`${item.title} is flagged ${(RISK_LABEL[item.risk] ?? item.risk).toLowerCase()} risk`}
+              />
               <RowMeta workItem={item} />
               <WorkItemLink workItemId={item.id} />
             </Row>
@@ -132,7 +140,11 @@ export default async function AttentionCenterPage() {
             const dueSoon = item.dueDate && item.dueDate.getTime() - now < 24 * 60 * 60 * 1000;
             return (
               <Row key={item.id}>
-                <p className={`font-medium ${dueSoon ? "text-red-500" : ""}`}>Due {formatDate(item.dueDate)}</p>
+                <StatusBadge
+                  tone={dueSoon ? "critical" : "warning"}
+                  label={`Due ${formatDate(item.dueDate)}`}
+                  reason={dueSoon ? "Due within 24 hours" : "Upcoming deadline"}
+                />
                 <RowMeta workItem={item} />
                 <WorkItemLink workItemId={item.id} />
               </Row>
@@ -145,7 +157,7 @@ export default async function AttentionCenterPage() {
         <Section id="approval-gates" title="Approval Gates" count={summary.approvalGates}>
           {approvalGates.map((item) => (
             <Row key={item.id}>
-              <p className="font-medium">Awaiting approval</p>
+              <StatusBadge tone="active" label="Awaiting approval" reason="This stage is waiting on a human gate approval" />
               <RowMeta workItem={item} />
               <WorkItemLink workItemId={item.id} />
             </Row>
@@ -157,17 +169,18 @@ export default async function AttentionCenterPage() {
         <Section id="clarifications" title="Clarifications" count={summary.pausedClarifications}>
           {pausedClarifications.map((stage) => (
             <Row key={stage.id}>
-              <p className="font-medium">
-                {stage.clarifyQuestions.length} question{stage.clarifyQuestions.length === 1 ? "" : "s"} outstanding on the{" "}
-                {stage.type} stage
-              </p>
+              <StatusBadge
+                tone="warning"
+                label="Clarification needed"
+                reason={`${stage.clarifyQuestions.length} question${stage.clarifyQuestions.length === 1 ? "" : "s"} outstanding on the ${stage.type} stage`}
+              />
               <RowMeta workItem={stage.pipeline.workItem} />
-              <ul className="text-xs opacity-70">
+              <ul className="text-xs text-neutral-500 dark:text-neutral-400">
                 {stage.clarifyQuestions.map((q) => (
                   <li key={q.id}>{q.question}</li>
                 ))}
               </ul>
-              <Link href={`/pipelines/${stage.pipelineId}`} className="text-xs underline opacity-70 w-fit">
+              <Link href={`/pipelines/${stage.pipelineId}`} className="w-fit text-xs text-accent hover:underline">
                 Answer on the pipeline page
               </Link>
             </Row>
@@ -179,11 +192,16 @@ export default async function AttentionCenterPage() {
         <Section id="sync-conflicts" title="Sync Conflicts" count={summary.syncConflicts}>
           {syncConflicts.map((conflict) => (
             <Row key={conflict.id}>
-              <p className="font-medium">
-                A sync would overwrite a manually-edited &ldquo;{conflict.field}&rdquo; with a different value
-              </p>
+              <StatusBadge
+                tone="warning"
+                label="Sync conflict"
+                reason={`A sync would overwrite a manually-edited "${conflict.field}" with a different value`}
+              />
               <RowMeta workItem={conflict.workItem} />
-              <Link href={`/projects/${conflict.workItem.projectId}/settings`} className="text-xs underline opacity-70 w-fit">
+              <Link
+                href={`/projects/${conflict.workItem.projectId}/settings`}
+                className="w-fit text-xs text-accent hover:underline"
+              >
                 Review on the project settings page
               </Link>
             </Row>
@@ -194,14 +212,14 @@ export default async function AttentionCenterPage() {
   );
 }
 
-function SummaryCard({ label, count, href }: { label: string; count: number; href: string }) {
+function SummaryChip({ label, count, href }: { label: string; count: number; href: string }) {
   return (
     <Link
       href={href}
-      className="rounded-lg border border-black/10 dark:border-white/15 p-3 hover:border-black/25 dark:hover:border-white/30"
+      className="flex items-center gap-1.5 rounded-full border border-border-hairline bg-surface px-3 py-1.5 text-sm hover:border-neutral-400 dark:hover:border-neutral-500"
     >
-      <p className="text-2xl font-semibold">{count}</p>
-      <p className="text-xs opacity-60">{label}</p>
+      <span className="font-semibold">{count}</span>
+      <span className="text-neutral-500 dark:text-neutral-400">{label}</span>
     </Link>
   );
 }
@@ -210,11 +228,9 @@ function Section({ id, title, count, children }: { id: string; title: string; co
   return (
     <section id={id} aria-labelledby={`${id}-heading`} className="flex flex-col gap-3">
       <h2 id={`${id}-heading`} className="font-medium">
-        {title} <span className="opacity-50">({count})</span>
+        {title} <span className="text-neutral-400">({count})</span>
       </h2>
-      <div className="flex flex-col divide-y divide-black/10 dark:divide-white/10 rounded-lg border border-black/10 dark:border-white/15">
-        {children}
-      </div>
+      <RowList>{children}</RowList>
     </section>
   );
 }
@@ -225,7 +241,7 @@ function Row({ children }: { children: React.ReactNode }) {
 
 function RowMeta({ workItem }: { workItem: { title: string; type: string; project?: { name: string } } }) {
   return (
-    <p className="text-xs opacity-60">
+    <p className="text-xs text-neutral-500 dark:text-neutral-400">
       {workItem.title} · {workItem.type}
       {workItem.project && ` · ${workItem.project.name}`}
     </p>
@@ -235,10 +251,10 @@ function RowMeta({ workItem }: { workItem: { title: string; type: string; projec
 function WorkItemLink({ workItemId }: { workItemId: string }) {
   return (
     <span className="flex gap-3">
-      <Link href={`/work-items/${workItemId}/360`} className="text-xs underline opacity-70">
+      <Link href={`/work-items/${workItemId}/360`} className="text-xs text-accent hover:underline">
         View work item
       </Link>
-      <QuickViewLink workItemId={workItemId} className="text-xs underline opacity-70">
+      <QuickViewLink workItemId={workItemId} className="text-xs text-accent hover:underline">
         Quick View
       </QuickViewLink>
     </span>

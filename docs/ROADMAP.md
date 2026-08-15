@@ -327,7 +327,7 @@ up in this slice. Its own E2E scenario caught a real gap before shipping:
 silently 404ing. Full detail: source §5 "Slice 6". Archive detail:
 `openspec/changes/archive/2026-08-15-slice-6-configuration-center/`.
 
-### Slice 7 — Design system foundation & premium UI refresh — **Scoped, not started**
+### Slice 7 — Design system foundation & premium UI refresh — **Done**
 
 *(Source: `docs/roadmap-sources/2026-08-15-design-system-direction.md` —
 agent-produced design direction, approved by the user for implementation.
@@ -335,16 +335,30 @@ Not part of the original master prompt / gap analysis; this slice was
 proposed and approved in conversation after all six master-prompt slices
 completed.)*
 
-Establishes a real design token system (neutral scale, single accent
-color, five-value status semantics, type scale, two elevation levels) and
-applies it to the three core surfaces of the existing Dashboard/Attention
-Center → Quick View → 360° Delivery Record architecture (built in Slice
-1). Scope: design tokens + base components (`StatusBadge`, row/list
-primitives, panel, drawer elevation) + restyle of Dashboard/Attention
-Center, Quick View drawer, and 360° Delivery Record. Explicitly does not
-add new domain features, entities, or change backend behavior — visual/
-structural UI layer only, on top of the unchanged domain model. Full
-direction: see the source document above.
+Established a real design token system (`@theme` block in
+`src/app/globals.css`: neutral scale, one accent color, five status-
+semantic colors each with a paired background, a 6-step type scale, and
+two elevation levels — flat hairline-border surfaces vs. floating shadow+
+backdrop overlays) and applied it to the three core surfaces of the
+existing Dashboard/Attention Center → Quick View → 360° Delivery Record
+architecture (built in Slice 1): a persistent left icon+label navigation
+rail (`NavRail`) replacing inline text links; new base components
+(`StatusBadge` — reason required at the type level; `Row`/`RowList`;
+`Panel`) applied to the Dashboard, Attention Center, Quick View drawer,
+and 360° Record's `WorkItemTabs`/`OverviewTab`; the 360° Record's
+Configuration tab now states why it's empty instead of a bare "Coming
+soon"; tab order reshuffled to Overview → Dependencies → Evidence → Code →
+Tests → Timeline → Configuration per the design direction. Explicitly no
+new domain features, entities, or backend behavior — visual/structural UI
+layer only, on top of the unchanged domain model.
+
+Fixing real E2E selector drift from the restyle also surfaced and fixed a
+pre-existing, unrelated navigation gap: `/pipelines/[id]` had no
+page-specific "back to dashboard" link (already noted, deferred, before
+this slice started) — the new nav rail's Dashboard link now works from
+every page, closing that gap as a side effect. Full detail: source §
+above; as-built detail:
+`openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/`.
 
 ## Definition of Done, for every future slice (source: `§6`)
 

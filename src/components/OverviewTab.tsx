@@ -8,6 +8,7 @@ import { CreateDecisionForm } from "@/components/CreateDecisionForm";
 import { ResolveBlockerButton } from "@/components/ResolveBlockerButton";
 import { DecisionActions } from "@/components/DecisionActions";
 import { StartPipelineButton } from "@/components/StartPipelineButton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 const STATUS_EXPLANATION: Record<string, string> = {
   DRAFT: "Not yet started.",
@@ -138,7 +139,14 @@ export function OverviewTab({
 
   const due = workItem.dueDate ? new Date(workItem.dueDate) : null;
   const dueDays = due ? Math.ceil((due.getTime() - now) / (24 * 60 * 60 * 1000)) : null;
-  const dueColor = dueDays === null ? "" : dueDays < 0 ? "text-red-500" : dueDays <= 7 ? "text-amber-500" : "text-emerald-500";
+  const dueColor =
+    dueDays === null
+      ? ""
+      : dueDays < 0
+        ? "text-status-critical"
+        : dueDays <= 7
+          ? "text-status-warning"
+          : "text-status-healthy";
 
   if (editing) {
     return (
@@ -164,8 +172,39 @@ export function OverviewTab({
 
   return (
     <div className="flex flex-col gap-4">
+      {activeBlocker && (
+        <div data-testid="blocker-panel" className="rounded-lg bg-status-critical-bg p-3">
+          <StatusBadge tone="critical" label="Blocked" reason={activeBlocker.reason} />
+          <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+            Owner: {activeBlocker.owner.name ?? activeBlocker.owner.email}
+          </p>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400">Required action: {activeBlocker.requiredAction}</p>
+          {(canManage || isBlockerOwner) && (
+            <div className="mt-2">
+              <ResolveBlockerButton blockerId={activeBlocker.id} onResolved={onChanged} />
+            </div>
+          )}
+        </div>
+      )}
+
+      {pendingDecision && (
+        <div className="rounded-lg bg-status-warning-bg p-3">
+          <StatusBadge tone="warning" label="Decision needed" reason={pendingDecision.question} />
+          <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">{pendingDecision.reason}</p>
+          {pendingDecision.aiRecommendation && (
+            <p className="text-xs text-status-ai">
+              AI recommends: {pendingDecision.aiRecommendation}
+              {pendingDecision.aiConfidence !== null && ` (${pendingDecision.aiConfidence}% confidence)`}
+            </p>
+          )}
+          <div className="mt-2">
+            <DecisionActions decisionId={pendingDecision.id} onDecided={onChanged} />
+          </div>
+        </div>
+      )}
+
       {workItem.description && (
-        <p className="text-sm opacity-80 whitespace-pre-wrap">
+        <p className="whitespace-pre-wrap text-sm text-neutral-700 dark:text-neutral-300">
           {workItem.description}
           <ProvenanceNote field="description" provenance={provenance} />
         </p>
@@ -173,19 +212,19 @@ export function OverviewTab({
 
       <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-xs opacity-60">Status</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Status</dt>
           <dd className="font-medium">
             {workItem.status}
             <ProvenanceNote field="status" provenance={provenance} />
           </dd>
-          <dd className="text-xs opacity-50">{STATUS_EXPLANATION[workItem.status]}</dd>
+          <dd className="text-xs text-neutral-400">{STATUS_EXPLANATION[workItem.status]}</dd>
         </div>
         <div>
-          <dt className="text-xs opacity-60">Owner</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Owner</dt>
           <dd>{workItem.owner ? workItem.owner.name ?? workItem.owner.email : "Unassigned"}</dd>
         </div>
         <div>
-          <dt className="text-xs opacity-60">Executor</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Executor</dt>
           <dd>
             {workItem.executorType === "AI_AGENT"
               ? "AI Agent"
@@ -197,68 +236,39 @@ export function OverviewTab({
           </dd>
         </div>
         <div>
-          <dt className="text-xs opacity-60">Due date</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Due date</dt>
           <dd className={dueColor}>
             {due ? due.toLocaleDateString() : "None"}
             {dueDays !== null && (dueDays < 0 ? ` (overdue by ${Math.abs(dueDays)}d)` : ` (in ${dueDays}d)`)}
           </dd>
         </div>
         <div>
-          <dt className="text-xs opacity-60">Risk</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Risk</dt>
           <dd className="font-medium">{workItem.risk}</dd>
-          <dd className="text-xs opacity-50">{RISK_EXPLANATION[workItem.risk]}</dd>
+          <dd className="text-xs text-neutral-400">{RISK_EXPLANATION[workItem.risk]}</dd>
         </div>
         <div>
-          <dt className="text-xs opacity-60">Priority</dt>
+          <dt className="text-xs text-neutral-500 dark:text-neutral-400">Priority</dt>
           <dd className="font-medium">{workItem.priority}</dd>
         </div>
       </dl>
 
       <div>
-        <div className="flex items-center justify-between text-xs opacity-60">
+        <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
           <span>Progress</span>
           <span>{workItem.progress}%</span>
         </div>
-        <div className="mt-1 h-2 w-full rounded-full bg-black/10 dark:bg-white/10">
-          <div className="h-2 rounded-full bg-foreground" style={{ width: `${workItem.progress}%` }} />
+        <div className="mt-1 h-1.5 w-full rounded-full bg-surface-muted">
+          <div className="h-1.5 rounded-full bg-accent" style={{ width: `${workItem.progress}%` }} />
         </div>
       </div>
 
-      {activeBlocker && (
-        <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
-          <p className="text-sm font-medium text-red-600 dark:text-red-400">🚫 Blocked — {activeBlocker.reason}</p>
-          <p className="mt-1 text-xs opacity-70">Owner: {activeBlocker.owner.name ?? activeBlocker.owner.email}</p>
-          <p className="text-xs opacity-70">Required action: {activeBlocker.requiredAction}</p>
-          {(canManage || isBlockerOwner) && (
-            <div className="mt-2">
-              <ResolveBlockerButton blockerId={activeBlocker.id} onResolved={onChanged} />
-            </div>
-          )}
-        </div>
-      )}
-
-      {pendingDecision && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
-          <p className="text-sm font-medium text-amber-600 dark:text-amber-400">⚠️ Decision Needed — {pendingDecision.question}</p>
-          <p className="mt-1 text-xs opacity-70">{pendingDecision.reason}</p>
-          {pendingDecision.aiRecommendation && (
-            <p className="text-xs opacity-60">
-              AI recommends: {pendingDecision.aiRecommendation}
-              {pendingDecision.aiConfidence !== null && ` (${pendingDecision.aiConfidence}% confidence)`}
-            </p>
-          )}
-          <div className="mt-2">
-            <DecisionActions decisionId={pendingDecision.id} onDecided={onChanged} />
-          </div>
-        </div>
-      )}
-
       {(Number(aiCost) > 0 || stageCosts.some((s) => s.costUsd)) && (
         <div>
-          <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">AI Cost</h3>
+          <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">AI Cost</h3>
           <p className="text-sm">Total: ${aiCost}</p>
           {stageCosts.length > 0 && (
-            <ul className="mt-1 text-xs opacity-60">
+            <ul className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
               {stageCosts.filter((s) => s.costUsd).map((s) => (
                 <li key={s.type}>{s.type}: ${s.costUsd}</li>
               ))}
@@ -273,7 +283,7 @@ export function OverviewTab({
             <p className="text-sm">
               Parent:{" "}
               {parent.pipelineId ? (
-                <Link href={`/pipelines/${parent.pipelineId}`} className="underline">
+                <Link href={`/pipelines/${parent.pipelineId}`} className="text-accent hover:underline">
                   {parent.title}
                 </Link>
               ) : (
@@ -283,18 +293,18 @@ export function OverviewTab({
           )}
           {childItems.length > 0 && (
             <div>
-              <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Children</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">Children</h3>
               <ul className="mt-1 flex flex-col gap-1">
                 {childItems.map((c) => (
                   <li key={c.id} className="text-sm">
                     {c.pipelineId ? (
-                      <Link href={`/pipelines/${c.pipelineId}`} className="underline">
+                      <Link href={`/pipelines/${c.pipelineId}`} className="text-accent hover:underline">
                         {c.title}
                       </Link>
                     ) : (
                       c.title
                     )}{" "}
-                    <span className="text-xs opacity-50">
+                    <span className="text-xs text-neutral-400">
                       · {c.status} · {c.owner ? c.owner.name ?? c.owner.email : "Unassigned"}
                     </span>
                   </li>
@@ -305,9 +315,12 @@ export function OverviewTab({
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2 border-t border-black/10 dark:border-white/15 pt-3">
+      <div className="flex flex-wrap gap-2 border-t border-border-hairline pt-3">
         {canEdit && (
-          <button onClick={() => setEditing(true)} className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]">
+          <button
+            onClick={() => setEditing(true)}
+            className="rounded-md border border-border-hairline px-3 py-1.5 text-sm hover:bg-surface-muted"
+          >
             Edit
           </button>
         )}

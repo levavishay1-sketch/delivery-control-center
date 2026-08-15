@@ -45,7 +45,9 @@ test("configuration center: organization -> client -> project budget inheritance
   await expect(orgBudgetSection.getByText(/Effective budget:\s*\$123\.45/)).toBeVisible({ timeout: 10_000 });
 
   const orgHistorySection = page.locator("section", { has: page.getByRole("heading", { name: "Budget History" }) });
-  await expect(orgHistorySection.getByText(/No limit\s*→\s*\$123\.45/)).toBeVisible();
+  // History is append-only, so repeated runs against the same database can leave more than
+  // one matching entry — assert the most recent (first, since it renders newest-first).
+  await expect(orgHistorySection.getByText(/No limit\s*→\s*\$123\.45/).first()).toBeVisible();
 
   // --- Back to the Dashboard: the Default Client has no override, so it now inherits $123.45 ---
   await page.getByRole("link", { name: "← Back to Dashboard" }).click();
@@ -67,7 +69,9 @@ test("configuration center: organization -> client -> project budget inheritance
   await expect(clientSection.getByText(/own override/)).toBeVisible();
 
   await clientSection.locator("summary", { hasText: "Budget history" }).click();
-  await expect(clientSection.getByText(/No limit\s*→\s*\$50/)).toBeVisible();
+  // Append-only history: repeated runs against the same database can leave more than one
+  // matching entry — assert the most recent (first, since it renders newest-first).
+  await expect(clientSection.getByText(/No limit\s*→\s*\$50/).first()).toBeVisible();
 
   // --- Create a fresh project under Default Client (no override of its own) ---
   const projectName = `Config Test Project ${suffix}`;

@@ -99,7 +99,7 @@ export function CodeChangesTab({
       ) : (
         <div className="flex flex-col gap-2">
           {evidence.map((pr) => (
-            <div key={pr.evidenceId} className="rounded border border-black/10 dark:border-white/10 p-3 text-sm">
+            <div key={pr.evidenceId} className="rounded border border-border-hairline p-3 text-sm">
               <div className="flex items-center justify-between">
                 <a href={pr.url} target="_blank" rel="noreferrer" className="font-medium underline">
                   #{pr.number} {pr.title}
@@ -124,7 +124,7 @@ export function CodeChangesTab({
           <select
             value={selected}
             onChange={(e) => setSelected(e.target.value)}
-            className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-xs"
+            className="rounded border border-border-hairline bg-transparent px-2 py-1 text-xs"
           >
             {candidatePullRequests.map((pr) => (
               <option key={pr.id} value={pr.id}>

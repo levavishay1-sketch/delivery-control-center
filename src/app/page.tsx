@@ -16,6 +16,9 @@ import { StartPipelineButton } from "@/components/StartPipelineButton";
 import { ConfigBudgetPanel } from "@/components/ConfigBudgetPanel";
 import { ConfigHistoryList } from "@/components/ConfigHistoryList";
 import { WRITE_ROLES } from "@/domain/shared/authz";
+import { Panel } from "@/components/ui/Panel";
+import { Row, RowList, RowEmpty } from "@/components/ui/Row";
+import { CheckCircle2 } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +102,11 @@ export default async function HomePage() {
         {ctx.isOrgAdmin && organizations.length > 0 && (
           <div className="flex items-center gap-3 text-xs">
             {organizations.map((org) => (
-              <Link key={org.id} href={`/organizations/${org.id}/config`} className="underline opacity-70 hover:opacity-100">
+              <Link
+                key={org.id}
+                href={`/organizations/${org.id}/config`}
+                className="text-accent hover:underline"
+              >
                 {org.name} configuration
               </Link>
             ))}
@@ -108,29 +115,30 @@ export default async function HomePage() {
       </div>
 
       <section aria-labelledby="attention-summary-heading" className="flex flex-col gap-3">
-        <h2 id="attention-summary-heading" className="text-sm font-semibold uppercase tracking-wide opacity-60">
+        <h2 id="attention-summary-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Attention Summary
         </h2>
         {allClear ? (
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4 text-center">
-            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">All clear — no attention needed.</p>
+          <div className="flex items-center gap-2 rounded-full bg-status-healthy-bg px-3 py-1.5 text-status-healthy w-fit">
+            <CheckCircle2 className="h-4 w-4" />
+            <span className="text-sm font-medium">All clear — no attention needed.</span>
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <SummaryCard label="Decisions Pending" count={summary.decisions} href="/attention#decisions" />
-            <SummaryCard label="Blockers Active" count={summary.blockers} href="/attention#blockers" />
-            <SummaryCard label="Risks" count={summary.risks} href="/attention#risks" />
-            <SummaryCard label="Deadlines" count={summary.deadlines} href="/attention#deadlines" />
+          <div className="flex flex-wrap gap-2">
+            <SummaryChip label="Decisions" count={summary.decisions} href="/attention#decisions" />
+            <SummaryChip label="Blockers" count={summary.blockers} href="/attention#blockers" />
+            <SummaryChip label="Risks" count={summary.risks} href="/attention#risks" />
+            <SummaryChip label="Deadlines" count={summary.deadlines} href="/attention#deadlines" />
           </div>
         )}
       </section>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section aria-labelledby="quick-access-heading" className="flex flex-col gap-3">
-          <h2 id="quick-access-heading" className="text-sm font-semibold uppercase tracking-wide opacity-60">
+          <h2 id="quick-access-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Project Quick Access
           </h2>
-          {quickAccessProjects.length === 0 && <p className="text-sm opacity-50">No projects yet.</p>}
+          {quickAccessProjects.length === 0 && <p className="text-sm text-neutral-500">No projects yet.</p>}
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {quickAccessProjects.map((project) => {
               const client = clients.find((c) => c.id === project.clientId);
@@ -139,13 +147,13 @@ export default async function HomePage() {
                 <a
                   key={project.id}
                   href={`#project-${project.id}`}
-                  className="rounded-lg border border-black/10 dark:border-white/15 p-3 hover:border-black/25 dark:hover:border-white/30"
+                  className="rounded-lg border border-border-hairline bg-surface p-3 hover:border-neutral-400 dark:hover:border-neutral-500"
                 >
-                  <p className="font-medium text-sm">
-                    {project.name} <span className="opacity-50">({project.key})</span>
+                  <p className="text-sm font-medium">
+                    {project.name} <span className="text-neutral-500">({project.key})</span>
                   </p>
-                  <p className="text-xs opacity-60">{client?.name}</p>
-                  <p className="mt-1 text-xs opacity-50">
+                  <p className="text-xs text-neutral-500">{client?.name}</p>
+                  <p className="mt-1 text-xs text-neutral-400">
                     {project.workItems.length} work item{project.workItems.length === 1 ? "" : "s"}
                     {lastActivity && ` · updated ${relativeTime(lastActivity, now)}`}
                   </p>
@@ -156,31 +164,36 @@ export default async function HomePage() {
         </section>
 
         <section aria-labelledby="recent-activity-heading" className="flex flex-col gap-3">
-          <h2 id="recent-activity-heading" className="text-sm font-semibold uppercase tracking-wide opacity-60">
+          <h2 id="recent-activity-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
             Recent Activity
           </h2>
-          {recentEvents.length === 0 && <p className="text-sm opacity-50">No activity yet.</p>}
-          <div className="flex flex-col divide-y divide-black/10 dark:divide-white/10 rounded-lg border border-black/10 dark:border-white/15">
-            {recentEvents.map((event) => (
-              <div key={event.id} className="flex flex-col gap-0.5 px-3 py-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm">
-                    {ACTOR_ICON[event.actor]} {event.action}
-                  </span>
-                  <time className="shrink-0 text-xs opacity-50">{relativeTime(event.createdAt, now)}</time>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs opacity-50">
-                  {event.actorName && <span>by {event.actorName}</span>}
-                  {event.workItem?.pipeline && (
-                    <Link href={`/pipelines/${event.workItem.pipeline.id}`} className="underline">
-                      {event.workItem.title}
-                    </Link>
-                  )}
-                  {event.project && !event.workItem && <span>{event.project.name}</span>}
-                </div>
-              </div>
-            ))}
-          </div>
+          {recentEvents.length === 0 ? (
+            <RowList>
+              <RowEmpty>No activity yet.</RowEmpty>
+            </RowList>
+          ) : (
+            <RowList>
+              {recentEvents.map((event) => (
+                <Row key={event.id} className="flex-col items-start gap-0.5">
+                  <div className="flex w-full items-center justify-between gap-2">
+                    <span className="text-sm">
+                      {ACTOR_ICON[event.actor]} {event.action}
+                    </span>
+                    <time className="shrink-0 text-xs text-neutral-400">{relativeTime(event.createdAt, now)}</time>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-xs text-neutral-500">
+                    {event.actorName && <span>by {event.actorName}</span>}
+                    {event.workItem?.pipeline && (
+                      <Link href={`/pipelines/${event.workItem.pipeline.id}`} className="text-accent hover:underline">
+                        {event.workItem.title}
+                      </Link>
+                    )}
+                    {event.project && !event.workItem && <span>{event.project.name}</span>}
+                  </div>
+                </Row>
+              ))}
+            </RowList>
+          )}
         </section>
       </div>
 
@@ -192,7 +205,7 @@ export default async function HomePage() {
       </section>
 
       {clients.length === 0 && (
-        <p className="text-sm opacity-60">
+        <p className="text-sm text-neutral-500">
           No clients yet. Run the seed script (<code>npm run db:seed</code>) or create one directly to get started.
         </p>
       )}
@@ -205,9 +218,11 @@ export default async function HomePage() {
         return (
           <section key={client.id} id={`client-${client.id}`} className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wide opacity-60">
+              <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
                 {client.name}
-                <span className="ml-2 normal-case font-normal opacity-60">· AI cost: ${(clientAiCosts.get(client.id) ?? "0").toString()}</span>
+                <span className="ml-2 normal-case font-normal text-neutral-400">
+                  · AI cost: ${(clientAiCosts.get(client.id) ?? "0").toString()}
+                </span>
               </h2>
             </div>
             {budgetConfig && (
@@ -215,7 +230,7 @@ export default async function HomePage() {
                 {canManageClient ? (
                   <ConfigBudgetPanel scope="CLIENT" id={client.id} effective={budgetConfig.effective} />
                 ) : (
-                  <p className="text-xs opacity-60">
+                  <p className="text-xs text-neutral-500">
                     Effective budget: {budgetConfig.effective.value ? `$${budgetConfig.effective.value}` : "No limit"}
                     {budgetConfig.effective.sourceScope && !budgetConfig.effective.isOverride
                       ? ` (inherited from ${budgetConfig.effective.sourceScope.toLowerCase()})`
@@ -224,7 +239,7 @@ export default async function HomePage() {
                 )}
                 {budgetConfig.history.length > 0 && (
                   <details className="text-xs">
-                    <summary className="cursor-pointer opacity-60 hover:opacity-100">Budget history</summary>
+                    <summary className="cursor-pointer text-neutral-500 hover:text-foreground">Budget history</summary>
                     <div className="mt-2">
                       <ConfigHistoryList history={budgetConfig.history} />
                     </div>
@@ -232,68 +247,65 @@ export default async function HomePage() {
                 )}
               </div>
             )}
-            {clientProjects.length === 0 && <p className="text-sm opacity-50">No projects for this client yet.</p>}
+            {clientProjects.length === 0 && <p className="text-sm text-neutral-500">No projects for this client yet.</p>}
             <div className="flex flex-col gap-6">
               {clientProjects.map((project) => (
-                <div key={project.id} id={`project-${project.id}`} className="rounded-lg border border-black/10 dark:border-white/15 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div>
-                      <h3 className="font-medium">
-                        {project.name} <span className="opacity-50">({project.key})</span>
-                      </h3>
-                      <p className="text-xs opacity-60">{project.connector?.type ?? "MANUAL"}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Link href={`/projects/${project.id}/constitution`} className="text-xs underline opacity-70 hover:opacity-100">
-                        Constitution
-                      </Link>
-                      <Link href={`/projects/${project.id}/settings`} className="text-xs underline opacity-70 hover:opacity-100">
-                        Settings
-                      </Link>
-                      {project.connector && project.connector.type !== "MANUAL" && <SyncButton projectId={project.id} />}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-col gap-2">
-                    {project.workItems.map((item) => (
-                      <div
-                        key={item.id}
-                        className="flex items-center justify-between rounded border border-black/10 dark:border-white/10 px-3 py-2 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]"
-                      >
-                        {item.pipeline ? (
-                          <Link href={`/pipelines/${item.pipeline.id}`} className="flex items-center gap-2">
-                            {item.title}
-                            <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">
-                              {item.status}
-                            </span>
-                          </Link>
-                        ) : (
-                          <span className="flex items-center gap-2">
-                            {item.title}
-                            <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">
-                              {item.status}
-                            </span>
-                          </span>
-                        )}
-                        <span className="flex items-center gap-3">
-                          <span className="opacity-50">{item.pipeline?.currentStage}</span>
-                          {item.pipeline && <StageBadge status={item.pipeline.status} />}
-                          {!item.pipeline && <StartPipelineButton workItemId={item.id} compact />}
-                          <QuickViewLink workItemId={item.id} className="text-xs underline opacity-60 hover:opacity-100">
-                            Quick View
-                          </QuickViewLink>
-                        </span>
+                <Panel key={project.id} id={`project-${project.id}`} className="scroll-mt-8">
+                  <div>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="font-medium">
+                          {project.name} <span className="text-neutral-500">({project.key})</span>
+                        </h3>
+                        <p className="text-xs text-neutral-500">{project.connector?.type ?? "MANUAL"}</p>
                       </div>
-                    ))}
-                    {project.workItems.length === 0 && (
-                      <p className="text-sm opacity-50">No work items yet.</p>
-                    )}
-                  </div>
+                      <div className="flex items-center gap-3">
+                        <Link href={`/projects/${project.id}/constitution`} className="text-xs text-accent hover:underline">
+                          Constitution
+                        </Link>
+                        <Link href={`/projects/${project.id}/settings`} className="text-xs text-accent hover:underline">
+                          Settings
+                        </Link>
+                        {project.connector && project.connector.type !== "MANUAL" && <SyncButton projectId={project.id} />}
+                      </div>
+                    </div>
 
-                  <div className="mt-3">
-                    <AddWorkItemForm projectId={project.id} />
+                    <RowList className="mt-4">
+                      {project.workItems.map((item) => (
+                        <Row key={item.id} className="justify-between text-sm">
+                          {item.pipeline ? (
+                            <Link href={`/pipelines/${item.pipeline.id}`} className="flex items-center gap-2">
+                              {item.title}
+                              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-neutral-500">
+                                {item.status}
+                              </span>
+                            </Link>
+                          ) : (
+                            <span className="flex items-center gap-2">
+                              {item.title}
+                              <span className="rounded-full bg-surface-muted px-2 py-0.5 text-xs text-neutral-500">
+                                {item.status}
+                              </span>
+                            </span>
+                          )}
+                          <span className="flex items-center gap-3">
+                            <span className="text-neutral-400">{item.pipeline?.currentStage}</span>
+                            {item.pipeline && <StageBadge status={item.pipeline.status} />}
+                            {!item.pipeline && <StartPipelineButton workItemId={item.id} compact />}
+                            <QuickViewLink workItemId={item.id} className="text-xs text-accent hover:underline">
+                              Quick View
+                            </QuickViewLink>
+                          </span>
+                        </Row>
+                      ))}
+                      {project.workItems.length === 0 && <RowEmpty>No work items yet.</RowEmpty>}
+                    </RowList>
+
+                    <div className="mt-3">
+                      <AddWorkItemForm projectId={project.id} />
+                    </div>
                   </div>
-                </div>
+                </Panel>
               ))}
             </div>
           </section>
@@ -303,14 +315,14 @@ export default async function HomePage() {
   );
 }
 
-function SummaryCard({ label, count, href }: { label: string; count: number; href: string }) {
+function SummaryChip({ label, count, href }: { label: string; count: number; href: string }) {
   return (
     <Link
       href={href}
-      className="rounded-lg border border-black/10 dark:border-white/15 p-3 hover:border-black/25 dark:hover:border-white/30"
+      className="flex items-center gap-1.5 rounded-full border border-border-hairline bg-surface px-3 py-1.5 text-sm hover:border-neutral-400 dark:hover:border-neutral-500"
     >
-      <p className="text-2xl font-semibold">{count}</p>
-      <p className="text-xs opacity-60">{label}</p>
+      <span className="font-semibold">{count}</span>
+      <span className="text-neutral-500 dark:text-neutral-400">{label}</span>
     </Link>
   );
 }

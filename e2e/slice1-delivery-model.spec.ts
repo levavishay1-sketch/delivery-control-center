@@ -84,23 +84,32 @@ test("delivery model: dependency, blocker, Attention Center, Quick View, timelin
   await page.getByPlaceholder("Reason (why is this blocked?)").fill(blockerReason);
   await page.getByPlaceholder("Required action (what needs to happen?)").fill("Get DBA sign-off");
   await page.getByRole("button", { name: "Create Blocker", exact: true }).click();
-  await expect(page.getByText(`🚫 Blocked — ${blockerReason}`)).toBeVisible();
+  await expect(page.getByText("Blocked", { exact: true })).toBeVisible();
+  await expect(page.getByText(blockerReason)).toBeVisible();
 
   // 7. Navigate to Attention Center, verify the blocker is shown with its reason.
   await page.getByRole("link", { name: "Attention Center" }).click();
   await page.waitForURL(/\/attention/);
-  await expect(page.getByText(`Blocked — ${blockerReason}`)).toBeVisible();
+  await expect(page.getByText(blockerReason)).toBeVisible();
 
   // 8. Open Quick View from the Attention Center row, verify the blocker panel.
-  const blockerRow = page.locator("div", { hasText: `Blocked — ${blockerReason}` }).last();
+  const blockerRow = page
+    .locator("div", { hasText: blockerReason })
+    .filter({ has: page.getByRole("link", { name: "Quick View" }) })
+    .last();
   await blockerRow.getByRole("link", { name: "Quick View" }).click();
   const drawer = page.getByRole("dialog");
   await expect(drawer).toBeVisible();
-  await expect(drawer.getByText(`🚫 Blocked — ${blockerReason}`)).toBeVisible();
+  // Scoped to the blocker panel itself (not the whole drawer) — the Timeline section
+  // below it also renders the reason inside the raw audit-event JSON, which would
+  // otherwise make this locator ambiguous.
+  const blockerPanel = drawer.getByTestId("blocker-panel");
+  await expect(blockerPanel.getByText("Blocked", { exact: true })).toBeVisible();
+  await expect(blockerPanel.getByText(blockerReason)).toBeVisible();
 
   // 9. Resolve the blocker via Quick View.
   await drawer.getByRole("button", { name: "Resolve Blocker" }).click();
-  await expect(drawer.getByText(`🚫 Blocked — ${blockerReason}`)).not.toBeVisible({ timeout: 10_000 });
+  await expect(blockerPanel).not.toBeVisible({ timeout: 10_000 });
 
   // 10. Verify the drawer's own Timeline shows the resolution event (no page reload).
   await expect(drawer.getByText(`resolved blocker on "${backendApiTitle}"`)).toBeVisible();

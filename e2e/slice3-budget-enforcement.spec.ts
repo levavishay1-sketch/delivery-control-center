@@ -66,7 +66,7 @@ test("budget enforcement: set budget → exceed → refuse → override → retr
   await expect(page.locator("form", { hasText: "Effective budget" }).first()).toContainText("$0.01");
 
   // --- Back to dashboard and create work item ---
-  await page.getByRole("link", { name: /back|home|dashboard/i }).click();
+  await page.getByRole("link", { name: "← Back to Dashboard" }).click();
   await page.waitForURL("/");
 
   await projectCard.getByText("+ Add work item").click();
@@ -163,7 +163,10 @@ test("budget enforcement: set budget → exceed → refuse → override → retr
   }
 
   // --- Verify project cost is rolled up and shown ---
-  await page.getByRole("link", { name: /back|home|dashboard/i }).click();
+  // This point in the flow is still on /pipelines/[id], which has no page-specific "back"
+  // link (a pre-existing navigation gap) — the persistent nav rail's Dashboard link works
+  // from any page, including this one.
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
   await page.waitForURL("/");
 
   const projectCostDisplay = projectCard.locator("text=/AI cost:/i");

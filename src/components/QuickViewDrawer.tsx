@@ -95,22 +95,31 @@ export function QuickViewDrawer() {
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
-      <div className="absolute inset-0 bg-black/30" onClick={close} aria-hidden="true" />
+      <div
+        className="absolute inset-0 bg-(--backdrop-floating) transition-opacity duration-150"
+        onClick={close}
+        aria-hidden="true"
+      />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={current ? current.workItem.title : "Work item quick view"}
-        className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-black/10 bg-background p-4 shadow-xl dark:border-white/15 sm:w-[400px]"
+        className="animate-drawer-in relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-border-hairline bg-surface p-4 shadow-(--shadow-floating) sm:w-[400px]"
       >
         <div className="flex items-start justify-between gap-2">
           <h2 className="text-lg font-semibold">{current ? current.workItem.title : "Loading…"}</h2>
-          <button ref={closeButtonRef} onClick={close} aria-label="Close" className="text-xl leading-none opacity-60 hover:opacity-100">
+          <button
+            ref={closeButtonRef}
+            onClick={close}
+            aria-label="Close"
+            className="rounded-md p-1 text-xl leading-none text-neutral-500 hover:bg-surface-muted hover:text-foreground"
+          >
             ×
           </button>
         </div>
 
-        {!current && !error && <p className="mt-4 text-sm opacity-60">Loading…</p>}
-        {error && <p className="mt-4 text-sm text-red-500">{error}</p>}
+        {!current && !error && <p className="mt-4 text-sm text-neutral-500">Loading…</p>}
+        {error && <p className="mt-4 text-sm text-status-critical">{error}</p>}
 
         {current && (
           <div className="mt-4 flex flex-col gap-6">
@@ -131,7 +140,9 @@ export function QuickViewDrawer() {
             />
 
             <section>
-              <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Dependencies</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                Dependencies
+              </h3>
               <div className="mt-2">
                 <DependenciesTab
                   upstream={current.dependencies.upstream}
@@ -145,7 +156,9 @@ export function QuickViewDrawer() {
             </section>
 
             <section>
-              <h3 className="text-xs font-medium uppercase tracking-wide opacity-60">Timeline</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+                Timeline
+              </h3>
               <div className="mt-2">
                 <TimelineTab
                   key={refreshCount}
@@ -156,7 +169,7 @@ export function QuickViewDrawer() {
               </div>
             </section>
 
-            <Link href={current.fullRecordHref} className="text-sm underline opacity-70 hover:opacity-100">
+            <Link href={current.fullRecordHref} className="text-sm text-accent hover:underline">
               Open full 360° Record →
             </Link>
           </div>

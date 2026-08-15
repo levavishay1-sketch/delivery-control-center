@@ -1,6 +1,6 @@
 # Delivery Control Center — Product & System Specification
 
-Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 6).
+Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 7).
 Every claim below is traceable to a file in this repo.
 Status tags used throughout:
 
@@ -11,7 +11,7 @@ Status tags used throughout:
 - **Missing** — not present at all; noted because the product's own stated
   goals imply it should exist.
 
-This revision folds in **seven** shipped slices: **Slice 0** (tenancy,
+This revision folds in **eight** shipped slices: **Slice 0** (tenancy,
 identity, auth — archived at
 `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/`),
 **Slice 1** (the delivery model and the Attention Center — archived at
@@ -43,7 +43,15 @@ resolution and its source, an impact preview naming affected
 clients/projects shown before any cascading change is saved, explicit
 reset-to-inherited, and a durable, append-only `ConfigChange` version
 history distinct from the general audit trail — archived at
-`openspec/changes/archive/2026-08-15-slice-6-configuration-center/`).
+`openspec/changes/archive/2026-08-15-slice-6-configuration-center/`), and
+**Slice 7** (Design system foundation & premium UI refresh — a real
+design token system (`@theme` block in `src/app/globals.css`: neutral
+scale, one accent color, five status-semantic colors, a 6-step type
+scale, two elevation levels) applied to the Dashboard, Attention Center,
+Quick View drawer, and 360° Delivery Record via new shared components
+(`StatusBadge`, `Row`/`RowList`, `Panel`) and a persistent left
+navigation rail; no domain, entity, or backend changes — archived at
+`openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/`).
 The previous revision of this file predated Slice 2 and described a fixed
 five-stage pipeline with uniform approval gating and an automatically-created,
 per-work-item Constitution stage — none of that is still true.
