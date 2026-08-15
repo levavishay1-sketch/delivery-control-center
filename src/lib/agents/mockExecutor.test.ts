@@ -35,3 +35,36 @@ describe("mockExecutor.executeStage(CLARIFY)", () => {
     expect(withAnswers.promptTokens).toBeGreaterThan(withoutAnswers.promptTokens);
   });
 });
+
+describe("mockExecutor.executeStage(ANALYZE)", () => {
+  it("returns an empty findings array and a clean-bill-of-health summary when the description has no marker", async () => {
+    const result = await mockExecutor.executeStage("ANALYZE", baseContext);
+    expect(result.analysisFindings).toEqual([]);
+    expect(result.content).toContain("No consistency issues found");
+  });
+
+  it("returns structured findings when the description has the mock analysis marker", async () => {
+    const result = await mockExecutor.executeStage("ANALYZE", {
+      ...baseContext,
+      workItemDescription:
+        "Reset flow. [NEEDS_ANALYSIS_FINDING: CRITICAL:PLAN:Plan omits rollback steps | HIGH:TASKS:Task 3 duplicates Task 1]",
+    });
+    expect(result.analysisFindings).toEqual([
+      { severity: "CRITICAL", relatedStageType: "PLAN", message: "Plan omits rollback steps" },
+      { severity: "HIGH", relatedStageType: "TASKS", message: "Task 3 duplicates Task 1" },
+    ]);
+    expect(result.content).toContain("Plan omits rollback steps");
+  });
+
+  it("folds prior-stage content into the filled instructions when present", async () => {
+    const withPriorStages = await mockExecutor.executeStage("ANALYZE", {
+      ...baseContext,
+      priorStagesContent: [
+        { type: "SPEC", content: "# Spec\nUsers can reset their password." },
+        { type: "PLAN", content: "# Plan\nAdd a reset endpoint." },
+      ],
+    });
+    const withoutPriorStages = await mockExecutor.executeStage("ANALYZE", baseContext);
+    expect(withPriorStages.promptTokens).toBeGreaterThan(withoutPriorStages.promptTokens);
+  });
+});

@@ -292,3 +292,147 @@ describe("completeStageDraft with clarifyQuestions", () => {
     expect(reloadedPipeline.currentStage).toBe("PLAN");
   });
 });
+
+describe("completeStageDraft with analysisFindings", () => {
+  /** Walks a fresh pipeline realistically through SPEC/CLARIFY/PLAN/TASKS up to ANALYZE. */
+  async function reachAnalyzeStage(title: string) {
+    const project = await createProjectWithApprovedConstitution(title);
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+    await draft(managerCtx, specStage.id);
+    const completedSpec = await runStageDraftJob(specStage.id, "# Spec");
+    await approveStage(managerCtx, completedSpec.id);
+
+    const clarifyStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "CLARIFY" } });
+    await draft(managerCtx, clarifyStage.id);
+    await runStageDraftJob(clarifyStage.id, "# Clarify — nothing outstanding");
+
+    const planStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "PLAN" } });
+    await draft(managerCtx, planStage.id);
+    const completedPlan = await runStageDraftJob(planStage.id, "# Plan");
+    await approveStage(managerCtx, completedPlan.id);
+
+    const tasksStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "TASKS" } });
+    await draft(managerCtx, tasksStage.id);
+    const completedTasks = await runStageDraftJob(tasksStage.id, "# Tasks");
+    await approveStage(managerCtx, completedTasks.id);
+
+    const analyzeStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "ANALYZE" } });
+    return { pipeline, planStage, tasksStage, analyzeStage };
+  }
+
+  it("records findings and auto-advances past ANALYZE when none are Critical", async () => {
+    const { pipeline, analyzeStage } = await reachAnalyzeStage("Analyze Clean Project");
+
+    await draft(managerCtx, analyzeStage.id);
+    const completed = await completeStageDraft(analyzeStage.id, {
+      content: "# Analyze",
+      aiModel: "mock-agent-v1",
+      promptTokens: 10,
+      completionTokens: 20,
+      costUsd: 0.001,
+      analysisFindings: [{ severity: "INFO", message: "Looks fine", relatedStageType: "PLAN" }],
+    });
+
+    expect(completed.status).toBe("DONE");
+
+    const findings = await db.analysisFinding.findMany({ where: { stageId: analyzeStage.id } });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe("INFO");
+
+    const reloadedPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(reloadedPipeline.currentStage).toBe("DEPLOY");
+    expect(reloadedPipeline.status).toBe("ACTIVE");
+  });
+
+  it("a Critical finding marks ANALYZE REJECTED, blocks the pipeline, and does not advance", async () => {
+    const { pipeline, analyzeStage } = await reachAnalyzeStage("Analyze Critical Project");
+
+    await draft(managerCtx, analyzeStage.id);
+    const completed = await completeStageDraft(analyzeStage.id, {
+      content: "# Analyze",
+      aiModel: "mock-agent-v1",
+      promptTokens: 10,
+      completionTokens: 20,
+      costUsd: 0.001,
+      analysisFindings: [{ severity: "CRITICAL", message: "Plan omits rollback", relatedStageType: "PLAN" }],
+    });
+
+    expect(completed.status).toBe("REJECTED");
+
+    const reloadedPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(reloadedPipeline.status).toBe("BLOCKED");
+    expect(reloadedPipeline.currentStage).toBe("ANALYZE");
+
+    const findings = await db.analysisFinding.findMany({ where: { stageId: analyzeStage.id } });
+    expect(findings).toHaveLength(1);
+    expect(findings[0].severity).toBe("CRITICAL");
+  });
+
+  it("allows redrafting the DONE stage a Critical finding names, but refuses an unflagged DONE stage", async () => {
+    const { planStage, tasksStage, analyzeStage } = await reachAnalyzeStage("Analyze Redraft Project");
+
+    await draft(managerCtx, analyzeStage.id);
+    await completeStageDraft(analyzeStage.id, {
+      content: "# Analyze",
+      aiModel: "mock-agent-v1",
+      promptTokens: 10,
+      completionTokens: 20,
+      costUsd: 0.001,
+      analysisFindings: [{ severity: "CRITICAL", message: "Plan omits rollback", relatedStageType: "PLAN" }],
+    });
+
+    // PLAN is DONE but named by the Critical finding above — allowed.
+    const redraftedPlan = await draft(managerCtx, planStage.id);
+    expect(redraftedPlan.status).toBe("AI_DRAFTING");
+
+    // TASKS is DONE and not named by any finding — still refused.
+    await expect(draft(managerCtx, tasksStage.id)).rejects.toThrow(/only PENDING or REJECTED/);
+  });
+
+  it("redrafting the flagged stage and re-running ANALYZE clean clears the block and advances, without disturbing downstream stages", async () => {
+    const { pipeline, planStage, analyzeStage } = await reachAnalyzeStage("Analyze Resolve Project");
+
+    await draft(managerCtx, analyzeStage.id);
+    await completeStageDraft(analyzeStage.id, {
+      content: "# Analyze",
+      aiModel: "mock-agent-v1",
+      promptTokens: 10,
+      completionTokens: 20,
+      costUsd: 0.001,
+      analysisFindings: [{ severity: "CRITICAL", message: "Plan omits rollback", relatedStageType: "PLAN" }],
+    });
+
+    await draft(managerCtx, planStage.id);
+    const redraftedPlan = await runStageDraftJob(planStage.id, "# Plan v2, with rollback steps");
+    await approveStage(managerCtx, redraftedPlan.id);
+
+    // Approving the flagged stage's redraft must not create a duplicate TASKS row or move
+    // currentStage backward — the pipeline is still sitting at ANALYZE, blocked.
+    const midPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(midPipeline.currentStage).toBe("ANALYZE");
+    const tasksStages = await db.stage.findMany({ where: { pipelineId: pipeline.id, type: "TASKS" } });
+    expect(tasksStages).toHaveLength(1);
+
+    // ANALYZE itself is REJECTED — redraftable via the ordinary PENDING/REJECTED path.
+    await draft(managerCtx, analyzeStage.id);
+    const cleaned = await completeStageDraft(analyzeStage.id, {
+      content: "# Analyze — clean",
+      aiModel: "mock-agent-v1",
+      promptTokens: 10,
+      completionTokens: 20,
+      costUsd: 0.001,
+      analysisFindings: [],
+    });
+
+    expect(cleaned.status).toBe("DONE");
+    const remainingFindings = await db.analysisFinding.findMany({ where: { stageId: analyzeStage.id } });
+    expect(remainingFindings).toHaveLength(0);
+
+    const finalPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(finalPipeline.currentStage).toBe("DEPLOY");
+    expect(finalPipeline.status).toBe("ACTIVE");
+  });
+});

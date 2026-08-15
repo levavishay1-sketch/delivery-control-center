@@ -3,7 +3,7 @@ import { getNextStageTypeInSequence, getStageConfig, loadWorkflow } from "@/lib/
 import { recordAuditEvent } from "@/lib/audit";
 import { getApprovedConstitution } from "@/domain/constitution/queries";
 import { enqueueJob } from "@/domain/job/commands";
-import type { Prisma, StageType } from "@/generated/prisma/client";
+import type { FindingSeverity, Prisma, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 import { ConflictError, ValidationError } from "@/domain/shared/errors";
@@ -68,13 +68,22 @@ export async function startPipeline(ctx: AuthContext, workItemId: string) {
  * Advances the pipeline past a just-completed stage: creates the next configured stage, or
  * marks the pipeline COMPLETED if there isn't one. Shared by approveStage and draftStage's
  * requiresApproval:false auto-complete path — both reach this the same way a human approval does.
+ *
+ * No-ops when completedStageType isn't the pipeline's actual currentStage: this happens when a
+ * stage a Critical Analyze finding names gets redrafted and re-approved after the pipeline has
+ * already moved on to ANALYZE (see design.md Decision 8 / Task Group 7.3) — that stage's own
+ * status still updates, but there is no "next" stage to create (one already exists) and the
+ * pipeline's frontier must not move backward.
  */
 async function advancePipelinePastStage(
   tx: Prisma.TransactionClient,
   pipelineId: string,
   stageSequence: StageType[],
+  currentStage: StageType,
   completedStageType: StageType
 ) {
+  if (completedStageType !== currentStage) return;
+
   const nextType = getNextStageTypeInSequence(stageSequence, completedStageType);
   if (nextType) {
     await tx.stage.create({ data: { pipelineId, type: nextType } });
@@ -101,6 +110,14 @@ async function advancePipelinePastStage(
  * Group 5). Returns as soon as the job is queued, not once drafted; the worker performs the
  * actual executor call via getStageForDrafting/completeStageDraft/revertStageDraftFailure
  * below. (CLARIFY's AWAITING_CLARIFICATION branch is added in Task Group 6.)
+ *
+ * One additional entry point (Task Group 7.3): a DONE stage can also be redrafted if it's
+ * currently named by an unresolved Critical Analyze finding — i.e. the pipeline's ANALYZE
+ * stage is REJECTED (blocking) and one of its findings' relatedStageType is this stage's type.
+ * This is how a human resolves the block (design.md Decision 8's "redraft the implicated
+ * stage"). No separate "resolved" flag is needed: redrafting ANALYZE itself always replaces
+ * its findings (see completeStageDraft), so once ANALYZE is clean again this condition no
+ * longer matches on its own.
  */
 export async function draftStage(ctx: AuthContext, stageId: string) {
   const stage = await db.stage.findUniqueOrThrow({
@@ -109,7 +126,17 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
   });
   requireClientRole(ctx, stage.pipeline.workItem.project.clientId, WRITE_ROLES);
 
-  if (stage.status !== "PENDING" && stage.status !== "REJECTED") {
+  const flaggedByCriticalAnalyze =
+    stage.status === "DONE" &&
+    (await db.analysisFinding.findFirst({
+      where: {
+        relatedStageType: stage.type,
+        severity: "CRITICAL",
+        stage: { pipelineId: stage.pipelineId, type: "ANALYZE", status: "REJECTED" },
+      },
+    })) !== null;
+
+  if (stage.status !== "PENDING" && stage.status !== "REJECTED" && !flaggedByCriticalAnalyze) {
     throw new Error(`Stage is ${stage.status}; only PENDING or REJECTED stages can be drafted.`);
   }
 
@@ -143,6 +170,8 @@ export interface StageDraftResult {
   costUsd: number;
   /** Present only for a CLARIFY draft that asked questions instead of producing content — see Task Group 6. */
   clarifyQuestions?: string[];
+  /** Present only for an ANALYZE draft — always set (possibly empty) — see Task Group 7. */
+  analysisFindings?: { severity: FindingSeverity; message: string; relatedStageType: StageType }[];
 }
 
 /**
@@ -153,7 +182,11 @@ export interface StageDraftResult {
  * overwritten), same as the old synchronous path did. A CLARIFY draft that asked questions
  * instead of drafting content takes a separate branch: no content, no StageVersion, no
  * auto-advance — the stage moves to AWAITING_CLARIFICATION until every question is answered
- * (src/domain/clarify/commands.ts), which is what actually resumes drafting.
+ * (src/domain/clarify/commands.ts), which is what actually resumes drafting. An ANALYZE draft
+ * takes its own branch too: it always completes (read-only check, not a gate — design.md
+ * Decision 8), but a Critical finding marks the stage REJECTED instead of DONE and skips
+ * auto-advance, blocking the pipeline the same way a human rejection or an exhausted retry
+ * does, until the flagged stage is redrafted and ANALYZE is drafted again clean.
  */
 export async function completeStageDraft(stageId: string, result: StageDraftResult) {
   return db.$transaction(async (tx) => {
@@ -184,6 +217,78 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
         action: `AI asked ${result.clarifyQuestions.length} clarifying question(s) on ${getStageConfig(current.type).label}`,
         detail: { questions: result.clarifyQuestions },
       });
+      return updated;
+    }
+
+    if (result.analysisFindings) {
+      const hasCritical = result.analysisFindings.some((f) => f.severity === "CRITICAL");
+      const updated = await tx.stage.update({
+        where: { id: stageId },
+        data: {
+          status: hasCritical ? "REJECTED" : "DONE",
+          content: result.content,
+          aiModel: result.aiModel,
+          promptTokens: result.promptTokens,
+          completionTokens: result.completionTokens,
+          costUsd: result.costUsd,
+          completedAt: hasCritical ? undefined : new Date(),
+        },
+      });
+
+      // Only the latest ANALYZE run's findings count (design.md Decision 8) — replace, don't
+      // accumulate, so a clean redraft after fixing a flagged stage clears the old ones.
+      await tx.analysisFinding.deleteMany({ where: { stageId } });
+      if (result.analysisFindings.length > 0) {
+        await tx.analysisFinding.createMany({
+          data: result.analysisFindings.map((f) => ({
+            stageId,
+            severity: f.severity,
+            message: f.message,
+            relatedStageType: f.relatedStageType,
+          })),
+        });
+      }
+
+      const priorVersionCount = await tx.stageVersion.count({ where: { stageId } });
+      await tx.stageVersion.create({
+        data: {
+          stageId,
+          versionNumber: priorVersionCount + 1,
+          content: result.content,
+          aiModel: result.aiModel,
+          promptTokens: result.promptTokens,
+          completionTokens: result.completionTokens,
+          costUsd: result.costUsd,
+          createdAsResultOf: priorVersionCount === 0 ? "DRAFT" : "REDRAFT",
+        },
+      });
+
+      await recordAuditEvent(tx, {
+        pipelineId: current.pipeline.id,
+        stageId,
+        actor: "AI",
+        actorName: result.aiModel,
+        action: `AI analyzed prior stages: ${result.analysisFindings.length} finding(s)${
+          hasCritical ? " — Critical, blocking advancement" : ""
+        }`,
+        detail: { findings: result.analysisFindings },
+      });
+
+      if (hasCritical) {
+        await tx.pipeline.update({ where: { id: current.pipeline.id }, data: { status: "BLOCKED" } });
+      } else {
+        if (current.pipeline.status === "BLOCKED") {
+          await tx.pipeline.update({ where: { id: current.pipeline.id }, data: { status: "ACTIVE" } });
+        }
+        await advancePipelinePastStage(
+          tx,
+          current.pipeline.id,
+          current.pipeline.stageSequence,
+          current.pipeline.currentStage,
+          current.type
+        );
+      }
+
       return updated;
     }
 
@@ -239,7 +344,13 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
         actor: "SYSTEM",
         action: `${getStageConfig(current.type).label} completed automatically (no approval required)`,
       });
-      await advancePipelinePastStage(tx, current.pipeline.id, current.pipeline.stageSequence, current.type);
+      await advancePipelinePastStage(
+        tx,
+        current.pipeline.id,
+        current.pipeline.stageSequence,
+        current.pipeline.currentStage,
+        current.type
+      );
     }
 
     return updated;
@@ -299,7 +410,7 @@ export async function approveStage(ctx: AuthContext, stageId: string, comment?: 
       detail: comment ? { comment } : undefined,
     });
 
-    await advancePipelinePastStage(tx, stage.pipeline.id, stage.pipeline.stageSequence, stage.type);
+    await advancePipelinePastStage(tx, stage.pipeline.id, stage.pipeline.stageSequence, stage.pipeline.currentStage, stage.type);
 
     return tx.pipeline.findUniqueOrThrow({ where: { id: stage.pipeline.id }, include: { stages: true } });
   });

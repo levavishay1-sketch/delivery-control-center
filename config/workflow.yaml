@@ -7,10 +7,10 @@
 # Slice 2 — CONSTITUTION is deliberately not a stage here: it's promoted to a
 # project-scoped, versioned artifact drafted/approved once per project (see
 # src/domain/constitution/), referenced by every pipeline started under it via
-# Pipeline.constitutionVersion, rather than drafted per work item. ANALYZE and
-# IMPLEMENT join this list in Task Group 7 once their prompt template and
-# worker-side handling exist; adding their StageType here before then would
-# create a stage the worker can't actually draft.
+# Pipeline.constitutionVersion, rather than drafted per work item. ANALYZE
+# joined this list in Task Group 7, once its prompt template and worker-side
+# handling existed. IMPLEMENT is still pending its own task group — adding its
+# StageType here before then would create a stage the worker can't draft.
 stages:
   - type: SPEC
     label: Specification
@@ -35,6 +35,12 @@ stages:
     description: Concrete, ordered implementation tasks derived from the Plan.
     promptTemplate: tasks.md
     requiresApproval: true
+
+  - type: ANALYZE
+    label: Analyze
+    description: Read-only consistency check across the Spec, Plan, and Tasks. A Critical finding blocks advancing until the flagged stage is redrafted.
+    promptTemplate: analyze.md
+    requiresApproval: false
 
   - type: DEPLOY
     label: Deploy

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { pollUntilDraftingFinishes } from "@/lib/pollStageStatus";
 
-export function DraftButton({ pipelineId, label }: { pipelineId: string; label: string }) {
+export function DraftButton({ stageId, label }: { stageId: string; label: string }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -12,14 +12,13 @@ export function DraftButton({ pipelineId, label }: { pipelineId: string; label: 
   async function onClick() {
     setPending(true);
     setError(null);
-    const res = await fetch(`/api/pipelines/${pipelineId}/advance`, { method: "POST" });
+    const res = await fetch(`/api/stages/${stageId}/draft`, { method: "POST" });
     if (!res.ok) {
       setPending(false);
       setError((await res.json()).error ?? "Failed to draft stage");
       return;
     }
-    const stage = (await res.json()) as { id: string };
-    await pollUntilDraftingFinishes(stage.id);
+    await pollUntilDraftingFinishes(stageId);
     setPending(false);
     router.refresh();
   }

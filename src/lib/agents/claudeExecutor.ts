@@ -1,10 +1,17 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { StageType } from "@/generated/prisma/client";
 import { getStageConfig, loadPromptTemplate } from "@/lib/config";
-import { clarifyQuestionsSchema } from "./types";
-import type { AgentExecutor, ConstitutionExecutionContext, StageExecutionContext, StageExecutionResult } from "./types";
+import { analysisFindingsSchema, clarifyQuestionsSchema, summarizeAnalysisFindings } from "./types";
+import type {
+  AgentExecutor,
+  AnalysisFindingDraft,
+  ConstitutionExecutionContext,
+  StageExecutionContext,
+  StageExecutionResult,
+} from "./types";
 
 const CLARIFY_QUESTIONS_MARKER = "<!-- CLARIFY_QUESTIONS -->";
+const ANALYZE_FINDINGS_MARKER = "<!-- ANALYZE_FINDINGS -->";
 
 /**
  * Parses the structured-questions block a CLARIFY draft can return instead of
@@ -40,6 +47,39 @@ function parseClarifyQuestions(text: string): string[] | null {
   return result.data;
 }
 
+/**
+ * Parses ANALYZE's structured findings — always required (unlike Clarify's marker, which is
+ * conditional on the model deciding to ask questions), since ANALYZE's whole job is to
+ * produce findings, even when that's an empty array. Zod-validated before ever being treated
+ * as authoritative, same discipline as parseClarifyQuestions above.
+ */
+function parseAnalysisFindings(text: string): AnalysisFindingDraft[] {
+  const markerIdx = text.indexOf(ANALYZE_FINDINGS_MARKER);
+  if (markerIdx === -1) {
+    throw new Error("ANALYZE response did not include the required findings marker.");
+  }
+
+  const rest = text
+    .slice(markerIdx + ANALYZE_FINDINGS_MARKER.length)
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/, "")
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rest);
+  } catch {
+    throw new Error("ANALYZE response included the findings marker but the JSON that followed could not be parsed.");
+  }
+
+  const result = analysisFindingsSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(`ANALYZE response's findings failed validation: ${result.error.message}`);
+  }
+  return result.data;
+}
+
 const MODEL = process.env.AI_MODEL || "claude-sonnet-5";
 
 // List price per token for claude-sonnet-5, in USD. Approximate: doesn't
@@ -55,6 +95,11 @@ const SYSTEM_PROMPT =
   "output format (e.g. a structured-questions marker), in which case follow " +
   "that format exactly instead.";
 
+function formatPriorStagesContent(priorStagesContent?: { type: StageType; content: string }[]): string {
+  if (!priorStagesContent?.length) return "(none)";
+  return priorStagesContent.map((s) => `## ${s.type}\n${s.content}`).join("\n\n");
+}
+
 function fillInstructions(template: string, context: StageExecutionContext): string {
   const instructions = template.slice(0, template.indexOf("<!-- OUTPUT TEMPLATE"));
   const filled = instructions
@@ -62,7 +107,8 @@ function fillInstructions(template: string, context: StageExecutionContext): str
     .replaceAll("{{description}}", context.workItemDescription || "(no description provided)")
     .replaceAll("{{source}}", context.workItemSource)
     .replaceAll("{{externalId}}", context.workItemExternalId)
-    .replaceAll("{{previousStageContent}}", context.previousStageContent || "(none)");
+    .replaceAll("{{previousStageContent}}", context.previousStageContent || "(none)")
+    .replaceAll("{{priorStagesContent}}", formatPriorStagesContent(context.priorStagesContent));
 
   if (!context.clarifyAnswers?.length) return filled;
   const answers = context.clarifyAnswers.map((qa) => `- Q: ${qa.question}\n  A: ${qa.answer}`).join("\n");
@@ -119,6 +165,13 @@ export const claudeExecutor: AgentExecutor = {
         return { content: "", aiModel: MODEL, promptTokens, completionTokens, costUsd, clarifyQuestions: questions };
       }
       return { content: text, aiModel: MODEL, promptTokens, completionTokens, costUsd };
+    }
+
+    if (stageType === "ANALYZE") {
+      const { text, promptTokens, completionTokens, costUsd } = await getClaudeResponse(prompt, stageType);
+      const findings = parseAnalysisFindings(text);
+      const content = `# Analyze — ${context.workItemTitle}\n\n${summarizeAnalysisFindings(findings)}`;
+      return { content, aiModel: MODEL, promptTokens, completionTokens, costUsd, analysisFindings: findings };
     }
 
     return callClaude(prompt, stageType);

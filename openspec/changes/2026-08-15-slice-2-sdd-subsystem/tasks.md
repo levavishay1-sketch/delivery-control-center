@@ -62,10 +62,10 @@ established pattern).
 
 ## Task Group 7: Analyze Stage (4 tasks)
 
-- [ ] 7.1 `config/prompts/analyze.md` prompt template; structured, schema-validated findings output (severity + message + related stage type) from the executor, same "AI output → schema → domain command" discipline as Clarify.
-- [ ] 7.2 Worker-side `DRAFT_STAGE` handling for `ANALYZE`: always completes (read-only check, not itself a gate); inserts `AnalysisFinding` rows from the structured output.
-- [ ] 7.3 `advancePipelinePastStage`: refuse to advance past an `ANALYZE` stage while any finding from its most recent run has `severity=CRITICAL`. Redrafting the stage a Critical finding names (`relatedStageType`) followed by a fresh `ANALYZE` draft is required to proceed — document/implement how a fresh `ANALYZE` run supersedes the prior findings (e.g. only the latest `ANALYZE` stage's `StageVersion`'s findings count, per design.md's resolution model).
-- [ ] 7.4 API/UI: findings panel on the pipeline detail page, grouped by severity, naming the related stage. Tests: findings recorded from a drafted Analyze stage; approving Analyze with a Critical finding present does not advance the pipeline; redrafting the flagged stage and re-running Analyze clean allows advancement. Commit: "Implement the Analyze stage: consistency findings, Critical blocks advancement"
+- [x] 7.1 `config/prompts/analyze.md` prompt template; structured, schema-validated findings output (severity + message + related stage type) from the executor, same "AI output → schema → domain command" discipline as Clarify.
+- [x] 7.2 Worker-side `DRAFT_STAGE` handling for `ANALYZE`: always completes (read-only check, not itself a gate); inserts `AnalysisFinding` rows from the structured output.
+- [x] 7.3 `advancePipelinePastStage`: refuse to advance past an `ANALYZE` stage while any finding from its most recent run has `severity=CRITICAL`. Redrafting the stage a Critical finding names (`relatedStageType`) followed by a fresh `ANALYZE` draft is required to proceed — document/implement how a fresh `ANALYZE` run supersedes the prior findings (e.g. only the latest `ANALYZE` stage's `StageVersion`'s findings count, per design.md's resolution model).
+- [x] 7.4 API/UI: findings panel on the pipeline detail page, grouped by severity, naming the related stage. Tests: findings recorded from a drafted Analyze stage; approving Analyze with a Critical finding present does not advance the pipeline; redrafting the flagged stage and re-running Analyze clean allows advancement. Commit: "Implement the Analyze stage: consistency findings, Critical blocks advancement"
 
 ## Task Group 8: Role-Based Gate Policy (3 tasks)
 

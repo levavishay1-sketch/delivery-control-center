@@ -1,9 +1,21 @@
 import type { StageType } from "@/generated/prisma/client";
 import { extractOutputTemplate, getStageConfig, loadPromptTemplate } from "@/lib/config";
-import type { AgentExecutor, ConstitutionExecutionContext, StageExecutionContext, StageExecutionResult } from "./types";
+import { summarizeAnalysisFindings } from "./types";
+import type {
+  AgentExecutor,
+  AnalysisFindingDraft,
+  ConstitutionExecutionContext,
+  StageExecutionContext,
+  StageExecutionResult,
+} from "./types";
 
 const PROMPT_COST_PER_TOKEN = 0.000003;
 const COMPLETION_COST_PER_TOKEN = 0.000015;
+
+function formatPriorStagesContent(priorStagesContent?: { type: StageType; content: string }[]): string {
+  if (!priorStagesContent?.length) return "(none)";
+  return priorStagesContent.map((s) => `## ${s.type}\n${s.content}`).join("\n\n");
+}
 
 function fillTemplate(template: string, context: StageExecutionContext): string {
   const filled = template
@@ -11,11 +23,36 @@ function fillTemplate(template: string, context: StageExecutionContext): string 
     .replaceAll("{{description}}", context.workItemDescription || "(no description provided)")
     .replaceAll("{{source}}", context.workItemSource)
     .replaceAll("{{externalId}}", context.workItemExternalId)
-    .replaceAll("{{previousStageContent}}", context.previousStageContent || "(none)");
+    .replaceAll("{{previousStageContent}}", context.previousStageContent || "(none)")
+    .replaceAll("{{priorStagesContent}}", formatPriorStagesContent(context.priorStagesContent));
 
   if (!context.clarifyAnswers?.length) return filled;
   const answers = context.clarifyAnswers.map((qa) => `- Q: ${qa.question}\n  A: ${qa.answer}`).join("\n");
   return `${filled}\n\nPreviously asked clarification questions and their answers:\n${answers}`;
+}
+
+/**
+ * Deterministic mock-only trigger for ANALYZE's findings, mirroring
+ * extractMockClarifyQuestions below: a work item description containing
+ * `[NEEDS_ANALYSIS_FINDING: SEVERITY:STAGE:message | SEVERITY:STAGE:message]`
+ * makes the mock ANALYZE draft return those findings, so tests can exercise
+ * the Critical-blocks-advancement flow without a real model deciding.
+ */
+function extractMockAnalysisFindings(description: string): AnalysisFindingDraft[] {
+  const match = description.match(/\[NEEDS_ANALYSIS_FINDING:\s*([\s\S]+?)\]/);
+  if (!match) return [];
+  return match[1]
+    .split("|")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [severity, relatedStageType, ...messageParts] = entry.split(":").map((p) => p.trim());
+      return {
+        severity: severity as AnalysisFindingDraft["severity"],
+        relatedStageType: relatedStageType as AnalysisFindingDraft["relatedStageType"],
+        message: messageParts.join(":") || "(no message provided)",
+      };
+    });
 }
 
 /**
@@ -66,6 +103,26 @@ export const mockExecutor: AgentExecutor = {
           clarifyQuestions: questions,
         };
       }
+    }
+
+    if (stageType === "ANALYZE") {
+      const findings = extractMockAnalysisFindings(context.workItemDescription);
+      const stageConfig = getStageConfig(stageType);
+      const rawTemplate = loadPromptTemplate(stageConfig.promptTemplate);
+      const instructions = rawTemplate.slice(0, rawTemplate.indexOf("<!-- OUTPUT TEMPLATE"));
+      const outputTemplate = extractOutputTemplate(rawTemplate);
+
+      const content = fillTemplate(outputTemplate, context).replaceAll(
+        "{{findingsSummary}}",
+        summarizeAnalysisFindings(findings)
+      );
+      const promptTokens = estimateTokens(fillTemplate(instructions, context));
+      const completionTokens = estimateTokens(content);
+      const costUsd =
+        Math.round((promptTokens * PROMPT_COST_PER_TOKEN + completionTokens * COMPLETION_COST_PER_TOKEN) * 10000) /
+        10000;
+
+      return { content, aiModel: "mock-agent-v1", promptTokens, completionTokens, costUsd, analysisFindings: findings };
     }
 
     const stageConfig = getStageConfig(stageType);

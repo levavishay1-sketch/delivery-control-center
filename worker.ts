@@ -34,6 +34,15 @@ async function handleDraftStageJob(payload: JobPayload): Promise<void> {
     .filter((q): q is typeof q & { answer: string } => q.answer !== null)
     .map((q) => ({ question: q.question, answer: q.answer }));
 
+  // ANALYZE's cross-artifact consistency check needs every prior stage's content, not just the
+  // one immediately before it (see design.md Decision 8 / Task Group 7).
+  const priorStagesContent =
+    stage.type === "ANALYZE"
+      ? stage.pipeline.stages
+          .filter((s) => s.type !== stage.type && (s.status === "DONE" || s.status === "APPROVED") && s.content)
+          .map((s) => ({ type: s.type, content: s.content! }))
+      : undefined;
+
   const result = await getAgentExecutor().executeStage(stage.type, {
     workItemTitle: stage.pipeline.workItem.title,
     workItemDescription: stage.pipeline.workItem.description ?? "",
@@ -41,6 +50,7 @@ async function handleDraftStageJob(payload: JobPayload): Promise<void> {
     workItemExternalId: stage.pipeline.workItem.externalId,
     previousStageContent: previousStage?.content ?? undefined,
     clarifyAnswers: answeredClarifyQuestions.length > 0 ? answeredClarifyQuestions : undefined,
+    priorStagesContent,
   });
 
   await completeStageDraft(stageId, result);

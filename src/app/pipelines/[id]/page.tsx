@@ -8,6 +8,7 @@ import { StageBadge } from "@/components/StageBadge";
 import { DraftButton } from "@/components/DraftButton";
 import { ApprovalGate } from "@/components/ApprovalGate";
 import { ClarifyPanel } from "@/components/ClarifyPanel";
+import { AnalyzeFindingsPanel } from "@/components/AnalyzeFindingsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,17 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
   // CONSTITUTION) so older pipelines' history still displays instead of crashing.
   const workflow = pipeline.stageSequence.map(getStageConfigOrFallback);
   const stagesByType = new Map(pipeline.stages.map((s) => [s.type, s]));
+
+  // A stage a Critical Analyze finding names can be redrafted even though it's DONE and no
+  // longer the pipeline's current stage — see Task Group 7.3. Findings are only ever the
+  // ANALYZE stage's latest run (replaced on every redraft), so its own status being REJECTED
+  // is exactly "this block is still active."
+  const analyzeStage = stagesByType.get("ANALYZE");
+  const flaggedStageTypes = new Set<string>(
+    analyzeStage?.status === "REJECTED"
+      ? analyzeStage.analysisFindings.filter((f) => f.severity === "CRITICAL").map((f) => f.relatedStageType)
+      : []
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -93,8 +105,26 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
 
               {isCurrent && stage && (stage.status === "PENDING" || stage.status === "REJECTED") && (
                 <div className="mt-3">
-                  <DraftButton pipelineId={pipeline.id} label={stage.status === "REJECTED" ? "Redraft" : "Draft with AI"} />
+                  <DraftButton stageId={stage.id} label={stage.status === "REJECTED" ? "Redraft" : "Draft with AI"} />
                 </div>
+              )}
+
+              {!isCurrent && stage && stage.status === "DONE" && flaggedStageTypes.has(stageConfig.type) && (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs text-red-500">Flagged by Analyze — redraft required to unblock the pipeline.</p>
+                  <DraftButton stageId={stage.id} label="Redraft" />
+                </div>
+              )}
+
+              {stageConfig.type === "ANALYZE" && stage && (stage.status === "DONE" || stage.status === "REJECTED") && (
+                <AnalyzeFindingsPanel
+                  findings={stage.analysisFindings.map((f) => ({
+                    id: f.id,
+                    severity: f.severity,
+                    message: f.message,
+                    relatedStageType: f.relatedStageType,
+                  }))}
+                />
               )}
 
               {isCurrent && stage && stage.status === "PENDING_APPROVAL" && (
