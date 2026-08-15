@@ -327,6 +327,25 @@ up in this slice. Its own E2E scenario caught a real gap before shipping:
 silently 404ing. Full detail: source §5 "Slice 6". Archive detail:
 `openspec/changes/archive/2026-08-15-slice-6-configuration-center/`.
 
+### Slice 7 — Design system foundation & premium UI refresh — **Scoped, not started**
+
+*(Source: `docs/roadmap-sources/2026-08-15-design-system-direction.md` —
+agent-produced design direction, approved by the user for implementation.
+Not part of the original master prompt / gap analysis; this slice was
+proposed and approved in conversation after all six master-prompt slices
+completed.)*
+
+Establishes a real design token system (neutral scale, single accent
+color, five-value status semantics, type scale, two elevation levels) and
+applies it to the three core surfaces of the existing Dashboard/Attention
+Center → Quick View → 360° Delivery Record architecture (built in Slice
+1). Scope: design tokens + base components (`StatusBadge`, row/list
+primitives, panel, drawer elevation) + restyle of Dashboard/Attention
+Center, Quick View drawer, and 360° Delivery Record. Explicitly does not
+add new domain features, entities, or change backend behavior — visual/
+structural UI layer only, on top of the unchanged domain model. Full
+direction: see the source document above.
+
 ## Definition of Done, for every future slice (source: `§6`)
 
 Not done until it has: persistent backend state with a migration, Zod
