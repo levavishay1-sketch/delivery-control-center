@@ -43,8 +43,13 @@ enum StageStatus {
 }
 
 // Slice 2 — job runtime (see openspec/changes/2026-08-15-slice-2-sdd-subsystem/design.md).
+// DRAFT_CONSTITUTION was added alongside DRAFT_STAGE (not deferred to a later
+// slice as design.md's Non-Goals originally implied): Constitution drafting is
+// a real AI call subject to the same crash-durability goal as Stage drafting,
+// and the job runtime's claim/retry mechanics are already type-agnostic.
 enum JobType {
   DRAFT_STAGE
+  DRAFT_CONSTITUTION
 }
 
 enum JobStatus {
@@ -56,6 +61,8 @@ enum JobStatus {
 
 enum ConstitutionStatus {
   DRAFT
+  // Set while a DRAFT_CONSTITUTION job is in flight; mirrors StageStatus.AI_DRAFTING.
+  AI_DRAFTING
   PENDING_APPROVAL
   APPROVED
   REJECTED

@@ -49,8 +49,10 @@ real code execution).
 **Non-Goals:**
 - A general-purpose job queue for arbitrary background work (Jira sync,
   future connector syncs) — this slice's `Job` table is shaped generally
-  enough to extend later (Slice 4), but only `DRAFT_STAGE` jobs are
-  implemented now.
+  enough to extend later (Slice 4), but only `DRAFT_STAGE` and
+  `DRAFT_CONSTITUTION` jobs are implemented now (Constitution drafting is a
+  real AI call subject to the same crash-durability goal as Stage drafting —
+  see Decision 4a).
 - Redis/BullMQ or any queue infrastructure beyond Postgres — the source
   document explicitly defers this until there's a measured need.
 - An `Agent` registry with configurable per-work-item-type routing — one
@@ -149,6 +151,45 @@ relationship at all; forcing it through the `Stage`-versioning shape
 would need a nullable `stageId` and a parallel `projectId`/`constitutionId`
 path on the same table, more complex than two small, independently
 understandable models.
+
+### 4a. Constitution drafting is job-backed via its own `DRAFT_CONSTITUTION` job type, run through a new `executeConstitution` on `AgentExecutor`
+`ConstitutionStatus` gains `AI_DRAFTING` (mirroring `StageStatus`).
+`draftConstitution(ctx, projectId)` enqueues a `DRAFT_CONSTITUTION` job
+(`{ constitutionId }` payload) and returns immediately, exactly like
+`draftStage` does for `DRAFT_STAGE` (Decision 1/Task Group 5) — the same
+`enqueueJob`/`claimJobs`/`completeJob`/`failJob` primitives, a second entry
+in `worker.ts`'s dispatch table. `AgentExecutor` gains
+`executeConstitution(context: ConstitutionExecutionContext):
+Promise<StageExecutionResult>` alongside `executeStage`, because a
+`Constitution` is project-scoped (`projectName`/`projectKey`), not
+work-item-scoped — `StageExecutionContext`'s shape (`workItemTitle`,
+`workItemSource`, ...) doesn't fit. `config/prompts/constitution.md` moves
+from work-item placeholders (`{{title}}`, `{{source}}`) to project ones
+(`{{projectName}}`, `{{projectKey}}`), and is loaded directly by
+filename rather than through `getStageConfig("CONSTITUTION")` — once
+Task Group 4 drops `CONSTITUTION` from `config/workflow.yaml`'s stage
+list, that lookup would 404.
+
+**Draft-vs-new-version policy** (Task 3.1's open question): drafting is
+allowed only when no `Constitution` exists yet for the project (creates
+version 1), the latest version's status is `DRAFT` (not yet submitted —
+reused in place, no new row), or the latest is `REJECTED`/`APPROVED` (both
+draft into a **new** version rather than overwriting — rejected content
+stays retrievable as history, and an approved version can still be
+superseded later without losing it; `getApprovedConstitution` just picks
+the newest `APPROVED` row by version, so an older approved row doesn't
+need active un-approval). Drafting is refused only while the latest is
+`PENDING_APPROVAL` or `AI_DRAFTING` — a submission already in flight or
+awaiting a decision, where a silent overwrite could change content a
+reviewer is currently looking at.
+
+**Alternative considered**: fold `executeConstitution` into `executeStage`
+by keeping `StageType.CONSTITUTION` as the discriminator and stretching
+`StageExecutionContext` with optional project fields. Rejected — Decision
+4 already made `Constitution` its own model specifically to stop treating
+it as a `Stage`; reusing `executeStage`'s work-item-shaped context for a
+project-scoped artifact would reintroduce the coupling that decision
+removed, for both callers and the two executor implementations.
 
 ### 5. Stage content versioning: an append-only `StageVersion` child table
 `Stage` keeps its current columns (`content`, `aiModel`, token/cost

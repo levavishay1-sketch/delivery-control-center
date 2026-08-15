@@ -17,6 +17,12 @@ export interface StageExecutionResult {
   costUsd: number;
 }
 
+/** Constitution is project-scoped, not work-item-scoped — see design.md Decision 4a. */
+export interface ConstitutionExecutionContext {
+  projectName: string;
+  projectKey: string;
+}
+
 /**
  * What drafts stage content. `mockExecutor` fills prompt templates directly;
  * a real implementation would call out to an LLM using the same prompt
@@ -24,4 +30,5 @@ export interface StageExecutionResult {
  */
 export interface AgentExecutor {
   executeStage(stageType: StageType, context: StageExecutionContext): Promise<StageExecutionResult>;
+  executeConstitution(context: ConstitutionExecutionContext): Promise<StageExecutionResult>;
 }

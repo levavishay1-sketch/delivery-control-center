@@ -1,21 +1,30 @@
 import { db } from "@/lib/db";
-import { getFirstStageType, getNextStageType, getStageConfig } from "@/lib/config";
+import { getFirstStageType, getNextStageType, getStageConfig, loadWorkflow } from "@/lib/config";
 import { recordAuditEvent } from "@/lib/audit";
 import { getAgentExecutor } from "@/lib/agents";
 import type { Prisma, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 
-/** Creates a Pipeline for a work item, seeded with its first (PENDING) stage. */
+/**
+ * Creates a Pipeline for a work item, seeded with its first (PENDING) stage.
+ * Snapshots stageSequence from the live config at creation time (Task Group
+ * 1's migration made the column NOT NULL) — Task Group 4 replaces this with
+ * an explicit startPipeline that also requires an APPROVED Constitution;
+ * until then this is the only pipeline-creation path and needs the same
+ * snapshot so the NOT NULL constraint is satisfiable.
+ */
 export async function createPipeline(workItemId: string) {
   return db.$transaction(async (tx) => {
     const workItem = await tx.workItem.findUniqueOrThrow({ where: { id: workItemId } });
     const firstStage = getFirstStageType();
+    const stageSequence = loadWorkflow().map((s) => s.type);
 
     const pipeline = await tx.pipeline.create({
       data: {
         workItemId: workItem.id,
         currentStage: firstStage,
+        stageSequence,
         stages: { create: { type: firstStage } },
       },
       include: { stages: true },

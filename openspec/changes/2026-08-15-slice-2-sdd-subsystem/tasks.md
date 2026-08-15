@@ -32,10 +32,10 @@ established pattern).
 
 ## Task Group 3: Constitution Versioning (4 tasks)
 
-- [ ] 3.1 `src/domain/constitution/commands.ts`: `draftConstitution(ctx, projectId)` — creates a new version (or reuses an existing `DRAFT`/`PENDING_APPROVAL` one — decide and document which), runs the AI executor (via the job runtime — see Task Group 5 for the shared drafting path), Zod-validates authorization (`WRITE_ROLES`).
-- [ ] 3.2 `approveConstitution(ctx, constitutionId)` / `rejectConstitution(ctx, constitutionId, comment?)` — same shape as `approveStage`/`rejectStage`, recording an audit event; approving sets `status='APPROVED'` and `approvedAt`.
-- [ ] 3.3 `src/domain/constitution/queries.ts`: `getApprovedConstitution(projectId)`, `getConstitutionHistory(projectId)` (all versions, newest first).
-- [ ] 3.4 API routes: `POST /api/projects/[id]/constitution/draft`, `POST /api/constitutions/[id]/approve`, `POST /api/constitutions/[id]/reject`. Tests: version increments on redraft (never overwrites), `getApprovedConstitution` returns the latest `APPROVED` version only. Commit: "Implement project-scoped Constitution versioning"
+- [x] 3.1 `src/domain/constitution/commands.ts`: `draftConstitution(ctx, projectId)` — enqueues a `DRAFT_CONSTITUTION` job via the job runtime (its own job type, worker handler, and `AgentExecutor.executeConstitution`, independent of Task Group 5's Stage-specific path — see design.md Decision 4a) and returns immediately. Draft-vs-new-version policy per Decision 4a: no existing Constitution -> version 1; latest is `DRAFT` -> reused in place; latest is `REJECTED`/`APPROVED` -> new version; latest is `PENDING_APPROVAL`/`AI_DRAFTING` -> refused (`ConflictError`). Zod-validates authorization (`WRITE_ROLES`).
+- [x] 3.2 `approveConstitution(ctx, constitutionId)` / `rejectConstitution(ctx, constitutionId, comment?)` — same shape as `approveStage`/`rejectStage`, recording an audit event; approving sets `status='APPROVED'` and `approvedAt`.
+- [x] 3.3 `src/domain/constitution/queries.ts`: `getApprovedConstitution(projectId)`, `getConstitutionHistory(projectId)` (all versions, newest first).
+- [x] 3.4 API routes: `POST /api/projects/[id]/constitution/draft`, `POST /api/constitutions/[id]/approve`, `POST /api/constitutions/[id]/reject`. Tests: version increments on redraft (never overwrites), `getApprovedConstitution` returns the latest `APPROVED` version only. Commit: "Implement project-scoped Constitution versioning"
 
 ## Task Group 4: Pipeline Optional Start (4 tasks)
 
