@@ -90,11 +90,11 @@ directly from this register; item numbers are referenced there.
 
 | # | Item | State |
 |---|---|---|
-| 27 | Agent registry + configurable routing | MISSING |
-| 28 | `AgentRun` entity | MISSING |
+| 27 | Agent registry + configurable routing | KEEP (✓ Slice 3) |
+| 28 | `AgentRun` entity | KEEP (✓ Slice 3) |
 | 29 | AI output → schema → validation → policy → domain command | MISSING *(partially done in Slice 2 — `CLARIFY`'s questions and `ANALYZE`'s findings are now Zod-schema-validated before the domain layer treats them as authoritative; every other stage's raw content still isn't schema-validated the same way, so this is partial, not full, closure)* |
 | 30 | Sandboxed coding runtime | MISSING |
-| 31 | AI cost rollups, budgets, thresholds | EXTEND (per-draft cost captured, never summed) |
+| 31 | AI cost rollups, budgets, thresholds | KEEP (✓ Slice 3) |
 | 32 | Retry/backoff on AI/integration calls | MISSING *(partially done in Slice 2 — AI drafting (Stage and Constitution) now retries with exponential backoff via the Job runtime; Jira/integration sync calls still have no retry, remains Slice 4 territory)* |
 
 **Integrations, config, evidence, platform**
@@ -195,7 +195,7 @@ re-litigate:
 | 0 | Tenancy, identity, and the cheap fixes | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 0" (retroactively corroborated — built from a session-local plan before this source was persisted; scope matches) | `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/` |
 | 1 | The delivery model and the Attention Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 1" | `openspec/changes/archive/2026-08-14-slice-1-delivery-model/` |
 | 2 | SDD as a subsystem | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 2" | `openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/` |
-| 3 | Agents as real execution resources | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | — |
+| 3 | Agents as real execution resources | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | `openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/` |
 | 4 | Connector framework | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | — |
 | 5 | Engineering evidence | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | — |
 | 6 | Configuration Center | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | — |

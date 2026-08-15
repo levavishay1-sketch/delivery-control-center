@@ -56,23 +56,23 @@ established pattern).
 
 ## Task Group 7: UI (4 tasks)
 
-- [ ] 7.1 Pipeline detail page: per-stage run summary (agent/model, cost, status) always visible; a "View run detail" expand showing structured error/retry count, rendered only when the viewer's role passes `getAgentRunDetail`'s check (page-level `ctx` role check, same pattern Slice 2 used for role-based gate messaging).
-- [ ] 7.2 Project/client view: AI cost rollup display (total, this-month if cheap to compute, else all-time only — avoid inventing a time-bucketing feature not asked for).
-- [ ] 7.3 Budget configuration UI: set/clear a client's or project's `aiBudgetUsd` (`WRITE_ROLES`).
-- [ ] 7.4 Budget-exceeded UX: `DraftButton`/`ConstitutionDraftButton` surface the `ConflictError`'s budget message; an "Approve to continue" action (visible only to `WRITE_ROLES`) calls `approveBudgetOverride` and retries the draft.
+- [x] 7.1 Pipeline detail page: per-stage run summary (agent/model, cost, status) always visible; a "View run detail" expand showing structured error/retry count, rendered only when the viewer's role passes `getAgentRunDetail`'s check (page-level `ctx` role check, same pattern Slice 2 used for role-based gate messaging).
+- [x] 7.2 Project/client view: AI cost rollup display (total, this-month if cheap to compute, else all-time only — avoid inventing a time-bucketing feature not asked for).
+- [x] 7.3 Budget configuration UI: set/clear a client's or project's `aiBudgetUsd` (`WRITE_ROLES`).
+- [x] 7.4 Budget-exceeded UX: `DraftButton`/`ConstitutionDraftButton` surface the `ConflictError`'s budget message; an "Approve to continue" action (visible only to `WRITE_ROLES`) calls `approveBudgetOverride` and retries the draft.
 
 ## Task Group 8: End-to-End Test Scenario (1 task)
 
-- [ ] 8.1 Playwright E2E: configure a low budget on a test project → draft stages until the budget is exceeded → verify drafting is refused with the budget error shown in the UI → approve an override → verify the next draft proceeds → verify the override is consumed (a further draft past budget is refused again) → view a stage's run detail as a write-capable role (sees full detail) and as a read-only role (sees summary only, no raw error) → verify the project's cost rollup reflects every run. No console errors.
+- [x] 8.1 Playwright E2E: configure a low budget on a test project → draft stages until the budget is exceeded → verify drafting is refused with the budget error shown in the UI → approve an override → verify the next draft proceeds → verify the override is consumed (a further draft past budget is refused again) → view a stage's run detail as a write-capable role (sees full detail) and as a read-only role (sees summary only, no raw error) → verify the project's cost rollup reflects every run. No console errors.
 
 ## Task Group 9: Unit Tests for Domain Logic (2 tasks)
 
-- [ ] 9.1 Vitest integration tests (real local Postgres) for every new domain module not already covered inline above: `agent` (registry, run recording, rollups, budget check, override claim) — cross-cutting `pipeline`/`constitution` changes (agent routing snapshot, budget-gated drafting) not already exercised by Task Groups 2/3/5's own test tasks.
-- [ ] 9.2 Confirm no regression in the existing Slice 0/1/2 domain test suite (`npm test`) — `completeStageDraft`/`completeConstitutionDraft`'s signature/behavior changes (now also linking `agentRunId`) touch existing tests in `pipeline/commands.test.ts` and `constitution/commands.test.ts`; update those call sites/assertions, don't leave them silently broken. Commit: "Add comprehensive unit tests for Slice 3 domain logic"
+- [x] 9.1 Vitest integration tests (real local Postgres) for every new domain module not already covered inline above: `agent` (registry, run recording, rollups, budget check, override claim) — cross-cutting `pipeline`/`constitution` changes (agent routing snapshot, budget-gated drafting) not already exercised by Task Groups 2/3/5's own test tasks.
+- [x] 9.2 Confirm no regression in the existing Slice 0/1/2 domain test suite (`npm test`) — `completeStageDraft`/`completeConstitutionDraft`'s signature/behavior changes (now also linking `agentRunId`) touch existing tests in `pipeline/commands.test.ts` and `constitution/commands.test.ts`; update those call sites/assertions, don't leave them silently broken. Commit: "Add comprehensive unit tests for Slice 3 domain logic"
 
 ## Task Group 10: Documentation & Verification (1 task)
 
-- [ ] 10.1 Update `docs/PRODUCT_SPEC.md` to reflect Slice 3 (Agent registry, AgentRun tracking, cost rollups, budget enforcement, permissioned run visibility). Update `docs/ROADMAP.md`'s gap register (items #27, #28, #31 — and re-confirm #29/#32's Slice-2-partial annotations still read correctly now that retry/backoff and structured errors are further built out) and move Slice 3's row to Done, linked to the archived change. Verify no dead code/unused imports (`npm run lint`, `npx tsc --noEmit`). Full verification: `npm run build`, `npm run lint`, `npm test`, `npx playwright test`, `openspec validate --specs`. Archive this OpenSpec change per `docs/ROADMAP.md`'s own stated process, syncing its delta specs into `openspec/specs/`.
+- [x] 10.1 Update `docs/PRODUCT_SPEC.md` to reflect Slice 3 (Agent registry, AgentRun tracking, cost rollups, budget enforcement, permissioned run visibility). Update `docs/ROADMAP.md`'s gap register (items #27, #28, #31 — and re-confirm #29/#32's Slice-2-partial annotations still read correctly now that retry/backoff and structured errors are further built out) and move Slice 3's row to Done, linked to the archived change. Verify no dead code/unused imports (`npm run lint`, `npx tsc --noEmit`). Full verification: `npm run build`, `npm run lint`, `npm test`, `npx playwright test`, `openspec validate --specs`. Archive this OpenSpec change per `docs/ROADMAP.md`'s own stated process, syncing its delta specs into `openspec/specs/`.
 
 ---
 

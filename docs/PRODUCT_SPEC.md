@@ -1,7 +1,7 @@
 # Delivery Control Center — Product & System Specification
 
-Reverse-engineered from the implementation as of commit `f13afc5` (2026-08-15,
-end of Slice 2). Every claim below is traceable to a file in this repo.
+Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 3).
+Every claim below is traceable to a file in this repo.
 Status tags used throughout:
 
 - **Implemented** — working, verified.
@@ -11,17 +11,21 @@ Status tags used throughout:
 - **Missing** — not present at all; noted because the product's own stated
   goals imply it should exist.
 
-This revision folds in **three** shipped slices: **Slice 0** (tenancy,
+This revision folds in **four** shipped slices: **Slice 0** (tenancy,
 identity, auth — archived at
 `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/`),
 **Slice 1** (the delivery model and the Attention Center — archived at
-`openspec/changes/archive/2026-08-14-slice-1-delivery-model/`), and
-**Slice 2** (SDD as a subsystem — Constitution versioning, Clarify/Analyze
-stages, versioned stage artifacts, a durable job-backed run state machine,
-role-based gate policy, redraft feedback — archived at
-`openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/`). The previous
-revision of this file predated Slice 2 and described a fixed five-stage
-pipeline with uniform approval gating and an automatically-created,
+`openspec/changes/archive/2026-08-14-slice-1-delivery-model/`), **Slice 2**
+(SDD as a subsystem — Constitution versioning, Clarify/Analyze stages,
+versioned stage artifacts, a durable job-backed run state machine, role-based
+gate policy, redraft feedback — archived at
+`openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/`), and **Slice 3**
+(Agents as real execution resources — agent registry with per-project routing,
+`AgentRun` recording per draft, per-stage cost rollups, budget enforcement with
+an audited override flow, and permissioned run-detail visibility — archived at
+`openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/`).
+The previous revision of this file predated Slice 2 and described a fixed
+five-stage pipeline with uniform approval gating and an automatically-created,
 per-work-item Constitution stage — none of that is still true.
 
 ---
@@ -1174,21 +1178,22 @@ trail.** It answers the product vision's four core questions — what is
 happening, why, does anyone need to act, what happens next — through the
 Attention Center, Quick View drawer, and 360° Delivery Record (Slice 1),
 now joined by a Clarify Q&A panel and Analyze findings panel on the
-pipeline detail page and a dedicated Constitution page (Slice 2). It is not
-yet a code/deployment system (Slice 5) — `IMPLEMENT` stays an AI-drafted
+pipeline detail page and a dedicated Constitution page (Slice 2), plus an
+agent registry with per-project AI routing, per-run cost tracking and
+budgets, and an audited override flow (Slice 3). It is not yet a
+code/deployment system (Slice 5) — `IMPLEMENT` stays an AI-drafted
 document, not real execution — and several real gaps remain: no
 client-creation path, no work-item deletion, no push notifications, no
-critical-path analysis, no agent registry or per-project AI routing (Slice
-3). Its strongest, most fully-realized property remains provenance — the
-audit trail is real, transactionally consistent, tenant-scoped,
-work-item-traceable, and (Slice 2) its project filter now actually
-includes pipeline/stage-scoped events, a real bug fixed along the way. Its
-access-control story is solid and got sharper in Slice 2: gate approval is
-now role-based per stage type, not a single uniform check. The product's
-architecture (swappable `AgentExecutor`/`IntegrationAdapter`, config-driven
-pipeline shape, the `src/domain/<aggregate>/` command/query pattern, and
-now the `Job`-backed durable-execution pattern) has proven itself capable
-of absorbing two slices this large in a row (Slice 2: 13 task groups, 5 new
-entities, 1 new page, ~60 new tests, a full E2E lifecycle scenario that
-caught 4 real bugs before they shipped) without a rewrite — a reasonable
-signal for the slices still ahead.
+critical-path analysis. Its strongest, most fully-realized property remains
+provenance — the audit trail is real, transactionally consistent,
+tenant-scoped, work-item-traceable, and (Slice 2) its project filter now
+actually includes pipeline/stage-scoped events, a real bug fixed along the
+way. Its access-control story is solid and got sharper in Slice 2: gate
+approval is now role-based per stage type, not a single uniform check. The
+product's architecture (swappable `AgentExecutor`/`IntegrationAdapter`,
+config-driven pipeline shape, the `src/domain/<aggregate>/` command/query
+pattern, and now the `Job`-backed durable-execution pattern) has proven
+itself capable of absorbing three slices this large in a row (Slice 2: 13
+task groups, 5 new entities, 1 new page, ~60 new tests; Slice 3: 10 task
+groups, 3 new entities, 2 new API suites, ~60 new tests and an E2E scenario)
+without a rewrite — a reasonable signal for the slices still ahead.
