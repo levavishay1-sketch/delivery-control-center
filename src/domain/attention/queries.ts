@@ -10,15 +10,21 @@ function accessibleClientIds(ctx: AuthContext): string[] | undefined {
 /**
  * Aggregates every item needing human attention across all projects ctx can
  * access: pending decisions, active blockers, high/critical risks, upcoming
- * deadlines, and work items awaiting review approval. Each group is sorted
- * by urgency (overdue/oldest first). Feeds the Attention Center (`/attention`)
- * and the Dashboard's attention summary card.
+ * deadlines, work items awaiting review approval, and paused Clarify stages.
+ * Each group is sorted by urgency (overdue/oldest first). Feeds the
+ * Attention Center (`/attention`) and the Dashboard's attention summary card.
+ *
+ * pausedClarifications is its own group (Task Group 6), not folded into the
+ * existing Decision-shaped visibility: a Decision is its own domain model
+ * with its own approve/reject semantics and an approverId, none of which fit
+ * a paused Clarify stage (answered per-question, resumes automatically once
+ * every question is answered — no single "decision" to approve or reject).
  */
 export async function getItemsNeedingAttention(ctx: AuthContext) {
   const clientIds = accessibleClientIds(ctx);
   const projectScope = clientIds ? { clientId: { in: clientIds } } : undefined;
 
-  const [decisions, blockers, risks, deadlines, approvalGates] = await Promise.all([
+  const [decisions, blockers, risks, deadlines, approvalGates, pausedClarifications] = await Promise.all([
     db.decision.findMany({
       where: {
         status: "OPEN",
@@ -45,6 +51,17 @@ export async function getItemsNeedingAttention(ctx: AuthContext) {
       include: { project: true, owner: true, pipeline: true },
       orderBy: { syncedAt: "asc" },
     }),
+    db.stage.findMany({
+      where: {
+        status: "AWAITING_CLARIFICATION",
+        pipeline: { workItem: { project: projectScope } },
+      },
+      include: {
+        pipeline: { include: { workItem: { include: { project: true } } } },
+        clarifyQuestions: { where: { answer: null }, orderBy: { createdAt: "asc" } },
+      },
+      orderBy: { updatedAt: "asc" },
+    }),
   ]);
 
   return {
@@ -53,6 +70,7 @@ export async function getItemsNeedingAttention(ctx: AuthContext) {
     risks,
     deadlines,
     approvalGates,
+    pausedClarifications,
     now: Date.now(),
     summary: {
       decisions: decisions.length,
@@ -60,6 +78,7 @@ export async function getItemsNeedingAttention(ctx: AuthContext) {
       risks: risks.length,
       deadlines: deadlines.length,
       approvalGates: approvalGates.length,
+      pausedClarifications: pausedClarifications.length,
     },
   };
 }

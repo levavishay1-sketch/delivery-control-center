@@ -127,11 +127,11 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
   });
 }
 
-/** Worker-side: loads what's needed to run the AI executor for a queued DRAFT_STAGE job. */
+/** Worker-side: loads what's needed to run the AI executor for a queued DRAFT_STAGE job. clarifyQuestions is included so a CLARIFY redraft after answering can fold Q&A into context. */
 export async function getStageForDrafting(stageId: string) {
   return db.stage.findUniqueOrThrow({
     where: { id: stageId },
-    include: { pipeline: { include: { workItem: { include: { project: true } }, stages: true } } },
+    include: { pipeline: { include: { workItem: { include: { project: true } }, stages: true } }, clarifyQuestions: true },
   });
 }
 
@@ -141,6 +141,8 @@ export interface StageDraftResult {
   promptTokens: number;
   completionTokens: number;
   costUsd: number;
+  /** Present only for a CLARIFY draft that asked questions instead of producing content — see Task Group 6. */
+  clarifyQuestions?: string[];
 }
 
 /**
@@ -148,13 +150,41 @@ export interface StageDraftResult {
  * StageVersion (design.md Decision 5) alongside Stage's own "latest" columns, and — if the
  * stage doesn't require approval — auto-advances the pipeline. Re-checks the stage is still
  * AI_DRAFTING first (a concurrent approval/rejection during the call can't be silently
- * overwritten), same as the old synchronous path did.
+ * overwritten), same as the old synchronous path did. A CLARIFY draft that asked questions
+ * instead of drafting content takes a separate branch: no content, no StageVersion, no
+ * auto-advance — the stage moves to AWAITING_CLARIFICATION until every question is answered
+ * (src/domain/clarify/commands.ts), which is what actually resumes drafting.
  */
 export async function completeStageDraft(stageId: string, result: StageDraftResult) {
   return db.$transaction(async (tx) => {
     const current = await tx.stage.findUniqueOrThrow({ where: { id: stageId }, include: { pipeline: true } });
     if (current.status !== "AI_DRAFTING") {
       throw new Error(`Stage changed to ${current.status} while drafting; discarding this draft.`);
+    }
+
+    if (result.clarifyQuestions?.length) {
+      const updated = await tx.stage.update({
+        where: { id: stageId },
+        data: {
+          status: "AWAITING_CLARIFICATION",
+          aiModel: result.aiModel,
+          promptTokens: result.promptTokens,
+          completionTokens: result.completionTokens,
+          costUsd: result.costUsd,
+        },
+      });
+      await tx.clarifyQuestion.createMany({
+        data: result.clarifyQuestions.map((question) => ({ stageId, question })),
+      });
+      await recordAuditEvent(tx, {
+        pipelineId: current.pipeline.id,
+        stageId,
+        actor: "AI",
+        actorName: result.aiModel,
+        action: `AI asked ${result.clarifyQuestions.length} clarifying question(s) on ${getStageConfig(current.type).label}`,
+        detail: { questions: result.clarifyQuestions },
+      });
+      return updated;
     }
 
     const requiresApproval = getStageConfig(current.type).requiresApproval;

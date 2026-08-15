@@ -7,6 +7,7 @@ import { getStageConfigOrFallback } from "@/lib/config";
 import { StageBadge } from "@/components/StageBadge";
 import { DraftButton } from "@/components/DraftButton";
 import { ApprovalGate } from "@/components/ApprovalGate";
+import { ClarifyPanel } from "@/components/ClarifyPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,20 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
               {isCurrent && stage && stage.status === "PENDING_APPROVAL" && (
                 <div className="mt-3">
                   <ApprovalGate stageId={stage.id} />
+                </div>
+              )}
+
+              {isCurrent && stage && stage.status === "AWAITING_CLARIFICATION" && (
+                <div className="mt-3">
+                  <ClarifyPanel
+                    stageId={stage.id}
+                    questions={stage.clarifyQuestions.map((q) => ({
+                      id: q.id,
+                      question: q.question,
+                      answer: q.answer,
+                      answeredByName: q.answeredByUser ? q.answeredByUser.name ?? q.answeredByUser.email : null,
+                    }))}
+                  />
                 </div>
               )}
             </div>

@@ -27,10 +27,16 @@ function formatDate(date: Date | null) {
 
 export default async function AttentionCenterPage() {
   const ctx = await requireAuthContext();
-  const { decisions, blockers, risks, deadlines, approvalGates, summary, now } = await getItemsNeedingAttention(ctx);
+  const { decisions, blockers, risks, deadlines, approvalGates, pausedClarifications, summary, now } =
+    await getItemsNeedingAttention(ctx);
 
   const allClear =
-    summary.decisions === 0 && summary.blockers === 0 && summary.risks === 0 && summary.deadlines === 0 && summary.approvalGates === 0;
+    summary.decisions === 0 &&
+    summary.blockers === 0 &&
+    summary.risks === 0 &&
+    summary.deadlines === 0 &&
+    summary.approvalGates === 0 &&
+    summary.pausedClarifications === 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -39,12 +45,13 @@ export default async function AttentionCenterPage() {
         <p className="text-sm opacity-60">Everything needing a human decision, in one place — with the reason always visible.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-6">
         <SummaryCard label="Decisions" count={summary.decisions} href="#decisions" />
         <SummaryCard label="Blockers" count={summary.blockers} href="#blockers" />
         <SummaryCard label="Risks" count={summary.risks} href="#risks" />
         <SummaryCard label="Deadlines" count={summary.deadlines} href="#deadlines" />
         <SummaryCard label="Approval Gates" count={summary.approvalGates} href="#approval-gates" />
+        <SummaryCard label="Clarifications" count={summary.pausedClarifications} href="#clarifications" />
       </div>
 
       {allClear && (
@@ -139,6 +146,28 @@ export default async function AttentionCenterPage() {
               <p className="font-medium">Awaiting approval</p>
               <RowMeta workItem={item} />
               <WorkItemLink workItemId={item.id} />
+            </Row>
+          ))}
+        </Section>
+      )}
+
+      {summary.pausedClarifications > 0 && (
+        <Section id="clarifications" title="Clarifications" count={summary.pausedClarifications}>
+          {pausedClarifications.map((stage) => (
+            <Row key={stage.id}>
+              <p className="font-medium">
+                {stage.clarifyQuestions.length} question{stage.clarifyQuestions.length === 1 ? "" : "s"} outstanding on the{" "}
+                {stage.type} stage
+              </p>
+              <RowMeta workItem={stage.pipeline.workItem} />
+              <ul className="text-xs opacity-70">
+                {stage.clarifyQuestions.map((q) => (
+                  <li key={q.id}>{q.question}</li>
+                ))}
+              </ul>
+              <Link href={`/pipelines/${stage.pipelineId}`} className="text-xs underline opacity-70 w-fit">
+                Answer on the pipeline page
+              </Link>
             </Row>
           ))}
         </Section>

@@ -128,7 +128,14 @@ describe("getItemsNeedingAttention", () => {
     };
 
     const result = await getItemsNeedingAttention(emptyCtx);
-    expect(result.summary).toEqual({ decisions: 0, blockers: 0, risks: 0, deadlines: 0, approvalGates: 0 });
+    expect(result.summary).toEqual({
+      decisions: 0,
+      blockers: 0,
+      risks: 0,
+      deadlines: 0,
+      approvalGates: 0,
+      pausedClarifications: 0,
+    });
 
     await db.organization.delete({ where: { id: org.id } });
     await db.user.delete({ where: { id: user.id } });

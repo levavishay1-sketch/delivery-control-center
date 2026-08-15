@@ -34,7 +34,12 @@ export async function getPipelineDetail(ctx: AuthContext, id: string) {
     where: { id },
     include: {
       workItem: { include: { project: true } },
-      stages: { include: { approvals: { orderBy: { decidedAt: "desc" } } } },
+      stages: {
+        include: {
+          approvals: { orderBy: { decidedAt: "desc" } },
+          clarifyQuestions: { orderBy: { createdAt: "asc" }, include: { answeredByUser: true } },
+        },
+      },
     },
   });
   if (!pipeline) return null;

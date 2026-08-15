@@ -235,3 +235,60 @@ describe("draftStage / completeStageDraft / revertStageDraftFailure", () => {
     expect(advanced.stages.some((s) => s.type === advanced.currentStage)).toBe(true);
   });
 });
+
+describe("completeStageDraft with clarifyQuestions", () => {
+  it("moves the stage to AWAITING_CLARIFICATION and records ClarifyQuestion rows instead of completing", async () => {
+    const project = await createProjectWithApprovedConstitution("Clarify Completion Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "Needs clarification" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+
+    // Advance to a CLARIFY-type stage the realistic way: draft+approve SPEC, which auto-creates
+    // the pipeline's next configured stage (CLARIFY, per config/workflow.yaml).
+    await draft(managerCtx, specStage.id);
+    const completedSpec = await runStageDraftJob(specStage.id, "# Spec");
+    await approveStage(managerCtx, completedSpec.id);
+    const clarifyStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "CLARIFY" } });
+
+    await draft(managerCtx, clarifyStage.id);
+    const questions = ["Which email provider?", "Is SMS 2FA in scope?"];
+    const paused = await completeStageDraft(clarifyStage.id, {
+      content: "",
+      aiModel: "mock-agent-v1",
+      promptTokens: 5,
+      completionTokens: 10,
+      costUsd: 0.0001,
+      clarifyQuestions: questions,
+    });
+
+    expect(paused.status).toBe("AWAITING_CLARIFICATION");
+    expect(paused.content).toBeNull();
+
+    const stored = await db.clarifyQuestion.findMany({ where: { stageId: clarifyStage.id }, orderBy: { createdAt: "asc" } });
+    expect(stored.map((q) => q.question)).toEqual(questions);
+    expect(stored.every((q) => q.answer === null)).toBe(true);
+
+    const versions = await db.stageVersion.count({ where: { stageId: clarifyStage.id } });
+    expect(versions).toBe(0);
+  });
+
+  it("a CLARIFY draft with no questions completes and auto-advances (requiresApproval: false)", async () => {
+    const project = await createProjectWithApprovedConstitution("Clarify Auto-Advance Project");
+    const { workItem } = await createWorkItem(managerCtx, { projectId: project.id, title: "No clarification needed" });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const specStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "SPEC" } });
+
+    await draft(managerCtx, specStage.id);
+    const completedSpec = await runStageDraftJob(specStage.id, "# Spec");
+    await approveStage(managerCtx, completedSpec.id);
+    const clarifyStage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id, type: "CLARIFY" } });
+
+    await draft(managerCtx, clarifyStage.id);
+    const completed = await runStageDraftJob(clarifyStage.id, "# Clarify — nothing outstanding");
+
+    expect(completed.status).toBe("DONE");
+
+    const reloadedPipeline = await db.pipeline.findUniqueOrThrow({ where: { id: pipeline.id } });
+    expect(reloadedPipeline.currentStage).toBe("PLAN");
+  });
+});

@@ -30,12 +30,17 @@ async function handleDraftStageJob(payload: JobPayload): Promise<void> {
     .filter((s) => s.type !== stage.type)
     .find((s) => s.status === "DONE" || s.status === "APPROVED");
 
+  const answeredClarifyQuestions = stage.clarifyQuestions
+    .filter((q): q is typeof q & { answer: string } => q.answer !== null)
+    .map((q) => ({ question: q.question, answer: q.answer }));
+
   const result = await getAgentExecutor().executeStage(stage.type, {
     workItemTitle: stage.pipeline.workItem.title,
     workItemDescription: stage.pipeline.workItem.description ?? "",
     workItemSource: stage.pipeline.workItem.source,
     workItemExternalId: stage.pipeline.workItem.externalId,
     previousStageContent: previousStage?.content ?? undefined,
+    clarifyAnswers: answeredClarifyQuestions.length > 0 ? answeredClarifyQuestions : undefined,
   });
 
   await completeStageDraft(stageId, result);
