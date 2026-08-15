@@ -10,6 +10,9 @@ import { completeStageDraft, getStageForDrafting, revertStageDraftFailure } from
 import { failAgentRun, resolveDefaultAgentId, resolveStageAgentId, startAgentRun } from "@/domain/agent/commands";
 import { getAgentRunByJobId } from "@/domain/agent/queries";
 import { getAgentExecutor } from "@/lib/agents";
+import { completeSyncRun, failSyncRun, startSyncRun } from "@/domain/connector/commands";
+import { getSyncRunByJobId } from "@/domain/connector/queries";
+import { runConnectorSync } from "@/domain/connector/sync";
 import type { Job } from "@/generated/prisma/client";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
@@ -94,9 +97,22 @@ async function handleDraftConstitutionExhausted(payload: JobPayload, error: stri
   await revertConstitutionDraftFailure(constitutionId, error, jobId);
 }
 
+async function handleSyncProjectJob(payload: JobPayload, jobId: string): Promise<void> {
+  const connectorId = payload.connectorId as string;
+  const run = await startSyncRun(connectorId, jobId);
+  const counts = await runConnectorSync(connectorId);
+  await completeSyncRun(run.id, counts);
+}
+
+async function handleSyncProjectExhausted(payload: JobPayload, error: string, jobId: string): Promise<void> {
+  const run = await getSyncRunByJobId(jobId);
+  if (run) await failSyncRun(run.id, error);
+}
+
 const handlers: Partial<Record<Job["type"], JobTypeHandlers>> = {
   DRAFT_STAGE: { run: handleDraftStageJob, onExhausted: handleDraftStageExhausted },
   DRAFT_CONSTITUTION: { run: handleDraftConstitutionJob, onExhausted: handleDraftConstitutionExhausted },
+  SYNC_PROJECT: { run: handleSyncProjectJob, onExhausted: handleSyncProjectExhausted },
 };
 
 async function processJob(job: Job): Promise<void> {

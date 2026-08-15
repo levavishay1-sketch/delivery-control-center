@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { createWorkItem, updateWorkItem, updateWorkItemStatus, addParentWorkItem, syncProjectWorkItems } from "./commands";
-import { configureConnector } from "@/domain/connector/commands";
+import { createWorkItem, updateWorkItem, updateWorkItemStatus, addParentWorkItem } from "./commands";
 import type { AuthContext } from "@/domain/shared/context";
 import { ForbiddenError, ValidationError } from "@/domain/shared/errors";
 
@@ -188,31 +187,6 @@ describe("addParentWorkItem", () => {
   });
 });
 
-describe("syncProjectWorkItems", () => {
-  it("reads the adapter through the project's Connector, not Project.integrationType directly", async () => {
-    // This project was created via a bare db.project.create (beforeAll), so it has no Connector
-    // yet — syncProjectWorkItems must lazily create one (getOrCreateConnectorForProject) rather
-    // than fail, and use its (MANUAL-default) type to resolve the adapter.
-    const result = await syncProjectWorkItems(managerCtx, projectId);
-    expect(result).toEqual({ synced: 0, newWorkItems: 0 });
-
-    const connector = await db.connector.findUnique({ where: { projectId } });
-    expect(connector).not.toBeNull();
-    expect(connector?.type).toBe("MANUAL");
-  });
-
-  it("uses the connector's configured type as the sync source once reconfigured", async () => {
-    await configureConnector(managerCtx, projectId, {
-      type: "JIRA",
-      config: { baseUrl: "https://example.atlassian.net", email: "a@b.com", apiToken: "secret", projectKey: "ABC" },
-    });
-
-    // The Jira adapter makes a real network call — asserting it's actually invoked (not silently
-    // skipped) is enough here without mocking `fetch`; a network failure proves the cutover picked
-    // up JIRA as the connector's type instead of silently sync-ing as MANUAL (which never throws).
-    await expect(syncProjectWorkItems(managerCtx, projectId)).rejects.toThrow();
-
-    // Reset back to MANUAL so this test doesn't leak connector state into other tests in this file.
-    await configureConnector(managerCtx, projectId, { type: "MANUAL" });
-  });
-});
+// Sync execution itself (runConnectorSync) and its Job-runtime wiring (triggerSync, SyncRun
+// lifecycle) are covered in src/domain/connector/commands.test.ts and sync.test.ts — sync no
+// longer runs synchronously through this module (see Task Group 3, design.md decision 2).

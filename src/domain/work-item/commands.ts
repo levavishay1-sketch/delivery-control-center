@@ -1,9 +1,7 @@
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { getIntegrationAdapter, decryptIntegrationConfig } from "@/lib/integrations";
 import { recordAuditEvent } from "@/lib/audit";
 import { getProjectById } from "@/domain/project/queries";
-import { getOrCreateConnectorForProject } from "@/domain/connector/commands";
 import { getWorkItemById } from "@/domain/work-item/queries";
 import { assertValidTransition } from "@/domain/work-item/status";
 import { NotFoundError, ValidationError } from "@/domain/shared/errors";
@@ -56,7 +54,7 @@ export type UpdateWorkItemInput = z.infer<typeof updateWorkItemSchema>;
  * rather than guessing — see PRODUCT_SPEC.md gap #3 and design.md's "Synced
  * work items" edge case.
  */
-function mapExternalStatus(raw: string): WorkStatus {
+export function mapExternalStatus(raw: string): WorkStatus {
   const normalized = raw.trim().toLowerCase();
   if (["done", "complete", "completed", "closed", "resolved"].includes(normalized)) return "COMPLETED";
   if (["in progress", "in review", "reviewing"].includes(normalized)) {
@@ -226,66 +224,7 @@ export async function addParentWorkItem(ctx: AuthContext, childId: string, paren
   });
 }
 
-/**
- * Pulls work items from a project's connector, upserting them. Pipelines are started separately
- * via startPipeline — sync no longer creates one automatically.
- *
- * Slice 4: reads the adapter type/config through the project's Connector rather than its own
- * integrationType/integrationConfig columns directly (design.md Migration Plan step 3's cutover)
- * — those columns stay as the backfill source but are no longer read by application code.
- */
-export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) {
-  const project = await getProjectById(projectId);
-  if (!project) throw new NotFoundError("Project not found");
-  requireClientRole(ctx, project.clientId, WRITE_ROLES);
-
-  const connector = await getOrCreateConnectorForProject(projectId);
-
-  const adapter = getIntegrationAdapter(connector.type);
-  const decryptedConfig = decryptIntegrationConfig(connector.type, connector.config as Record<string, unknown> | null);
-  const fetched = await adapter.fetchWorkItems(decryptedConfig as Record<string, unknown> | null);
-
-  const created: string[] = [];
-  for (const item of fetched) {
-    const status: WorkStatus = mapExternalStatus(item.status);
-    const externalKey = {
-      projectId_source_externalId: {
-        projectId: project.id,
-        source: connector.type,
-        externalId: item.externalId,
-      },
-    };
-    const existing = await db.workItem.findUnique({ where: externalKey });
-
-    const workItem = await db.workItem.upsert({
-      where: externalKey,
-      update: {
-        title: item.title,
-        description: item.description,
-        status,
-        externalUrl: item.externalUrl,
-        syncedAt: new Date(),
-      },
-      create: {
-        projectId: project.id,
-        source: connector.type,
-        externalId: item.externalId,
-        externalUrl: item.externalUrl,
-        title: item.title,
-        description: item.description,
-        status,
-      },
-    });
-
-    if (!existing) created.push(workItem.id);
-  }
-
-  await recordAuditEvent(db, {
-    projectId: project.id,
-    actor: "SYSTEM",
-    action: `Synced ${fetched.length} work item(s) from ${connector.type} for project "${project.name}"`,
-    detail: { synced: fetched.length, newWorkItems: created.length },
-  });
-
-  return { synced: fetched.length, newWorkItems: created.length };
-}
+// Sync execution itself (fetching from a connector's adapter and upserting WorkItem rows) now
+// lives in src/domain/connector/sync.ts, run through the Job runtime as a SyncRun (design.md
+// decision 2) rather than called directly here — see triggerSync in
+// src/domain/connector/commands.ts for the WRITE_ROLES-gated entry point.

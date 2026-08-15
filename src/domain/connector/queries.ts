@@ -14,3 +14,8 @@ export function listSyncRuns(connectorId: string) {
 export function getRunningSyncRun(connectorId: string) {
   return db.syncRun.findFirst({ where: { connectorId, status: "RUNNING" } });
 }
+
+/** The SyncRun tracking a given Job's attempt-cycle, if one has been started yet. */
+export function getSyncRunByJobId(jobId: string) {
+  return db.syncRun.findFirst({ where: { jobId } });
+}
