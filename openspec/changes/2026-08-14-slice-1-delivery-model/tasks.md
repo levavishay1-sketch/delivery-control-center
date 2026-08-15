@@ -126,21 +126,11 @@ Slice 1 extends the work-item model, adds Blocker, Decision, and Dependency enti
 
 ---
 
-## Task Group 13: Unit Tests for Domain Logic (2 tasks)
+## Task Group 13: Unit Tests for Domain Logic (2 tasks) — ✅ DONE
 
-**13.1** Write Vitest unit tests for all domain commands and queries.
-- **WorkItem**: createWorkItem, updateWorkItem, updateWorkItemStatus, addParentWorkItem, hierarchy cycle detection.
-- **Blocker**: createBlocker, updateBlocker, resolveBlocker, status side effects.
-- **Decision**: createDecision, approveDecision, rejectDecision, status restoration.
-- **Dependency**: addDependency, removeDependency, cycle detection.
-- Tests should cover: valid inputs, invalid inputs, authorization checks, side effects, audit events.
-- Tests: all pass.
+- [x] 13.1 Already satisfied incrementally, one task group at a time, rather than as a batch at the end — each domain module got its integration tests in the same commit as its implementation (per CLAUDE.md's change-sizing guidance to verify and commit each group, not just at the end): `work-item/commands.test.ts` (16 tests: createWorkItem, updateWorkItem, updateWorkItemStatus incl. valid/invalid/terminal transitions, addParentWorkItem incl. 3-level cycle detection), `blocker/commands.test.ts` (13 tests: createBlocker, updateBlocker, resolveBlocker incl. multi-blocker status-restoration ordering), `decision/commands.test.ts` (14 tests: createDecision, approveDecision, rejectDecision incl. status restoration), `dependency/commands.test.ts` (11 tests: addDependency, removeDependency, cycle detection) plus `dependency/graph.test.ts` (2 tests for the graph query). Every file covers valid inputs, Zod/domain validation rejections, authorization (Viewer/owner/Manager+), side effects (status transitions), and audit-event content, per the task's checklist.
 
-**13.2** Write tests for aggregation queries (Attention Center, Dashboard).
-- `getItemsNeedingAttention`: verify grouping, sorting, authorization.
-- Dashboard queries: verify counts are accurate, authorization enforced.
-- Tests: all pass.
-- Commit: "Add comprehensive unit tests for Slice 1 domain logic"
+- [x] 13.2 `getItemsNeedingAttention` already had its own test file from Task Group 6 (`attention/queries.test.ts`: aggregation across all 5 groups, cross-client scoping in both directions, empty-state). Closed the two remaining gaps in the Dashboard's data path: `project/queries.test.ts` (new — 7 tests for `listProjectsForHome`, `listProjectsWithCounts`, and `getProjectByIdForUser`: accurate work-item counts, cross-client scoping, org-admin sees everything, `getProjectByIdForUser` throws `ForbiddenError` for an outsider) and two new tests added to `audit/queries.test.ts` for `listRecentAuditEvents` (limit + most-recent-first ordering, cross-client scoping) — the Dashboard's Recent Activity feed's data source, which had no direct test until now (only the newer `listAuditEvents` was tested when Task Group 10 landed). Full suite: `npm run build` ✓, `npm run lint` ✓, `npm test` (88/88 passing across 11 files — 10 new this task group). Commit: "Add comprehensive unit tests for Slice 1 domain logic".
 
 ---
 

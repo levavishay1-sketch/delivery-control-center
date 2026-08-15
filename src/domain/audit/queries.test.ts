@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { listAuditEvents, getAuditActors } from "./queries";
+import { listAuditEvents, getAuditActors, listRecentAuditEvents } from "./queries";
 import { createWorkItem } from "@/domain/work-item/commands";
 import { createBlocker } from "@/domain/blocker/commands";
 import type { AuthContext } from "@/domain/shared/context";
@@ -114,5 +114,19 @@ describe("getAuditActors", () => {
   it("excludes actors from other clients", async () => {
     const actors = await getAuditActors(outsiderCtx, undefined);
     expect(actors.some((a) => a.id === managerUserId)).toBe(false);
+  });
+});
+
+describe("listRecentAuditEvents", () => {
+  it("respects the limit and orders most-recent-first — feeds the Dashboard's activity feed", async () => {
+    const events = await listRecentAuditEvents(managerCtx, 3);
+    expect(events).toHaveLength(3);
+    const timestamps = events.map((e) => e.createdAt.getTime());
+    expect(timestamps).toEqual([...timestamps].sort((a, b) => b - a));
+  });
+
+  it("scopes results to the user's accessible clients only", async () => {
+    const outsiderEvents = await listRecentAuditEvents(outsiderCtx, 200);
+    expect(outsiderEvents.every((e) => e.projectId !== projectId)).toBe(true);
   });
 });
