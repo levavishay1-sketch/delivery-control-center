@@ -47,18 +47,22 @@ test("delivery model: dependency, blocker, Attention Center, Quick View, timelin
   await expect(projectHeading).toBeVisible();
   const projectCard = page.locator("div.rounded-lg", { has: projectHeading });
 
-  // 4. Create two work items.
+  // 4. Create two work items. Neither gets a pipeline here — Slice 2 made pipeline start an
+  // explicit action, and this scenario is about dependency/blocker/timeline/audit, not the SDD
+  // pipeline, so it doesn't start one.
   for (const title of [backendApiTitle, databaseSchemaTitle]) {
     await projectCard.getByText("+ Add work item").click();
     await projectCard.getByPlaceholder("Work item title").fill(title);
-    await projectCard.getByRole("button", { name: "Create + start pipeline" }).click();
-    await expect(projectCard.getByRole("link", { name: title })).toBeVisible();
+    await projectCard.getByRole("button", { name: "Create work item" }).click();
+    await expect(projectCard.getByText(title)).toBeVisible();
   }
 
-  // Navigate to Backend API's 360° Record via its pipeline page.
-  await projectCard.getByRole("link", { name: backendApiTitle }).click();
-  await page.waitForURL(/\/pipelines\//);
-  await page.getByRole("link", { name: "360° Record →" }).click();
+  // Navigate to Backend API's 360° Record via Quick View (works whether or not a pipeline exists).
+  const backendApiRow = projectCard.locator("div", { hasText: backendApiTitle }).last();
+  await backendApiRow.getByRole("link", { name: "Quick View" }).click();
+  const quickView = page.getByRole("dialog");
+  await expect(quickView).toBeVisible();
+  await quickView.getByRole("link", { name: "Open full 360° Record →" }).click();
   await page.waitForURL(/\/work-items\/.+\/360/);
   await expect(page.getByRole("heading", { name: backendApiTitle })).toBeVisible();
 
@@ -68,7 +72,11 @@ test("delivery model: dependency, blocker, Attention Center, Quick View, timelin
   await page.locator("select").filter({ hasText: databaseSchemaTitle }).selectOption({ label: databaseSchemaTitle });
   await page.getByPlaceholder("Reason for the dependency").fill("Backend API depends on Database Schema");
   await page.getByRole("button", { name: "Add Dependency", exact: true }).click();
-  await expect(page.getByRole("link", { name: databaseSchemaTitle })).toBeVisible();
+  // Database Schema has no pipeline (neither work item started one in this scenario), so
+  // DependenciesTab renders it as plain text rather than a link to its pipeline. Scoped to
+  // the "Depends on" section since the title also appears (hidden) in the form's own <option>.
+  const dependsOnSection = page.locator("section", { has: page.getByRole("heading", { name: "Depends on" }) });
+  await expect(dependsOnSection.getByText(databaseSchemaTitle)).toBeVisible();
 
   // 6. Create a blocker on Backend API.
   await page.getByRole("tab", { name: "Overview" }).click();

@@ -39,10 +39,10 @@ established pattern).
 
 ## Task Group 4: Pipeline Optional Start (4 tasks)
 
-- [ ] 4.1 Remove the automatic `createPipeline` call from `createWorkItem` (`src/domain/work-item/commands.ts`).
-- [ ] 4.2 `src/domain/pipeline/commands.ts`: `startPipeline(ctx, workItemId)` — validates no existing pipeline (clear domain error, not a raw unique-constraint violation), validates the project has an `APPROVED` Constitution (`ValidationError` pointing at drafting one if not), snapshots `stageSequence` from `loadWorkflow()` and `constitutionVersion` from `getApprovedConstitution()`, creates the `Pipeline` + first stage, records the audit event — same transactional shape as today's `createPipeline`.
-- [ ] 4.3 Update `getNextStageType`/`getFirstStageType` equivalents to read from `pipeline.stageSequence` instead of the live config file (`src/lib/config.ts` callers move to pipeline-scoped lookups; keep `loadWorkflow()` itself for the snapshot-at-creation read).
-- [ ] 4.4 API route: `POST /api/work-items/[id]/pipeline` (start). UI: a "Start SDD" button where a work item has no pipeline (360° Record Overview tab, and the project work-item list). Tests: work item created with no pipeline; starting one without an approved Constitution is rejected; starting a second pipeline for the same work item is rejected; editing `workflow.yaml` after start doesn't change an existing pipeline's `stageSequence`. Commit: "Make pipeline start an explicit action; snapshot stage sequence"
+- [x] 4.1 Remove the automatic `createPipeline` call from `createWorkItem` (`src/domain/work-item/commands.ts`).
+- [x] 4.2 `src/domain/pipeline/commands.ts`: `startPipeline(ctx, workItemId)` — validates no existing pipeline (clear domain error, not a raw unique-constraint violation), validates the project has an `APPROVED` Constitution (`ValidationError` pointing at drafting one if not), snapshots `stageSequence` from `loadWorkflow()` and `constitutionVersion` from `getApprovedConstitution()`, creates the `Pipeline` + first stage, records the audit event — same transactional shape as today's `createPipeline`.
+- [x] 4.3 Update `getNextStageType`/`getFirstStageType` equivalents to read from `pipeline.stageSequence` instead of the live config file (`src/lib/config.ts` callers move to pipeline-scoped lookups; keep `loadWorkflow()` itself for the snapshot-at-creation read).
+- [x] 4.4 API route: `POST /api/work-items/[id]/pipeline` (start). UI: a "Start SDD" button where a work item has no pipeline (360° Record Overview tab, and the project work-item list). Tests: work item created with no pipeline; starting one without an approved Constitution is rejected; starting a second pipeline for the same work item is rejected; editing `workflow.yaml` after start doesn't change an existing pipeline's `stageSequence`. Commit: "Make pipeline start an explicit action; snapshot stage sequence"
 
 ## Task Group 5: Job-Backed Drafting & Stage Versioning (5 tasks)
 

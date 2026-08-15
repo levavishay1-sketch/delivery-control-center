@@ -73,6 +73,7 @@ export default async function WorkItem360Page({ params }: PageProps<"/work-items
             progress: workItem.progress,
             ownerId: workItem.ownerId,
             executorId: workItem.executorId,
+            pipelineId: workItem.pipeline?.id ?? null,
           }}
           members={members2}
           activeBlocker={

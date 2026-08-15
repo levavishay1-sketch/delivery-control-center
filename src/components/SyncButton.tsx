@@ -14,7 +14,7 @@ export function SyncButton({ projectId }: { projectId: string }) {
     const res = await fetch(`/api/projects/${projectId}/sync`, { method: "POST" });
     const data = await res.json();
     setPending(false);
-    setMessage(res.ok ? `Synced ${data.synced} (${data.newPipelines} new)` : data.error);
+    setMessage(res.ok ? `Synced ${data.synced} (${data.newWorkItems} new)` : data.error);
     router.refresh();
   }
 

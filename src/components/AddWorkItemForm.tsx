@@ -58,7 +58,7 @@ export function AddWorkItemForm({ projectId }: { projectId: string }) {
           disabled={pending}
           className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
         >
-          {pending ? "Creating…" : "Create + start pipeline"}
+          {pending ? "Creating…" : "Create work item"}
         </button>
         <button type="button" onClick={() => setOpen(false)} className="text-sm opacity-70 hover:opacity-100">
           Cancel

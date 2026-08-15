@@ -49,8 +49,8 @@ afterAll(async () => {
 });
 
 describe("createWorkItem", () => {
-  it("creates a work item with defaults and records an audit event", async () => {
-    const { workItem, pipeline } = await createWorkItem(managerCtx, { projectId, title: "Test item" });
+  it("creates a work item with defaults and records an audit event, with no pipeline until one is explicitly started", async () => {
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Test item" });
 
     expect(workItem.title).toBe("Test item");
     expect(workItem.status).toBe("OPEN");
@@ -58,7 +58,9 @@ describe("createWorkItem", () => {
     expect(workItem.risk).toBe("MEDIUM");
     expect(workItem.priority).toBe("MEDIUM");
     expect(workItem.ownerId).toBe(managerUserId);
-    expect(pipeline).toBeTruthy();
+
+    const pipeline = await db.pipeline.findUnique({ where: { workItemId: workItem.id } });
+    expect(pipeline).toBeNull();
 
     const events = await db.auditEvent.findMany({ where: { workItemId: workItem.id } });
     expect(events.some((e) => e.action.includes("created work item"))).toBe(true);

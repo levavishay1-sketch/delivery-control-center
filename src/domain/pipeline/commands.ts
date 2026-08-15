@@ -1,30 +1,50 @@
 import { db } from "@/lib/db";
-import { getFirstStageType, getNextStageType, getStageConfig, loadWorkflow } from "@/lib/config";
+import { getNextStageTypeInSequence, getStageConfig, loadWorkflow } from "@/lib/config";
 import { recordAuditEvent } from "@/lib/audit";
 import { getAgentExecutor } from "@/lib/agents";
+import { getApprovedConstitution } from "@/domain/constitution/queries";
 import type { Prisma, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
+import { ConflictError, ValidationError } from "@/domain/shared/errors";
 
 /**
- * Creates a Pipeline for a work item, seeded with its first (PENDING) stage.
- * Snapshots stageSequence from the live config at creation time (Task Group
- * 1's migration made the column NOT NULL) — Task Group 4 replaces this with
- * an explicit startPipeline that also requires an APPROVED Constitution;
- * until then this is the only pipeline-creation path and needs the same
- * snapshot so the NOT NULL constraint is satisfiable.
+ * Explicitly starts a Pipeline for a work item: requires the project to
+ * have an APPROVED Constitution (drafted and approved separately — see
+ * src/domain/constitution/commands.ts) and the work item to have no
+ * pipeline yet (the DB's @unique on workItemId enforces this too, but this
+ * gives a clear domain error instead of a raw constraint violation).
+ * Snapshots stageSequence from the live config and constitutionVersion
+ * from the approved Constitution — see design.md Decisions 3 and 4/7.
  */
-export async function createPipeline(workItemId: string) {
-  return db.$transaction(async (tx) => {
-    const workItem = await tx.workItem.findUniqueOrThrow({ where: { id: workItemId } });
-    const firstStage = getFirstStageType();
-    const stageSequence = loadWorkflow().map((s) => s.type);
+export async function startPipeline(ctx: AuthContext, workItemId: string) {
+  const workItem = await db.workItem.findUniqueOrThrow({
+    where: { id: workItemId },
+    include: { project: true, pipeline: true },
+  });
+  requireClientRole(ctx, workItem.project.clientId, WRITE_ROLES);
 
+  if (workItem.pipeline) {
+    throw new ConflictError("This work item already has a pipeline.");
+  }
+
+  const constitution = await getApprovedConstitution(workItem.projectId);
+  if (!constitution) {
+    throw new ValidationError(
+      "This project has no approved Constitution yet. Draft and approve one before starting a pipeline."
+    );
+  }
+
+  const stageSequence = loadWorkflow().map((s) => s.type);
+  const firstStage = stageSequence[0];
+
+  return db.$transaction(async (tx) => {
     const pipeline = await tx.pipeline.create({
       data: {
         workItemId: workItem.id,
         currentStage: firstStage,
         stageSequence,
+        constitutionVersion: constitution.version,
         stages: { create: { type: firstStage } },
       },
       include: { stages: true },
@@ -32,9 +52,12 @@ export async function createPipeline(workItemId: string) {
 
     await recordAuditEvent(tx, {
       pipelineId: pipeline.id,
-      actor: "SYSTEM",
-      action: `Pipeline created for "${workItem.title}"`,
-      detail: { workItemId: workItem.id, firstStage },
+      workItemId: workItem.id,
+      actor: "USER",
+      userId: ctx.userId,
+      actorName: ctx.displayName,
+      action: `${ctx.displayName} started the pipeline for "${workItem.title}"`,
+      detail: { firstStage, constitutionVersion: constitution.version, stageSequence },
     });
 
     return pipeline;
@@ -46,8 +69,13 @@ export async function createPipeline(workItemId: string) {
  * marks the pipeline COMPLETED if there isn't one. Shared by approveStage and draftStage's
  * requiresApproval:false auto-complete path — both reach this the same way a human approval does.
  */
-async function advancePipelinePastStage(tx: Prisma.TransactionClient, pipelineId: string, completedStageType: StageType) {
-  const nextType = getNextStageType(completedStageType);
+async function advancePipelinePastStage(
+  tx: Prisma.TransactionClient,
+  pipelineId: string,
+  stageSequence: StageType[],
+  completedStageType: StageType
+) {
+  const nextType = getNextStageTypeInSequence(stageSequence, completedStageType);
   if (nextType) {
     await tx.stage.create({ data: { pipelineId, type: nextType } });
     await tx.pipeline.update({ where: { id: pipelineId }, data: { currentStage: nextType } });
@@ -158,7 +186,7 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
         actor: "SYSTEM",
         action: `${getStageConfig(stage.type).label} completed automatically (no approval required)`,
       });
-      await advancePipelinePastStage(tx, stage.pipeline.id, stage.type);
+      await advancePipelinePastStage(tx, stage.pipeline.id, stage.pipeline.stageSequence, stage.type);
     }
 
     return updated;
@@ -191,7 +219,7 @@ export async function approveStage(ctx: AuthContext, stageId: string, comment?: 
       detail: comment ? { comment } : undefined,
     });
 
-    await advancePipelinePastStage(tx, stage.pipeline.id, stage.type);
+    await advancePipelinePastStage(tx, stage.pipeline.id, stage.pipeline.stageSequence, stage.type);
 
     return tx.pipeline.findUniqueOrThrow({ where: { id: stage.pipeline.id }, include: { stages: true } });
   });

@@ -59,6 +59,7 @@ export async function GET(request: Request, routeCtx: RouteContext<"/api/work-it
         progress: workItem.progress,
         ownerId: workItem.ownerId,
         executorId: workItem.executorId,
+        pipelineId: workItem.pipeline?.id ?? null,
       },
       members: members.map((m) => ({ id: m.id, name: m.name, email: m.email })),
       activeBlocker: activeBlocker

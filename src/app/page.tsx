@@ -9,6 +9,7 @@ import { AddWorkItemForm } from "@/components/AddWorkItemForm";
 import { SyncButton } from "@/components/SyncButton";
 import { StageBadge } from "@/components/StageBadge";
 import { QuickViewLink } from "@/components/QuickViewLink";
+import { StartPipelineButton } from "@/components/StartPipelineButton";
 
 export const dynamic = "force-dynamic";
 
@@ -172,15 +173,25 @@ export default async function HomePage() {
                         key={item.id}
                         className="flex items-center justify-between rounded border border-black/10 dark:border-white/10 px-3 py-2 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]"
                       >
-                        <Link href={item.pipeline ? `/pipelines/${item.pipeline.id}` : "#"} className="flex items-center gap-2">
-                          {item.title}
-                          <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">
-                            {item.status}
+                        {item.pipeline ? (
+                          <Link href={`/pipelines/${item.pipeline.id}`} className="flex items-center gap-2">
+                            {item.title}
+                            <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">
+                              {item.status}
+                            </span>
+                          </Link>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            {item.title}
+                            <span className="rounded-full bg-black/5 dark:bg-white/10 px-2 py-0.5 text-xs opacity-70">
+                              {item.status}
+                            </span>
                           </span>
-                        </Link>
+                        )}
                         <span className="flex items-center gap-3">
                           <span className="opacity-50">{item.pipeline?.currentStage}</span>
                           {item.pipeline && <StageBadge status={item.pipeline.status} />}
+                          {!item.pipeline && <StartPipelineButton workItemId={item.id} compact />}
                           <QuickViewLink workItemId={item.id} className="text-xs underline opacity-60 hover:opacity-100">
                             Quick View
                           </QuickViewLink>

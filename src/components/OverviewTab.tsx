@@ -7,6 +7,7 @@ import { CreateBlockerForm } from "@/components/CreateBlockerForm";
 import { CreateDecisionForm } from "@/components/CreateDecisionForm";
 import { ResolveBlockerButton } from "@/components/ResolveBlockerButton";
 import { DecisionActions } from "@/components/DecisionActions";
+import { StartPipelineButton } from "@/components/StartPipelineButton";
 
 const STATUS_EXPLANATION: Record<string, string> = {
   DRAFT: "Not yet started.",
@@ -90,6 +91,7 @@ export function OverviewTab({
     progress: number;
     ownerId: string | null;
     executorId: string | null;
+    pipelineId: string | null;
   };
   members: Member[];
   activeBlocker: Blocker | null;
@@ -278,6 +280,7 @@ export function OverviewTab({
           <CreateBlockerForm workItemId={workItem.id} members={members} defaultOwnerId={workItem.ownerId ?? members[0]?.id ?? ""} onCreated={onChanged} />
         )}
         {canManage && !pendingDecision && <CreateDecisionForm workItemId={workItem.id} onCreated={onChanged} />}
+        {canManage && !workItem.pipelineId && <StartPipelineButton workItemId={workItem.id} onStarted={onChanged} />}
       </div>
     </div>
   );

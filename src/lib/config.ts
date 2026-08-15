@@ -40,16 +40,18 @@ export function getStageConfig(type: StageType): WorkflowStageConfig {
   return stage;
 }
 
-/** Returns the stage type that follows `current`, or null if `current` is the last stage. */
-export function getNextStageType(current: StageType): StageType | null {
-  const stages = loadWorkflow();
-  const idx = stages.findIndex((s) => s.type === current);
-  if (idx === -1 || idx === stages.length - 1) return null;
-  return stages[idx + 1].type;
-}
-
-export function getFirstStageType(): StageType {
-  return loadWorkflow()[0].type;
+/**
+ * Returns the stage type that follows `current` within a pipeline's own
+ * snapshotted `stageSequence`, or null if `current` is the last stage.
+ * Deliberately takes the sequence as a parameter rather than reading
+ * `loadWorkflow()` — a pipeline's stage sequence is fixed at creation
+ * (see design.md Decision 3), so this must never fall back to the live
+ * config file for an existing pipeline.
+ */
+export function getNextStageTypeInSequence(stageSequence: StageType[], current: StageType): StageType | null {
+  const idx = stageSequence.indexOf(current);
+  if (idx === -1 || idx === stageSequence.length - 1) return null;
+  return stageSequence[idx + 1];
 }
 
 export function loadPromptTemplate(fileName: string): string {

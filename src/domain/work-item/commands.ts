@@ -2,7 +2,6 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { getIntegrationAdapter, decryptIntegrationConfig } from "@/lib/integrations";
 import { recordAuditEvent } from "@/lib/audit";
-import { createPipeline } from "@/domain/pipeline/commands";
 import { getProjectById } from "@/domain/project/queries";
 import { getWorkItemById } from "@/domain/work-item/queries";
 import { assertValidTransition } from "@/domain/work-item/status";
@@ -67,7 +66,7 @@ function mapExternalStatus(raw: string): WorkStatus {
   return "OPEN";
 }
 
-/** Adds a work item by hand (the "manual" integration path) and starts its pipeline. */
+/** Adds a work item by hand (the "manual" integration path). Its pipeline is started separately via startPipeline. */
 export async function createWorkItem(ctx: AuthContext, rawInput: CreateWorkItemInput) {
   const input = createWorkItemSchema.parse(rawInput);
   const project = await getProjectById(input.projectId);
@@ -111,8 +110,7 @@ export async function createWorkItem(ctx: AuthContext, rawInput: CreateWorkItemI
     return created;
   });
 
-  const pipeline = await createPipeline(workItem.id);
-  return { workItem, pipeline };
+  return { workItem };
 }
 
 /** Updates a work item's editable fields (not status — see updateWorkItemStatus). */
@@ -227,7 +225,7 @@ export async function addParentWorkItem(ctx: AuthContext, childId: string, paren
   });
 }
 
-/** Pulls work items from a project's configured integration, upserting and starting pipelines for new ones. */
+/** Pulls work items from a project's configured integration, upserting them. Pipelines are started separately via startPipeline — sync no longer creates one automatically. */
 export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) {
   const project = await getProjectById(projectId);
   if (!project) throw new NotFoundError("Project not found");
@@ -243,14 +241,17 @@ export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) 
   const created: string[] = [];
   for (const item of fetched) {
     const status: WorkStatus = mapExternalStatus(item.status);
-    const workItem = await db.workItem.upsert({
-      where: {
-        projectId_source_externalId: {
-          projectId: project.id,
-          source: project.integrationType,
-          externalId: item.externalId,
-        },
+    const externalKey = {
+      projectId_source_externalId: {
+        projectId: project.id,
+        source: project.integrationType,
+        externalId: item.externalId,
       },
+    };
+    const existing = await db.workItem.findUnique({ where: externalKey });
+
+    const workItem = await db.workItem.upsert({
+      where: externalKey,
       update: {
         title: item.title,
         description: item.description,
@@ -267,21 +268,17 @@ export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) 
         description: item.description,
         status,
       },
-      include: { pipeline: true },
     });
 
-    if (!workItem.pipeline) {
-      await createPipeline(workItem.id);
-      created.push(workItem.id);
-    }
+    if (!existing) created.push(workItem.id);
   }
 
   await recordAuditEvent(db, {
     projectId: project.id,
     actor: "SYSTEM",
     action: `Synced ${fetched.length} work item(s) from ${project.integrationType} for project "${project.name}"`,
-    detail: { synced: fetched.length, newPipelines: created.length },
+    detail: { synced: fetched.length, newWorkItems: created.length },
   });
 
-  return { synced: fetched.length, newPipelines: created.length };
+  return { synced: fetched.length, newWorkItems: created.length };
 }
