@@ -67,7 +67,7 @@ directly from this register; item numbers are referenced there.
 | 11 | Dashboard as command center | MISSING *(done in Slice 1)* |
 | 12 | Quick View drawer | MISSING *(done in Slice 1)* |
 | 13 | Progressive disclosure (3 levels) | MISSING *(done in Slice 1 — Attention/Dashboard → Quick View → 360° Record)* |
-| 14 | 360° Delivery Record (9 tabs) | EXTEND (`/pipelines/[id]` ≈ 1 tab) *(partially done in Slice 1 — Overview/Dependencies/Timeline built for real; Code/Tests/Evidence/Configuration are honest "Coming soon" stubs, not the remaining ~5 tabs; those need Slice 5's evidence entities to be real)* |
+| 14 | 360° Delivery Record (9 tabs) | EXTEND (`/pipelines/[id]` ≈ 1 tab) *(Overview/Dependencies/Timeline done in Slice 1; Code/Tests/Evidence done in Slice 5 — real, backed by GitHub-sourced entities; Configuration remains an honest "Coming soon" stub, pending Slice 6)* |
 | 15 | Per-work-item timeline | EXTEND (data exists, only a global 200-row feed) *(done in Slice 1 — `AuditEvent.workItemId` + the 360° Record's Timeline tab + the audit trail's own filters/pagination; the 200-row cap is gone)* |
 | 16 | Ctrl+K command palette / global search | MISSING — still not built. |
 | 17 | UI states (loading/empty/error/partial/stale/permission-denied) | EXTEND *(partially done in Slice 1 — loading/empty states exist on every new page; no dedicated "stale" or "partial" state, no global error boundary beyond inline error text)* |
@@ -81,7 +81,7 @@ directly from this register; item numbers are referenced there.
 | 20 | Clarify stage | MISSING *(done in Slice 2)* |
 | 21 | Analyze stage | MISSING *(done in Slice 2)* |
 | 22 | Constitution as project-scoped versioned artifact | CONFLICT (built per-work-item) *(resolved in Slice 2 — new `Constitution` model, project-scoped, versioned, referenced by `Pipeline.constitutionVersion`)* |
-| 23 | Final stage = Implement (real code) | CONFLICT (built final stage = Deploy doc) *(partially resolved in Slice 2 — `IMPLEMENT` now exists in the default stage sequence, ahead of `DEPLOY`, but per design.md's Non-Goals it stays an AI-drafted document, not real code execution; genuinely closing this conflict is still open, likely Slice 5 territory)* |
+| 23 | Final stage = Implement (real code) | CONFLICT (built final stage = Deploy doc) *(partially resolved in Slice 2 — `IMPLEMENT` now exists in the default stage sequence, ahead of `DEPLOY`, but per design.md's Non-Goals it stays an AI-drafted document, not real code execution; Slice 5 closed the adjacent "status alone means done" gap via evidence-driven completion, but did not make `IMPLEMENT` itself real execution — genuinely closing this conflict is still open, unscoped)* |
 | 24 | Configurable, role-based gate policy | EXTEND (`requiresApproval` read by nothing *(fixed in Slice 0)*) *(done in Slice 2 — `approverRoles: Role[]` per stage type in `config/workflow.yaml`, enforced in `approveStage`/`rejectStage`)* |
 | 25 | Versioned artifacts, pause/resume run state machine | EXTEND (`AI_DRAFTING` was a dead enum *(observability fixed in Slice 0)*) *(done in Slice 2 — `StageVersion` (append-only content history) + the `Job`-backed run state machine, which survives a process restart; `AWAITING_CLARIFICATION` is the pause, durable as ordinary rows)* |
 | 26 | Pipeline optional per work item | CONFLICT (auto-created 1:1 today) *(resolved in Slice 2 — `startPipeline` is now an explicit action requiring an approved Constitution; `createWorkItem` no longer auto-creates a `Pipeline`)* |
@@ -105,8 +105,8 @@ directly from this register; item numbers are referenced there.
 | 34 | Conflict handling (manual wins, surfaced) | KEEP (✓ Slice 4) |
 | 35 | Field-level provenance | KEEP (✓ Slice 4) |
 | 36 | Azure DevOps adapter | KEEP (✓ Slice 4 — real adapter; GitHub adapter also added, not separately numbered here) |
-| 37 | Repositories/git/PRs/commits/tests awareness | MISSING |
-| 38 | Evidence-driven completion | MISSING |
+| 37 | Repositories/git/PRs/commits/tests awareness | KEEP (✓ Slice 5) |
+| 38 | Evidence-driven completion | KEEP (✓ Slice 5) |
 | 39 | Hierarchical config, impact preview, versioning | MISSING |
 | 40 | Roles & real backend authorization | MISSING *(done in Slice 0)* |
 | 41 | Per-client credential isolation | MISSING *(done in Slice 0)* |
@@ -128,9 +128,11 @@ What's built today (the SDD pipeline: SPEC → Clarify → Plan → Tasks →
 Analyze → Implement → Deploy, run under a project-scoped versioned
 Constitution, role-gated, audited, AI-drafted, job-backed) is explicitly
 named the **"engine room"** of that product — correct, and kept — but only
-a fraction of it. Missing: the agent-execution, connector, and evidence
-layers around it (Slices 3–5); the delivery model, attention, blockers,
-decisions, and dependencies layers (Slice 1) are done.
+a fraction of it. The delivery model, attention, blockers, decisions, and
+dependencies layers (Slice 1) and the agent-execution, connector, and
+evidence layers around the engine room (Slices 3–5) are now built. Still
+missing: hierarchical configuration (Slice 6) and the items in §"Missing"
+above that no slice has scoped yet.
 
 ## What must be protected while building the rest (source: `§1`–`§2`)
 
@@ -197,7 +199,7 @@ re-litigate:
 | 2 | SDD as a subsystem | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 2" | `openspec/changes/archive/2026-08-15-slice-2-sdd-subsystem/` |
 | 3 | Agents as real execution resources | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | `openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/` |
 | 4 | Connector framework | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | `openspec/changes/archive/2026-08-15-slice-4-connector-framework/` |
-| 5 | Engineering evidence | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | — |
+| 5 | Engineering evidence | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | `openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/` |
 | 6 | Configuration Center | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | — |
 
 "Scoped" means the source document's own scope for that slice (below) is
@@ -275,13 +277,23 @@ connector-specific logic inside the core domain. Full detail: source §5
 "Slice 4". Archive detail:
 `openspec/changes/archive/2026-08-15-slice-4-connector-framework/`.
 
-### Slice 5 — Engineering evidence
+### Slice 5 — Engineering evidence — **Done**
 
-Repository/branch/commit/PR/test-run/build/deployment entities; Code &
-Changes and Tests tabs tracing work item → code change; `Evidence` entity
-and evidence-driven completion — a work item is only "done" with mandatory
-evidence present or an explicitly approved exception. Full detail: source
-§5 "Slice 5".
+`Repository`/`Commit`/`PullRequest`/`TestRun`/`Build`/`Deployment`
+entities, populated from GitHub via webhook events and the GitHub
+adapter's catch-up fetch, reusing Slice 4's `Connector`/webhook
+infrastructure; `Evidence` — a work item's explicit (never inferred) link
+to a pull request; evidence-driven completion — `APPROVED` → `COMPLETED`
+now requires a linked, merged pull request whose latest test run passed,
+or an approved `CompletionException`, closing the "status alone means
+done" gap the source names as a non-negotiable. 360° Record's Code &
+Changes and Tests tabs are real. Two scope decisions confirmed with the
+user before implementation (not in the source): work-item-to-PR linking is
+manual only for this slice (no branch/title-parsing auto-detection); the
+completion policy is one fixed default for every project, not
+per-project/per-type configurable (deferred to Slice 6). Full detail:
+source §5 "Slice 5". Archive detail:
+`openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/`.
 
 ### Slice 6 — Configuration Center
 

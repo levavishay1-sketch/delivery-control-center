@@ -1,6 +1,6 @@
 # Delivery Control Center — Product & System Specification
 
-Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 4).
+Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 5).
 Every claim below is traceable to a file in this repo.
 Status tags used throughout:
 
@@ -11,7 +11,7 @@ Status tags used throughout:
 - **Missing** — not present at all; noted because the product's own stated
   goals imply it should exist.
 
-This revision folds in **five** shipped slices: **Slice 0** (tenancy,
+This revision folds in **six** shipped slices: **Slice 0** (tenancy,
 identity, auth — archived at
 `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/`),
 **Slice 1** (the delivery model and the Attention Center — archived at
@@ -24,11 +24,19 @@ gate policy, redraft feedback — archived at
 `AgentRun` recording per draft, per-stage cost rollups, budget enforcement with
 an audited override flow, and permissioned run-detail visibility — archived at
 `openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/`),
-and **Slice 4** (Connector framework — `Connector`/`SyncRun` entities run
+**Slice 4** (Connector framework — `Connector`/`SyncRun` entities run
 through the `Job` runtime, field-level provenance, manual-wins sync conflict
 resolution, real Azure DevOps/GitHub adapters, idempotent webhook intake —
 archived at
-`openspec/changes/archive/2026-08-15-slice-4-connector-framework/`).
+`openspec/changes/archive/2026-08-15-slice-4-connector-framework/`), and
+**Slice 5** (Engineering evidence — `Repository`/`Commit`/`PullRequest`/
+`TestRun`/`Build`/`Deployment`/`Evidence`/`CompletionException` entities
+populated by GitHub webhook events and the GitHub adapter's catch-up fetch,
+manual (never inferred) work-item-to-pull-request linking, and
+evidence-driven completion — the `APPROVED` → `COMPLETED` transition now
+refuses without a qualifying merged/passing-tests pull request or an
+approved exception — archived at
+`openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/`).
 The previous revision of this file predated Slice 2 and described a fixed
 five-stage pipeline with uniform approval gating and an automatically-created,
 per-work-item Constitution stage — none of that is still true.
@@ -57,12 +65,15 @@ approval, rejection, blocker, decision, dependency change, and cost is
 permanently recorded. Source: `README.md`, `config/workflow.yaml`,
 `openspec/specs/*/spec.md`, `docs/ROADMAP.md`.
 
-**It is not (yet) a task tracker in the software-engineering sense** — the
-pipeline still tracks documentation artifacts moving through a governance
-process, not code/test/deploy state (that's Slice 5, unbuilt). But it is no
-longer *just* that: the delivery model (work-item status lifecycle, risk,
-blockers, decisions, dependencies) now tracks real delivery state
-independent of the pipeline.
+The pipeline tracks documentation artifacts moving through a governance
+process, not code/test/deploy state on its own — but as of Slice 5, a work
+item's completion is no longer a human's unverified claim either: the
+`APPROVED` → `COMPLETED` transition requires real engineering evidence (a
+merged pull request with passing tests) or an explicitly approved
+exception. The delivery model (work-item status lifecycle, risk, blockers,
+decisions, dependencies) tracks real delivery state independent of the
+pipeline, and that state is now itself evidence-backed for its most
+consequential transition.
 
 ## 2. Core product concepts
 
@@ -172,8 +183,12 @@ directly.
     drawer (`?quickView=<id>`) with the same blocker/decision/detail/
     dependencies/timeline data as the full record, without navigating away.
 14. **360° Delivery Record** — `/work-items/[id]/360`: tabbed Overview /
-    Dependencies (incl. a directed graph visualization) / Timeline, plus
-    honest "Coming soon" stubs for Code/Tests/Evidence/Configuration.
+    Dependencies (incl. a directed graph visualization) / Timeline / Code &
+    Changes (linked PRs, commits, CI status) / Tests (test runs) / Evidence
+    (completion-policy state and, for a write-capable role, the
+    exception-approval action) *(Code/Tests/Evidence implemented in Slice
+    5 — were "Coming soon" stubs before)*, plus an honest "Coming soon"
+    stub for Configuration.
 15. **Review the audit trail** — `/audit`: filterable (project, actor,
     action category, date range), paginated (20/50/100 rows), no longer
     truncated at 200 rows.
@@ -599,9 +614,20 @@ dead config flag; that's resolved).
 
 ## 17. Git / code / PR workflow
 
-Unchanged — still not a product feature. See `CLAUDE.md`'s own "Git
-workflow" section for how *this repository* is developed, which is a
-separate concern from the product.
+**Implemented as of Slice 5** (was "not a product feature" before). A
+project's linked GitHub `Repository` (via its `Connector`) is the source of
+`Commit`/`PullRequest`/`TestRun`/`Build`/`Deployment` records, populated by
+GitHub webhook events (`push`, `pull_request`, `check_run`,
+`deployment_status` — `src/app/api/webhooks/github/[connectorId]/route.ts`)
+and, for pre-existing history, a bounded inline catch-up fetch run once
+when the repository is linked (`linkRepository`,
+`src/domain/evidence/commands.ts`). A pull request's commits and CI status
+(via `TestRun`) surface on a work item's 360° Record **Code & Changes**
+tab; its test runs surface on the **Tests** tab. Linking a pull request to
+a work item as its evidence is always an explicit, manual action
+(`linkEvidence`) — never inferred from a branch name or PR title. See
+`CLAUDE.md`'s own "Git workflow" section for how *this repository itself*
+is developed, which remains a separate concern from the product.
 
 ## 18. Testing and deployment
 
@@ -632,10 +658,21 @@ only runs via `npm run dev` / `next build` + `next start`. "Verification"
 
 ## 19. Evidence and completion rules
 
-Unchanged — still just a stage's AI-drafted content plus one `Approval`
-record. Work-item `progress` (0–100, Slice 1) is a manually-set number, not
-derived from any evidence. No file attachments, no linked test results, no
-CI status. Evidence-driven completion remains Slice 5's scope.
+**Implemented as of Slice 5** (was "unchanged, still just an `Approval`
+record" before). The `APPROVED` → `COMPLETED` status transition
+(`updateWorkItemStatus`, `src/domain/work-item/commands.ts`) now runs a
+fixed default completion policy (`checkCompletionPolicy`,
+`src/domain/evidence/completion.ts`): it succeeds only if the work item has
+at least one linked, merged `PullRequest` whose latest `TestRun` passed, or
+an approved `CompletionException` exists for it — otherwise the transition
+is rejected with an error naming exactly what's missing. A write-capable
+role can record a `CompletionException` (required reason, audited) when
+qualifying evidence genuinely can't be produced. The 360° Record's
+**Evidence** tab shows the policy's current state in plain language and,
+for a write-capable role, the exception-approval action. This policy is
+fixed (not per-project/per-type configurable) for this slice — configurable
+policy is Slice 6's Configuration Center territory. Work-item `progress`
+(0–100, Slice 1) remains a manually-set number, independent of this policy.
 
 ## 20. Audit and provenance
 
@@ -971,6 +1008,10 @@ on Jira sync calls (now job-backed, same pattern as Slice 2's AI
 drafting), no field-level provenance ("where did this value come from"
 was unanswerable), a re-sync silently overwriting a human's manual edit,
 Azure DevOps declared but stubbed out, no webhook intake at all.
+**Fixed in Slice 5**: `WorkStatus.COMPLETED` reachable on status alone
+with zero evidence any code was written, tested, or reviewed; the 360°
+Record's Code/Tests/Evidence tabs were honest but permanent "Coming soon"
+stubs.
 
 Still outstanding:
 
@@ -1163,11 +1204,24 @@ Covered in §25.
   on the Attention Center and the project's Settings page. *(Slice 4.)*
 - Idempotent webhook intake for GitHub and Azure DevOps, verified by
   signature/Basic-Auth before touching the database. *(Slice 4.)*
-- 226 domain-layer integration tests, 8 Playwright E2E tests (up from 149
-  and 6 — Slice 3 added budget/cost-rollup coverage and its own lifecycle
-  scenario; Slice 4 added connector/provenance/conflict coverage and a
+- Engineering evidence: `Repository`/`Commit`/`PullRequest`/`TestRun`/
+  `Build`/`Deployment` entities populated by GitHub webhook events (push,
+  pull_request, check_run, deployment_status) and a bounded catch-up fetch
+  when a repository is linked; manual (never inferred) work-item-to-PR
+  linking; the 360° Record's Code & Changes and Tests tabs are real.
+  *(Slice 5.)*
+- Evidence-driven completion: `APPROVED` → `COMPLETED` requires a linked,
+  merged pull request whose latest test run passed, or an approved
+  `CompletionException` — status alone can no longer mean "done." The
+  Evidence tab explains the policy's current state in plain language.
+  *(Slice 5.)*
+- 253 domain-layer integration tests, 9 Playwright E2E tests (up from 226
+  and 8 — Slice 4 added connector/provenance/conflict coverage and a
   scenario that itself caught and fixed a real Server/Client boundary bug
-  before shipping).
+  before shipping; Slice 5 added evidence/completion-policy coverage and
+  its own end-to-end scenario, and made the GitHub adapter's base URL
+  configurable — mirroring `jira.ts` — so that scenario runs against a
+  local deterministic stub).
 
 ## Missing capabilities
 
@@ -1195,8 +1249,13 @@ Covered in §25.
   `Connector.syncMode` records the intent as data, nothing acts on it yet).
 - Two-way sync (pushing local changes back to Jira/Azure DevOps/GitHub) —
   Slice 4's adapters are fetch/webhook-in only.
-- Repository/commit/PR/test-run entities, evidence-driven completion
-  (Slice 5 territory).
+- Auto-detection of work-item-to-PR linking (branch name/title parsing) —
+  deliberately manual-only in Slice 5; see §17, §19.
+- Per-project/per-type configurable completion policy — Slice 5 shipped
+  one fixed default policy for every project; configurability is Slice 6's
+  Configuration Center territory.
+- Non-GitHub evidence sources (Jira/Azure DevOps commits or PRs) — Slice
+  5's `Repository` is GitHub-only.
 
 ## Inconsistencies between UI, backend, and domain model
 
@@ -1236,17 +1295,18 @@ Covered in §25.
 Per `docs/ROADMAP.md`'s slice sequence (source of truth — this section
 summarizes, doesn't override it):
 
-1. **Slice 5 — Engineering evidence**: repository/commit/PR/test-run
-   entities, Code & Changes / Tests tabs, evidence-driven completion.
-2. **Slice 6 — Configuration Center**: hierarchical config with
+1. **Slice 6 — Configuration Center**: hierarchical config with
    inheritance, impact preview, versioning.
-3. Cheap, high-clarity fixes that don't need a full slice: client-creation
+2. Cheap, high-clarity fixes that don't need a full slice: client-creation
    UI/API; a `WorkItem` delete path (once the audit-immutability question
    is resolved); push notifications for the Attention Center;
-   critical-path analysis over dependencies; scheduled/polled connector sync.
+   critical-path analysis over dependencies; scheduled/polled connector
+   sync; per-project/per-type configurable completion policy; auto-detected
+   work-item-to-PR linking.
 
-*(Slice 3 — Agents as real execution resources — and Slice 4 — Connector
-framework — are now Done; see `docs/ROADMAP.md`.)*
+*(Slice 3 — Agents as real execution resources — Slice 4 — Connector
+framework — and Slice 5 — Engineering evidence — are now Done; see
+`docs/ROADMAP.md`.)*
 
 ---
 
@@ -1270,24 +1330,33 @@ pipeline detail page and a dedicated Constitution page (Slice 2), plus an
 agent registry with per-project AI routing, per-run cost tracking and
 budgets, and an audited override flow (Slice 3), plus a real connector
 framework with field-level provenance, manual-wins conflict resolution,
-and idempotent webhook intake for Jira/Azure DevOps/GitHub (Slice 4). It
-is not yet a code/deployment system (Slice 5) — `IMPLEMENT` stays an
-AI-drafted document, not real execution — and several real gaps remain: no
+and idempotent webhook intake for Jira/Azure DevOps/GitHub (Slice 4), plus
+real engineering evidence — GitHub commits, pull requests, and test runs
+traced to the work item they belong to, with the `APPROVED` → `COMPLETED`
+transition now refusing without qualifying evidence or an approved
+exception (Slice 5). `IMPLEMENT` still stays an AI-drafted document, not
+real code execution — that gap is now specifically about the pipeline's
+own `IMPLEMENT` stage, not evidence at large, since Slice 5 closed the
+"status alone means done" gap — and several real gaps remain: no
 client-creation path, no work-item deletion, no push notifications, no
-critical-path analysis, no scheduled sync. Its strongest, most
-fully-realized property remains provenance — the audit trail is real,
-transactionally consistent, tenant-scoped, work-item-traceable, and
-(Slice 2) its project filter now actually includes pipeline/stage-scoped
-events, a real bug fixed along the way, joined in Slice 4 by field-level
-provenance for every synced work-item field. Its access-control story is
+critical-path analysis, no scheduled sync, no per-project completion
+policy configuration. Its strongest, most fully-realized property remains
+provenance — the audit trail is real, transactionally consistent,
+tenant-scoped, work-item-traceable, and (Slice 2) its project filter now
+actually includes pipeline/stage-scoped events, a real bug fixed along the
+way, joined in Slice 4 by field-level provenance for every synced
+work-item field and in Slice 5 by evidence-backed completion. Its
+access-control story is
 solid and got sharper in Slice 2: gate approval is now role-based per
 stage type, not a single uniform check. The product's architecture
 (swappable `AgentExecutor`/`IntegrationAdapter`, config-driven pipeline
 shape, the `src/domain/<aggregate>/` command/query pattern, and now the
 `Job`-backed durable-execution pattern) has proven itself capable of
-absorbing four slices this large in a row (Slice 2: 13 task groups, 5 new
+absorbing five slices this large in a row (Slice 2: 13 task groups, 5 new
 entities, 1 new page, ~60 new tests; Slice 3: 10 task groups, 3 new
 entities, 2 new API suites, ~60 new tests and an E2E scenario; Slice 4: 10
 task groups, 5 new entities, 3 real adapters, a new page, ~50 new tests
-and an E2E scenario that caught a real bug before it shipped) without a
+and an E2E scenario that caught a real bug before it shipped; Slice 5: 10
+task groups, 8 new entities, 4 new API routes, 3 new 360°-Record tabs made
+real, ~27 new tests and an E2E scenario) without a
 rewrite — a reasonable signal for the slices still ahead.
