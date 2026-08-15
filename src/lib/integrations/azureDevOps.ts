@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { IntegrationAdapter } from "./types";
 
 interface AzureDevOpsConfig {
@@ -68,3 +69,18 @@ export const azureDevOpsAdapter: IntegrationAdapter = {
     }));
   },
 };
+
+/**
+ * Verifies an Azure DevOps service hook request against its configured Basic-Auth-on-URL scheme
+ * (Azure DevOps service hooks authenticate via a username/password baked into the webhook's own
+ * "Basic authentication" fields, sent as a standard `Authorization: Basic <base64>` header) —
+ * `expectedSecret` is the `username:password` pair configured for this connector's webhook.
+ */
+export function verifyAzureDevOpsAuth(authorizationHeader: string | null, expectedSecret: string): boolean {
+  if (!authorizationHeader) return false;
+  const expected = `Basic ${Buffer.from(expectedSecret).toString("base64")}`;
+  const expectedBuf = Buffer.from(expected);
+  const actualBuf = Buffer.from(authorizationHeader);
+  if (expectedBuf.length !== actualBuf.length) return false;
+  return timingSafeEqual(expectedBuf, actualBuf);
+}

@@ -88,13 +88,22 @@ export async function configureConnector(ctx: AuthContext, projectId: string, ra
 }
 
 /**
- * The write path behind a project's "Sync now" button (or a verified webhook delivery —
- * src/domain/connector/webhooks.ts). Enqueues a SYNC_PROJECT job rather than running the sync
- * inline (design.md decision 2): retry/backoff and crash-durability come from the existing Job
- * runtime for free, the same way DRAFT_STAGE/DRAFT_CONSTITUTION already do. Refuses a second
- * trigger while one is already RUNNING for this connector rather than enqueueing a concurrent
- * SyncRun.
+ * Enqueues a SYNC_PROJECT job for a connector rather than running the sync inline (design.md
+ * decision 2): retry/backoff and crash-durability come from the existing Job runtime for free,
+ * the same way DRAFT_STAGE/DRAFT_CONSTITUTION already do. Refuses a second trigger while one is
+ * already RUNNING for this connector rather than enqueueing a concurrent SyncRun. Internal — has
+ * no ctx/authz of its own; both entry points below (a human's "Sync now", a verified webhook
+ * delivery) do their own authorization before reaching this.
  */
+async function enqueueSyncJob(connectorId: string) {
+  const running = await getRunningSyncRun(connectorId);
+  if (running) {
+    throw new ConflictError("A sync is already running for this connector.");
+  }
+  return enqueueJob("SYNC_PROJECT", { connectorId }, `sync-project-${connectorId}-${Date.now()}`);
+}
+
+/** The write path behind a project's "Sync now" button — WRITE_ROLES-gated. */
 export async function triggerSync(ctx: AuthContext, connectorId: string) {
   const connector = await db.connector.findUnique({ where: { id: connectorId } });
   if (!connector) throw new NotFoundError("Connector not found");
@@ -102,12 +111,16 @@ export async function triggerSync(ctx: AuthContext, connectorId: string) {
   if (!project) throw new NotFoundError("Project not found");
   requireClientRole(ctx, project.clientId, WRITE_ROLES);
 
-  const running = await getRunningSyncRun(connectorId);
-  if (running) {
-    throw new ConflictError("A sync is already running for this connector.");
-  }
+  return enqueueSyncJob(connectorId);
+}
 
-  return enqueueJob("SYNC_PROJECT", { connectorId }, `sync-project-${connectorId}-${Date.now()}`);
+/**
+ * The write path behind a verified webhook delivery (src/domain/connector/webhooks.ts) — no
+ * ctx/human role to gate against; authorization is the webhook's own signature/auth
+ * verification, already done by the caller before this is reached.
+ */
+export async function triggerSyncFromWebhook(connectorId: string) {
+  return enqueueSyncJob(connectorId);
 }
 
 /** Convenience wrapper for the common case of triggering a sync by project id (e.g. the "Sync now" API route) rather than connectorId. */

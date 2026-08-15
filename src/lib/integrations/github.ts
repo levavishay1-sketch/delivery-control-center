@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { IntegrationAdapter } from "./types";
 
 interface GithubConfig {
@@ -56,3 +57,17 @@ export const githubAdapter: IntegrationAdapter = {
       }));
   },
 };
+
+/**
+ * Verifies a GitHub webhook delivery's HMAC-SHA256 signature (the `X-Hub-Signature-256` header,
+ * formatted `sha256=<hex>`), per GitHub's own documented scheme:
+ * https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries
+ */
+export function verifyGithubSignature(payload: string, signatureHeader: string | null, secret: string): boolean {
+  if (!signatureHeader) return false;
+  const expected = `sha256=${createHmac("sha256", secret).update(payload).digest("hex")}`;
+  const expectedBuf = Buffer.from(expected);
+  const actualBuf = Buffer.from(signatureHeader);
+  if (expectedBuf.length !== actualBuf.length) return false;
+  return timingSafeEqual(expectedBuf, actualBuf);
+}

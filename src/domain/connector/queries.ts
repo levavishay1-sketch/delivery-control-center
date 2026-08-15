@@ -5,6 +5,11 @@ export function getConnector(projectId: string) {
   return db.connector.findUnique({ where: { projectId } });
 }
 
+/** A connector by its own id — used by webhook routes, which address a connector directly rather than through its project. */
+export function getConnectorById(connectorId: string) {
+  return db.connector.findUnique({ where: { id: connectorId } });
+}
+
 /** A project's SyncRun history, most recent first. */
 export function listSyncRuns(connectorId: string) {
   return db.syncRun.findMany({ where: { connectorId }, orderBy: { startedAt: "desc" } });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { azureDevOpsAdapter } from "./azureDevOps";
+import { azureDevOpsAdapter, verifyAzureDevOpsAuth } from "./azureDevOps";
 import { getIntegrationAdapter } from "./index";
 
 const VALID_CONFIG = { orgUrl: "https://dev.azure.com/my-org", project: "MyProject", pat: "secret-pat" };
@@ -70,5 +70,25 @@ describe("getIntegrationAdapter(\"AZURE_DEVOPS\")", () => {
   it("no longer throws 'not yet available'", () => {
     expect(() => getIntegrationAdapter("AZURE_DEVOPS")).not.toThrow();
     expect(getIntegrationAdapter("AZURE_DEVOPS").type).toBe("AZURE_DEVOPS");
+  });
+});
+
+describe("verifyAzureDevOpsAuth", () => {
+  // Azure DevOps service hooks authenticate via standard HTTP Basic Auth (RFC 7617) on the
+  // webhook URL — there's no separate signature scheme to validate against, unlike GitHub's HMAC.
+  const SECRET = "hookuser:hookpass123";
+  const VALID_HEADER = `Basic ${Buffer.from(SECRET).toString("base64")}`;
+
+  it("accepts a correctly-constructed Basic Auth header for the configured secret", () => {
+    expect(verifyAzureDevOpsAuth(VALID_HEADER, SECRET)).toBe(true);
+  });
+
+  it("rejects a header built from the wrong secret", () => {
+    const wrongHeader = `Basic ${Buffer.from("hookuser:wrongpass").toString("base64")}`;
+    expect(verifyAzureDevOpsAuth(wrongHeader, SECRET)).toBe(false);
+  });
+
+  it("rejects a missing Authorization header", () => {
+    expect(verifyAzureDevOpsAuth(null, SECRET)).toBe(false);
   });
 });

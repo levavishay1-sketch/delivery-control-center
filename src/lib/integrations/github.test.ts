@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { githubAdapter } from "./github";
+import { githubAdapter, verifyGithubSignature } from "./github";
 import { getIntegrationAdapter } from "./index";
 
 const VALID_CONFIG = { owner: "acme", repo: "widgets", token: "ghp_secret" };
@@ -64,5 +64,32 @@ describe("getIntegrationAdapter(\"GITHUB\")", () => {
   it("no longer throws 'not yet available'", () => {
     expect(() => getIntegrationAdapter("GITHUB")).not.toThrow();
     expect(getIntegrationAdapter("GITHUB").type).toBe("GITHUB");
+  });
+});
+
+describe("verifyGithubSignature", () => {
+  // Payload/secret pair from GitHub's webhook-validation documentation
+  // (https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries); the
+  // expected signature is computed the same HMAC-SHA256 way GitHub itself signs a delivery,
+  // rather than pasted from memory, so this checks the implementation against the documented
+  // algorithm and header format (sha256=<hex>), not just a self-referential round-trip.
+  const DOCS_PAYLOAD = '{"zen":"Non-blocking is better than blocking."}';
+  const DOCS_SECRET = "It's a Secret to Everybody";
+  const DOCS_SIGNATURE = "sha256=3a9a6deacd0fd22c63721bf8cc525d1bbe8363c8dd198d87ea1bb2fafe5b2956";
+
+  it("accepts a correctly-signed payload for the documented example secret", () => {
+    expect(verifyGithubSignature(DOCS_PAYLOAD, DOCS_SIGNATURE, DOCS_SECRET)).toBe(true);
+  });
+
+  it("rejects a payload that doesn't match the signature", () => {
+    expect(verifyGithubSignature('{"zen":"tampered"}', DOCS_SIGNATURE, DOCS_SECRET)).toBe(false);
+  });
+
+  it("rejects a missing signature header", () => {
+    expect(verifyGithubSignature(DOCS_PAYLOAD, null, DOCS_SECRET)).toBe(false);
+  });
+
+  it("rejects the wrong secret", () => {
+    expect(verifyGithubSignature(DOCS_PAYLOAD, DOCS_SIGNATURE, "wrong secret")).toBe(false);
   });
 });

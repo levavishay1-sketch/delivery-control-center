@@ -10,7 +10,9 @@ const { auth } = NextAuth(authConfig);
 export default auth;
 
 export const config = {
-  // Everything except the login page, the auth API, and static assets
-  // requires an authenticated session — enforced by authorized() above.
-  matcher: ["/((?!login|api/auth|_next/static|_next/image|favicon.ico).*)"],
+  // Everything except the login page, the auth API, static assets, and connector webhook intake
+  // requires an authenticated session — enforced by authorized() above. Webhook routes are
+  // server-to-server (GitHub/Azure DevOps calling in) and authenticate via their own
+  // signature/Basic-Auth verification inside the route handler, not a user session.
+  matcher: ["/((?!login|api/auth|api/webhooks|_next/static|_next/image|favicon.ico).*)"],
 };

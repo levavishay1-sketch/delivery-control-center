@@ -53,10 +53,10 @@ committable independently, per this project's change-sizing convention
 
 ## Task Group 6: Idempotent Webhook Intake (4 tasks)
 
-- [ ] 6.1 `src/domain/connector/webhooks.ts`: `receiveWebhook(connectorId, deliveryId, verify)` — inserts into `WebhookDelivery` (`@@unique([connectorId, deliveryId])`); if the insert is a no-op (already exists), returns "duplicate, skip" without enqueueing; otherwise calls `triggerSync` and returns "processed".
-- [ ] 6.2 Each adapter gains a webhook verifier: `github.ts` exports `verifyGithubSignature(payload, signatureHeader, secret)` using HMAC-SHA256 + `crypto.timingSafeEqual`; `azureDevOps.ts` exports `verifyAzureDevOpsAuth(request, expectedSecret)` per its Basic-Auth-on-URL scheme. Both documented against their provider's own example payload/signature.
-- [ ] 6.3 API routes: `POST /api/webhooks/github/[connectorId]`, `POST /api/webhooks/azure-devops/[connectorId]` — extract the delivery id and signature per adapter, verify, then call `receiveWebhook`; an unverified or unmatched-connector request is rejected (401/404) with no `WebhookDelivery` row created and no sync triggered.
-- [ ] 6.4 Tests: a redelivered `deliveryId` triggers exactly one `SyncRun`, not two; a request with an invalid signature is rejected and creates no `WebhookDelivery`/`SyncRun`; a request for a connector with a mismatched or disconnected state is rejected; a genuinely new delivery triggers a sync normally. Commit: "Add idempotent webhook intake for push-capable connectors"
+- [x] 6.1 `src/domain/connector/webhooks.ts`: `receiveWebhook(connectorId, deliveryId, verify)` — inserts into `WebhookDelivery` (`@@unique([connectorId, deliveryId])`); if the insert is a no-op (already exists), returns "duplicate, skip" without enqueueing; otherwise calls `triggerSync` and returns "processed".
+- [x] 6.2 Each adapter gains a webhook verifier: `github.ts` exports `verifyGithubSignature(payload, signatureHeader, secret)` using HMAC-SHA256 + `crypto.timingSafeEqual`; `azureDevOps.ts` exports `verifyAzureDevOpsAuth(request, expectedSecret)` per its Basic-Auth-on-URL scheme. Both documented against their provider's own example payload/signature.
+- [x] 6.3 API routes: `POST /api/webhooks/github/[connectorId]`, `POST /api/webhooks/azure-devops/[connectorId]` — extract the delivery id and signature per adapter, verify, then call `receiveWebhook`; an unverified or unmatched-connector request is rejected (401/404) with no `WebhookDelivery` row created and no sync triggered.
+- [x] 6.4 Tests: a redelivered `deliveryId` triggers exactly one `SyncRun`, not two; a request with an invalid signature is rejected and creates no `WebhookDelivery`/`SyncRun`; a request for a connector with a mismatched or disconnected state is rejected; a genuinely new delivery triggers a sync normally. Commit: "Add idempotent webhook intake for push-capable connectors"
 
 ## Task Group 7: UI (4 tasks)
 

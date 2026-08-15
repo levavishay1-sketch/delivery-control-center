@@ -10,8 +10,8 @@ import { encryptSecret, decryptSecret } from "@/domain/shared/crypto";
 /** Which keys inside a project's integrationConfig are credentials, per integration type. */
 const SECRET_FIELDS: Partial<Record<IntegrationType, string[]>> = {
   JIRA: ["apiToken"],
-  AZURE_DEVOPS: ["pat"],
-  GITHUB: ["token"],
+  AZURE_DEVOPS: ["pat", "webhookSecret"],
+  GITHUB: ["token", "webhookSecret"],
 };
 
 /** Encrypts the credential fields of an integrationConfig before it's written to the DB. Non-secret fields pass through untouched. */
