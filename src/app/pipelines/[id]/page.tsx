@@ -4,6 +4,7 @@ import { getPipelineDetail } from "@/domain/pipeline/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { getStageConfigOrFallback } from "@/lib/config";
+import { WRITE_ROLES } from "@/domain/shared/authz";
 import { StageBadge } from "@/components/StageBadge";
 import { DraftButton } from "@/components/DraftButton";
 import { ApprovalGate } from "@/components/ApprovalGate";
@@ -46,6 +47,11 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
   // PENDING_APPROVAL stage can explain who *can* act when the viewer can't — approverRoles is
   // per stage type (Task Group 8), not uniform, so this is computed per stage below.
   const userRole = ctx.memberships.find((m) => m.clientId === pipeline.workItem.project.clientId)?.role;
+  // Slice 3 — raw AgentRun detail (structured error, retry count) is write-gated the same way
+  // getAgentRunDetail's own check is (design.md's permissioned-visibility requirement); the
+  // status/cost summary line below it is always visible, matching getAgentRunSummary's ALL_ROLES
+  // scope, which this page's own ALL_ROLES query gate already satisfies for every viewer here.
+  const canManage = ctx.isOrgAdmin || (!!userRole && (WRITE_ROLES as string[]).includes(userRole));
 
   return (
     <div className="flex flex-col gap-6">
@@ -106,9 +112,27 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
 
               {stage && (stage.status === "PENDING_APPROVAL" || stage.status === "DONE") && (
                 <p className="mt-2 text-xs opacity-50">
-                  {stage.aiModel} · {stage.promptTokens}+{stage.completionTokens} tokens · $
-                  {stage.costUsd?.toString()}
+                  {stage.agentRun ? `${stage.agentRun.agent.name} (${stage.agentRun.status})` : stage.aiModel} ·{" "}
+                  {stage.promptTokens}+{stage.completionTokens} tokens · ${stage.costUsd?.toString()}
                 </p>
+              )}
+
+              {stage?.agentRun && canManage && (
+                <details className="mt-2 text-xs opacity-70">
+                  <summary className="cursor-pointer">View run detail</summary>
+                  <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-2 gap-y-1">
+                    <dt className="opacity-60">Status</dt>
+                    <dd>{stage.agentRun.status}</dd>
+                    <dt className="opacity-60">Retries</dt>
+                    <dd>{stage.agentRun.retryCount}</dd>
+                    {stage.agentRun.lastError && (
+                      <>
+                        <dt className="opacity-60">Last error</dt>
+                        <dd className="whitespace-pre-wrap text-red-500">{stage.agentRun.lastError}</dd>
+                      </>
+                    )}
+                  </dl>
+                </details>
               )}
 
               {stage && stage.approvals.length > 0 && (
@@ -124,14 +148,18 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
 
               {isCurrent && stage && (stage.status === "PENDING" || stage.status === "REJECTED") && (
                 <div className="mt-3">
-                  <DraftButton stageId={stage.id} label={stage.status === "REJECTED" ? "Redraft" : "Draft with AI"} />
+                  <DraftButton
+                    stageId={stage.id}
+                    label={stage.status === "REJECTED" ? "Redraft" : "Draft with AI"}
+                    canApprove={canManage}
+                  />
                 </div>
               )}
 
               {!isCurrent && stage && stage.status === "DONE" && flaggedStageTypes.has(stageConfig.type) && (
                 <div className="mt-3">
                   <p className="mb-1 text-xs text-red-500">Flagged by Analyze — redraft required to unblock the pipeline.</p>
-                  <DraftButton stageId={stage.id} label="Redraft" />
+                  <DraftButton stageId={stage.id} label="Redraft" canApprove={canManage} />
                 </div>
               )}
 

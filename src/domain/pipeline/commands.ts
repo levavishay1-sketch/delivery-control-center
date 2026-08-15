@@ -7,7 +7,7 @@ import { checkBudget, completeAgentRun, failAgentRun, syncAgentRegistry } from "
 import type { FindingSeverity, Prisma, Role, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
-import { ConflictError, ValidationError } from "@/domain/shared/errors";
+import { BudgetExceededError, ConflictError, ValidationError } from "@/domain/shared/errors";
 
 /**
  * Resolves a stage type's approverRoles without ever throwing — getStageConfig throws for a
@@ -180,8 +180,11 @@ export async function draftStage(ctx: AuthContext, stageId: string) {
   // "queued" response.
   const budgetCheck = await checkBudget(stage.pipeline.workItem.project.clientId, stage.pipeline.workItem.projectId);
   if (!budgetCheck.allowed) {
-    throw new ConflictError(
-      `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`
+    throw new BudgetExceededError(
+      `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`,
+      budgetCheck.scope!,
+      stage.pipeline.workItem.project.clientId,
+      stage.pipeline.workItem.projectId
     );
   }
 

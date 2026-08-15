@@ -260,7 +260,7 @@ model Client {
   aiConfig          Json?
   // Slice 3 — unset means no spending limit for this client. A project's own
   // aiBudgetUsd, if set, overrides this one (see design.md decision 4).
-  aiBudgetUsd       Decimal?     @db.Decimal(10, 2)
+  aiBudgetUsd       Decimal?     @db.Decimal(10, 4)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -280,7 +280,7 @@ model Project {
   integrationType   IntegrationType @default(MANUAL)
   integrationConfig Json?
   // Slice 3 — unset means "use the client's budget" (see Client.aiBudgetUsd).
-  aiBudgetUsd       Decimal?        @db.Decimal(10, 2)
+  aiBudgetUsd       Decimal?        @db.Decimal(10, 4)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 

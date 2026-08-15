@@ -3,6 +3,7 @@ import { listProjectsForHome } from "@/domain/project/queries";
 import { listClients } from "@/domain/client/queries";
 import { listRecentAuditEvents } from "@/domain/audit/queries";
 import { getItemsNeedingAttention } from "@/domain/attention/queries";
+import { getClientAiCost } from "@/domain/agent/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { AddProjectForm } from "@/components/AddProjectForm";
 import { AddWorkItemForm } from "@/components/AddWorkItemForm";
@@ -10,6 +11,8 @@ import { SyncButton } from "@/components/SyncButton";
 import { StageBadge } from "@/components/StageBadge";
 import { QuickViewLink } from "@/components/QuickViewLink";
 import { StartPipelineButton } from "@/components/StartPipelineButton";
+import { BudgetForm } from "@/components/BudgetForm";
+import { WRITE_ROLES } from "@/domain/shared/authz";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +44,12 @@ export default async function HomePage() {
     list.push(project);
     projectsByClient.set(project.clientId, list);
   }
+
+  // Slice 3 — AI cost rollup per client (Task Group 7.2). All-time only: this app has no
+  // time-bucketed AgentRun query yet, and inventing month-bucketing here isn't what was asked for.
+  const clientAiCosts = new Map(
+    await Promise.all(clients.map(async (client) => [client.id, await getClientAiCost(client.id)] as const))
+  );
 
   const { summary } = attention;
   const allClear = summary.decisions === 0 && summary.blockers === 0 && summary.risks === 0 && summary.deadlines === 0;
@@ -152,7 +161,20 @@ export default async function HomePage() {
         const clientProjects = projectsByClient.get(client.id) ?? [];
         return (
           <section key={client.id} className="flex flex-col gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide opacity-60">{client.name}</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide opacity-60">
+                {client.name}
+                <span className="ml-2 normal-case font-normal opacity-60">
+                  · AI cost: ${(clientAiCosts.get(client.id) ?? "0").toString()}
+                  {client.aiBudgetUsd ? ` / $${client.aiBudgetUsd.toString()} budget` : ""}
+                </span>
+              </h2>
+              {(ctx.isOrgAdmin || (WRITE_ROLES as string[]).includes(
+                ctx.memberships.find((m) => m.clientId === client.id)?.role ?? ""
+              )) && (
+                <BudgetForm scope="client" id={client.id} currentBudgetUsd={client.aiBudgetUsd?.toString() ?? null} />
+              )}
+            </div>
             {clientProjects.length === 0 && <p className="text-sm opacity-50">No projects for this client yet.</p>}
             <div className="flex flex-col gap-6">
               {clientProjects.map((project) => (

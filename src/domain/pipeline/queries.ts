@@ -25,6 +25,7 @@ export async function getPipelineDetail(ctx: AuthContext, id: string) {
           clarifyQuestions: { orderBy: { createdAt: "asc" }, include: { answeredByUser: true } },
           analysisFindings: { orderBy: { createdAt: "asc" } },
           versions: { orderBy: { versionNumber: "desc" } },
+          agentRun: { include: { agent: true } },
         },
       },
     },

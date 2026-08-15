@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueJob } from "@/domain/job/commands";
 import { checkBudget, completeAgentRun, failAgentRun } from "@/domain/agent/commands";
-import { NotFoundError, ConflictError } from "@/domain/shared/errors";
+import { NotFoundError, ConflictError, BudgetExceededError } from "@/domain/shared/errors";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 import type { Constitution } from "@/generated/prisma/client";
@@ -33,8 +33,11 @@ export async function draftConstitution(ctx: AuthContext, projectId: string): Pr
 
   const budgetCheck = await checkBudget(project.clientId, projectId);
   if (!budgetCheck.allowed) {
-    throw new ConflictError(
-      `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`
+    throw new BudgetExceededError(
+      `AI drafting is blocked: the ${budgetCheck.scope} AI budget of $${budgetCheck.budgetUsd} has been reached ($${budgetCheck.accruedUsd} spent). Ask a manager to approve continuing.`,
+      budgetCheck.scope!,
+      project.clientId,
+      projectId
     );
   }
 

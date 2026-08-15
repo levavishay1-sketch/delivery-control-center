@@ -4,9 +4,11 @@ import { getProjectConstitutionDetail } from "@/domain/constitution/queries";
 import { getProjectAiCost } from "@/domain/agent/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
+import { WRITE_ROLES } from "@/domain/shared/authz";
 import { StageBadge } from "@/components/StageBadge";
 import { ConstitutionDraftButton } from "@/components/ConstitutionDraftButton";
 import { ConstitutionApprovalGate } from "@/components/ConstitutionApprovalGate";
+import { BudgetForm } from "@/components/BudgetForm";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +26,8 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
   if (!detail) notFound();
   const { project, latest, history } = detail;
   const aiCost = await getProjectAiCost(project.id);
+  const userRole = ctx.memberships.find((m) => m.clientId === project.clientId)?.role;
+  const canManage = ctx.isOrgAdmin || (!!userRole && (WRITE_ROLES as string[]).includes(userRole));
 
   return (
     <div className="flex flex-col gap-6">
@@ -32,7 +36,15 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
         <h1 className="text-xl font-semibold">
           {project.name} <span className="opacity-50">({project.key})</span>
         </h1>
-        <p className="mt-1 text-xs opacity-60">Total AI drafting cost: ${aiCost.toString()}</p>
+        <p className="mt-1 text-xs opacity-60">
+          Total AI drafting cost: ${aiCost.toString()}
+          {project.aiBudgetUsd ? ` / $${project.aiBudgetUsd.toString()} budget` : ""}
+        </p>
+        {canManage && (
+          <div className="mt-2">
+            <BudgetForm scope="project" id={project.id} currentBudgetUsd={project.aiBudgetUsd?.toString() ?? null} />
+          </div>
+        )}
         <Link href="/" className="mt-1 inline-block text-xs underline opacity-70 hover:opacity-100">
           ← Back to Dashboard
         </Link>
@@ -54,7 +66,7 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
         {!latest && (
           <div className="mt-3">
             <p className="mb-2 text-sm opacity-70">No Constitution has been drafted for this project yet.</p>
-            <ConstitutionDraftButton projectId={project.id} label="Draft with AI" />
+            <ConstitutionDraftButton projectId={project.id} label="Draft with AI" canApprove={canManage} />
           </div>
         )}
 
@@ -77,6 +89,7 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
                 <ConstitutionDraftButton
                   projectId={project.id}
                   label={latest.status === "REJECTED" ? "Redraft (new version)" : "Draft with AI"}
+                  canApprove={canManage}
                 />
               </div>
             )}
