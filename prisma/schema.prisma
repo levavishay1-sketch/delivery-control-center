@@ -22,6 +22,12 @@ enum StageType {
   PLAN
   TASKS
   DEPLOY
+  // Slice 2 — CONSTITUTION stays for historical Stage rows (pipelines created
+  // before Slice 2 ran a per-work-item Constitution stage); new pipelines'
+  // stageSequence never includes it — see the project-scoped Constitution model.
+  CLARIFY
+  ANALYZE
+  IMPLEMENT
 }
 
 enum StageStatus {
@@ -31,6 +37,41 @@ enum StageStatus {
   APPROVED
   REJECTED
   DONE
+  // Slice 2 — set when a CLARIFY stage's draft returns questions instead of
+  // content; left only once every ClarifyQuestion for the stage is answered.
+  AWAITING_CLARIFICATION
+}
+
+// Slice 2 — job runtime (see openspec/changes/2026-08-15-slice-2-sdd-subsystem/design.md).
+enum JobType {
+  DRAFT_STAGE
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ConstitutionStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum StageVersionTrigger {
+  DRAFT
+  REDRAFT
+}
+
+enum FindingSeverity {
+  INFO
+  WARNING
+  MEDIUM
+  HIGH
+  CRITICAL
 }
 
 enum PipelineStatus {
@@ -125,6 +166,7 @@ model User {
   executedWorkItems WorkItem[] @relation("WorkItemExecutor")
   ownedBlockers     Blocker[]  @relation("BlockerOwner")
   decidedDecisions  Decision[] @relation("DecisionApprover")
+  answeredClarifyQuestions ClarifyQuestion[] @relation("ClarifyQuestionAnsweredBy")
 }
 
 model Account {
@@ -220,10 +262,31 @@ model Project {
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  workItems   WorkItem[]
-  auditEvents AuditEvent[]
+  workItems     WorkItem[]
+  auditEvents   AuditEvent[]
+  constitutions Constitution[]
 
   @@unique([clientId, key])
+}
+
+// Slice 2 — project-scoped, versioned Constitution. Promoted out of the
+// per-work-item pipeline (see StageType.CONSTITUTION's comment): drafted and
+// approved once per project, referenced by every pipeline started under it.
+model Constitution {
+  id               String              @id @default(cuid())
+  projectId        String
+  project          Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version          Int
+  content          String?
+  status           ConstitutionStatus  @default(DRAFT)
+  aiModel          String?
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal?            @db.Decimal(10, 4)
+  createdAt        DateTime            @default(now())
+  approvedAt       DateTime?
+
+  @@unique([projectId, version])
 }
 
 model WorkItem {
@@ -327,6 +390,17 @@ model Pipeline {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
+  // Slice 2 — snapshotted at creation (startPipeline) from config/workflow.yaml's
+  // stage list at that moment; getNextStageType/getFirstStageType read this, not
+  // the live file, so an edit to the config never changes an in-flight pipeline.
+  // Nullable only because existing rows predate this column; backfilled to
+  // ['CONSTITUTION','SPEC','PLAN','TASKS','DEPLOY'] (see the Slice 2 migration),
+  // then made NOT NULL in a follow-up migration.
+  stageSequence       StageType[]
+  // Which Constitution version this pipeline started under (nullable: existing
+  // rows predate the Constitution model entirely and never had one).
+  constitutionVersion Int?
+
   stages      Stage[]
   auditEvents AuditEvent[]
 }
@@ -347,10 +421,84 @@ model Stage {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  approvals   Approval[]
-  auditEvents AuditEvent[]
+  approvals         Approval[]
+  auditEvents       AuditEvent[]
+  versions          StageVersion[]
+  clarifyQuestions  ClarifyQuestion[]
+  analysisFindings  AnalysisFinding[]
 
   @@unique([pipelineId, type])
+}
+
+// Slice 2 — append-only draft history. Stage's own content/aiModel/... columns
+// remain "the latest version" (every existing read site keeps working
+// unchanged); this table is populated alongside them on every draft/redraft.
+model StageVersion {
+  id                String              @id @default(cuid())
+  stageId           String
+  stage             Stage               @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  versionNumber     Int
+  content           String?
+  aiModel           String?
+  promptTokens      Int?
+  completionTokens  Int?
+  costUsd           Decimal?            @db.Decimal(10, 4)
+  createdAsResultOf StageVersionTrigger
+  createdAt         DateTime            @default(now())
+
+  @@unique([stageId, versionNumber])
+}
+
+// Slice 2 — a CLARIFY stage's draft can return questions instead of content;
+// the stage moves to AWAITING_CLARIFICATION until every question here has an
+// answer. The pause is durable because this is just a persisted row — a
+// process restart while paused loses nothing.
+model ClarifyQuestion {
+  id               String    @id @default(cuid())
+  stageId          String
+  stage            Stage     @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  question         String
+  answer           String?
+  answeredByUserId String?
+  answeredByUser   User?     @relation("ClarifyQuestionAnsweredBy", fields: [answeredByUserId], references: [id], onDelete: SetNull)
+  answeredAt       DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+// Slice 2 — severity-rated consistency findings from an ANALYZE stage's draft.
+// A CRITICAL finding blocks advancing past ANALYZE until the related stage is
+// redrafted and ANALYZE is drafted again (see design.md decision 8).
+model AnalysisFinding {
+  id               String          @id @default(cuid())
+  stageId          String
+  stage            Stage           @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  severity         FindingSeverity
+  message          String
+  relatedStageType StageType
+  createdAt        DateTime        @default(now())
+}
+
+// Slice 2 — durable job runtime. A worker process polls for QUEUED jobs whose
+// scheduledAt has passed and atomically claims one via an UPDATE ... WHERE
+// status = 'QUEUED' ... RETURNING (see design.md decision 1); lockedAt/lockedBy
+// record that claim. idempotencyKey lets a caller re-enqueue the same logical
+// work safely (e.g. a retry of the enqueue request itself) without duplicating it.
+model Job {
+  id             String    @id @default(cuid())
+  type           JobType
+  payload        Json
+  status         JobStatus @default(QUEUED)
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  lastError      String?
+  scheduledAt    DateTime  @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  idempotencyKey String    @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status, scheduledAt])
 }
 
 model Approval {
