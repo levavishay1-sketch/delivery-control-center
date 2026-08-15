@@ -122,6 +122,32 @@ describe("updateWorkItem", () => {
     const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Bad progress" });
     await expect(updateWorkItem(managerCtx, workItem.id, { progress: 150 })).rejects.toThrow();
   });
+
+  it("records manual provenance for title/description when they're touched (Slice 4)", async () => {
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Provenance touched" });
+    await updateWorkItem(managerCtx, workItem.id, { title: "New title", description: "New description" });
+
+    const titleProvenance = await db.fieldProvenance.findUnique({
+      where: { workItemId_field: { workItemId: workItem.id, field: "title" } },
+    });
+    expect(titleProvenance?.source).toBe("MANUAL");
+    expect(titleProvenance?.actorUserId).toBe(managerUserId);
+
+    const descriptionProvenance = await db.fieldProvenance.findUnique({
+      where: { workItemId_field: { workItemId: workItem.id, field: "description" } },
+    });
+    expect(descriptionProvenance?.source).toBe("MANUAL");
+  });
+
+  it("does not record provenance for a field that wasn't part of the update", async () => {
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Only progress touched" });
+    await updateWorkItem(managerCtx, workItem.id, { progress: 50 });
+
+    const titleProvenance = await db.fieldProvenance.findUnique({
+      where: { workItemId_field: { workItemId: workItem.id, field: "title" } },
+    });
+    expect(titleProvenance).toBeNull();
+  });
 });
 
 describe("updateWorkItemStatus", () => {
@@ -158,6 +184,17 @@ describe("updateWorkItemStatus", () => {
       where: { workItemId: workItem.id, action: { contains: "moved" } },
     });
     expect((event?.detail as { reason?: string } | null)?.reason).toBe("Starting work");
+  });
+
+  it("records manual provenance for status (Slice 4)", async () => {
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Status provenance" });
+    await updateWorkItemStatus(managerCtx, workItem.id, "IN_PROGRESS");
+
+    const statusProvenance = await db.fieldProvenance.findUnique({
+      where: { workItemId_field: { workItemId: workItem.id, field: "status" } },
+    });
+    expect(statusProvenance?.source).toBe("MANUAL");
+    expect(statusProvenance?.actorUserId).toBe(managerUserId);
   });
 });
 

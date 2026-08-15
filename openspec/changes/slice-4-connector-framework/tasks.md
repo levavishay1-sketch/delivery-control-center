@@ -71,8 +71,8 @@ committable independently, per this project's change-sizing convention
 
 ## Task Group 9: Unit Tests for Domain Logic (2 tasks)
 
-- [ ] 9.1 Vitest integration tests (real local Postgres) for every new domain module not already covered inline above: `connector` (backfill, sync-via-job, retry/backoff, provenance, conflict create/resolve, webhook dedup) — cross-cutting `work-item` changes (manual-edit provenance recording) not already exercised by Task Groups 2/4's own test tasks.
-- [ ] 9.2 Confirm no regression in the existing Slice 0/1/2/3 domain test suite (`npm test`) — the sync API route's behavior change (now routing through `Connector`/`SyncRun` instead of a direct adapter call) touches any existing test that asserts on the old direct-call shape; update those call sites/assertions, don't leave them silently broken. Commit: "Add comprehensive unit tests for Slice 4 domain logic"
+- [x] 9.1 Vitest integration tests (real local Postgres) for every new domain module not already covered inline above: `connector` (backfill, sync-via-job, retry/backoff, provenance, conflict create/resolve, webhook dedup) — cross-cutting `work-item` changes (manual-edit provenance recording) not already exercised by Task Groups 2/4's own test tasks.
+- [x] 9.2 Confirm no regression in the existing Slice 0/1/2/3 domain test suite (`npm test`) — the sync API route's behavior change (now routing through `Connector`/`SyncRun` instead of a direct adapter call) touches any existing test that asserts on the old direct-call shape; update those call sites/assertions, don't leave them silently broken. Commit: "Add comprehensive unit tests for Slice 4 domain logic"
 
 ## Task Group 10: Documentation & Verification (1 task)
 
