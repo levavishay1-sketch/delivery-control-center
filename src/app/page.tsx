@@ -188,7 +188,7 @@ export default async function HomePage() {
         <h2 id="all-projects-heading" className="text-xl font-semibold">
           Projects
         </h2>
-        <AddProjectForm clients={clients} />
+        <AddProjectForm clients={clients.map((c) => ({ id: c.id, name: c.name }))} />
       </section>
 
       {clients.length === 0 && (

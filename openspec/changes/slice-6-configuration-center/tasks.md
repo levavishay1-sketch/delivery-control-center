@@ -32,11 +32,11 @@
 
 ## 6. E2E test scenario
 
-- [ ] 6.1 Write `e2e/slice6-configuration-center.spec.ts`: an org admin sets an Organization budget, sees the impact preview naming affected clients/projects, confirms, and sees a client with no override now report that value as its effective (inherited) budget; the org admin then sets a Client-level override, previews and confirms, and sees a project under it (no override) report the client's value instead; a write-capable user then sets that project's own override directly (no preview), sees it reported as an override, resets it to inherited, and sees it fall back to the client's value; the scope's history list reflects every change made.
+- [x] 6.1 Write `e2e/slice6-configuration-center.spec.ts`: an org admin sets an Organization budget, sees the impact preview naming affected clients/projects, confirms, and sees a client with no override now report that value as its effective (inherited) budget; the org admin then sets a Client-level override, previews and confirms, and sees a project under it (no override) report the client's value instead; a write-capable user then sets that project's own override directly (no preview), sees it reported as an override, resets it to inherited, and sees it fall back to the client's value; the scope's history list reflects every change made. Also fixed a real bug this test caught: `POST /api/config/projects/[id]/budget` had never actually been created despite Task 4.3 being marked done — the project-scope save was silently 404ing. Updated `e2e/slice3-budget-enforcement.spec.ts`'s two assertions that depended on the old inline `BudgetForm`'s combined "cost / budget" text, now split across `ConfigBudgetPanel`. Also fixed a pre-existing bug in `AddProjectForm`'s caller (`src/app/page.tsx`) passing full Prisma `Client` rows (with `Decimal` fields) to a Client Component instead of a plain `{id,name}` shape.
 
 ## 7. Unit tests for domain logic
 
-- [ ] 7.1 Full-suite pass confirming existing `agent/budget.test.ts` (Slice 3) transition/precedence tests still pass unmodified alongside the new Organization-tier tests from Task Group 2.
+- [x] 7.1 Full-suite pass confirming existing `agent/budget.test.ts` (Slice 3) transition/precedence tests still pass unmodified alongside the new Organization-tier tests from Task Group 2. 270/270 passing.
 
 ## 8. Documentation & verification
 

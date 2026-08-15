@@ -62,7 +62,8 @@ test("budget enforcement: set budget → exceed → refuse → override → retr
 
   // --- Verify budget cost is shown ---
   const constitutionCostText = await page.locator("text=/Total AI drafting cost/").innerText();
-  expect(constitutionCostText).toMatch(/\d+\.\d+.*budget/);
+  expect(constitutionCostText).toMatch(/\d+\.\d+/);
+  await expect(page.locator("form", { hasText: "Effective budget" }).first()).toContainText("$0.01");
 
   // --- Back to dashboard and create work item ---
   await page.getByRole("link", { name: /back|home|dashboard/i }).click();

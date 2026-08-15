@@ -137,7 +137,7 @@ export function ConfigBudgetPanel({ scope, id, effective }: { scope: Scope; id: 
         <span className="opacity-50">({effective.isOverride ? "own override" : `inherited from ${SCOPE_LABEL[effective.sourceScope]}`})</span>
       )}
       <label className="ml-2 opacity-60" htmlFor={`config-budget-${scope}-${id}`}>
-        Set ($)
+        AI budget ($)
       </label>
       <input
         id={`config-budget-${scope}-${id}`}
