@@ -202,6 +202,8 @@ re-litigate:
 | 4 | Connector framework | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | `openspec/changes/archive/2026-08-15-slice-4-connector-framework/` |
 | 5 | Engineering evidence | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | `openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/` |
 | 6 | Configuration Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | `openspec/changes/archive/2026-08-15-slice-6-configuration-center/` |
+| 7 | Design system foundation & premium UI refresh | **Done** | `2026-08-15-design-system-direction.md` | `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/` |
+| 8 | i18n readiness & RTL support (Hebrew/English) | **Scoped — not started** | `2026-08-15-i18n-rtl-support.md` | — |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -359,6 +361,30 @@ this slice started) — the new nav rail's Dashboard link now works from
 every page, closing that gap as a side effect. Full detail: source §
 above; as-built detail:
 `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/`.
+
+### Slice 8 — i18n readiness & RTL support (Hebrew/English) — **Scoped, not started**
+
+*(Source: `docs/roadmap-sources/2026-08-15-i18n-rtl-support.md` — a direct
+user requirement given in conversation immediately after Slice 7 shipped.
+Not part of the original master prompt / gap analysis. The source file is
+authoritative if this summary drifts from it.)*
+
+- The product must be i18n-ready from day one, with Hebrew and English as
+  the initial supported languages.
+- Hebrew is a true RTL experience, not translated strings over an LTR
+  layout: the nav rail, drawers, tabs, tables, forms, icons, spacing,
+  alignment, and date/number formatting all need to mirror correctly under
+  `dir="rtl"`, not just read right-to-left text.
+- Lightweight implementation, no unnecessary localization machinery;
+  architecture should make adding a third language later straightforward
+  (translation keys, not hardcoded strings; logical CSS properties over
+  physical ones so RTL mirroring is automatic rather than duplicated
+  per-component).
+- Builds on top of Slice 7's design-token/component layer (`NavRail`,
+  `StatusBadge`, `Row`/`Panel`, Quick View drawer, 360° Record tabs) rather
+  than replacing it — no domain, entity, or backend architecture changes.
+
+Ready for an OpenSpec proposal; no plan written or approved yet.
 
 ## Definition of Done, for every future slice (source: `§6`)
 
