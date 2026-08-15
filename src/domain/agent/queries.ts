@@ -12,3 +12,8 @@ export function getAgentById(id: string) {
 export function listAgents() {
   return db.agent.findMany({ orderBy: { name: "asc" } });
 }
+
+/** The AgentRun tracking a given Job's attempt-cycle, if one has been started yet. */
+export function getAgentRunByJobId(jobId: string) {
+  return db.agentRun.findFirst({ where: { jobId } });
+}

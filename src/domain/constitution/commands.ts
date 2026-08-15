@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { enqueueJob } from "@/domain/job/commands";
+import { completeAgentRun, failAgentRun } from "@/domain/agent/commands";
 import { NotFoundError, ConflictError } from "@/domain/shared/errors";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
@@ -84,15 +85,28 @@ export interface ConstitutionDraftResult {
  * Worker-side completion: writes the AI executor's result and moves the
  * Constitution to PENDING_APPROVAL. Re-checks the row is still AI_DRAFTING
  * (mirrors draftStage's own re-check) in case it changed concurrently.
+ *
+ * `runId` (Slice 3) is the AgentRun tracking this drafting attempt-cycle, if the caller started
+ * one. When present, it's marked SUCCEEDED in this same transaction and linked as agentRunId
+ * alongside (not instead of — design.md Decision 2) the aiModel/token/cost columns.
  */
 export async function completeConstitutionDraft(
   constitutionId: string,
-  result: ConstitutionDraftResult
+  result: ConstitutionDraftResult,
+  runId?: string
 ): Promise<Constitution> {
   return db.$transaction(async (tx) => {
     const current = await tx.constitution.findUniqueOrThrow({ where: { id: constitutionId } });
     if (current.status !== "AI_DRAFTING") {
       throw new Error(`Constitution changed to ${current.status} while drafting; discarding this draft.`);
+    }
+
+    if (runId) {
+      await completeAgentRun(
+        runId,
+        { promptTokens: result.promptTokens, completionTokens: result.completionTokens, costUsd: result.costUsd },
+        tx
+      );
     }
 
     const updated = await tx.constitution.update({
@@ -104,6 +118,7 @@ export async function completeConstitutionDraft(
         promptTokens: result.promptTokens,
         completionTokens: result.completionTokens,
         costUsd: result.costUsd,
+        agentRunId: runId,
       },
     });
 
@@ -127,14 +142,24 @@ export async function completeConstitutionDraft(
  * status rather than inventing a new one, the same choice Task Group 5
  * makes for Stage by reusing REJECTED. A no-op if the row already moved on
  * (e.g. a concurrent change) by the time this runs.
+ *
+ * `jobId` (Slice 3), when given, finalizes that job's AgentRun as FAILED in this same
+ * transaction — the exhaustion counterpart to completeConstitutionDraft's SUCCEEDED write.
  */
-export async function revertConstitutionDraftFailure(constitutionId: string, error: string): Promise<void> {
+export async function revertConstitutionDraftFailure(constitutionId: string, error: string, jobId?: string): Promise<void> {
   await db.$transaction(async (tx) => {
     const updated = await tx.constitution.updateMany({
       where: { id: constitutionId, status: "AI_DRAFTING" },
       data: { status: "DRAFT" },
     });
     if (updated.count === 0) return;
+
+    if (jobId) {
+      const run = await tx.agentRun.findFirst({ where: { jobId } });
+      if (run) {
+        await failAgentRun(run.id, { retryCount: run.retryCount, error, exhausted: true }, tx);
+      }
+    }
 
     const constitution = await tx.constitution.findUniqueOrThrow({ where: { id: constitutionId } });
     await recordAuditEvent(tx, {

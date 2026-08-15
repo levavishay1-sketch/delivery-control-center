@@ -540,6 +540,8 @@ model Job {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  agentRuns AgentRun[]
+
   @@index([status, scheduledAt])
 }
 
@@ -567,6 +569,7 @@ model AgentRun {
   agentId          String
   agent            Agent          @relation(fields: [agentId], references: [id], onDelete: Restrict)
   jobId            String?
+  job              Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
   status           AgentRunStatus @default(RUNNING)
   promptTokens     Int?
   completionTokens Int?

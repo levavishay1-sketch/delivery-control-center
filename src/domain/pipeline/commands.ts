@@ -3,7 +3,7 @@ import { getNextStageTypeInSequence, getStageConfig, getStageConfigOrFallback, l
 import { recordAuditEvent } from "@/lib/audit";
 import { getApprovedConstitution } from "@/domain/constitution/queries";
 import { enqueueJob } from "@/domain/job/commands";
-import { syncAgentRegistry } from "@/domain/agent/commands";
+import { completeAgentRun, failAgentRun, syncAgentRegistry } from "@/domain/agent/commands";
 import type { FindingSeverity, Prisma, Role, StageType } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
@@ -231,12 +231,25 @@ export interface StageDraftResult {
  * Decision 8), but a Critical finding marks the stage REJECTED instead of DONE and skips
  * auto-advance, blocking the pipeline the same way a human rejection or an exhausted retry
  * does, until the flagged stage is redrafted and ANALYZE is drafted again clean.
+ *
+ * `runId` (Slice 3) is the AgentRun tracking this drafting attempt-cycle, if the caller started
+ * one (worker.ts always does; direct test callers may omit it). When present, it's marked
+ * SUCCEEDED in this same transaction and linked as agentRunId on the Stage/StageVersion rows
+ * alongside (not instead of — design.md Decision 2) the aiModel/token/cost columns.
  */
-export async function completeStageDraft(stageId: string, result: StageDraftResult) {
+export async function completeStageDraft(stageId: string, result: StageDraftResult, runId?: string) {
   return db.$transaction(async (tx) => {
     const current = await tx.stage.findUniqueOrThrow({ where: { id: stageId }, include: { pipeline: true } });
     if (current.status !== "AI_DRAFTING") {
       throw new Error(`Stage changed to ${current.status} while drafting; discarding this draft.`);
+    }
+
+    if (runId) {
+      await completeAgentRun(
+        runId,
+        { promptTokens: result.promptTokens, completionTokens: result.completionTokens, costUsd: result.costUsd },
+        tx
+      );
     }
 
     if (result.clarifyQuestions?.length) {
@@ -248,6 +261,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
           promptTokens: result.promptTokens,
           completionTokens: result.completionTokens,
           costUsd: result.costUsd,
+          agentRunId: runId,
         },
       });
       await tx.clarifyQuestion.createMany({
@@ -276,6 +290,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
           completionTokens: result.completionTokens,
           costUsd: result.costUsd,
           completedAt: hasCritical ? undefined : new Date(),
+          agentRunId: runId,
         },
       });
 
@@ -304,6 +319,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
           completionTokens: result.completionTokens,
           costUsd: result.costUsd,
           createdAsResultOf: priorVersionCount === 0 ? "DRAFT" : "REDRAFT",
+          agentRunId: runId,
         },
       });
 
@@ -347,6 +363,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
         completionTokens: result.completionTokens,
         costUsd: result.costUsd,
         completedAt: requiresApproval ? undefined : new Date(),
+        agentRunId: runId,
       },
     });
 
@@ -361,6 +378,7 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
         completionTokens: result.completionTokens,
         costUsd: result.costUsd,
         createdAsResultOf: priorVersionCount === 0 ? "DRAFT" : "REDRAFT",
+        agentRunId: runId,
       },
     });
 
@@ -414,14 +432,24 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
  * REJECTED rather than inventing a new status (per tasks.md 5.3) — a human sees it exactly
  * as they'd see any other rejected stage and redrafts it the same way — and blocks the
  * pipeline the same way a human rejection does. A no-op if the stage already moved on.
+ *
+ * `jobId` (Slice 3), when given, finalizes that job's AgentRun as FAILED in this same
+ * transaction — the exhaustion counterpart to completeStageDraft's SUCCEEDED write.
  */
-export async function revertStageDraftFailure(stageId: string, error: string): Promise<void> {
+export async function revertStageDraftFailure(stageId: string, error: string, jobId?: string): Promise<void> {
   await db.$transaction(async (tx) => {
     const reverted = await tx.stage.updateMany({
       where: { id: stageId, status: "AI_DRAFTING" },
       data: { status: "REJECTED" },
     });
     if (reverted.count === 0) return;
+
+    if (jobId) {
+      const run = await tx.agentRun.findFirst({ where: { jobId } });
+      if (run) {
+        await failAgentRun(run.id, { retryCount: run.retryCount, error, exhausted: true }, tx);
+      }
+    }
 
     const stage = await tx.stage.findUniqueOrThrow({ where: { id: stageId } });
     await tx.pipeline.update({ where: { id: stage.pipelineId }, data: { status: "BLOCKED" } });

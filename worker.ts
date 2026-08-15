@@ -7,6 +7,8 @@ import {
   revertConstitutionDraftFailure,
 } from "@/domain/constitution/commands";
 import { completeStageDraft, getStageForDrafting, revertStageDraftFailure } from "@/domain/pipeline/commands";
+import { failAgentRun, resolveDefaultAgentId, resolveStageAgentId, startAgentRun } from "@/domain/agent/commands";
+import { getAgentRunByJobId } from "@/domain/agent/queries";
 import { getAgentExecutor } from "@/lib/agents";
 import type { Job } from "@/generated/prisma/client";
 
@@ -17,12 +19,12 @@ const workerId = `worker-${process.pid}-${randomUUID()}`;
 type JobPayload = Record<string, unknown>;
 
 interface JobTypeHandlers {
-  run: (payload: JobPayload) => Promise<void>;
+  run: (payload: JobPayload, jobId: string) => Promise<void>;
   /** Called only once the job's retries are exhausted (Job.status becomes FAILED), not on every attempt. */
-  onExhausted?: (payload: JobPayload, error: string) => Promise<void>;
+  onExhausted?: (payload: JobPayload, error: string, jobId: string) => Promise<void>;
 }
 
-async function handleDraftStageJob(payload: JobPayload): Promise<void> {
+async function handleDraftStageJob(payload: JobPayload, jobId: string): Promise<void> {
   const stageId = payload.stageId as string;
   const stage = await getStageForDrafting(stageId);
 
@@ -51,6 +53,9 @@ async function handleDraftStageJob(payload: JobPayload): Promise<void> {
   const rejectionComment =
     latestApproval?.decision === "REJECTED" && latestApproval.comment ? latestApproval.comment : undefined;
 
+  const agentId = await resolveStageAgentId(stage.pipeline.agentRouting, stage.type);
+  const run = await startAgentRun(agentId, jobId);
+
   const result = await getAgentExecutor().executeStage(stage.type, {
     workItemTitle: stage.pipeline.workItem.title,
     workItemDescription: stage.pipeline.workItem.description ?? "",
@@ -62,27 +67,31 @@ async function handleDraftStageJob(payload: JobPayload): Promise<void> {
     rejectionComment,
   });
 
-  await completeStageDraft(stageId, result);
+  await completeStageDraft(stageId, result, run.id);
 }
 
-async function handleDraftStageExhausted(payload: JobPayload, error: string): Promise<void> {
+async function handleDraftStageExhausted(payload: JobPayload, error: string, jobId: string): Promise<void> {
   const stageId = payload.stageId as string;
-  await revertStageDraftFailure(stageId, error);
+  await revertStageDraftFailure(stageId, error, jobId);
 }
 
-async function handleDraftConstitutionJob(payload: JobPayload): Promise<void> {
+async function handleDraftConstitutionJob(payload: JobPayload, jobId: string): Promise<void> {
   const constitutionId = payload.constitutionId as string;
   const constitution = await getConstitutionForDrafting(constitutionId);
+
+  const agentId = await resolveDefaultAgentId();
+  const run = await startAgentRun(agentId, jobId);
+
   const result = await getAgentExecutor().executeConstitution({
     projectName: constitution.project.name,
     projectKey: constitution.project.key,
   });
-  await completeConstitutionDraft(constitutionId, result);
+  await completeConstitutionDraft(constitutionId, result, run.id);
 }
 
-async function handleDraftConstitutionExhausted(payload: JobPayload, error: string): Promise<void> {
+async function handleDraftConstitutionExhausted(payload: JobPayload, error: string, jobId: string): Promise<void> {
   const constitutionId = payload.constitutionId as string;
-  await revertConstitutionDraftFailure(constitutionId, error);
+  await revertConstitutionDraftFailure(constitutionId, error, jobId);
 }
 
 const handlers: Partial<Record<Job["type"], JobTypeHandlers>> = {
@@ -94,14 +103,26 @@ async function processJob(job: Job): Promise<void> {
   const handlerSet = handlers[job.type];
   try {
     if (!handlerSet) throw new Error(`No handler registered for job type ${job.type}`);
-    await handlerSet.run(job.payload as JobPayload);
+    await handlerSet.run(job.payload as JobPayload, job.id);
     await completeJob(job.id);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[worker ${workerId}] job ${job.id} (${job.type}) failed: ${message}`);
     const failed = await failJob(job.id, message);
+
+    // Not yet exhausted: sync the AgentRun's retryCount/lastError, but leave it RUNNING — the
+    // same attempt-cycle continues on the next poll (design.md Decision 1). Final exhaustion is
+    // handled inside onExhausted's own revertStageDraftFailure/revertConstitutionDraftFailure
+    // transaction below, alongside reverting the stage/Constitution row.
+    if (failed.status !== "FAILED") {
+      const run = await getAgentRunByJobId(job.id);
+      if (run) {
+        await failAgentRun(run.id, { retryCount: failed.attempts, error: message, exhausted: false });
+      }
+    }
+
     if (failed.status === "FAILED" && handlerSet?.onExhausted) {
-      await handlerSet.onExhausted(job.payload as JobPayload, message);
+      await handlerSet.onExhausted(job.payload as JobPayload, message, job.id);
     }
   }
 }
