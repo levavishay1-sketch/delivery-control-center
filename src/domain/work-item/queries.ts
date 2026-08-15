@@ -36,6 +36,8 @@ export async function getWorkItemDetail(ctx: AuthContext, id: string) {
       parent: { include: { pipeline: true } },
       children: { include: { owner: true, pipeline: true }, orderBy: { createdAt: "asc" } },
       pipeline: { include: { stages: true } },
+      // Slice 4 — "where did this field's value come from" (design.md field-provenance capability).
+      fieldProvenance: { include: { actorUser: true } },
     },
   });
   if (!workItem) return null;

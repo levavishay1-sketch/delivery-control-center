@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { recordAuditEvent } from "@/lib/audit";
 import { getProjectById } from "@/domain/project/queries";
+import { recordManualProvenance } from "@/domain/connector/provenance";
 import { getWorkItemById } from "@/domain/work-item/queries";
 import { assertValidTransition } from "@/domain/work-item/status";
 import { NotFoundError, ValidationError } from "@/domain/shared/errors";
@@ -136,6 +137,11 @@ export async function updateWorkItem(ctx: AuthContext, id: string, rawInput: Upd
         progress: input.progress,
       },
     });
+    // Slice 4 — title/description are also sync-writable fields; a manual edit here takes
+    // precedence over a future sync's incoming value until the human's own resolution says
+    // otherwise (design.md decision 3).
+    if (input.title !== undefined) await recordManualProvenance(id, "title", ctx.userId, tx);
+    if (input.description !== undefined) await recordManualProvenance(id, "description", ctx.userId, tx);
     await recordAuditEvent(tx, {
       projectId: project.id,
       workItemId: id,
@@ -165,6 +171,7 @@ export async function updateWorkItemStatus(ctx: AuthContext, id: string, rawStat
 
   return db.$transaction(async (tx) => {
     const updated = await tx.workItem.update({ where: { id }, data: { status: newStatus } });
+    await recordManualProvenance(id, "status", ctx.userId, tx);
     await recordAuditEvent(tx, {
       projectId: project.id,
       workItemId: id,
