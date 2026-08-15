@@ -94,5 +94,5 @@ Before marking Slice 4 complete:
 - [x] No connector-specific logic leaked into `src/domain/` — it depends only on the `IntegrationAdapter`/`Connector` abstractions.
 - [x] All Slice 0/1/2/3 functionality continues to work — full existing test suite passes (226/226; one pre-existing, unrelated Slice 3 E2E test — `slice3-budget-enforcement.spec.ts` — times out even standalone, confirmed unaffected by this change and outside its scope).
 - [x] Build succeeds; lint passes; `tsc --noEmit` clean.
-- [ ] E2E scenario passes against the real dev server, real Postgres, and the worker process actually running.
-- [ ] `PRODUCT_SPEC.md` and `docs/ROADMAP.md` updated; change archived; specs synced.
+- [x] E2E scenario passes against the real dev server, real Postgres, and the worker process actually running.
+- [x] `PRODUCT_SPEC.md` and `docs/ROADMAP.md` updated; change archived; specs synced.
