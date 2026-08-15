@@ -22,10 +22,10 @@ committable independently, per this project's change-sizing convention
 
 ## Task Group 2: Connector Backfill & Cutover (4 tasks)
 
-- [ ] 2.1 Backfill migration (separate from 1.6, per this project's own precedent): create one `Connector` per existing `Project`, copying `integrationType`→`type`, `integrationConfig`→`config`, `status: CONNECTED` if `integrationType != MANUAL` else the manual-mode equivalent, `mode: PULL`, `authType` inferred per type (e.g. `"api_token"` for `JIRA`), `capabilities: []`. Verify every `Project` has exactly one `Connector` after this step.
-- [ ] 2.2 `src/domain/connector/commands.ts`: `getOrCreateConnectorForProject(projectId)`, `configureConnector(ctx, projectId, { type, config, mode, authType, syncMode })` (`WRITE_ROLES`-gated). `src/domain/connector/queries.ts`: `getConnector(projectId)`, `listSyncRuns(connectorId)`.
-- [ ] 2.3 Cut over `POST /api/projects/[id]/sync` and any other reader of `Project.integrationType`/`integrationConfig` to read through `Connector` instead. `getIntegrationAdapter` is now called with `connector.type`, not `project.integrationType`.
-- [ ] 2.4 Tests: backfill produces exactly one `Connector` per `Project` with correct field mapping; `configureConnector` rejects a non-`WRITE_ROLES` caller; `getOrCreateConnectorForProject` is idempotent (a second call for the same project returns the same row, never creates a duplicate). Commit: "Add the Connector entity, backfilled from existing Project integration config"
+- [x] 2.1 Backfill migration (separate from 1.6, per this project's own precedent): create one `Connector` per existing `Project`, copying `integrationType`→`type`, `integrationConfig`→`config`, `status: CONNECTED` if `integrationType != MANUAL` else the manual-mode equivalent, `mode: PULL`, `authType` inferred per type (e.g. `"api_token"` for `JIRA`), `capabilities: []`. Verify every `Project` has exactly one `Connector` after this step.
+- [x] 2.2 `src/domain/connector/commands.ts`: `getOrCreateConnectorForProject(projectId)`, `configureConnector(ctx, projectId, { type, config, mode, authType, syncMode })` (`WRITE_ROLES`-gated). `src/domain/connector/queries.ts`: `getConnector(projectId)`, `listSyncRuns(connectorId)`.
+- [x] 2.3 Cut over `POST /api/projects/[id]/sync` and any other reader of `Project.integrationType`/`integrationConfig` to read through `Connector` instead. `getIntegrationAdapter` is now called with `connector.type`, not `project.integrationType`.
+- [x] 2.4 Tests: backfill produces exactly one `Connector` per `Project` with correct field mapping; `configureConnector` rejects a non-`WRITE_ROLES` caller; `getOrCreateConnectorForProject` is idempotent (a second call for the same project returns the same row, never creates a duplicate). Commit: "Add the Connector entity, backfilled from existing Project integration config"
 
 ## Task Group 3: Sync via the Job Runtime (5 tasks)
 

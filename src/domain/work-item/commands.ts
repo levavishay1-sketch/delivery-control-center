@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getIntegrationAdapter, decryptIntegrationConfig } from "@/lib/integrations";
 import { recordAuditEvent } from "@/lib/audit";
 import { getProjectById } from "@/domain/project/queries";
+import { getOrCreateConnectorForProject } from "@/domain/connector/commands";
 import { getWorkItemById } from "@/domain/work-item/queries";
 import { assertValidTransition } from "@/domain/work-item/status";
 import { NotFoundError, ValidationError } from "@/domain/shared/errors";
@@ -225,17 +226,23 @@ export async function addParentWorkItem(ctx: AuthContext, childId: string, paren
   });
 }
 
-/** Pulls work items from a project's configured integration, upserting them. Pipelines are started separately via startPipeline — sync no longer creates one automatically. */
+/**
+ * Pulls work items from a project's connector, upserting them. Pipelines are started separately
+ * via startPipeline — sync no longer creates one automatically.
+ *
+ * Slice 4: reads the adapter type/config through the project's Connector rather than its own
+ * integrationType/integrationConfig columns directly (design.md Migration Plan step 3's cutover)
+ * — those columns stay as the backfill source but are no longer read by application code.
+ */
 export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) {
   const project = await getProjectById(projectId);
   if (!project) throw new NotFoundError("Project not found");
   requireClientRole(ctx, project.clientId, WRITE_ROLES);
 
-  const adapter = getIntegrationAdapter(project.integrationType);
-  const decryptedConfig = decryptIntegrationConfig(
-    project.integrationType,
-    project.integrationConfig as Record<string, unknown> | null
-  );
+  const connector = await getOrCreateConnectorForProject(projectId);
+
+  const adapter = getIntegrationAdapter(connector.type);
+  const decryptedConfig = decryptIntegrationConfig(connector.type, connector.config as Record<string, unknown> | null);
   const fetched = await adapter.fetchWorkItems(decryptedConfig as Record<string, unknown> | null);
 
   const created: string[] = [];
@@ -244,7 +251,7 @@ export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) 
     const externalKey = {
       projectId_source_externalId: {
         projectId: project.id,
-        source: project.integrationType,
+        source: connector.type,
         externalId: item.externalId,
       },
     };
@@ -261,7 +268,7 @@ export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) 
       },
       create: {
         projectId: project.id,
-        source: project.integrationType,
+        source: connector.type,
         externalId: item.externalId,
         externalUrl: item.externalUrl,
         title: item.title,
@@ -276,7 +283,7 @@ export async function syncProjectWorkItems(ctx: AuthContext, projectId: string) 
   await recordAuditEvent(db, {
     projectId: project.id,
     actor: "SYSTEM",
-    action: `Synced ${fetched.length} work item(s) from ${project.integrationType} for project "${project.name}"`,
+    action: `Synced ${fetched.length} work item(s) from ${connector.type} for project "${project.name}"`,
     detail: { synced: fetched.length, newWorkItems: created.length },
   });
 

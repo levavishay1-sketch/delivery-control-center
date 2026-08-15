@@ -3,6 +3,7 @@ import type { IntegrationType, Prisma } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 import { encryptIntegrationConfig } from "@/lib/integrations";
+import { getOrCreateConnectorForProject } from "@/domain/connector/commands";
 
 export interface CreateProjectInput {
   clientId: string;
@@ -15,16 +16,21 @@ export interface CreateProjectInput {
 export async function createProject(ctx: AuthContext, input: CreateProjectInput) {
   requireClientRole(ctx, input.clientId, WRITE_ROLES);
   const integrationType = input.integrationType ?? "MANUAL";
-  return db.project.create({
-    data: {
-      clientId: input.clientId,
-      name: input.name,
-      key: input.key,
-      integrationType,
-      integrationConfig: encryptIntegrationConfig(integrationType, input.integrationConfig) as
-        | Prisma.InputJsonValue
-        | undefined,
-    },
+  return db.$transaction(async (tx) => {
+    const project = await tx.project.create({
+      data: {
+        clientId: input.clientId,
+        name: input.name,
+        key: input.key,
+        integrationType,
+        integrationConfig: encryptIntegrationConfig(integrationType, input.integrationConfig) as
+          | Prisma.InputJsonValue
+          | undefined,
+      },
+    });
+    // Slice 4 — every Project gets a Connector the same moment it's created (design.md decision 1).
+    await getOrCreateConnectorForProject(project.id, tx);
+    return project;
   });
 }
 
