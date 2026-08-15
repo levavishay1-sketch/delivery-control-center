@@ -8,14 +8,14 @@ export async function getWorkItemDependencies(workItemId: string) {
   // Upstream: items this work item depends on
   const upstream = await db.dependency.findMany({
     where: { workItemId },
-    include: { dependsOnWorkItem: true },
+    include: { dependsOnWorkItem: { include: { pipeline: true } } },
     orderBy: { createdAt: "desc" },
   });
 
   // Downstream: items that depend on this work item
   const downstream = await db.dependency.findMany({
     where: { dependsOnWorkItemId: workItemId },
-    include: { workItem: true },
+    include: { workItem: { include: { pipeline: true } } },
     orderBy: { createdAt: "desc" },
   });
 

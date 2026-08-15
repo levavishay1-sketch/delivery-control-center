@@ -18,3 +18,14 @@ export async function getClientById(ctx: AuthContext, id: string) {
   requireClientRole(ctx, client.id, ALL_ROLES);
   return client;
 }
+
+/** Users with a membership on this client — for owner/executor pickers. Requires at least read access. */
+export async function listClientMembers(ctx: AuthContext, clientId: string) {
+  requireClientRole(ctx, clientId, ALL_ROLES);
+  const memberships = await db.clientMembership.findMany({
+    where: { clientId },
+    include: { user: true },
+    orderBy: { user: { name: "asc" } },
+  });
+  return memberships.map((m) => m.user);
+}

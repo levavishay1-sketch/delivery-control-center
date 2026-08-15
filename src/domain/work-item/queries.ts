@@ -25,6 +25,24 @@ export async function getWorkItem(ctx: AuthContext, id: string) {
   return workItem;
 }
 
+/** Full work item detail for the 360° Record / Quick View — includes parent, children, and pipeline+stages for the AI cost breakdown. */
+export async function getWorkItemDetail(ctx: AuthContext, id: string) {
+  const workItem = await db.workItem.findUnique({
+    where: { id },
+    include: {
+      project: true,
+      owner: true,
+      executor: true,
+      parent: { include: { pipeline: true } },
+      children: { include: { owner: true, pipeline: true }, orderBy: { createdAt: "asc" } },
+      pipeline: { include: { stages: true } },
+    },
+  });
+  if (!workItem) return null;
+  requireClientRole(ctx, workItem.project.clientId, ALL_ROLES);
+  return workItem;
+}
+
 /** Unchecked lookup for internal domain use (e.g. by other commands resolving a work item before their own authz check). */
 export async function getWorkItemById(id: string) {
   return db.workItem.findUnique({ where: { id } });
