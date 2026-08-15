@@ -1,6 +1,6 @@
 # Delivery Control Center — Product & System Specification
 
-Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 5).
+Reverse-engineered from the implementation as of 2026-08-15 (end of Slice 6).
 Every claim below is traceable to a file in this repo.
 Status tags used throughout:
 
@@ -11,7 +11,7 @@ Status tags used throughout:
 - **Missing** — not present at all; noted because the product's own stated
   goals imply it should exist.
 
-This revision folds in **six** shipped slices: **Slice 0** (tenancy,
+This revision folds in **seven** shipped slices: **Slice 0** (tenancy,
 identity, auth — archived at
 `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/`),
 **Slice 1** (the delivery model and the Attention Center — archived at
@@ -36,7 +36,14 @@ manual (never inferred) work-item-to-pull-request linking, and
 evidence-driven completion — the `APPROVED` → `COMPLETED` transition now
 refuses without a qualifying merged/passing-tests pull request or an
 approved exception — archived at
-`openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/`).
+`openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/`), and
+**Slice 6** (Configuration Center — hierarchical AI-budget configuration
+across Organization → Client → Project scopes, with effective-value
+resolution and its source, an impact preview naming affected
+clients/projects shown before any cascading change is saved, explicit
+reset-to-inherited, and a durable, append-only `ConfigChange` version
+history distinct from the general audit trail — archived at
+`openspec/changes/archive/2026-08-15-slice-6-configuration-center/`).
 The previous revision of this file predated Slice 2 and described a fixed
 five-stage pipeline with uniform approval gating and an automatically-created,
 per-work-item Constitution stage — none of that is still true.
@@ -354,6 +361,7 @@ drawer-local exception.
 | `/work-items/[id]/360` | `work-items/[id]/360/page.tsx` | 360° Delivery Record: Overview / Dependencies (+ graph) / Timeline tabs, Code/Tests/Evidence/Configuration stubs |
 | `/pipelines/[id]` | `pipelines/[id]/page.tsx` | All 5 pipeline stages, content, cost, approvals, draft/approve/reject, a link into the work item's 360° Record |
 | `/audit` | `audit/page.tsx` | Filterable, paginated audit trail (project/actor/action-category/date-range; 20/50/100 rows/page) |
+| `/organizations/[id]/config` | `organizations/[id]/config/page.tsx` | The app's first Organization-scoped page: AI-budget `ConfigBudgetPanel` + `ConfigHistoryList` for the organization, plus its clients for drill-down. `requireOrgAdmin`-gated. *(Slice 6.)* |
 
 Components (`src/components/`, 20 total, up from 6): the original
 `AddProjectForm`/`AddWorkItemForm`/`ApprovalGate`/`DraftButton`/
@@ -458,7 +466,12 @@ Slice 1.
 actions require which role). NextAuth Credentials provider + JWT sessions
 (`src/auth.ts`); `requireAuthContext()`
 (`src/domain/shared/session.ts`) gates every page/route; `requireClientRole`
-gates every domain command against `WRITE_ROLES`/`ALL_ROLES`. `.env`
+gates every domain command against `WRITE_ROLES`/`ALL_ROLES`. `requireOrgAdmin`
+existed since Slice 0 but gated nothing until Slice 6's Organization-scope
+budget commands became its first real consumer — it's a `User.isOrgAdmin`
+boolean, not a per-organization membership row, so it's a global admin flag,
+not scoped to a specific `Organization` the way `requireClientRole` is scoped
+to a specific `Client`. `.env`
 (gitignored) still holds shared `DATABASE_URL`/`ANTHROPIC_API_KEY`/`JIRA_*`
 — per-client credential isolation exists at the schema level
 (`Client.integrationConfig`) but not for the AI/Jira env-var fallback path.
@@ -711,10 +724,39 @@ Found by Slice 2's own E2E scenario asserting against the filtered page.
 
 ## 21. Configuration and inheritance
 
-Unchanged. Global `config/workflow.yaml` + `config/prompts/*.md`, no
-per-project/per-client override despite `Client.integrationConfig` and
-`Client.aiConfig` existing (integration credentials only). Hierarchical
-config remains Slice 6's scope.
+Pipeline shape/prompts (`config/workflow.yaml` + `config/prompts/*.md`)
+remain global, unchanged. **AI budget is now Slice 6's Configuration
+Center**, the first (and, for this slice, only) field to get hierarchical,
+inspectable configuration: `Organization.aiBudgetUsd` /
+`Client.aiBudgetUsd` / `Project.aiBudgetUsd` are all nullable `Decimal`
+columns, unset meaning "inherit from the next-broadest scope, or unbounded
+if nothing in the chain has a value." `getEffectiveBudget`
+(`src/domain/config/queries.ts`) walks Project → Client → Organization and
+returns the resolved value, which scope it actually came from, and whether
+this scope holds its own override or is inheriting — shown by
+`ConfigBudgetPanel` (`src/components/ConfigBudgetPanel.tsx`) on the
+Dashboard's Client cards, the project Constitution page, and a new
+Organization Configuration page (`/organizations/[id]/config` — the app's
+first Organization-scoped page, `requireOrgAdmin`-gated). Changing a
+value at Organization or Client scope shows an impact preview
+(`previewBudgetImpact`: how many descendant clients/projects with no
+override of their own would see their effective value change) before the
+change is confirmed and saved — no server-held pending-change state, just
+the same read the UI shows, with the UI's own confirm step standing
+between preview and save (design.md decision 3). Project scope has no
+descendants, so it saves directly with no preview step. Every set/clear is
+recorded as a `ConfigChange` row (old value, new value, who, when) —
+append-only, separate from the general `AuditEvent` trail (which still
+also records the same change, exactly like every other domain command),
+because `AuditEvent` has no `clientId`/`organizationId` FK to attach a
+tenancy-scoped change to cleanly. `checkBudget`
+(`src/domain/agent/commands.ts`, Slice 3) now falls through Project →
+Client → Organization → unbounded, one more tier than before. `Client.
+integrationConfig`/`Client.aiConfig` remain integration-credential-only,
+untouched by Slice 6. Configuring anything other than AI budget (pipeline
+shape, gate policy, per-project completion policy) remains out of scope —
+Slice 6's mechanics are designed to extend to a second field later without
+a breaking change, but nothing else is wired up yet.
 
 ## 22. Notifications and attention mechanisms
 
@@ -1215,13 +1257,28 @@ Covered in §25.
   `CompletionException` — status alone can no longer mean "done." The
   Evidence tab explains the policy's current state in plain language.
   *(Slice 5.)*
-- 253 domain-layer integration tests, 9 Playwright E2E tests (up from 226
-  and 8 — Slice 4 added connector/provenance/conflict coverage and a
-  scenario that itself caught and fixed a real Server/Client boundary bug
-  before shipping; Slice 5 added evidence/completion-policy coverage and
-  its own end-to-end scenario, and made the GitHub adapter's base URL
-  configurable — mirroring `jira.ts` — so that scenario runs against a
-  local deterministic stub).
+- Hierarchical AI-budget configuration (Configuration Center): effective
+  value + its source shown at Organization/Client/Project scope
+  (`getEffectiveBudget` walks Project → Client → Organization → unbounded);
+  impact preview naming affected clients/projects before an
+  Organization- or Client-scope change is confirmed and saved; explicit
+  reset-to-inherited, distinct from saving an empty value; a durable,
+  append-only `ConfigChange` history per scope, separate from the general
+  audit trail. The app's first Organization-scoped page
+  (`/organizations/[id]/config`). `checkBudget` (Slice 3) now falls
+  through Project → Client → Organization → unbounded, one more tier than
+  before, and the "Approve to continue" override flow now works at
+  Organization scope too. *(Slice 6.)*
+- 270 domain-layer integration tests, 10 Playwright E2E tests (up from 253
+  and 9 — Slice 6 added Organization-tier budget-precedence coverage and
+  its own end-to-end scenario, which itself caught a real gap: a project-
+  scope budget API route that had been marked done but never actually
+  existed, before it shipped; Slice 4 added connector/provenance/conflict
+  coverage and a scenario that itself caught and fixed a real Server/Client
+  boundary bug before shipping; Slice 5 added evidence/completion-policy
+  coverage and its own end-to-end scenario, and made the GitHub adapter's
+  base URL configurable — mirroring `jira.ts` — so that scenario runs
+  against a local deterministic stub).
 
 ## Missing capabilities
 
@@ -1251,11 +1308,19 @@ Covered in §25.
   Slice 4's adapters are fetch/webhook-in only.
 - Auto-detection of work-item-to-PR linking (branch name/title parsing) —
   deliberately manual-only in Slice 5; see §17, §19.
-- Per-project/per-type configurable completion policy — Slice 5 shipped
-  one fixed default policy for every project; configurability is Slice 6's
-  Configuration Center territory.
+- Per-project/per-type configurable completion policy — still one fixed
+  default policy for every project; Slice 6's Configuration Center covers
+  AI budget only, by deliberate scope (confirmed Non-Goal — see
+  `openspec/changes/archive/2026-08-15-slice-6-configuration-center/design.md`).
 - Non-GitHub evidence sources (Jira/Azure DevOps commits or PRs) — Slice
   5's `Repository` is GitHub-only.
+- Config scopes below Project (Repository, Work Item) — no existing
+  inheritance-target concept for either; confirmed out of scope for Slice
+  6.
+- A generic/pluggable config-value framework — `ConfigChange` and the
+  Configuration Center UI are written concretely against the AI budget
+  field; generalizing to arbitrary fields is deferred until a second field
+  actually needs it.
 
 ## Inconsistencies between UI, backend, and domain model
 
@@ -1295,18 +1360,19 @@ Covered in §25.
 Per `docs/ROADMAP.md`'s slice sequence (source of truth — this section
 summarizes, doesn't override it):
 
-1. **Slice 6 — Configuration Center**: hierarchical config with
-   inheritance, impact preview, versioning.
-2. Cheap, high-clarity fixes that don't need a full slice: client-creation
+1. Cheap, high-clarity fixes that don't need a full slice: client-creation
    UI/API; a `WorkItem` delete path (once the audit-immutability question
    is resolved); push notifications for the Attention Center;
    critical-path analysis over dependencies; scheduled/polled connector
    sync; per-project/per-type configurable completion policy; auto-detected
-   work-item-to-PR linking.
+   work-item-to-PR linking; a fix for the pre-existing pipeline-detail-page
+   navigation gap `e2e/slice3-budget-enforcement.spec.ts` still tolerates
+   (no "back to Dashboard"-style link on `/pipelines/[id]`, unrelated to
+   Slice 6 but surfaced again while verifying it).
 
 *(Slice 3 — Agents as real execution resources — Slice 4 — Connector
-framework — and Slice 5 — Engineering evidence — are now Done; see
-`docs/ROADMAP.md`.)*
+framework — Slice 5 — Engineering evidence — and Slice 6 — Configuration
+Center — are now Done; see `docs/ROADMAP.md`.)*
 
 ---
 
@@ -1334,13 +1400,18 @@ and idempotent webhook intake for Jira/Azure DevOps/GitHub (Slice 4), plus
 real engineering evidence — GitHub commits, pull requests, and test runs
 traced to the work item they belong to, with the `APPROVED` → `COMPLETED`
 transition now refusing without qualifying evidence or an approved
-exception (Slice 5). `IMPLEMENT` still stays an AI-drafted document, not
+exception (Slice 5), plus a hierarchical Configuration Center for AI
+budget — Organization → Client → Project inheritance with an inspectable
+effective value and source, a cascade-impact preview before any
+Organization- or Client-scope change is confirmed, explicit
+reset-to-inherited, and a durable per-scope change history (Slice 6).
+`IMPLEMENT` still stays an AI-drafted document, not
 real code execution — that gap is now specifically about the pipeline's
 own `IMPLEMENT` stage, not evidence at large, since Slice 5 closed the
 "status alone means done" gap — and several real gaps remain: no
 client-creation path, no work-item deletion, no push notifications, no
 critical-path analysis, no scheduled sync, no per-project completion
-policy configuration. Its strongest, most fully-realized property remains
+policy configuration (Slice 6 covers AI budget only, by design). Its strongest, most fully-realized property remains
 provenance — the audit trail is real, transactionally consistent,
 tenant-scoped, work-item-traceable, and (Slice 2) its project filter now
 actually includes pipeline/stage-scoped events, a real bug fixed along the
@@ -1352,11 +1423,14 @@ stage type, not a single uniform check. The product's architecture
 (swappable `AgentExecutor`/`IntegrationAdapter`, config-driven pipeline
 shape, the `src/domain/<aggregate>/` command/query pattern, and now the
 `Job`-backed durable-execution pattern) has proven itself capable of
-absorbing five slices this large in a row (Slice 2: 13 task groups, 5 new
+absorbing six slices this large in a row (Slice 2: 13 task groups, 5 new
 entities, 1 new page, ~60 new tests; Slice 3: 10 task groups, 3 new
 entities, 2 new API suites, ~60 new tests and an E2E scenario; Slice 4: 10
 task groups, 5 new entities, 3 real adapters, a new page, ~50 new tests
 and an E2E scenario that caught a real bug before it shipped; Slice 5: 10
 task groups, 8 new entities, 4 new API routes, 3 new 360°-Record tabs made
-real, ~27 new tests and an E2E scenario) without a
+real, ~27 new tests and an E2E scenario; Slice 6: 8 task groups, 1 new
+entity, 7 new API routes, 2 new components, a new page, ~17 new tests and
+an E2E scenario that caught a real gap — a project-scope budget API route
+marked done but never actually created — before it shipped) without a
 rewrite — a reasonable signal for the slices still ahead.

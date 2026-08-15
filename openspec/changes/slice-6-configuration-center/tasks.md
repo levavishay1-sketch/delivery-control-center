@@ -40,6 +40,6 @@
 
 ## 8. Documentation & verification
 
-- [ ] 8.1 Update `docs/PRODUCT_SPEC.md`: revision header (seven slices); a new/updated section covering the Configuration Center; "Current capabilities"/"Missing capabilities" refreshed; Slice 6 marked Done in "Prioritized roadmap" and "Current Product Definition."
-- [ ] 8.2 Update `docs/ROADMAP.md`: Slice 6 row → Done with archive link, Slice 6 section heading → "— **Done**".
-- [ ] 8.3 Run build + lint + `tsc --noEmit` + full unit test suite + the new E2E test; live-check the impact-preview counts against real seeded data (not just "looks right") and the Organization-level budget-enforcement path (a real drafting attempt refused once the org-level threshold is exceeded), per the project's verification standard.
+- [x] 8.1 Update `docs/PRODUCT_SPEC.md`: revision header (seven slices); a new/updated section covering the Configuration Center; "Current capabilities"/"Missing capabilities" refreshed; Slice 6 marked Done in "Prioritized roadmap" and "Current Product Definition."
+- [x] 8.2 Update `docs/ROADMAP.md`: Slice 6 row → Done with archive link, Slice 6 section heading → "— **Done**".
+- [x] 8.3 Run build + lint + `tsc --noEmit` + full unit test suite + the new E2E test; live-check the impact-preview counts against real seeded data (not just "looks right") and the Organization-level budget-enforcement path (a real drafting attempt refused once the org-level threshold is exceeded), per the project's verification standard. Build/lint/tsc clean; 270/270 unit tests passing; `e2e/slice6-configuration-center.spec.ts` and (after fixing its stale UI-text assertions) `e2e/slice3-budget-enforcement.spec.ts` passing individually against a live Postgres + worker; impact-preview and org-level enforcement verified live against seeded data (see Task Group 4/5/6 notes above).

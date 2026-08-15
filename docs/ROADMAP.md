@@ -67,7 +67,7 @@ directly from this register; item numbers are referenced there.
 | 11 | Dashboard as command center | MISSING *(done in Slice 1)* |
 | 12 | Quick View drawer | MISSING *(done in Slice 1)* |
 | 13 | Progressive disclosure (3 levels) | MISSING *(done in Slice 1 — Attention/Dashboard → Quick View → 360° Record)* |
-| 14 | 360° Delivery Record (9 tabs) | EXTEND (`/pipelines/[id]` ≈ 1 tab) *(Overview/Dependencies/Timeline done in Slice 1; Code/Tests/Evidence done in Slice 5 — real, backed by GitHub-sourced entities; Configuration remains an honest "Coming soon" stub, pending Slice 6)* |
+| 14 | 360° Delivery Record (9 tabs) | EXTEND (`/pipelines/[id]` ≈ 1 tab) *(Overview/Dependencies/Timeline done in Slice 1; Code/Tests/Evidence done in Slice 5 — real, backed by GitHub-sourced entities; the 360° Record's own per-work-item Configuration tab remains an honest "Coming soon" stub — Slice 6 built Organization/Client/Project-scoped AI budget configuration, not a Work-Item scope, a confirmed Non-Goal — see Slice 6's design.md)* |
 | 15 | Per-work-item timeline | EXTEND (data exists, only a global 200-row feed) *(done in Slice 1 — `AuditEvent.workItemId` + the 360° Record's Timeline tab + the audit trail's own filters/pagination; the 200-row cap is gone)* |
 | 16 | Ctrl+K command palette / global search | MISSING — still not built. |
 | 17 | UI states (loading/empty/error/partial/stale/permission-denied) | EXTEND *(partially done in Slice 1 — loading/empty states exist on every new page; no dedicated "stale" or "partial" state, no global error boundary beyond inline error text)* |
@@ -129,10 +129,10 @@ Analyze → Implement → Deploy, run under a project-scoped versioned
 Constitution, role-gated, audited, AI-drafted, job-backed) is explicitly
 named the **"engine room"** of that product — correct, and kept — but only
 a fraction of it. The delivery model, attention, blockers, decisions, and
-dependencies layers (Slice 1) and the agent-execution, connector, and
-evidence layers around the engine room (Slices 3–5) are now built. Still
-missing: hierarchical configuration (Slice 6) and the items in §"Missing"
-above that no slice has scoped yet.
+dependencies layers (Slice 1) and the agent-execution, connector,
+evidence, and hierarchical AI-budget configuration layers around the
+engine room (Slices 3–6) are now built. Still missing: the items in
+§"Missing" above that no slice has scoped yet.
 
 ## What must be protected while building the rest (source: `§1`–`§2`)
 
@@ -143,7 +143,8 @@ Non-negotiable constraints that apply to every future slice, not just one:
 - The `AgentExecutor` and `IntegrationAdapter` interfaces are extended, not
   replaced; the mock executor must keep working with no API key.
 - `config/workflow.yaml` + `config/prompts/*.md` stays the config-driven
-  mechanism; only its scope widens (global → hierarchical) in Slice 6.
+  mechanism for pipeline shape/prompts; Slice 6 widened AI budget alone
+  (global → hierarchical, Organization → Client → Project), not this file.
 - Real usage-based token/cost capture from the API's actual `usage`, never
   estimated.
 - Prisma migration history is additive only — `20260814065231_init` is
@@ -200,7 +201,7 @@ re-litigate:
 | 3 | Agents as real execution resources | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | `openspec/changes/archive/2026-08-15-slice-3-agents-as-execution-resources/` |
 | 4 | Connector framework | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | `openspec/changes/archive/2026-08-15-slice-4-connector-framework/` |
 | 5 | Engineering evidence | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 5" | `openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/` |
-| 6 | Configuration Center | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | — |
+| 6 | Configuration Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | `openspec/changes/archive/2026-08-15-slice-6-configuration-center/` |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -295,12 +296,36 @@ per-project/per-type configurable (deferred to Slice 6). Full detail:
 source §5 "Slice 5". Archive detail:
 `openspec/changes/archive/2026-08-15-slice-5-engineering-evidence/`.
 
-### Slice 6 — Configuration Center
+### Slice 6 — Configuration Center — **Done**
 
-Hierarchical config (Organization → Client → Project → Repository → Work
-Item) with inheritance/overrides, effective-value display, impact preview
-before saving, and config versioning/audit. Full detail: source §5
-"Slice 6".
+Hierarchical AI-budget configuration across Organization → Client →
+Project (not Repository/Work Item — no existing inheritance-target
+concept for either, confirmed out of scope with the user before
+implementation): `Organization.aiBudgetUsd` joins the existing
+`Client.aiBudgetUsd`/`Project.aiBudgetUsd` (Slice 3) nullable-Decimal,
+unset-means-inherit pattern; `getEffectiveBudget` resolves the value and
+its source (own override vs. inherited, and from which scope);
+`previewBudgetImpact` names affected descendant clients/projects before
+an Organization- or Client-scope change is confirmed and saved (Project
+scope has no descendants, so it saves directly, no preview); a dedicated
+append-only `ConfigChange` table (not folded into `AuditEvent`, which has
+no `clientId`/`organizationId` FK to attach to) records every set/clear
+with old/new value, who, and when; explicit reset-to-inherited, distinct
+from saving an empty value. `checkBudget` (Slice 3) now falls through
+Project → Client → Organization → unbounded. `requireOrgAdmin`
+(existed since Slice 0, gated nothing until now) is Organization scope's
+authz; Client/Project reuse the existing `requireClientRole(WRITE_ROLES)`.
+The app's first Organization-scoped page:
+`/organizations/[id]/config`. One scope decision confirmed with the user
+before implementation (not in the source): config fields other than AI
+budget (pipeline/gate policy, integration defaults, Slice 5's completion
+policy) stay out of scope — the mechanics are designed to extend to a
+second field later without a breaking change, but nothing else is wired
+up in this slice. Its own E2E scenario caught a real gap before shipping:
+`POST /api/config/projects/[id]/budget` had been marked done in
+`tasks.md` but never actually existed, so project-scope saves were
+silently 404ing. Full detail: source §5 "Slice 6". Archive detail:
+`openspec/changes/archive/2026-08-15-slice-6-configuration-center/`.
 
 ## Definition of Done, for every future slice (source: `§6`)
 
