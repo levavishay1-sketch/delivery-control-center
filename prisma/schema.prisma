@@ -73,6 +73,14 @@ enum StageVersionTrigger {
   REDRAFT
 }
 
+// Slice 3 — see openspec/changes/slice-3-agents-as-execution-resources/design.md
+// decision 1: one AgentRun per Job attempt-cycle, not per individual retry.
+enum AgentRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 enum FindingSeverity {
   INFO
   WARNING
@@ -169,11 +177,12 @@ model User {
   approvals   Approval[]
   auditEvents AuditEvent[]
 
-  ownedWorkItems    WorkItem[] @relation("WorkItemOwner")
-  executedWorkItems WorkItem[] @relation("WorkItemExecutor")
-  ownedBlockers     Blocker[]  @relation("BlockerOwner")
-  decidedDecisions  Decision[] @relation("DecisionApprover")
+  ownedWorkItems           WorkItem[]        @relation("WorkItemOwner")
+  executedWorkItems        WorkItem[]        @relation("WorkItemExecutor")
+  ownedBlockers            Blocker[]         @relation("BlockerOwner")
+  decidedDecisions         Decision[]        @relation("DecisionApprover")
   answeredClarifyQuestions ClarifyQuestion[] @relation("ClarifyQuestionAnsweredBy")
+  approvedBudgetOverrides  BudgetOverride[]  @relation("BudgetOverrideApprovedBy")
 }
 
 model Account {
@@ -242,18 +251,22 @@ model Organization {
 }
 
 model Client {
-  id               String       @id @default(cuid())
-  organizationId   String
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name             String
-  slug             String
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name              String
+  slug              String
   integrationConfig Json?
-  aiConfig         Json?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  aiConfig          Json?
+  // Slice 3 — unset means no spending limit for this client. A project's own
+  // aiBudgetUsd, if set, overrides this one (see design.md decision 4).
+  aiBudgetUsd       Decimal?     @db.Decimal(10, 2)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  projects    Project[]
-  memberships ClientMembership[]
+  projects        Project[]
+  memberships     ClientMembership[]
+  budgetOverrides BudgetOverride[]
 
   @@unique([organizationId, slug])
 }
@@ -266,12 +279,15 @@ model Project {
   key               String
   integrationType   IntegrationType @default(MANUAL)
   integrationConfig Json?
+  // Slice 3 — unset means "use the client's budget" (see Client.aiBudgetUsd).
+  aiBudgetUsd       Decimal?        @db.Decimal(10, 2)
   createdAt         DateTime        @default(now())
   updatedAt         DateTime        @updatedAt
 
-  workItems     WorkItem[]
-  auditEvents   AuditEvent[]
-  constitutions Constitution[]
+  workItems       WorkItem[]
+  auditEvents     AuditEvent[]
+  constitutions   Constitution[]
+  budgetOverrides BudgetOverride[]
 
   @@unique([clientId, key])
 }
@@ -280,34 +296,40 @@ model Project {
 // per-work-item pipeline (see StageType.CONSTITUTION's comment): drafted and
 // approved once per project, referenced by every pipeline started under it.
 model Constitution {
-  id               String              @id @default(cuid())
+  id               String             @id @default(cuid())
   projectId        String
-  project          Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
   version          Int
   content          String?
-  status           ConstitutionStatus  @default(DRAFT)
+  status           ConstitutionStatus @default(DRAFT)
   aiModel          String?
   promptTokens     Int?
   completionTokens Int?
-  costUsd          Decimal?            @db.Decimal(10, 4)
-  createdAt        DateTime            @default(now())
+  costUsd          Decimal?           @db.Decimal(10, 4)
+  // Slice 3 — the AgentRun that produced this version's content. Nullable:
+  // pre-Slice-3 rows and never-drafted rows have none. aiModel/promptTokens/
+  // completionTokens/costUsd above stay in sync as a cache of this run's
+  // values (see design.md decision 2) — not replaced by this FK.
+  agentRunId       String?
+  agentRun         AgentRun?          @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  createdAt        DateTime           @default(now())
   approvedAt       DateTime?
 
   @@unique([projectId, version])
 }
 
 model WorkItem {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   source      IntegrationType
   externalId  String
   externalUrl String?
   title       String
   description String?
-  status      WorkStatus @default(OPEN)
-  syncedAt    DateTime @default(now())
-  createdAt   DateTime @default(now())
+  status      WorkStatus      @default(OPEN)
+  syncedAt    DateTime        @default(now())
+  createdAt   DateTime        @default(now())
 
   // Slice 1 — delivery model extension. `source` (above) already serves the
   // role a separate "sourceMode" field would have; not duplicated.
@@ -329,8 +351,8 @@ model WorkItem {
   pipeline     Pipeline?
   blockers     Blocker[]
   decisions    Decision[]
-  dependsOn    Dependency[]  @relation("DependentWorkItem")
-  dependedOnBy Dependency[]  @relation("DependencyTarget")
+  dependsOn    Dependency[] @relation("DependentWorkItem")
+  dependedOnBy Dependency[] @relation("DependencyTarget")
   auditEvents  AuditEvent[]
 
   @@unique([projectId, source, externalId])
@@ -389,13 +411,13 @@ model Decision {
 }
 
 model Pipeline {
-  id            String         @id @default(cuid())
-  workItemId    String         @unique
-  workItem      WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Cascade)
-  currentStage  StageType      @default(CONSTITUTION)
-  status        PipelineStatus @default(ACTIVE)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  workItemId   String         @unique
+  workItem     WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  currentStage StageType      @default(CONSTITUTION)
+  status       PipelineStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   // Slice 2 — snapshotted at creation (startPipeline) from config/workflow.yaml's
   // stage list at that moment; getNextStageType/getFirstStageType read this, not
@@ -407,6 +429,12 @@ model Pipeline {
   // Which Constitution version this pipeline started under (nullable: existing
   // rows predate the Constitution model entirely and never had one).
   constitutionVersion Int?
+
+  // Slice 3 — snapshotted at startPipeline alongside stageSequence: resolved
+  // { [stageType]: agentId } routing, so editing config/workflow.yaml's agent
+  // routing after a pipeline starts never changes that pipeline's behavior
+  // (see design.md decision 3). Nullable: pre-Slice-3 pipelines never had one.
+  agentRouting Json?
 
   stages      Stage[]
   auditEvents AuditEvent[]
@@ -423,16 +451,20 @@ model Stage {
   promptTokens     Int?
   completionTokens Int?
   costUsd          Decimal?    @db.Decimal(10, 4)
+  // Slice 3 — the AgentRun that produced this stage's current content. See
+  // Constitution.agentRunId's comment: aiModel/etc. above remain a synced cache.
+  agentRunId       String?
+  agentRun         AgentRun?   @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
   startedAt        DateTime?
   completedAt      DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  approvals         Approval[]
-  auditEvents       AuditEvent[]
-  versions          StageVersion[]
-  clarifyQuestions  ClarifyQuestion[]
-  analysisFindings  AnalysisFinding[]
+  approvals        Approval[]
+  auditEvents      AuditEvent[]
+  versions         StageVersion[]
+  clarifyQuestions ClarifyQuestion[]
+  analysisFindings AnalysisFinding[]
 
   @@unique([pipelineId, type])
 }
@@ -450,6 +482,9 @@ model StageVersion {
   promptTokens      Int?
   completionTokens  Int?
   costUsd           Decimal?            @db.Decimal(10, 4)
+  // Slice 3 — see Stage.agentRunId's comment; same cache-alongside-FK pattern.
+  agentRunId        String?
+  agentRun          AgentRun?           @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
   createdAsResultOf StageVersionTrigger
   createdAt         DateTime            @default(now())
 
@@ -508,46 +543,112 @@ model Job {
   @@index([status, scheduledAt])
 }
 
+// Slice 3 — the routable agent registry (see design.md decision 3). Seeded
+// from config/workflow.yaml's `agents:` list; exactly one row is isDefault
+// true at a time, enforced in the domain command, not a DB constraint.
+model Agent {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  provider  String
+  model     String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  runs AgentRun[]
+}
+
+// Slice 3 — one row per drafting attempt-cycle (one Job's full retry
+// lifecycle), not per individual retry attempt (see design.md decision 1).
+// toolCalls is unpopulated in this slice (no executor calls tools today);
+// present only for forward compatibility per design.md's Non-Goals.
+model AgentRun {
+  id               String         @id @default(cuid())
+  agentId          String
+  agent            Agent          @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  jobId            String?
+  status           AgentRunStatus @default(RUNNING)
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal?       @db.Decimal(10, 4)
+  retryCount       Int            @default(0)
+  lastError        String?
+  toolCalls        Json?
+  startedAt        DateTime       @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+
+  stages             Stage[]
+  stageVersions      StageVersion[]
+  constitutions      Constitution[]
+  consumedByOverride BudgetOverride?
+
+  @@index([agentId, status])
+}
+
+// Slice 3 — an audited, single-use grant to draft past an exceeded budget
+// (see design.md decision 5). Exactly one of clientId/projectId is set,
+// enforced in the domain command. Consumed atomically by whichever drafting
+// request claims it first (UPDATE ... WHERE consumed = false RETURNING,
+// same pattern as Job.claimJobs).
+model BudgetOverride {
+  id               String    @id @default(cuid())
+  clientId         String?
+  client           Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId        String?
+  project          Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  approvedByUserId String
+  approvedByUser   User      @relation("BudgetOverrideApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  approvedAt       DateTime  @default(now())
+  consumed         Boolean   @default(false)
+  consumedAt       DateTime?
+  consumedByRunId  String?   @unique
+  consumedByRun    AgentRun? @relation(fields: [consumedByRunId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, consumed])
+  @@index([projectId, consumed])
+}
+
 model Approval {
-  id           String            @id @default(cuid())
+  id           String           @id @default(cuid())
   stageId      String
-  stage        Stage             @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  stage        Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
   decision     ApprovalDecision
   // approverId is the real, session-derived identity; approverName is an immutable display
   // snapshot (kept even if the user is later renamed/removed) — not a half-measure, both are
   // meant to coexist. approverId is nullable only because it postdates this table.
   approverId   String?
-  approver     User?             @relation(fields: [approverId], references: [id], onDelete: SetNull)
+  approver     User?            @relation(fields: [approverId], references: [id], onDelete: SetNull)
   approverName String
   comment      String?
-  decidedAt    DateTime          @default(now())
+  decidedAt    DateTime         @default(now())
 }
 
 // pipelineId/projectId are both optional because an event can originate above
 // pipeline scope (e.g. a project-level integration sync) — but every audit
 // event still records enough to trace back to what it's about.
 model AuditEvent {
-  id         String      @id @default(cuid())
+  id         String     @id @default(cuid())
   projectId  String?
-  project    Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project    Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   pipelineId String?
-  pipeline   Pipeline?   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  pipeline   Pipeline?  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   stageId    String?
-  stage      Stage?      @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  stage      Stage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
   // Slice 1: lets Blocker/Decision/Dependency events (which have no pipelineId)
   // trace back to the work item they're about, and powers the 360° Record's
   // per-item Timeline tab.
   workItemId String?
-  workItem   WorkItem?   @relation(fields: [workItemId], references: [id], onDelete: SetNull)
+  workItem   WorkItem?  @relation(fields: [workItemId], references: [id], onDelete: SetNull)
   actor      AuditActor
   // userId is the real, session-derived identity for USER-actor events; actorName is an
   // immutable display snapshot (also used for SYSTEM/AI actor names, which have no User row).
   userId     String?
-  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   actorName  String?
   action     String
   detail     Json?
-  createdAt  DateTime    @default(now())
+  createdAt  DateTime   @default(now())
 
   @@index([pipelineId, createdAt])
   @@index([projectId, createdAt])
