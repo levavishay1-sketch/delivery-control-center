@@ -90,8 +90,8 @@ established pattern).
 
 ## Task Group 12: Unit Tests for Domain Logic (2 tasks)
 
-- [ ] 12.1 Vitest integration tests (real local Postgres, per this project's established pattern) for every new domain module not already covered inline in its own task group: `job`, `constitution`, `clarify`, cross-cutting `pipeline` changes (`startPipeline`, role-based gates, redraft feedback, stage versioning) not already exercised by Task Groups 2–9's own test tasks.
-- [ ] 12.2 Confirm no regression in existing Slice 0/1 domain tests (`npm test` full suite) — the automatic-pipeline-creation removal (Task Group 4.1) and `createPipeline`→`startPipeline` rename touch `work-item/commands.test.ts` and any other test relying on the old auto-creation behavior; update those call sites, don't leave them silently broken. Commit: "Add comprehensive unit tests for Slice 2 domain logic"
+- [x] 12.1 Vitest integration tests (real local Postgres, per this project's established pattern) for every new domain module not already covered inline in its own task group: `job`, `constitution`, `clarify`, cross-cutting `pipeline` changes (`startPipeline`, role-based gates, redraft feedback, stage versioning) not already exercised by Task Groups 2–9's own test tasks.
+- [x] 12.2 Confirm no regression in existing Slice 0/1 domain tests (`npm test` full suite) — the automatic-pipeline-creation removal (Task Group 4.1) and `createPipeline`→`startPipeline` rename touch `work-item/commands.test.ts` and any other test relying on the old auto-creation behavior; update those call sites, don't leave them silently broken. Commit: "Add comprehensive unit tests for Slice 2 domain logic"
 
 ## Task Group 13: Documentation & Verification (1 task)
 

@@ -221,4 +221,21 @@ describe("approveConstitution / rejectConstitution", () => {
     const completed = await runConstitutionDraftJob(v1.id);
     await expect(approveConstitution(viewerCtx, completed.id)).rejects.toThrow(ForbiddenError);
   });
+
+  it("rejects rejecting a version that isn't PENDING_APPROVAL", async () => {
+    const project = await db.project.create({
+      data: { clientId, name: "Bad State Reject Project", key: `BSR${Date.now().toString(36).toUpperCase()}` },
+    });
+    const v1 = await draft(managerCtx, project.id);
+    await expect(rejectConstitution(managerCtx, v1.id)).rejects.toThrow(ConflictError);
+  });
+
+  it("rejects a Viewer rejecting", async () => {
+    const project = await db.project.create({
+      data: { clientId, name: "Viewer Reject Project", key: `VRP${Date.now().toString(36).toUpperCase()}` },
+    });
+    const v1 = await draft(managerCtx, project.id);
+    const completed = await runConstitutionDraftJob(v1.id);
+    await expect(rejectConstitution(viewerCtx, completed.id)).rejects.toThrow(ForbiddenError);
+  });
 });
