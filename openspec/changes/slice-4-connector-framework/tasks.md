@@ -46,10 +46,10 @@ committable independently, per this project's change-sizing convention
 
 ## Task Group 5: Azure DevOps & GitHub Adapters (4 tasks)
 
-- [ ] 5.1 `src/lib/integrations/azureDevOps.ts`: implements `IntegrationAdapter`, resolving config (`orgUrl`, `project`, `pat`) from `Connector.config` falling back to env vars (same pattern as `jira.ts`'s `resolveConfig`), calling Azure DevOps' Work Items REST API, mapping `id`→`externalId`, `fields['System.Title']`→`title`, `fields['System.Description']`→`description`, `fields['System.State']`→`status`.
-- [ ] 5.2 `src/lib/integrations/github.ts`: implements `IntegrationAdapter`, resolving config (`owner`, `repo`, `token`) from `Connector.config`/env, calling the GitHub Issues REST API, mapping `number`→`externalId`, `title`→`title`, `body`→`description`, `state`→`status`.
-- [ ] 5.3 Register both in `src/lib/integrations/index.ts`'s `adapters` map (`AZURE_DEVOPS`, `GITHUB`), removing the now-obsolete "no adapter for Azure DevOps" comment. Add `apiToken`/`pat`/`token` fields to `SECRET_FIELDS` for encryption.
-- [ ] 5.4 Tests: each adapter maps a representative API response into the correct `FetchedWorkItem[]` shape; each adapter throws a clear configuration error when required config/env is missing (mirroring `jira.ts`'s existing `resolveConfig` test coverage); `getIntegrationAdapter("AZURE_DEVOPS")`/`("GITHUB")` no longer throw "not yet available". Commit: "Add real Azure DevOps and GitHub sync adapters"
+- [x] 5.1 `src/lib/integrations/azureDevOps.ts`: implements `IntegrationAdapter`, resolving config (`orgUrl`, `project`, `pat`) from `Connector.config` falling back to env vars (same pattern as `jira.ts`'s `resolveConfig`), calling Azure DevOps' Work Items REST API, mapping `id`→`externalId`, `fields['System.Title']`→`title`, `fields['System.Description']`→`description`, `fields['System.State']`→`status`.
+- [x] 5.2 `src/lib/integrations/github.ts`: implements `IntegrationAdapter`, resolving config (`owner`, `repo`, `token`) from `Connector.config`/env, calling the GitHub Issues REST API, mapping `number`→`externalId`, `title`→`title`, `body`→`description`, `state`→`status`.
+- [x] 5.3 Register both in `src/lib/integrations/index.ts`'s `adapters` map (`AZURE_DEVOPS`, `GITHUB`), removing the now-obsolete "no adapter for Azure DevOps" comment. Add `apiToken`/`pat`/`token` fields to `SECRET_FIELDS` for encryption.
+- [x] 5.4 Tests: each adapter maps a representative API response into the correct `FetchedWorkItem[]` shape; each adapter throws a clear configuration error when required config/env is missing (mirroring `jira.ts`'s existing `resolveConfig` test coverage); `getIntegrationAdapter("AZURE_DEVOPS")`/`("GITHUB")` no longer throw "not yet available". Commit: "Add real Azure DevOps and GitHub sync adapters"
 
 ## Task Group 6: Idempotent Webhook Intake (4 tasks)
 
