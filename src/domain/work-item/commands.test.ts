@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createWorkItem, updateWorkItem, updateWorkItemStatus, addParentWorkItem } from "./commands";
+import { approveCompletionException } from "@/domain/evidence/commands";
 import type { AuthContext } from "@/domain/shared/context";
 import { ForbiddenError, ValidationError } from "@/domain/shared/errors";
 
@@ -172,6 +173,9 @@ describe("updateWorkItemStatus", () => {
     await updateWorkItemStatus(managerCtx, workItem.id, "IN_PROGRESS");
     await updateWorkItemStatus(managerCtx, workItem.id, "REVIEW");
     await updateWorkItemStatus(managerCtx, workItem.id, "APPROVED");
+    // Slice 5: APPROVED -> COMPLETED now requires qualifying evidence or an approved exception
+    // (see src/domain/evidence/completion.test.ts for that policy's own dedicated coverage).
+    await approveCompletionException(managerCtx, workItem.id, "No evidence needed for this terminal-state test.");
     await updateWorkItemStatus(managerCtx, workItem.id, "COMPLETED");
     await expect(updateWorkItemStatus(managerCtx, workItem.id, "IN_PROGRESS")).rejects.toThrow(ValidationError);
   });

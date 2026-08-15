@@ -23,3 +23,12 @@ export function listPullRequestsForRepository(repositoryId: string) {
     orderBy: { updatedAt: "desc" },
   });
 }
+
+/** A work item's linked pull requests (its evidence), each with its repository and test runs. */
+export function getEvidenceForWorkItem(workItemId: string) {
+  return db.evidence.findMany({
+    where: { workItemId },
+    include: { pullRequest: { include: { testRuns: true, repository: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+}

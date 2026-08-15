@@ -10,6 +10,7 @@ import {
 } from "@/lib/integrations/github";
 import { getProjectById } from "@/domain/project/queries";
 import { getConnector } from "@/domain/connector/queries";
+import { getWorkItemById } from "@/domain/work-item/queries";
 import { NotFoundError, ValidationError } from "@/domain/shared/errors";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
 import type { AuthContext } from "@/domain/shared/context";
@@ -290,6 +291,98 @@ export async function recordDeploymentStatusEvent(repositoryId: string, payload:
       status: mapDeploymentState(payload.deployment_status.state),
       deployedAt: new Date(payload.deployment_status.created_at),
     },
+  });
+}
+
+/**
+ * Explicitly links a pull request to a work item as its evidence (never inferred — see
+ * engineering-evidence spec's "not inferred" requirement). The pull request must belong to a
+ * repository linked to the work item's own project.
+ */
+export async function linkEvidence(ctx: AuthContext, workItemId: string, pullRequestId: string) {
+  const workItem = await getWorkItemById(workItemId);
+  if (!workItem) throw new NotFoundError("Work item not found");
+  const project = await getProjectById(workItem.projectId);
+  if (!project) throw new NotFoundError("Project not found");
+  requireClientRole(ctx, project.clientId, WRITE_ROLES);
+
+  const pullRequest = await db.pullRequest.findUnique({ where: { id: pullRequestId }, include: { repository: true } });
+  if (!pullRequest) throw new NotFoundError("Pull request not found");
+
+  const connector = await getConnector(workItem.projectId);
+  if (!connector || pullRequest.repository.connectorId !== connector.id) {
+    throw new ValidationError("This pull request does not belong to this work item's linked repository.");
+  }
+
+  const existing = await db.evidence.findUnique({ where: { workItemId_pullRequestId: { workItemId, pullRequestId } } });
+  if (existing) return existing;
+
+  return db.$transaction(async (tx) => {
+    const evidence = await tx.evidence.create({ data: { workItemId, pullRequestId } });
+    await recordAuditEvent(tx, {
+      projectId: project.id,
+      workItemId,
+      actor: "USER",
+      userId: ctx.userId,
+      actorName: ctx.displayName,
+      action: `${ctx.displayName} linked pull request #${pullRequest.number} to "${workItem.title}"`,
+    });
+    return evidence;
+  });
+}
+
+/** Removes a previously-linked pull request from a work item. */
+export async function unlinkEvidence(ctx: AuthContext, evidenceId: string) {
+  const evidence = await db.evidence.findUnique({
+    where: { id: evidenceId },
+    include: { workItem: true, pullRequest: true },
+  });
+  if (!evidence) throw new NotFoundError("Evidence link not found");
+  const project = await getProjectById(evidence.workItem.projectId);
+  if (!project) throw new NotFoundError("Project not found");
+  requireClientRole(ctx, project.clientId, WRITE_ROLES);
+
+  return db.$transaction(async (tx) => {
+    await tx.evidence.delete({ where: { id: evidenceId } });
+    await recordAuditEvent(tx, {
+      projectId: project.id,
+      workItemId: evidence.workItemId,
+      actor: "USER",
+      userId: ctx.userId,
+      actorName: ctx.displayName,
+      action: `${ctx.displayName} unlinked pull request #${evidence.pullRequest.number} from "${evidence.workItem.title}"`,
+    });
+  });
+}
+
+/**
+ * Records a write-capable role's approval to complete a work item without qualifying evidence
+ * (design.md decision 6: the row's presence is the source of truth for checkCompletionPolicy,
+ * not a boolean flag elsewhere).
+ */
+export async function approveCompletionException(ctx: AuthContext, workItemId: string, reason: string) {
+  if (!reason.trim()) throw new ValidationError("A reason is required to approve a completion exception.");
+
+  const workItem = await getWorkItemById(workItemId);
+  if (!workItem) throw new NotFoundError("Work item not found");
+  const project = await getProjectById(workItem.projectId);
+  if (!project) throw new NotFoundError("Project not found");
+  requireClientRole(ctx, project.clientId, WRITE_ROLES);
+
+  return db.$transaction(async (tx) => {
+    const exception = await tx.completionException.create({
+      data: { workItemId, reason, approvedByUserId: ctx.userId },
+    });
+    await recordAuditEvent(tx, {
+      projectId: project.id,
+      workItemId,
+      actor: "USER",
+      userId: ctx.userId,
+      actorName: ctx.displayName,
+      action: `${ctx.displayName} approved a completion exception for "${workItem.title}"`,
+      detail: { reason },
+    });
+    return exception;
   });
 }
 

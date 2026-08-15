@@ -5,6 +5,7 @@ import { getProjectById } from "@/domain/project/queries";
 import { recordManualProvenance } from "@/domain/connector/provenance";
 import { getWorkItemById } from "@/domain/work-item/queries";
 import { assertValidTransition } from "@/domain/work-item/status";
+import { checkCompletionPolicy } from "@/domain/evidence/completion";
 import { NotFoundError, ValidationError } from "@/domain/shared/errors";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, WRITE_ROLES } from "@/domain/shared/authz";
@@ -168,6 +169,15 @@ export async function updateWorkItemStatus(ctx: AuthContext, id: string, rawStat
   requireClientRole(ctx, project.clientId, WRITE_ROLES);
 
   assertValidTransition(existing.status, newStatus);
+
+  if (existing.status === "APPROVED" && newStatus === "COMPLETED") {
+    const policy = await checkCompletionPolicy(id);
+    if (!policy.satisfied) {
+      throw new ValidationError(
+        `Cannot complete "${existing.title}" — missing: ${policy.missing.join(", ")}. Approve a completion exception to override.`
+      );
+    }
+  }
 
   return db.$transaction(async (tx) => {
     const updated = await tx.workItem.update({ where: { id }, data: { status: newStatus } });

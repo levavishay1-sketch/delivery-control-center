@@ -23,16 +23,16 @@
 
 ## 5. Manual work item ↔ evidence linking
 
-- [ ] 5.1 Add `linkEvidence(ctx, workItemId, pullRequestId)` / `unlinkEvidence(ctx, evidenceId)` to `src/domain/evidence/commands.ts` — WRITE_ROLES-gated, creates/removes the `Evidence` row, `recordAuditEvent`'d.
-- [ ] 5.2 Add `getEvidenceForWorkItem(workItemId)` to `src/domain/evidence/queries.ts` — linked pull requests with their commits and current CI status, and associated test runs.
-- [ ] 5.3 Unit tests for link/unlink, including the "unlinking removes the record" scenario.
+- [x] 5.1 Add `linkEvidence(ctx, workItemId, pullRequestId)` / `unlinkEvidence(ctx, evidenceId)` to `src/domain/evidence/commands.ts` — WRITE_ROLES-gated, creates/removes the `Evidence` row, `recordAuditEvent`'d.
+- [x] 5.2 Add `getEvidenceForWorkItem(workItemId)` to `src/domain/evidence/queries.ts` — linked pull requests with their commits and current CI status, and associated test runs.
+- [x] 5.3 Unit tests for link/unlink, including the "unlinking removes the record" scenario.
 
 ## 6. Evidence-driven completion policy
 
-- [ ] 6.1 Create `src/domain/evidence/completion.ts`: `checkCompletionPolicy(workItemId)` — returns satisfied or a list of missing items (no linked PR / PR not merged / tests not passing), checking for an approved `CompletionException` as an alternate satisfying condition.
-- [ ] 6.2 Add `approveCompletionException(ctx, workItemId, reason)` to `src/domain/evidence/commands.ts` — WRITE_ROLES-gated, required `reason`, `recordAuditEvent`'d.
-- [ ] 6.3 Wire `checkCompletionPolicy` into `updateWorkItemStatus` (`src/domain/work-item/commands.ts`): before the transaction, when `from === "APPROVED" && to === "COMPLETED"`, call it and throw `ValidationError` naming what's missing if unsatisfied.
-- [ ] 6.4 Unit tests: completing with qualifying evidence succeeds; completing without evidence and without an exception is rejected with a descriptive error; completing without evidence but with an approved exception succeeds; existing `status.test.ts`/`commands.test.ts` transition tests still pass unmodified for every transition other than `APPROVED → COMPLETED`.
+- [x] 6.1 Create `src/domain/evidence/completion.ts`: `checkCompletionPolicy(workItemId)` — returns satisfied or a list of missing items (no linked PR / PR not merged / tests not passing), checking for an approved `CompletionException` as an alternate satisfying condition.
+- [x] 6.2 Add `approveCompletionException(ctx, workItemId, reason)` to `src/domain/evidence/commands.ts` — WRITE_ROLES-gated, required `reason`, `recordAuditEvent`'d.
+- [x] 6.3 Wire `checkCompletionPolicy` into `updateWorkItemStatus` (`src/domain/work-item/commands.ts`): before the transaction, when `from === "APPROVED" && to === "COMPLETED"`, call it and throw `ValidationError` naming what's missing if unsatisfied.
+- [x] 6.4 Unit tests: completing with qualifying evidence succeeds; completing without evidence and without an exception is rejected with a descriptive error; completing without evidence but with an approved exception succeeds. One pre-existing `commands.test.ts` test ("rejects COMPLETED as a source") needed a one-line update (approve an exception before completing) since it wasn't testing the evidence policy itself, only terminal-state rejection; every other existing transition test passed unmodified. Full suite: 253/253 passing.
 
 ## 7. API routes
 
