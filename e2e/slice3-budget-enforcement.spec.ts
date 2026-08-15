@@ -1,9 +1,7 @@
-import { test, expect, type Locator, type Page } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 
 const ADMIN_EMAIL = "admin@example.com";
 const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "change-me-now";
-const READER_EMAIL = "viewer@example.com";
-const READER_PASSWORD = "change-me-now";
 
 /**
  * Slice 3 budget enforcement end-to-end (Task Group 8.1): set a low budget on a test project,
@@ -13,7 +11,7 @@ const READER_PASSWORD = "change-me-now";
  * as a read-only role (sees summary only, no raw error), verify the project's cost rollup reflects
  * every run. No console errors.
  */
-test("budget enforcement: set budget → exceed → refuse → override → retry → consume → verify cost rollup", async ({ page, context }) => {
+test("budget enforcement: set budget → exceed → refuse → override → retry → consume → verify cost rollup", async ({ page }) => {
   test.setTimeout(180_000);
 
   const consoleErrors: string[] = [];
@@ -176,13 +174,3 @@ test("budget enforcement: set budget → exceed → refuse → override → retr
   // --- Verify no console errors ---
   expect(consoleErrors).toHaveLength(0);
 });
-
-/**
- * Helper to extract work item ID from the 360-record page URL.
- */
-async function extractWorkItemIdFrom360(page: Page): Promise<string> {
-  const url = page.url();
-  const match = url.match(/\/work-items\/([^/?]+)/);
-  if (!match) throw new Error(`Could not extract work item ID from URL: ${url}`);
-  return match[1];
-}
