@@ -4,6 +4,8 @@ import { listClients } from "@/domain/client/queries";
 import { listRecentAuditEvents } from "@/domain/audit/queries";
 import { getItemsNeedingAttention } from "@/domain/attention/queries";
 import { getClientAiCost } from "@/domain/agent/queries";
+import { getEffectiveBudget, listConfigHistory } from "@/domain/config/queries";
+import { listOrganizations } from "@/domain/organization/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { AddProjectForm } from "@/components/AddProjectForm";
 import { AddWorkItemForm } from "@/components/AddWorkItemForm";
@@ -11,7 +13,8 @@ import { SyncButton } from "@/components/SyncButton";
 import { StageBadge } from "@/components/StageBadge";
 import { QuickViewLink } from "@/components/QuickViewLink";
 import { StartPipelineButton } from "@/components/StartPipelineButton";
-import { BudgetForm } from "@/components/BudgetForm";
+import { ConfigBudgetPanel } from "@/components/ConfigBudgetPanel";
+import { ConfigHistoryList } from "@/components/ConfigHistoryList";
 import { WRITE_ROLES } from "@/domain/shared/authz";
 
 export const dynamic = "force-dynamic";
@@ -31,11 +34,12 @@ function relativeTime(date: Date, now: number) {
 
 export default async function HomePage() {
   const ctx = await requireAuthContext();
-  const [projects, clients, attention, recentEvents] = await Promise.all([
+  const [projects, clients, attention, recentEvents, organizations] = await Promise.all([
     listProjectsForHome(ctx),
     listClients(ctx),
     getItemsNeedingAttention(ctx),
     listRecentAuditEvents(ctx, 10),
+    ctx.isOrgAdmin ? listOrganizations() : Promise.resolve([]),
   ]);
 
   const projectsByClient = new Map<string, typeof projects>();
@@ -49,6 +53,31 @@ export default async function HomePage() {
   // time-bucketed AgentRun query yet, and inventing month-bucketing here isn't what was asked for.
   const clientAiCosts = new Map(
     await Promise.all(clients.map(async (client) => [client.id, await getClientAiCost(client.id)] as const))
+  );
+
+  // Slice 6 — effective AI budget + change history per client, for the Configuration Center panel.
+  const clientBudgetConfig = new Map(
+    await Promise.all(
+      clients.map(async (client) => {
+        const [effective, history] = await Promise.all([
+          getEffectiveBudget("CLIENT", client.id),
+          listConfigHistory("CLIENT", client.id),
+        ]);
+        return [
+          client.id,
+          {
+            effective,
+            history: history.map((h) => ({
+              id: h.id,
+              oldValueUsd: h.oldValueUsd?.toString() ?? null,
+              newValueUsd: h.newValueUsd?.toString() ?? null,
+              changedByUser: { name: h.changedByUser.name, email: h.changedByUser.email },
+              createdAt: h.createdAt.toISOString(),
+            })),
+          },
+        ] as const;
+      })
+    )
   );
 
   const { summary } = attention;
@@ -65,7 +94,18 @@ export default async function HomePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="text-xl font-semibold">Dashboard</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-semibold">Dashboard</h1>
+        {ctx.isOrgAdmin && organizations.length > 0 && (
+          <div className="flex items-center gap-3 text-xs">
+            {organizations.map((org) => (
+              <Link key={org.id} href={`/organizations/${org.id}/config`} className="underline opacity-70 hover:opacity-100">
+                {org.name} configuration
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
 
       <section aria-labelledby="attention-summary-heading" className="flex flex-col gap-3">
         <h2 id="attention-summary-heading" className="text-sm font-semibold uppercase tracking-wide opacity-60">
@@ -159,22 +199,39 @@ export default async function HomePage() {
 
       {clients.map((client) => {
         const clientProjects = projectsByClient.get(client.id) ?? [];
+        const budgetConfig = clientBudgetConfig.get(client.id);
+        const canManageClient =
+          ctx.isOrgAdmin || (WRITE_ROLES as string[]).includes(ctx.memberships.find((m) => m.clientId === client.id)?.role ?? "");
         return (
-          <section key={client.id} className="flex flex-col gap-3">
+          <section key={client.id} id={`client-${client.id}`} className="flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold uppercase tracking-wide opacity-60">
                 {client.name}
-                <span className="ml-2 normal-case font-normal opacity-60">
-                  · AI cost: ${(clientAiCosts.get(client.id) ?? "0").toString()}
-                  {client.aiBudgetUsd ? ` / $${client.aiBudgetUsd.toString()} budget` : ""}
-                </span>
+                <span className="ml-2 normal-case font-normal opacity-60">· AI cost: ${(clientAiCosts.get(client.id) ?? "0").toString()}</span>
               </h2>
-              {(ctx.isOrgAdmin || (WRITE_ROLES as string[]).includes(
-                ctx.memberships.find((m) => m.clientId === client.id)?.role ?? ""
-              )) && (
-                <BudgetForm scope="client" id={client.id} currentBudgetUsd={client.aiBudgetUsd?.toString() ?? null} />
-              )}
             </div>
+            {budgetConfig && (
+              <div className="flex flex-col gap-1">
+                {canManageClient ? (
+                  <ConfigBudgetPanel scope="CLIENT" id={client.id} effective={budgetConfig.effective} />
+                ) : (
+                  <p className="text-xs opacity-60">
+                    Effective budget: {budgetConfig.effective.value ? `$${budgetConfig.effective.value}` : "No limit"}
+                    {budgetConfig.effective.sourceScope && !budgetConfig.effective.isOverride
+                      ? ` (inherited from ${budgetConfig.effective.sourceScope.toLowerCase()})`
+                      : ""}
+                  </p>
+                )}
+                {budgetConfig.history.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer opacity-60 hover:opacity-100">Budget history</summary>
+                    <div className="mt-2">
+                      <ConfigHistoryList history={budgetConfig.history} />
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
             {clientProjects.length === 0 && <p className="text-sm opacity-50">No projects for this client yet.</p>}
             <div className="flex flex-col gap-6">
               {clientProjects.map((project) => (

@@ -19,16 +19,16 @@
 
 ## 4. API routes
 
-- [ ] 4.1 `GET /api/config/organization/[id]` (effective value + history), `POST /api/config/organization/[id]/preview` (impact preview), `POST /api/config/organization/[id]/budget` (set/clear).
-- [ ] 4.2 `GET /api/config/clients/[id]` , `POST /api/config/clients/[id]/preview`, `POST /api/config/clients/[id]/budget`.
-- [ ] 4.3 `GET /api/config/projects/[id]` , `POST /api/config/projects/[id]/budget` (no preview route — project scope skips preview per design.md decision 4).
+- [x] 4.1 `GET /api/config/organization/[id]` (effective value + history), `POST /api/config/organization/[id]/preview` (impact preview), `POST /api/config/organization/[id]/budget` (set/clear).
+- [x] 4.2 `GET /api/config/clients/[id]` , `POST /api/config/clients/[id]/preview`, `POST /api/config/clients/[id]/budget`.
+- [x] 4.3 `GET /api/config/projects/[id]` , `POST /api/config/projects/[id]/budget` (no preview route — project scope skips preview per design.md decision 4).
 
 ## 5. UI — Configuration Center
 
-- [ ] 5.1 New `ConfigBudgetPanel.tsx` client component: shows effective value / source scope / inherited-or-override badge, an editable value field, "Reset to inherited" action, and (Organization/Client scope) the impact-preview-then-confirm flow before saving.
-- [ ] 5.2 New `ConfigHistoryList.tsx`: renders a scope's `ConfigChange` history (old → new, who, when).
-- [ ] 5.3 New Organization Configuration page (`/organizations/[id]/config` — the app's first Organization-scoped page; org-admin-gated) showing the Organization's `ConfigBudgetPanel` + history, and its clients for drill-down.
-- [ ] 5.4 Replace the inline `BudgetForm` on the Dashboard's Client cards (`src/app/page.tsx`) and the project Constitution page (`src/app/projects/[id]/constitution/page.tsx`) with a link into `ConfigBudgetPanel` for that scope (Client/Project use the direct-save path per design.md decision 4; no preview step for Project).
+- [x] 5.1 New `ConfigBudgetPanel.tsx` client component: shows effective value / source scope / inherited-or-override badge, an editable value field, "Reset to inherited" action, and (Organization/Client scope) the impact-preview-then-confirm flow before saving.
+- [x] 5.2 New `ConfigHistoryList.tsx`: renders a scope's `ConfigChange` history (old → new, who, when).
+- [x] 5.3 New Organization Configuration page (`/organizations/[id]/config` — the app's first Organization-scoped page; org-admin-gated) showing the Organization's `ConfigBudgetPanel` + history, and its clients for drill-down.
+- [x] 5.4 Replace the inline `BudgetForm` on the Dashboard's Client cards (`src/app/page.tsx`) and the project Constitution page (`src/app/projects/[id]/constitution/page.tsx`) with a link into `ConfigBudgetPanel` for that scope (Client/Project use the direct-save path per design.md decision 4; no preview step for Project).
 
 ## 6. E2E test scenario
 

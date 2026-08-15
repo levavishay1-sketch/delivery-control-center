@@ -2,13 +2,15 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getProjectConstitutionDetail } from "@/domain/constitution/queries";
 import { getProjectAiCost } from "@/domain/agent/queries";
+import { getEffectiveBudget, listConfigHistory } from "@/domain/config/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { WRITE_ROLES } from "@/domain/shared/authz";
 import { StageBadge } from "@/components/StageBadge";
 import { ConstitutionDraftButton } from "@/components/ConstitutionDraftButton";
 import { ConstitutionApprovalGate } from "@/components/ConstitutionApprovalGate";
-import { BudgetForm } from "@/components/BudgetForm";
+import { ConfigBudgetPanel } from "@/components/ConfigBudgetPanel";
+import { ConfigHistoryList } from "@/components/ConfigHistoryList";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +30,10 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
   const aiCost = await getProjectAiCost(project.id);
   const userRole = ctx.memberships.find((m) => m.clientId === project.clientId)?.role;
   const canManage = ctx.isOrgAdmin || (!!userRole && (WRITE_ROLES as string[]).includes(userRole));
+  const [effectiveBudget, budgetHistory] = await Promise.all([
+    getEffectiveBudget("PROJECT", project.id),
+    listConfigHistory("PROJECT", project.id),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -36,15 +42,33 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
         <h1 className="text-xl font-semibold">
           {project.name} <span className="opacity-50">({project.key})</span>
         </h1>
-        <p className="mt-1 text-xs opacity-60">
-          Total AI drafting cost: ${aiCost.toString()}
-          {project.aiBudgetUsd ? ` / $${project.aiBudgetUsd.toString()} budget` : ""}
-        </p>
-        {canManage && (
-          <div className="mt-2">
-            <BudgetForm scope="project" id={project.id} currentBudgetUsd={project.aiBudgetUsd?.toString() ?? null} />
-          </div>
-        )}
+        <p className="mt-1 text-xs opacity-60">Total AI drafting cost: ${aiCost.toString()}</p>
+        <div className="mt-2 flex flex-col gap-1">
+          {canManage ? (
+            <ConfigBudgetPanel scope="PROJECT" id={project.id} effective={effectiveBudget} />
+          ) : (
+            <p className="text-xs opacity-60">
+              Effective budget: {effectiveBudget.value ? `$${effectiveBudget.value}` : "No limit"}
+              {effectiveBudget.sourceScope && !effectiveBudget.isOverride ? ` (inherited from ${effectiveBudget.sourceScope.toLowerCase()})` : ""}
+            </p>
+          )}
+          {budgetHistory.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer opacity-60 hover:opacity-100">Budget history</summary>
+              <div className="mt-2">
+                <ConfigHistoryList
+                  history={budgetHistory.map((h) => ({
+                    id: h.id,
+                    oldValueUsd: h.oldValueUsd?.toString() ?? null,
+                    newValueUsd: h.newValueUsd?.toString() ?? null,
+                    changedByUser: { name: h.changedByUser.name, email: h.changedByUser.email },
+                    createdAt: h.createdAt.toISOString(),
+                  }))}
+                />
+              </div>
+            </details>
+          )}
+        </div>
         <Link href="/" className="mt-1 inline-block text-xs underline opacity-70 hover:opacity-100">
           ← Back to Dashboard
         </Link>
