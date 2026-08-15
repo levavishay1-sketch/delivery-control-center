@@ -49,30 +49,30 @@ directly from this register; item numbers are referenced there.
 
 | # | Item | State |
 |---|---|---|
-| 1 | Work item type (project/task/bug/change) | MISSING |
-| 2 | risk, priority, owner, executorType, dueDate, progress | MISSING |
-| 3 | 9-state `WorkStatus` (incl. `decision_required`, `blocked`, `review`) | MISSING |
-| 4 | `parentId` — work item decomposition | MISSING |
+| 1 | Work item type (project/task/bug/change) | MISSING *(done in Slice 1)* |
+| 2 | risk, priority, owner, executorType, dueDate, progress | MISSING *(done in Slice 1)* |
+| 3 | 9-state `WorkStatus` (incl. `decision_required`, `blocked`, `review`) | MISSING *(done in Slice 1)* |
+| 4 | `parentId` — work item decomposition | MISSING *(done in Slice 1)* |
 | 5 | Organization → Client → Project hierarchy | MISSING *(done in Slice 0)* |
-| 6 | Dependencies between work items | MISSING |
-| 7 | Critical path | MISSING (depends on #6) |
-| 8 | Blocker as a first-class object | MISSING |
-| 9 | Decision object (question/reason/impact/aiRecommendation/aiConfidence/deadline) | EXTEND (`Approval` has the outcome, not the context) |
+| 6 | Dependencies between work items | MISSING *(done in Slice 1)* |
+| 7 | Critical path | MISSING (depends on #6) — **still stubbed** (`getCriticalPath()` returns `[]`); Slice 1 built the dependency graph and cycle detection #6 depends on, but explicitly deferred critical-path analysis to Slice 2 per the original scope. |
+| 8 | Blocker as a first-class object | MISSING *(done in Slice 1)* |
+| 9 | Decision object (question/reason/impact/aiRecommendation/aiConfidence/deadline) | EXTEND (`Approval` has the outcome, not the context) *(done in Slice 1 — `Decision` is now its own model with the full shape named here; `Approval` remains the separate pipeline-stage-gate outcome, deliberately not merged)* |
 
 **Attention & UX**
 
 | # | Item | State |
 |---|---|---|
-| 10 | Attention Center | MISSING |
-| 11 | Dashboard as command center | MISSING |
-| 12 | Quick View drawer | MISSING |
-| 13 | Progressive disclosure (3 levels) | MISSING |
-| 14 | 360° Delivery Record (9 tabs) | EXTEND (`/pipelines/[id]` ≈ 1 tab) |
-| 15 | Per-work-item timeline | EXTEND (data exists, only a global 200-row feed) |
-| 16 | Ctrl+K command palette / global search | MISSING |
-| 17 | UI states (loading/empty/error/partial/stale/permission-denied) | EXTEND |
-| 18 | Explainability on every status/risk/recommendation | MISSING |
-| 19 | Responsive + WCAG 2.2 AA | MISSING |
+| 10 | Attention Center | MISSING *(done in Slice 1)* |
+| 11 | Dashboard as command center | MISSING *(done in Slice 1)* |
+| 12 | Quick View drawer | MISSING *(done in Slice 1)* |
+| 13 | Progressive disclosure (3 levels) | MISSING *(done in Slice 1 — Attention/Dashboard → Quick View → 360° Record)* |
+| 14 | 360° Delivery Record (9 tabs) | EXTEND (`/pipelines/[id]` ≈ 1 tab) *(partially done in Slice 1 — Overview/Dependencies/Timeline built for real; Code/Tests/Evidence/Configuration are honest "Coming soon" stubs, not the remaining ~5 tabs; those need Slice 5's evidence entities to be real)* |
+| 15 | Per-work-item timeline | EXTEND (data exists, only a global 200-row feed) *(done in Slice 1 — `AuditEvent.workItemId` + the 360° Record's Timeline tab + the audit trail's own filters/pagination; the 200-row cap is gone)* |
+| 16 | Ctrl+K command palette / global search | MISSING — still not built. |
+| 17 | UI states (loading/empty/error/partial/stale/permission-denied) | EXTEND *(partially done in Slice 1 — loading/empty states exist on every new page; no dedicated "stale" or "partial" state, no global error boundary beyond inline error text)* |
+| 18 | Explainability on every status/risk/recommendation | MISSING *(done in Slice 1 — every Attention Center row, and the 360° Record's Overview tab, states a reason/explanation next to every status, risk, and recommendation; enforced as a design constraint in the delivery-model spec)* |
+| 19 | Responsive + WCAG 2.2 AA | MISSING *(partially done in Slice 1 — every new page uses semantic sections, `aria-label`/`role` on interactive elements (tabs, dialogs), and responsive grid breakpoints; not independently audited against the full WCAG 2.2 AA checklist, so "partially done" rather than "done")* |
 
 **SDD engine**
 
@@ -187,7 +187,7 @@ re-litigate:
 | # | Name | Status | Source | Detail |
 |---|---|---|---|---|
 | 0 | Tenancy, identity, and the cheap fixes | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 0" (retroactively corroborated — built from a session-local plan before this source was persisted; scope matches) | `openspec/changes/archive/2026-08-14-slice-0-tenancy-and-identity/` |
-| 1 | The delivery model and the Attention Center | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 1" | — |
+| 1 | The delivery model and the Attention Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 1" | `openspec/changes/archive/2026-08-14-slice-1-delivery-model/` |
 | 2 | SDD as a subsystem | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 2" | — |
 | 3 | Agents as real execution resources | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 3" | — |
 | 4 | Connector framework | **Scoped — not started** | `2026-08-14-gap-analysis-full.md` §5 "Slice 4" | — |
