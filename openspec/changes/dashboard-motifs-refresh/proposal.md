@@ -1,7 +1,7 @@
 ## Roadmap Source
 
 Implements `docs/ROADMAP.md` Slice 9 — "Dashboard motifs refresh (budget
-donut, real global search, nav polish)". Scope is sourced from
+usage meter, real global search, nav polish)". Scope is sourced from
 `docs/roadmap-sources/2026-08-15-dashboard-motifs-direction.md`'s
 "Final synthesis" section (the last of three rounds of user direction on
 this file — the two "superseding instruction" sections above it record
@@ -54,7 +54,14 @@ was already a known, named gap.
   the small `SummaryChip` pills currently used for attention-summary
   counts on the Dashboard and Attention Center.
 - New `AvatarStack` component: overlapping member avatars with an
-  overflow count, for "who's involved" on project cards / Attention rows.
+  overflow count, for "who's involved" — rendered per Dashboard client
+  section (that client's team, via the existing `listClientMembers`
+  query), not per project card or Attention Center row as first sketched.
+  Corrected after implementation: `WorkItem` has only a single optional
+  `ownerId`, not a members list, and `ClientMembership` is the only real
+  multi-person "who's involved" data this app has — a project card or
+  attention row would have nothing genuine to show a multi-avatar stack
+  of.
 - New `CommandPalette` component + a read-only search query: a real
   global search opened via Ctrl+K, closing the roadmap gap register's
   item #16 ("Ctrl+K command palette / global search — still not built").
@@ -65,7 +72,7 @@ was already a known, named gap.
   for fast visual scanning on the Dashboard's project quick-access cards.
 - Work-item-type color coding using the existing 4-value `type` enum
   (`project`/`task`/`bug`/`change`).
-- An AI-budget-usage donut chart on the Dashboard's per-client section,
+- An AI-budget-usage meter on the Dashboard's per-client section,
   built entirely on existing `AI Cost`/`aiBudgetUsd` data (Slices 3, 6) —
   no new metric, no schema change.
 - A subtle gradient-mesh background wash behind the Dashboard and
@@ -96,7 +103,7 @@ was already a known, named gap.
   rail's active-state treatment.
 - `dashboard`: attention-summary counts render as `StatTile`s instead of
   `SummaryChip` pills; project quick-access cards gain a per-project
-  identity color and an AI-budget-usage donut per client; a persistent
+  identity color and an AI-budget-usage meter per client; a persistent
   header-level primary CTA is added.
 - `attention-center`: attention-summary counts render as `StatTile`s
   instead of `SummaryChip` pills, reusing the same component and
@@ -117,7 +124,7 @@ was already a known, named gap.
   tenancy/authz scoping patterns — no new Prisma model, no write path)
   and `src/app/api/search/route.ts`.
 - `src/app/page.tsx` (Dashboard): stat tiles, project identity color,
-  budget donut, header CTA.
+  budget usage meter, header CTA.
 - `src/app/attention/page.tsx`: stat tiles.
 - `src/components/NavRail.tsx`: active-pill treatment.
 - `src/app/layout.tsx`: mounts `CommandPalette`, wires the Ctrl+K
@@ -128,8 +135,8 @@ was already a known, named gap.
   logical CSS properties and are verified under `dir="rtl"`, per Slice
   8's established mechanism.
 - No Prisma schema change, no new domain write command. The Configuration
-  Center's own page is explicitly out of scope for the donut — it
-  already renders per-client budget elsewhere; duplicating the donut
+  Center's own page is explicitly out of scope for the meter — it
+  already renders per-client budget elsewhere; duplicating the meter
   there is deferred, not silently dropped.
 - Quick View drawer and the 360° Record are not directly modified by this
   change beyond inheriting the base token revision (radius, spacing,

@@ -10,7 +10,8 @@ import type { ComponentType } from "react";
 
 export type StatusTone = "healthy" | "active" | "ai" | "warning" | "critical" | "inactive";
 
-const TONE_STYLES: Record<StatusTone, { text: string; bg: string; icon: ComponentType<{ className?: string }> }> = {
+/** Exported so other components (e.g. `IconBadge`) reuse this exact tone→color mapping instead of duplicating it. */
+export const TONE_STYLES: Record<StatusTone, { text: string; bg: string; icon: ComponentType<{ className?: string }> }> = {
   healthy: { text: "text-status-healthy", bg: "bg-status-healthy-bg", icon: CheckCircle2 },
   active: { text: "text-status-active", bg: "bg-status-active-bg", icon: CircleDot },
   ai: { text: "text-status-ai", bg: "bg-status-ai-bg", icon: Sparkles },

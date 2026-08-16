@@ -7,6 +7,7 @@ import { ResolveBlockerButton } from "@/components/ResolveBlockerButton";
 import { QuickViewLink } from "@/components/QuickViewLink";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { RowList } from "@/components/ui/Row";
+import { StatTile } from "@/components/ui/StatTile";
 import { CheckCircle2 } from "lucide-react";
 import { getServerLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
@@ -49,19 +50,21 @@ export default async function AttentionCenterPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-xl font-semibold">{t.attentionCenter.heading}</h1>
-        <p className="text-sm text-neutral-500 dark:text-neutral-400">{t.attentionCenter.subtitle}</p>
-      </div>
+      <div className="hero-mesh flex flex-col gap-4 rounded-card p-4 -m-4">
+        <div>
+          <h1 className="text-xl font-semibold">{t.attentionCenter.heading}</h1>
+          <p className="text-sm text-neutral-500 dark:text-neutral-400">{t.attentionCenter.subtitle}</p>
+        </div>
 
-      <div className="flex flex-wrap gap-2">
-        <SummaryChip label={t.common.decisions} count={summary.decisions} href="#decisions" />
-        <SummaryChip label={t.common.blockers} count={summary.blockers} href="#blockers" />
-        <SummaryChip label={t.common.risks} count={summary.risks} href="#risks" />
-        <SummaryChip label={t.common.deadlines} count={summary.deadlines} href="#deadlines" />
-        <SummaryChip label={t.attentionCenter.approvalGates} count={summary.approvalGates} href="#approval-gates" />
-        <SummaryChip label={t.attentionCenter.clarifications} count={summary.pausedClarifications} href="#clarifications" />
-        <SummaryChip label={t.attentionCenter.syncConflicts} count={summary.syncConflicts} href="#sync-conflicts" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          <StatTile tone="warning" count={summary.decisions} label={t.common.decisions} href="#decisions" delayMs={0} />
+          <StatTile tone="critical" count={summary.blockers} label={t.common.blockers} href="#blockers" delayMs={40} />
+          <StatTile tone="critical" count={summary.risks} label={t.common.risks} href="#risks" delayMs={80} />
+          <StatTile tone="warning" count={summary.deadlines} label={t.common.deadlines} href="#deadlines" delayMs={120} />
+          <StatTile tone="active" count={summary.approvalGates} label={t.attentionCenter.approvalGates} href="#approval-gates" delayMs={160} />
+          <StatTile tone="warning" count={summary.pausedClarifications} label={t.attentionCenter.clarifications} href="#clarifications" delayMs={200} />
+          <StatTile tone="warning" count={summary.syncConflicts} label={t.attentionCenter.syncConflicts} href="#sync-conflicts" delayMs={240} />
+        </div>
       </div>
 
       {allClear && (
@@ -220,18 +223,6 @@ export default async function AttentionCenterPage() {
         </Section>
       )}
     </div>
-  );
-}
-
-function SummaryChip({ label, count, href }: { label: string; count: number; href: string }) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-1.5 rounded-full border border-border-hairline bg-surface px-3 py-1.5 text-sm hover:border-neutral-400 dark:hover:border-neutral-500"
-    >
-      <span className="font-semibold">{count}</span>
-      <span className="text-neutral-500 dark:text-neutral-400">{label}</span>
-    </Link>
   );
 }
 

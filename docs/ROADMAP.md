@@ -204,7 +204,7 @@ re-litigate:
 | 6 | Configuration Center | **Done** | `2026-08-14-gap-analysis-full.md` §5 "Slice 6" | `openspec/changes/archive/2026-08-15-slice-6-configuration-center/` |
 | 7 | Design system foundation & premium UI refresh | **Done** | `2026-08-15-design-system-direction.md` | `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/` |
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
-| 9 | Dashboard motifs refresh (budget donut, real global search, nav polish) | **Scoped — not started** | `2026-08-15-dashboard-motifs-direction.md` | — |
+| 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a

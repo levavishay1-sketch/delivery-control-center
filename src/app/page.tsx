@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listProjectsForHome } from "@/domain/project/queries";
-import { listClients } from "@/domain/client/queries";
+import { listClients, listClientMembers } from "@/domain/client/queries";
 import { listRecentAuditEvents } from "@/domain/audit/queries";
 import { getItemsNeedingAttention } from "@/domain/attention/queries";
 import { getClientAiCost } from "@/domain/agent/queries";
@@ -18,11 +18,16 @@ import { ConfigHistoryList } from "@/components/ConfigHistoryList";
 import { WRITE_ROLES } from "@/domain/shared/authz";
 import { Panel } from "@/components/ui/Panel";
 import { Row, RowList, RowEmpty } from "@/components/ui/Row";
+import { StatTile } from "@/components/ui/StatTile";
 import { CheckCircle2 } from "lucide-react";
 import { getServerLocale } from "@/lib/i18n/server";
 import { getDictionary } from "@/lib/i18n/dictionaries";
 import { formatMessage, pluralize } from "@/lib/i18n/format";
 import type { Translations } from "@/lib/i18n/en";
+import { projectIdentityColor } from "@/lib/colors/projectIdentity";
+import { HeaderCreateWorkItem } from "@/components/HeaderCreateWorkItem";
+import { BudgetUsageMeter } from "@/components/BudgetUsageMeter";
+import { AvatarStack } from "@/components/ui/AvatarStack";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +94,14 @@ export default async function HomePage() {
     )
   );
 
+  // Slice 9 — "who's involved" per client, for the AvatarStack next to each client heading.
+  // Scoped to client team membership (real multi-person data via `ClientMembership`), not a
+  // per-project or per-work-item field — this app tracks a single optional `WorkItem.ownerId`,
+  // not a members list, so a project-card-level stack would have nothing real to show.
+  const clientMembers = new Map(
+    await Promise.all(clients.map(async (client) => [client.id, await listClientMembers(ctx, client.id)] as const))
+  );
+
   const { summary } = attention;
   const allClear = summary.decisions === 0 && summary.blockers === 0 && summary.risks === 0 && summary.deadlines === 0;
   const now = attention.now;
@@ -103,41 +116,46 @@ export default async function HomePage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-xl font-semibold">{t.dashboard.heading}</h1>
-        {ctx.isOrgAdmin && organizations.length > 0 && (
-          <div className="flex items-center gap-3 text-xs">
-            {organizations.map((org) => (
-              <Link
-                key={org.id}
-                href={`/organizations/${org.id}/config`}
-                className="text-accent hover:underline"
-              >
-                {org.name} configuration
-              </Link>
-            ))}
+      <div className="hero-mesh flex flex-col gap-6 rounded-card p-4 -m-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-xl font-semibold">{t.dashboard.heading}</h1>
+          <div className="flex items-center gap-3">
+            {ctx.isOrgAdmin && organizations.length > 0 && (
+              <div className="flex items-center gap-3 text-xs">
+                {organizations.map((org) => (
+                  <Link
+                    key={org.id}
+                    href={`/organizations/${org.id}/config`}
+                    className="text-accent hover:underline"
+                  >
+                    {org.name} configuration
+                  </Link>
+                ))}
+              </div>
+            )}
+            <HeaderCreateWorkItem projects={projects.map((p) => ({ id: p.id, name: p.name, key: p.key }))} />
           </div>
-        )}
-      </div>
+        </div>
 
-      <section aria-labelledby="attention-summary-heading" className="flex flex-col gap-3">
-        <h2 id="attention-summary-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-          {t.dashboard.attentionSummaryHeading}
-        </h2>
-        {allClear ? (
-          <div className="flex items-center gap-2 rounded-full bg-status-healthy-bg px-3 py-1.5 text-status-healthy w-fit">
-            <CheckCircle2 className="h-4 w-4" />
-            <span className="text-sm font-medium">{t.dashboard.allClear}</span>
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <SummaryChip label={t.common.decisions} count={summary.decisions} href="/attention#decisions" />
-            <SummaryChip label={t.common.blockers} count={summary.blockers} href="/attention#blockers" />
-            <SummaryChip label={t.common.risks} count={summary.risks} href="/attention#risks" />
-            <SummaryChip label={t.common.deadlines} count={summary.deadlines} href="/attention#deadlines" />
-          </div>
-        )}
-      </section>
+        <section aria-labelledby="attention-summary-heading" className="flex flex-col gap-3">
+          <h2 id="attention-summary-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+            {t.dashboard.attentionSummaryHeading}
+          </h2>
+          {allClear ? (
+            <div className="flex items-center gap-2 rounded-full bg-status-healthy-bg px-3 py-1.5 text-status-healthy w-fit">
+              <CheckCircle2 className="h-4 w-4" />
+              <span className="text-sm font-medium">{t.dashboard.allClear}</span>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatTile tone="warning" count={summary.decisions} label={t.common.decisions} href="/attention#decisions" delayMs={0} />
+              <StatTile tone="critical" count={summary.blockers} label={t.common.blockers} href="/attention#blockers" delayMs={60} />
+              <StatTile tone="critical" count={summary.risks} label={t.common.risks} href="/attention#risks" delayMs={120} />
+              <StatTile tone="warning" count={summary.deadlines} label={t.common.deadlines} href="/attention#deadlines" delayMs={180} />
+            </div>
+          )}
+        </section>
+      </div>
 
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section aria-labelledby="quick-access-heading" className="flex flex-col gap-3">
@@ -153,7 +171,8 @@ export default async function HomePage() {
                 <a
                   key={project.id}
                   href={`#project-${project.id}`}
-                  className="rounded-lg border border-border-hairline bg-surface p-3 hover:border-neutral-400 dark:hover:border-neutral-500"
+                  className="hover-lift rounded-card border border-border-hairline bg-surface p-3 hover:border-neutral-400 dark:hover:border-neutral-500"
+                  style={{ borderInlineStartWidth: "3px", borderInlineStartColor: projectIdentityColor(project.id) }}
                 >
                   <p className="text-sm font-medium">
                     {project.name} <span className="text-neutral-500">({project.key})</span>
@@ -230,9 +249,12 @@ export default async function HomePage() {
                   · AI cost: ${(clientAiCosts.get(client.id) ?? "0").toString()}
                 </span>
               </h2>
+              {(clientMembers.get(client.id)?.length ?? 0) > 0 && (
+                <AvatarStack members={clientMembers.get(client.id) ?? []} />
+              )}
             </div>
             {budgetConfig && (
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-2">
                 {canManageClient ? (
                   <ConfigBudgetPanel scope="CLIENT" id={client.id} effective={budgetConfig.effective} />
                 ) : (
@@ -243,6 +265,10 @@ export default async function HomePage() {
                       : ""}
                   </p>
                 )}
+                <BudgetUsageMeter
+                  effectiveBudgetUsd={budgetConfig.effective.value ? Number(budgetConfig.effective.value) : null}
+                  aiCostUsd={Number(clientAiCosts.get(client.id) ?? 0)}
+                />
                 {budgetConfig.history.length > 0 && (
                   <details className="text-xs">
                     <summary className="cursor-pointer text-neutral-500 hover:text-foreground">Budget history</summary>
@@ -256,7 +282,12 @@ export default async function HomePage() {
             {clientProjects.length === 0 && <p className="text-sm text-neutral-500">No projects for this client yet.</p>}
             <div className="flex flex-col gap-6">
               {clientProjects.map((project) => (
-                <Panel key={project.id} id={`project-${project.id}`} className="scroll-mt-8">
+                <Panel
+                  key={project.id}
+                  id={`project-${project.id}`}
+                  className="scroll-mt-8 rounded-card"
+                  style={{ borderInlineStartWidth: "3px", borderInlineStartColor: projectIdentityColor(project.id) }}
+                >
                   <div>
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
@@ -318,17 +349,5 @@ export default async function HomePage() {
         );
       })}
     </div>
-  );
-}
-
-function SummaryChip({ label, count, href }: { label: string; count: number; href: string }) {
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-1.5 rounded-full border border-border-hairline bg-surface px-3 py-1.5 text-sm hover:border-neutral-400 dark:hover:border-neutral-500"
-    >
-      <span className="font-semibold">{count}</span>
-      <span className="text-neutral-500 dark:text-neutral-400">{label}</span>
-    </Link>
   );
 }

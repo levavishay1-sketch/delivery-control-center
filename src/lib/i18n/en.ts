@@ -33,6 +33,12 @@ export const en = {
     updatedRelative: "updated {time}",
     recentActivityHeading: "Recent Activity",
     noActivity: "No activity yet.",
+    newWorkItem: "+ New Work Item",
+    newWorkItemProjectLabel: "Project",
+    newWorkItemTitlePlaceholder: "Work item title",
+    newWorkItemSubmit: "Create",
+    newWorkItemCancel: "Cancel",
+    budgetUsed: "{percent}% of budget used",
   },
   attentionCenter: {
     heading: "Attention Center",
@@ -149,6 +155,13 @@ export const en = {
       timeline: "Timeline",
       configuration: "Configuration",
     },
+  },
+  commandPalette: {
+    placeholder: "Search work items and projects…",
+    noResults: "No results",
+    workItemsGroup: "Work Items",
+    projectsGroup: "Projects",
+    hint: "Press Ctrl+K to search",
   },
 };
 

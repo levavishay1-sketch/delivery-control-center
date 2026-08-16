@@ -9,8 +9,9 @@ const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "change-me-now";
  * verify the Quick View drawer opens from the mirrored (left) edge -> verify
  * 360° Record tab arrow-key navigation reverses under RTL -> verify a
  * subsequent page load renders RTL from the server response itself (no
- * LTR-then-RTL flash), then switch back to English and verify layout/text
- * revert.
+ * LTR-then-RTL flash) -> (Slice 9) verify the NavRail active pill and the
+ * command palette (Ctrl+K, search, select) still work correctly under RTL,
+ * then switch back to English and verify layout/text revert.
  */
 test("i18n/RTL: switch to Hebrew, verify layout mirroring, tab-nav reversal, and no direction flash on reload", async ({ page }) => {
   const suffix = Date.now().toString(36);
@@ -92,7 +93,31 @@ test("i18n/RTL: switch to Hebrew, verify layout mirroring, tab-nav reversal, and
   expect(html).toMatch(/<html[^>]*\bdir="rtl"/);
   expect(html).toMatch(/<html[^>]*\blang="he"/);
 
-  // 9. Switch back to English and verify layout/text revert.
+  // 9. NavRail active pill still applies under RTL: the Hebrew-labeled
+  // Dashboard link carries aria-current after the locale switch (Slice 9 —
+  // it's a full-tile background fill driven by a direction-agnostic
+  // vertical gradient, not a positioned accent that needs mirroring).
+  await expect(page.getByRole("link", { name: "לוח בקרה" })).toHaveAttribute("aria-current", "page");
+
+  // 10. Command palette (Slice 9) opens under RTL with Hebrew copy, searches,
+  // and navigates to a result. Retries the shortcut: a single press can land before
+  // CommandPalette's keydown listener has attached post-hydration (a dev-server timing
+  // race, not a product bug).
+  const paletteDialog = page.getByRole("dialog", { name: "חיפוש פריטי עבודה ופרויקטים…" });
+  await expect(async () => {
+    if (await paletteDialog.isVisible()) return;
+    await page.keyboard.press("Control+k");
+    await expect(paletteDialog).toBeVisible({ timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await paletteDialog.getByPlaceholder("חיפוש פריטי עבודה ופרויקטים…").fill(workItemTitle);
+  await expect(paletteDialog.getByText(workItemTitle)).toBeVisible();
+  await paletteDialog.getByText(workItemTitle).click();
+  await page.waitForURL(/\/work-items\/.+\/360/);
+  await expect(overviewTab).toBeVisible();
+
+  // 11. Switch back to English and verify layout/text revert.
+  await page.getByRole("link", { name: "לוח בקרה" }).click();
+  await page.waitForURL("/");
   await page.getByRole("button", { name: "English" }).click();
   await expect(page.locator("html")).toHaveAttribute("dir", "ltr", { timeout: 10_000 });
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();

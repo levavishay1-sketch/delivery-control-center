@@ -41,6 +41,12 @@ export const he: Translations = {
     updatedRelative: "עודכן {time}",
     recentActivityHeading: "פעילות אחרונה",
     noActivity: "אין עדיין פעילות.",
+    newWorkItem: "+ פריט עבודה חדש",
+    newWorkItemProjectLabel: "פרויקט",
+    newWorkItemTitlePlaceholder: "כותרת פריט העבודה",
+    newWorkItemSubmit: "יצירה",
+    newWorkItemCancel: "ביטול",
+    budgetUsed: "{percent}% מהתקציב נוצל",
   },
   attentionCenter: {
     heading: "מרכז התראות",
@@ -157,5 +163,12 @@ export const he: Translations = {
       timeline: "ציר זמן",
       configuration: "הגדרות",
     },
+  },
+  commandPalette: {
+    placeholder: "חיפוש פריטי עבודה ופרויקטים…",
+    noResults: "אין תוצאות",
+    workItemsGroup: "פריטי עבודה",
+    projectsGroup: "פרויקטים",
+    hint: "לחצו Ctrl+K לחיפוש",
   },
 };

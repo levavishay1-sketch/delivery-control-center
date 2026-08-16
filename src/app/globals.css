@@ -1,19 +1,19 @@
 @import "tailwindcss";
 
 :root {
-  /* Neutral scale */
+  /* Neutral scale — cool-tinted slate (Slice 9), replacing Slice 7's pure gray for a more crafted feel */
   --color-neutral-0: #ffffff;
-  --color-neutral-50: #f8f8f8;
-  --color-neutral-100: #f0f0f1;
-  --color-neutral-200: #e2e2e4;
-  --color-neutral-300: #c9c9cd;
-  --color-neutral-400: #9a9aa1;
-  --color-neutral-500: #71717a;
-  --color-neutral-600: #52525b;
-  --color-neutral-700: #3a3a41;
-  --color-neutral-800: #232327;
-  --color-neutral-900: #17171a;
-  --color-neutral-950: #0d0d0f;
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+  --color-neutral-950: #020617;
 
   /* Base surfaces */
   --background: var(--color-neutral-0);
@@ -41,9 +41,52 @@
   --color-status-inactive: var(--color-neutral-500);
   --color-status-inactive-bg: var(--color-neutral-100);
 
+  /* Work-item-type categorical colors (Slice 9) — distinct from the five status hues above
+     (validated with the dataviz skill's palette checker: lightness band, chroma floor, CVD
+     separation, and normal-vision floor all pass in both light and dark). Identity, not
+     status — never implies health/risk. */
+  --color-type-project: #4d7c0f;
+  --color-type-task: #0284c7;
+  --color-type-bug: #e11d48;
+  --color-type-change: #c026d3;
+
   /* Elevation */
   --shadow-floating: 0 8px 24px -4px rgb(0 0 0 / 0.15), 0 2px 8px -2px rgb(0 0 0 / 0.08);
   --backdrop-floating: rgb(15 15 17 / 0.35);
+
+  /* Depth accents (Slice 9) — soft, tone-tinted glow for a flat-elevation surface's icon
+     badge; NOT a floating-elevation shadow (no backdrop dimming, doesn't ring the surface's
+     own edges). Derived from the tone's own color via color-mix, so dark mode's redefined
+     status and accent colors below are picked up automatically — no separate dark
+     declarations needed. */
+  --shadow-glow-accent: 0 0 20px -6px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  --shadow-glow-healthy: 0 0 20px -6px color-mix(in srgb, var(--color-status-healthy) 45%, transparent);
+  --shadow-glow-active: 0 0 20px -6px color-mix(in srgb, var(--color-status-active) 45%, transparent);
+  --shadow-glow-ai: 0 0 20px -6px color-mix(in srgb, var(--color-status-ai) 45%, transparent);
+  --shadow-glow-warning: 0 0 20px -6px color-mix(in srgb, var(--color-status-warning) 45%, transparent);
+  --shadow-glow-critical: 0 0 20px -6px color-mix(in srgb, var(--color-status-critical) 45%, transparent);
+  --shadow-glow-inactive: 0 0 20px -6px color-mix(in srgb, var(--color-status-inactive) 45%, transparent);
+  --shadow-glow-type-project: 0 0 20px -6px color-mix(in srgb, var(--color-type-project) 45%, transparent);
+  --shadow-glow-type-task: 0 0 20px -6px color-mix(in srgb, var(--color-type-task) 45%, transparent);
+  --shadow-glow-type-bug: 0 0 20px -6px color-mix(in srgb, var(--color-type-bug) 45%, transparent);
+  --shadow-glow-type-change: 0 0 20px -6px color-mix(in srgb, var(--color-type-change) 45%, transparent);
+
+  /* Tonal gradients (Slice 9) — every stop is a shade of the SAME hue (design-system spec's
+     "one accent color... MAY be rendered as a tonal gradient" requirement), vertical only so
+     they never imply a reading direction and need no RTL-mirrored variant. */
+  --gradient-accent: linear-gradient(180deg, var(--color-accent), color-mix(in srgb, var(--color-accent), black 18%));
+  --gradient-healthy: linear-gradient(180deg, var(--color-status-healthy), color-mix(in srgb, var(--color-status-healthy), black 18%));
+  --gradient-active: linear-gradient(180deg, var(--color-status-active), color-mix(in srgb, var(--color-status-active), black 18%));
+  --gradient-ai: linear-gradient(180deg, var(--color-status-ai), color-mix(in srgb, var(--color-status-ai), black 18%));
+  --gradient-warning: linear-gradient(180deg, var(--color-status-warning), color-mix(in srgb, var(--color-status-warning), black 18%));
+  --gradient-critical: linear-gradient(180deg, var(--color-status-critical), color-mix(in srgb, var(--color-status-critical), black 18%));
+  --gradient-inactive: linear-gradient(180deg, var(--color-status-inactive), color-mix(in srgb, var(--color-status-inactive), black 18%));
+  --gradient-type-project: linear-gradient(180deg, var(--color-type-project), color-mix(in srgb, var(--color-type-project), black 18%));
+  --gradient-type-task: linear-gradient(180deg, var(--color-type-task), color-mix(in srgb, var(--color-type-task), black 18%));
+  --gradient-type-bug: linear-gradient(180deg, var(--color-type-bug), color-mix(in srgb, var(--color-type-bug), black 18%));
+  --gradient-type-change: linear-gradient(180deg, var(--color-type-change), color-mix(in srgb, var(--color-type-change), black 18%));
+
+  --radius-card: 0.875rem;
 }
 
 @theme inline {
@@ -83,9 +126,29 @@
   --color-status-inactive: var(--color-status-inactive);
   --color-status-inactive-bg: var(--color-status-inactive-bg);
 
-  --shadow-floating: var(--shadow-floating);
+  --color-type-project: var(--color-type-project);
+  --color-type-task: var(--color-type-task);
+  --color-type-bug: var(--color-type-bug);
+  --color-type-change: var(--color-type-change);
 
-  /* Type scale — 5 steps */
+  --shadow-floating: var(--shadow-floating);
+  --shadow-glow-accent: var(--shadow-glow-accent);
+  --shadow-glow-healthy: var(--shadow-glow-healthy);
+  --shadow-glow-active: var(--shadow-glow-active);
+  --shadow-glow-ai: var(--shadow-glow-ai);
+  --shadow-glow-warning: var(--shadow-glow-warning);
+  --shadow-glow-critical: var(--shadow-glow-critical);
+  --shadow-glow-inactive: var(--shadow-glow-inactive);
+  --shadow-glow-type-project: var(--shadow-glow-type-project);
+  --shadow-glow-type-task: var(--shadow-glow-type-task);
+  --shadow-glow-type-bug: var(--shadow-glow-type-bug);
+  --shadow-glow-type-change: var(--shadow-glow-type-change);
+
+  --radius-card: var(--radius-card);
+
+  /* Type scale — 7 steps. Slice 9 widens the top end (lg/xl) for stronger heading
+     presence and adds 2xl for hero numbers (StatTile); the bottom end (2xs/xs) stays
+     tight, since metadata density is functional, not stinginess. */
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
   --text-xs: 0.75rem;
@@ -94,10 +157,12 @@
   --text-sm--line-height: 1.3rem;
   --text-base: 0.9375rem;
   --text-base--line-height: 1.5rem;
-  --text-lg: 1.125rem;
-  --text-lg--line-height: 1.6rem;
-  --text-xl: 1.375rem;
-  --text-xl--line-height: 1.7rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.625rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 2.25rem;
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -128,6 +193,13 @@
     --color-status-inactive: var(--color-neutral-400);
     --color-status-inactive-bg: var(--color-neutral-800);
 
+    /* Validated against the dark surface with the dataviz skill's palette checker,
+       same as the light-mode values above. */
+    --color-type-project: #65a30d;
+    --color-type-task: #0284c7;
+    --color-type-bug: #f43f5e;
+    --color-type-change: #d946ef;
+
     --shadow-floating: 0 8px 24px -4px rgb(0 0 0 / 0.5), 0 2px 8px -2px rgb(0 0 0 / 0.3);
     --backdrop-floating: rgb(0 0 0 / 0.55);
   }
@@ -137,6 +209,17 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Subtle atmosphere behind hero/header sections only (Dashboard, Attention Center) —
+   never behind dense tables/rows, where it would hurt scannability. Two soft radial
+   blobs at mirrored horizontal positions: since both read as ambient, non-directional
+   texture (not content with an implied reading order), the composition looks the same
+   mirrored under RTL with no logical-property handling needed. */
+.hero-mesh {
+  background-image:
+    radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 45%),
+    radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--color-status-ai) 10%, transparent), transparent 45%);
 }
 
 @keyframes drawer-in {
@@ -159,4 +242,47 @@ body {
    inward from that same edge, so the sign flips under RTL. */
 :dir(rtl) .animate-drawer-in {
   --drawer-slide-offset: -16px;
+}
+
+/* Motion (Slice 9): entrance + hover-lift for stat tiles and project cards.
+   Direction-agnostic (vertical translateY only) — no RTL variant needed. */
+@keyframes fade-up {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 400ms ease-out both;
+}
+
+.hover-lift {
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+/* Single centralized gate (design.md decision 8): every new animation/transition
+   from this change, plus the pre-existing drawer entrance, is disabled or
+   shortened here rather than re-checked per component. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-drawer-in,
+  .animate-fade-up {
+    animation: none;
+  }
+
+  .hover-lift {
+    transition: none;
+  }
+
+  .hover-lift:hover {
+    transform: none;
+  }
 }

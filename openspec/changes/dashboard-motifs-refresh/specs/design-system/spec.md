@@ -99,6 +99,22 @@ motion when the user's `prefers-reduced-motion` setting is set.
 - **THEN** stat tiles and project cards do not play an entrance or hover
   animation
 
+### Requirement: A subtle atmospheric wash is reserved for hero/header sections only
+The system SHALL permit a subtle gradient-mesh background wash behind a
+page's header/hero section (e.g. the Dashboard's or Attention Center's
+top summary area), and SHALL NOT apply it to dense content (tables, row
+lists, the audit trail), where it would hurt scannability.
+
+#### Scenario: The Dashboard's header carries the wash
+- **WHEN** the Dashboard renders its heading and attention-summary stat
+  tiles
+- **THEN** that header area has a subtle gradient-mesh background wash
+
+#### Scenario: Dense rows do not carry the wash
+- **WHEN** the Dashboard renders its recent-activity row list or a
+  project's work-item rows
+- **THEN** no gradient-mesh wash is applied to those rows
+
 ### Requirement: The persistent navigation rail's active item renders as a solid colored pill
 The system SHALL render the navigation rail's currently active
 destination with a solid accent-colored (or accent-gradient) pill

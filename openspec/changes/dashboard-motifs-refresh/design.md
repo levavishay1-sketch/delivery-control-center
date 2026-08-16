@@ -25,7 +25,7 @@ an established pattern in every domain query module (e.g.
   Slice 8's established mechanism — no new component ships without it.
 
 **Non-Goals:**
-- No chart library dependency — the AI-budget donut is a small hand-built
+- No chart library dependency — the AI-budget usage meter is a small hand-built
   SVG (stroke-dasharray progress ring), consistent with "avoid
   unnecessary complexity."
 - No full-text search infrastructure (no search index, no external
@@ -36,7 +36,7 @@ an established pattern in every domain query module (e.g.
   beyond the token-level ripple (radius, spacing, neutral tint) that
   reaches every surface through the shared design-system layer.
 - No new Prisma model or migration. The project identity color is a
-  pure function of the existing project ID; the AI-budget donut reads
+  pure function of the existing project ID; the AI-budget usage meter reads
   data that already exists.
 
 ## Decisions
@@ -100,15 +100,24 @@ rejected; a pure function needs no migration, no backfill, and produces
 the same stability the reference's folder colors have, since a
 project's ID never changes.
 
-### 5. AI-budget donut: hand-built SVG ring, reads existing budget data
-A `src/components/ui/DonutChart.tsx` primitive (value 0-100, color,
-optional center label) renders two concentric SVG circles (a muted
-track + a `stroke-dasharray`-based progress arc). A `src/components/
-BudgetUsageDonut.tsx` wrapper computes the percentage from the same
-`getEffectiveBudget`/AI-cost data `page.tsx` already fetches for the
-existing per-client budget text — no new query. Colors and proportions
-will be checked against the `dataviz` skill's accessibility/consistency
-guidance during implementation before finalizing the exact palette.
+### 5. AI-budget usage meter: hand-built SVG ring, reads existing budget data
+Consulted the `dataviz` skill before building this: "a single ratio
+against a limit" is its documented case for a **Meter** (a track + a
+single progress indicator, same-hue ramp), explicitly *not* "a pie of 2
+slices" (a used-wedge/remaining-wedge disc) — the anti-pattern a naive
+"budget donut" would have been. `src/components/ui/Meter.tsx` (value
+0-100, color, optional center label) renders two concentric SVG circles:
+a muted track (`--color-neutral-200`/`-700`) + a `stroke-dasharray`-based
+progress arc — never two competing fill colors. The arc's color reuses
+the existing status scale by usage severity (healthy green below 70%,
+warning amber 70-99%, critical red at/over 100%) rather than inventing a
+new color decision — budget-usage severity already *is* a health signal
+in this product's vocabulary. Per the design-system spec's "status
+always needs a stated reason" rule, the meter always renders its
+percentage as a visible center label, never color alone. A
+`src/components/BudgetUsageMeter.tsx` wrapper computes the percentage
+from the same `getEffectiveBudget`/AI-cost data `page.tsx` already
+fetches for the existing per-client budget text — no new query.
 
 ### 6. Command palette: client-side overlay, server-side scoped search
 `CommandPalette.tsx` (`"use client"`) mounts once in `RootLayout`
@@ -173,5 +182,5 @@ per gradient.
 
 No data migration. Additive UI/read-query layer only — no existing
 behavior changes for a user who never opens the command palette or
-never sees a client with a set budget (the donut simply doesn't render,
+never sees a client with a set budget (the meter simply doesn't render,
 per the modified dashboard spec's explicit empty-budget scenario).

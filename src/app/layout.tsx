@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { auth, signOut } from "@/auth";
 import { QuickViewDrawer } from "@/components/QuickViewDrawer";
+import { CommandPalette } from "@/components/CommandPalette";
 import { NavRail } from "@/components/NavRail";
 import { listOrganizations } from "@/domain/organization/queries";
 import { LOCALES } from "@/lib/i18n/locales";
@@ -74,6 +75,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
               <QuickViewDrawer />
             </Suspense>
           )}
+          {session?.user && <CommandPalette />}
         </LocaleProvider>
       </body>
     </html>

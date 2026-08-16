@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /**
  * Flat-elevation grouped-detail container for on-page sections (Overview
@@ -10,14 +10,17 @@ export function Panel({
   children,
   className = "",
   id,
+  style,
 }: {
   title?: string;
   children: ReactNode;
   className?: string;
   id?: string;
+  /** Escape hatch for a dynamic per-instance style (e.g. a project's identity-color accent border) that can't be a static Tailwind class. */
+  style?: CSSProperties;
 }) {
   return (
-    <div id={id} className={`rounded-lg border border-border-hairline bg-surface p-4 ${className}`}>
+    <div id={id} style={style} className={`rounded-lg border border-border-hairline bg-surface p-4 ${className}`}>
       {title && (
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           {title}
