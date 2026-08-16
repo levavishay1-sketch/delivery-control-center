@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/FormField";
 
 type Scope = "ORGANIZATION" | "CLIENT" | "PROJECT";
 
@@ -90,34 +92,24 @@ export function ConfigBudgetPanel({ scope, id, effective }: { scope: Scope; id: 
     const { budgetUsd, impact } = preview;
     const nothingAffected = impact.affectedClients === 0 && impact.affectedProjects === 0;
     return (
-      <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-        <p className="font-medium text-amber-600 dark:text-amber-400">
+      <div className="rounded-card border border-status-warning/30 bg-status-warning-bg p-3 text-xs">
+        <p className="font-medium text-status-warning">
           {budgetUsd === null ? `Reset the ${SCOPE_LABEL[scope]} budget to inherited` : `Set the ${SCOPE_LABEL[scope]} budget to $${budgetUsd}`}
         </p>
-        <p className="mt-1 opacity-70">
+        <p className="mt-1 text-neutral-600 dark:text-neutral-300">
           {nothingAffected
             ? "No clients or projects currently inherit this scope's value — nothing else is affected."
             : `Affects ${impact.affectedClients} client${impact.affectedClients === 1 ? "" : "s"} and ${impact.affectedProjects} project${impact.affectedProjects === 1 ? "" : "s"} with no override of their own.`}
         </p>
         <div className="mt-2 flex gap-2">
-          <button
-            type="button"
-            onClick={() => setPreview(null)}
-            disabled={pending}
-            className="rounded border border-black/15 dark:border-white/20 px-2 py-1 disabled:opacity-40"
-          >
+          <Button type="button" variant="secondary" size="sm" onClick={() => setPreview(null)} disabled={pending}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => save(budgetUsd)}
-            disabled={pending}
-            className="rounded bg-foreground px-2 py-1 text-background disabled:opacity-40"
-          >
+          </Button>
+          <Button type="button" variant="primary" size="sm" onClick={() => save(budgetUsd)} disabled={pending}>
             {pending ? "…" : "Confirm"}
-          </button>
+          </Button>
         </div>
-        {error && <p className="mt-1 text-red-500">{error}</p>}
+        {error && <p className="mt-1 text-status-critical">{error}</p>}
       </div>
     );
   }
@@ -131,15 +123,17 @@ export function ConfigBudgetPanel({ scope, id, effective }: { scope: Scope; id: 
       }}
       className="flex flex-wrap items-center gap-2 text-xs"
     >
-      <span className="opacity-60">Effective budget:</span>
+      <span className="text-neutral-500 dark:text-neutral-400">Effective budget:</span>
       <span className="font-mono">{effective.value ? `$${effective.value}` : "No limit"}</span>
       {effective.sourceScope && (
-        <span className="opacity-50">({effective.isOverride ? "own override" : `inherited from ${SCOPE_LABEL[effective.sourceScope]}`})</span>
+        <span className="text-neutral-400">
+          ({effective.isOverride ? "own override" : `inherited from ${SCOPE_LABEL[effective.sourceScope]}`})
+        </span>
       )}
-      <label className="ml-2 opacity-60" htmlFor={`config-budget-${scope}-${id}`}>
+      <label className="ms-2 text-neutral-500 dark:text-neutral-400" htmlFor={`config-budget-${scope}-${id}`}>
         AI budget ($)
       </label>
-      <input
+      <Input
         id={`config-budget-${scope}-${id}`}
         type="number"
         min="0"
@@ -147,25 +141,26 @@ export function ConfigBudgetPanel({ scope, id, effective }: { scope: Scope; id: 
         placeholder="No limit"
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        className="w-24 rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1"
+        className="w-24"
       />
-      <button type="submit" disabled={pending} className="underline opacity-70 hover:opacity-100 disabled:opacity-40">
+      <Button type="submit" variant="secondary" size="sm" disabled={pending}>
         {pending ? "…" : hasPreview ? "Preview" : "Save"}
-      </button>
+      </Button>
       {effective.isOverride && (
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           disabled={pending}
           onClick={() => {
             setValue("");
             requestChange(null);
           }}
-          className="underline opacity-50 hover:opacity-100 disabled:opacity-40"
         >
           Reset to inherited
-        </button>
+        </Button>
       )}
-      {error && <span className="text-red-500">{error}</span>}
+      {error && <span className="text-status-critical">{error}</span>}
     </form>
   );
 }

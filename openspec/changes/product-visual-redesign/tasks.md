@@ -288,11 +288,17 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 12. Configuration Center
 
-- [ ] 12.1 Migrate `src/app/organizations/[id]/config/page.tsx`'s page
+- [x] 12.1 Migrated `src/app/organizations/[id]/config/page.tsx`'s page
       chrome to `Panel`/design-system tokens.
-- [ ] 12.2 Migrate `ConfigBudgetPanel.tsx` (including its preview/
-      confirm-cascade card) and `ConfigHistoryList.tsx` to `FormField`/
-      `Button`.
+- [x] 12.2 Migrated `ConfigBudgetPanel.tsx` (including its preview/
+      confirm-cascade card) to `FormField`/`Button`. `ConfigHistoryList.tsx`
+      rebuilt on `Row`'s column-grid mode (deferred here from Task Group 2
+      since its 3 fields — value change, changed-by, when — are genuinely
+      fixed and comparable, unlike the audit feed's variable content).
+      Verified live: header row + aligned columns render as a clean,
+      readable table with zero console errors — validates both the
+      column-grid primitive itself and the Task Group 2 decision to defer
+      its real use here instead of forcing it onto the audit feed.
 
 ## 13. RTL & i18n verification
 

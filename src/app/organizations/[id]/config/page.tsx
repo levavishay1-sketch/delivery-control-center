@@ -7,6 +7,7 @@ import { requireOrgAdmin } from "@/domain/shared/authz";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { ConfigBudgetPanel } from "@/components/ConfigBudgetPanel";
 import { ConfigHistoryList } from "@/components/ConfigHistoryList";
+import { Panel } from "@/components/ui/Panel";
 
 export const dynamic = "force-dynamic";
 
@@ -40,27 +41,24 @@ export default async function OrganizationConfigPage({ params }: PageProps<"/org
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <p className="text-xs opacity-60">Organization</p>
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">Organization</p>
         <h1 className="text-xl font-semibold">{organization.name}</h1>
-        <Link href="/" className="mt-1 inline-block text-xs underline opacity-70 hover:opacity-100">
+        <Link href="/" className="mt-1 inline-block text-xs text-accent hover:underline">
           ← Back to Dashboard
         </Link>
       </div>
 
-      <section aria-labelledby="org-budget-heading" className="rounded-lg border border-black/10 dark:border-white/15 p-4">
-        <h2 id="org-budget-heading" className="font-medium">
-          AI Budget
-        </h2>
-        <p className="mt-1 text-xs opacity-60">
+      <Panel title="AI Budget">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
           The organization-wide AI spending limit. Clients and projects with no override of their own inherit this value.
         </p>
         <div className="mt-3">
           <ConfigBudgetPanel scope="ORGANIZATION" id={organization.id} effective={effectiveBudget} />
         </div>
-      </section>
+      </Panel>
 
-      <section aria-labelledby="org-history-heading" className="flex flex-col gap-2">
-        <h2 id="org-history-heading" className="text-sm font-semibold uppercase tracking-wide opacity-60">
+      <section aria-labelledby="org-history-heading" className="flex flex-col gap-3">
+        <h2 id="org-history-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Budget History
         </h2>
         <ConfigHistoryList
@@ -74,20 +72,20 @@ export default async function OrganizationConfigPage({ params }: PageProps<"/org
         />
       </section>
 
-      <section aria-labelledby="org-clients-heading" className="flex flex-col gap-2">
-        <h2 id="org-clients-heading" className="text-sm font-semibold uppercase tracking-wide opacity-60">
+      <section aria-labelledby="org-clients-heading" className="flex flex-col gap-3">
+        <h2 id="org-clients-heading" className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           Clients
         </h2>
-        {clientsWithBudget.length === 0 && <p className="text-sm opacity-50">No clients yet.</p>}
-        <div className="flex flex-col gap-1">
-          {clientsWithBudget.map((client) => (
+        {clientsWithBudget.length === 0 && <p className="text-sm text-neutral-500 dark:text-neutral-400">No clients yet.</p>}
+        <div className="rounded-md border border-border-hairline">
+          {clientsWithBudget.map((client, i) => (
             <Link
               key={client.id}
               href={`/#client-${client.id}`}
-              className="flex flex-wrap items-center justify-between gap-2 rounded border border-black/10 dark:border-white/10 px-3 py-2 text-xs hover:bg-black/[.03] dark:hover:bg-white/[.04]"
+              className={`flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-xs hover:bg-surface-muted ${i > 0 ? "border-t border-border-hairline" : ""}`}
             >
               <span className="font-medium">{client.name}</span>
-              <span className="opacity-60">
+              <span className="text-neutral-500 dark:text-neutral-400">
                 Effective budget: {client.effective.value ? `$${client.effective.value}` : "No limit"}
                 {client.effective.sourceScope && !client.effective.isOverride ? ` (inherited from ${client.effective.sourceScope.toLowerCase()})` : ""}
                 {client.effective.isOverride ? " (own override)" : ""}
