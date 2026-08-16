@@ -22,10 +22,25 @@
   --surface-muted: var(--color-neutral-50);
   --border-hairline: var(--color-neutral-200);
 
-  /* Accent — reserved for primary actions and active nav/tab state only */
+  /* Accent — reserved for primary actions, active nav/tab state, and the
+     application shell's sidebar surface (design-system spec, amended Slice 10) */
   --color-accent: #4f46e5;
   --color-accent-foreground: #ffffff;
   --color-accent-muted: #eef0fd;
+
+  /* Application shell (Slice 10) — the sidebar surface is a shade of the SAME
+     accent hue via color-mix(), not a new unrelated brand color (design.md
+     decision 1). --surface-page is the light neutral canvas behind the white
+     workspace container; distinct from --surface/--surface-muted, which stay
+     reserved for content surfaces inside the workspace. */
+  --color-sidebar-surface: color-mix(in srgb, var(--color-accent), black 55%);
+  --color-sidebar-surface-hover: color-mix(in srgb, var(--color-accent), black 40%);
+  /* Anchored to literal white, not --color-accent-foreground — that token's
+     semantic meaning is "readable text atop --color-accent" and flips to
+     near-black in dark mode (since dark mode's accent is pale), which would
+     make sidebar text unreadable against the sidebar's always-dark surface. */
+  --color-sidebar-text: color-mix(in srgb, white 78%, var(--color-accent) 22%);
+  --surface-page: var(--color-neutral-100);
 
   /* Five status-semantic colors */
   --color-status-healthy: #059669;
@@ -87,6 +102,9 @@
   --gradient-type-change: linear-gradient(180deg, var(--color-type-change), color-mix(in srgb, var(--color-type-change), black 18%));
 
   --radius-card: 0.875rem;
+  /* Outer geometry for the shell's workspace container (Slice 10) — larger than
+     --radius-card, which stays the per-card/panel radius inside it. */
+  --radius-shell: 1.5rem;
 }
 
 @theme inline {
@@ -112,6 +130,11 @@
   --color-accent: var(--color-accent);
   --color-accent-foreground: var(--color-accent-foreground);
   --color-accent-muted: var(--color-accent-muted);
+
+  --color-sidebar-surface: var(--color-sidebar-surface);
+  --color-sidebar-surface-hover: var(--color-sidebar-surface-hover);
+  --color-sidebar-text: var(--color-sidebar-text);
+  --color-surface-page: var(--surface-page);
 
   --color-status-healthy: var(--color-status-healthy);
   --color-status-healthy-bg: var(--color-status-healthy-bg);
@@ -145,6 +168,7 @@
   --shadow-glow-type-change: var(--shadow-glow-type-change);
 
   --radius-card: var(--radius-card);
+  --radius-shell: var(--radius-shell);
 
   /* Type scale — 7 steps. Slice 9 widens the top end (lg/xl) for stronger heading
      presence and adds 2xl for hero numbers (StatTile); the bottom end (2xs/xs) stays
@@ -175,6 +199,11 @@
     --surface: var(--color-neutral-900);
     --surface-muted: var(--color-neutral-800);
     --border-hairline: var(--color-neutral-700);
+    /* --color-neutral-100 itself doesn't flip between modes (only which
+       semantic token points at which neutral does), so the page canvas needs
+       an explicit dark override — it would otherwise stay light-mode-light
+       here. */
+    --surface-page: var(--color-neutral-950);
 
     --color-accent: #818cf8;
     --color-accent-foreground: #0d0d0f;

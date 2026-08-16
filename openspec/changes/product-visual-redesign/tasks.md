@@ -1,21 +1,30 @@
 ## 1. Design tokens
 
-- [ ] 1.1 Add `--color-sidebar-surface` (and any needed hover/active-item
+- [x] 1.1 Add `--color-sidebar-surface` (and any needed hover/active-item
       sub-tones) to `globals.css`, derived from `--color-accent` via
       `color-mix()` per design.md decision 1 — no new unrelated color.
-      Add a dark-mode override only if the derived value doesn't already
-      read correctly against the dark-mode accent (Slice 9's precedent:
-      most Slice 9 tokens needed no separate dark declaration).
-- [ ] 1.2 Add `--surface-page` (the light neutral page background behind
+      Added `--color-sidebar-surface`/`-hover` and `--color-sidebar-text`.
+      Found a real bug while wiring dark mode: deriving sidebar-text from
+      `--color-accent-foreground` inherited that token's light/dark flip
+      (white → near-black, since it means "text atop `--color-accent`",
+      not "text atop the sidebar") — fixed by anchoring to literal white
+      instead, since the sidebar surface stays dark in both modes.
+- [x] 1.2 Add `--surface-page` (the light neutral page background behind
       the white workspace container), distinct from the existing
-      `--surface`/`--surface-muted`.
-- [ ] 1.3 Review/extend the type scale and spacing tokens for the
-      reference's "generous, calm" density — adjust only what the
-      current scale (Slice 9) doesn't already cover; do not introduce a
-      parallel scale.
-- [ ] 1.4 Add any new radius token needed for the sidebar/workspace
-      container's larger outer geometry, reusing `--radius-card` where it
-      already fits.
+      `--surface`/`--surface-muted`. Reuses `--color-neutral-100` in light
+      mode; needed an explicit dark-mode override to `--color-neutral-950`
+      since raw neutral tokens don't themselves flip between modes (only
+      the semantic tokens pointing at them do).
+- [x] 1.3 Reviewed the type scale and spacing tokens (Slice 9) against the
+      mockup's page-title/heading sizes — `--text-xl` (26px) and
+      `--text-2xl` (32px) already cover the redesign's hierarchy; no
+      change needed. Spacing stays on Tailwind's default utility scale
+      (as before Slice 9/10 — this project has never tokenized spacing
+      separately), so "generous density" is a per-component padding/gap
+      choice made during each screen's migration, not a new token set.
+- [x] 1.4 Added `--radius-shell` (1.5rem) for the workspace container's
+      outer geometry; `--radius-card` (Slice 9, 0.875rem) is reused
+      unchanged for cards/panels inside it.
 
 ## 2. Shared primitives
 
