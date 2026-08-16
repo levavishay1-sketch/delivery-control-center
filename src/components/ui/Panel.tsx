@@ -11,6 +11,7 @@ export function Panel({
   className = "",
   id,
   style,
+  ...rest
 }: {
   title?: string;
   children: ReactNode;
@@ -18,9 +19,9 @@ export function Panel({
   id?: string;
   /** Escape hatch for a dynamic per-instance style (e.g. a project's identity-color accent border) that can't be a static Tailwind class. */
   style?: CSSProperties;
-}) {
+} & Record<`data-${string}`, string | undefined>) {
   return (
-    <div id={id} style={style} className={`rounded-lg border border-border-hairline bg-surface p-4 ${className}`}>
+    <div id={id} style={style} className={`rounded-lg border border-border-hairline bg-surface p-4 ${className}`} {...rest}>
       {title && (
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
           {title}

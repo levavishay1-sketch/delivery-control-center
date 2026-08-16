@@ -12,6 +12,7 @@ import { ApprovalGate } from "@/components/ApprovalGate";
 import { ClarifyPanel } from "@/components/ClarifyPanel";
 import { AnalyzeFindingsPanel } from "@/components/AnalyzeFindingsPanel";
 import { StageVersionHistory } from "@/components/StageVersionHistory";
+import { Panel } from "@/components/ui/Panel";
 
 export const dynamic = "force-dynamic";
 
@@ -57,13 +58,13 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <p className="text-xs opacity-60">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
           {pipeline.workItem.project.name} ({pipeline.workItem.project.key}) · {pipeline.workItem.source}{" "}
           {pipeline.workItem.externalId}
         </p>
         <h1 className="text-xl font-semibold">{pipeline.workItem.title}</h1>
         {pipeline.workItem.description && (
-          <p className="mt-1 text-sm opacity-70 whitespace-pre-wrap">{pipeline.workItem.description}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600 dark:text-neutral-300">{pipeline.workItem.description}</p>
         )}
         <div className="mt-2 flex items-center gap-3">
           <StatusBadge
@@ -71,7 +72,7 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
             label={stageStatusLabel(pipeline.status)}
             reason={`Currently at the ${stageStatusLabel(pipeline.currentStage)} stage`}
           />
-          <Link href={`/work-items/${pipeline.workItem.id}/360`} className="text-xs underline opacity-70 hover:opacity-100">
+          <Link href={`/work-items/${pipeline.workItem.id}/360`} className="text-xs text-accent hover:underline">
             360° Record →
           </Link>
         </div>
@@ -83,12 +84,10 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
           const isCurrent = pipeline.currentStage === stageConfig.type;
 
           return (
-            <div
+            <Panel
               key={stageConfig.type}
               data-stage-id={stage?.id}
-              className={`rounded-lg border p-4 ${
-                isCurrent ? "border-black/25 dark:border-white/30" : "border-black/10 dark:border-white/15"
-              }`}
+              className={isCurrent ? "ring-1 ring-accent/40" : ""}
             >
               <div className="flex items-center justify-between">
                 <h2 className="font-medium">{stageConfig.label}</h2>
@@ -100,9 +99,7 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
               </div>
 
               {stage?.content && (
-                <pre className="mt-3 whitespace-pre-wrap rounded bg-black/[.03] dark:bg-white/[.05] p-3 text-xs font-mono">
-                  {stage.content}
-                </pre>
+                <pre className="mt-3 whitespace-pre-wrap rounded-md bg-surface-muted p-3 text-xs font-mono">{stage.content}</pre>
               )}
 
               {stage && (
@@ -119,24 +116,24 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
               )}
 
               {stage && (stage.status === "PENDING_APPROVAL" || stage.status === "DONE") && (
-                <p className="mt-2 text-xs opacity-50">
+                <p className="mt-2 text-xs text-neutral-400">
                   {stage.agentRun ? `${stage.agentRun.agent.name} (${stage.agentRun.status})` : stage.aiModel} ·{" "}
                   {stage.promptTokens}+{stage.completionTokens} tokens · ${stage.costUsd?.toString()}
                 </p>
               )}
 
               {stage?.agentRun && canManage && (
-                <details className="mt-2 text-xs opacity-70">
+                <details className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
                   <summary className="cursor-pointer">View run detail</summary>
                   <dl className="mt-1 grid grid-cols-[max-content_1fr] gap-x-2 gap-y-1">
-                    <dt className="opacity-60">Status</dt>
+                    <dt className="text-neutral-400">Status</dt>
                     <dd>{stage.agentRun.status}</dd>
-                    <dt className="opacity-60">Retries</dt>
+                    <dt className="text-neutral-400">Retries</dt>
                     <dd>{stage.agentRun.retryCount}</dd>
                     {stage.agentRun.lastError && (
                       <>
-                        <dt className="opacity-60">Last error</dt>
-                        <dd className="whitespace-pre-wrap text-red-500">{stage.agentRun.lastError}</dd>
+                        <dt className="text-neutral-400">Last error</dt>
+                        <dd className="whitespace-pre-wrap text-status-critical">{stage.agentRun.lastError}</dd>
                       </>
                     )}
                   </dl>
@@ -144,7 +141,7 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
               )}
 
               {stage && stage.approvals.length > 0 && (
-                <ul className="mt-2 flex flex-col gap-1 text-xs opacity-70">
+                <ul className="mt-2 flex flex-col gap-1 text-xs text-neutral-500 dark:text-neutral-400">
                   {stage.approvals.map((a) => (
                     <li key={a.id}>
                       {a.decision === "APPROVED" ? "✅" : "❌"} {a.approverName} — {a.decision.toLowerCase()}
@@ -213,7 +210,7 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
                   />
                 </div>
               )}
-            </div>
+            </Panel>
           );
         })}
       </div>

@@ -13,22 +13,18 @@ export function StageVersionHistory({ versions }: { versions: StageVersionItem[]
 
   return (
     <details className="mt-3">
-      <summary className="cursor-pointer text-xs underline opacity-70 hover:opacity-100">
-        Version history ({versions.length})
-      </summary>
+      <summary className="cursor-pointer text-xs text-accent hover:underline">Version history ({versions.length})</summary>
       <div className="mt-2 flex flex-col gap-2">
         {versions.map((v) => (
-          <details key={v.id} className="rounded border border-black/10 dark:border-white/15 p-2">
+          <details key={v.id} className="rounded-md border border-border-hairline bg-surface p-2">
             <summary className="flex cursor-pointer items-center justify-between text-xs">
               <span>
                 v{v.versionNumber} — {v.createdAsResultOf.toLowerCase()}
               </span>
-              <span className="opacity-50">{v.createdAt.toDateString()}</span>
+              <span className="text-neutral-400">{v.createdAt.toDateString()}</span>
             </summary>
-            {v.aiModel && <p className="mt-1 text-xs opacity-50">{v.aiModel}</p>}
-            <pre className="mt-2 whitespace-pre-wrap rounded bg-black/[.03] dark:bg-white/[.05] p-2 text-xs font-mono">
-              {v.content}
-            </pre>
+            {v.aiModel && <p className="mt-1 text-xs text-neutral-400">{v.aiModel}</p>}
+            <pre className="mt-2 whitespace-pre-wrap rounded-md bg-surface-muted p-2 text-xs font-mono">{v.content}</pre>
           </details>
         ))}
       </div>

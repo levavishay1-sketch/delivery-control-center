@@ -239,15 +239,30 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 9. Pipeline Detail
 
-- [ ] 9.1 Migrate `src/app/pipelines/[id]/page.tsx`'s page chrome (stage
-      cards, headers) to `Panel`/`Row`/design-system tokens, replacing
-      the raw-legacy bordered `<section>` pattern.
-- [ ] 9.2 Migrate `ClarifyPanel.tsx` and `AnalyzeFindingsPanel.tsx` to
-      `Button`/`FormField`/`StatusBadge` (severity groups → status
-      tones).
-- [ ] 9.3 Migrate `StageVersionHistory.tsx` to design-system tokens.
-- [ ] 9.4 Verify `ApprovalGate`/`DraftButton`/`StatusBadge` (already
-      migrated in Task Group 4) render correctly in place on this page.
+- [x] 9.1 Migrated `src/app/pipelines/[id]/page.tsx`'s page chrome
+      (stage cards, headers) to `Panel`/design-system tokens, replacing
+      the raw-legacy bordered `<div>` pattern — the most raw-legacy page
+      in the whole product per the original investigation, now fully
+      token-driven. Found and fixed a real bug of my own making in the
+      same pass: swapping the stage card's wrapping `<div>` for `Panel`
+      initially dropped `data-stage-id` in favor of `Panel`'s own `id`
+      prop — a different attribute, not the same one — which would have
+      silently broken any E2E selector depending on `data-stage-id`.
+      Caught before it shipped; extended `Panel` to accept `data-*`
+      passthrough props instead of conflating the two.
+- [x] 9.2 Migrated `ClarifyPanel.tsx` and `AnalyzeFindingsPanel.tsx` to
+      `Button`/`FormField`/`StatusBadge`-adjacent tokens. `Analyze`'s 5
+      raw severity hues (red/orange/amber/yellow/gray) collapsed onto
+      the design system's tokens: CRITICAL and HIGH both map to
+      `text-status-critical` (both urgent enough to flag the same way),
+      MEDIUM/WARNING to `text-status-warning`, INFO to
+      `text-status-inactive` — an intentional reduction (5 arbitrary
+      hues → the product's real 5-tone status system), not an oversight.
+- [x] 9.3 Migrated `StageVersionHistory.tsx` to design-system tokens.
+- [x] 9.4 Verified `ApprovalGate`/`DraftButton`/`StatusBadge` (already
+      migrated in Task Group 4) render correctly in place on this page —
+      confirmed live, zero console errors, `data-stage-id` present on
+      both rendered stage cards after the `Panel` fix.
 
 ## 10. Project Settings
 
