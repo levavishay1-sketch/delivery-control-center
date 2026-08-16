@@ -205,6 +205,7 @@ re-litigate:
 | 7 | Design system foundation & premium UI refresh | **Done** | `2026-08-15-design-system-direction.md` | `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/` |
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
 | 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
+| 10 | Product-wide visual redesign (reference-driven design system overhaul) | Scoped, not started | `2026-08-16-product-visual-redesign-reference.md` | — |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -407,7 +408,7 @@ inherit RTL-safe layout for free from the shared components. Full detail:
 source above; as-built detail:
 `openspec/changes/archive/2026-08-15-i18n-rtl-support/`.
 
-### Slice 9 — Dashboard motifs refresh — **Scoped, not started**
+### Slice 9 — Dashboard motifs refresh — **Done**
 
 *(Source: `docs/roadmap-sources/2026-08-15-dashboard-motifs-direction.md`
 — the agent's design-direction analysis of a user-provided consumer
@@ -431,6 +432,42 @@ reference's literal multi-hue decorative cards and vanity trend charts):
 - A persistent primary CTA in the header (e.g. "+ New Work Item"),
   instead of an action buried in page-body forms.
 - Roomier spacing / slightly larger corner radius on primary surfaces.
+
+Implemented per `openspec/changes/dashboard-motifs-refresh/` (not yet
+archived — this row was previously left as "Scoped, not started" after the
+table above was updated to Done; corrected here so the two don't drift, per
+CLAUDE.md's spec-anchored rule).
+
+### Slice 10 — Product-wide visual redesign (reference-driven design system overhaul)
+
+*(Source: `docs/roadmap-sources/2026-08-16-product-visual-redesign-reference.md`
+— a direct user requirement given in conversation on 2026-08-16, attaching a
+reference screenshot of a purple-branded SaaS dashboard. Not part of the
+original master prompt / gap analysis. The source file is authoritative if
+this summary drifts from it.)*
+
+A full visual redesign of the entire product's presentation layer — not a
+palette swap — extracting the reference's complete design language
+(application shell with a branded sidebar + light outer surface + large
+white workspace, sidebar proportions and selected-state treatment, card/
+panel geometry, typography scale, spacing/density, button/input/badge
+language, table/list treatment, icon treatment, empty/loading/error/
+disabled states, RTL-appropriate directional behavior) and applying it
+consistently to every existing user-facing screen (Dashboard, Attention
+Center, Quick View, 360° Delivery Record, pipeline detail, Configuration
+Center, Audit Trail, login, and any others found during investigation) —
+not only the Dashboard used as the reference's visual example.
+
+Explicitly preserves all existing functionality, routes, business logic,
+terminology, entities, and permissions — this is a presentation-layer
+change, not a rebuild. Explicitly does not invent fake data/entities/metrics
+to match the reference screenshot's example content; the redesigned
+Dashboard uses this app's real data. Explicitly supersedes/reconciles with
+Slice 7's design-token foundation and Slice 9's motif system where the
+reference's direction differs (e.g., a stronger brand-color application via
+a branded sidebar) rather than running two competing systems side by side —
+the OpenSpec proposal must resolve this reconciliation explicitly in
+`design.md`, not silently.
 
 Ready for an OpenSpec proposal; no plan written or approved yet.
 
