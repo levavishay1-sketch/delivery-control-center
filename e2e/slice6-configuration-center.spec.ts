@@ -35,7 +35,10 @@ test("configuration center: organization -> client -> project budget inheritance
   await page.getByRole("link", { name: /configuration/i }).first().click();
   await page.waitForURL(/\/organizations\/.+\/config/);
 
-  const orgBudgetSection = page.locator("section", { has: page.getByRole("heading", { name: "AI Budget" }) });
+  // AI Budget renders in a `Panel` (a styled div, Task Group 12) rather than a bare `<section>`
+  // post-redesign, so match on the Panel's own `rounded-lg` class — same pattern already used
+  // for project cards elsewhere in this suite (see slice5's `div.rounded-lg` locator).
+  const orgBudgetSection = page.locator("div.rounded-lg", { has: page.getByRole("heading", { name: "AI Budget" }) });
   await orgBudgetSection.getByLabel("AI budget ($)").fill("123.45");
   await orgBudgetSection.getByRole("button", { name: "Preview" }).click();
   await expect(orgBudgetSection.getByText("Set the organization budget to $123.45")).toBeVisible();
