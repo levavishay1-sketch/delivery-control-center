@@ -205,7 +205,7 @@ re-litigate:
 | 7 | Design system foundation & premium UI refresh | **Done** | `2026-08-15-design-system-direction.md` | `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/` |
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
 | 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
-| 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/product-visual-redesign/` (implemented, not yet archived) |
+| 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/archive/2026-08-16-product-visual-redesign/` |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -469,8 +469,9 @@ a branded sidebar) rather than running two competing systems side by side —
 the OpenSpec proposal must resolve this reconciliation explicitly in
 `design.md`, not silently.
 
-Implemented per `openspec/changes/product-visual-redesign/` (not yet
-archived): design tokens, application shell (branded sidebar + rounded
+Implemented per
+`openspec/changes/archive/2026-08-16-product-visual-redesign/`: design
+tokens, application shell (branded sidebar + rounded
 workspace container), shared primitives (`Button`, `FormField`, `Row`
 column-grid mode, `ApproveRejectButtons`, `AuditEventRow`), and every
 existing screen migrated to them (Dashboard, Attention Center, Quick

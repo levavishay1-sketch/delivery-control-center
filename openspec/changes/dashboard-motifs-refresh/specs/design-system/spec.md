@@ -2,11 +2,16 @@
 
 ### Requirement: One accent color is reserved for actions and active state
 The system SHALL use a single accent color across the product exclusively
-for primary actions and active navigation/tab state, and SHALL NOT use the
-accent color for purely decorative emphasis. The accent color MAY be
-rendered as a tonal gradient (a range of shades of the same hue) rather
-than a single flat value, provided it remains recognizably one accent
-color and is still confined to primary actions and active state.
+for primary actions, active navigation/tab state, and the persistent
+application shell's branded surface (the sidebar), and SHALL NOT use the
+accent color for purely decorative emphasis on page content. The shell
+surface is a singular, structural, product-identity element — present
+exactly once, in exactly one place — categorically distinct from
+decorative emphasis, which this requirement continues to forbid anywhere
+on page content itself. The accent color MAY be rendered as a tonal
+gradient (a range of shades of the same hue) rather than a single flat
+value, provided it remains recognizably one accent color and is still
+confined to primary actions, active state, and the shell surface.
 
 #### Scenario: Primary action button
 - **WHEN** a primary action (e.g., "Approve," "Resolve Blocker") is
@@ -19,6 +24,13 @@ color and is still confined to primary actions and active state.
   of a flat fill
 - **THEN** every color in the gradient is a shade of the single accent
   hue, not a second, unrelated color
+
+#### Scenario: The application shell's sidebar carries the accent hue
+- **WHEN** the persistent sidebar renders
+- **THEN** its branded surface color derives from the same single accent
+  hue as primary actions and active state (a shade of the same color, not
+  an unrelated second brand color), and no other page-content surface
+  outside the sidebar uses that surface treatment
 
 ### Requirement: Every surface uses one of exactly two elevation levels
 The system SHALL render on-page content (panels, rows, cards) with the
