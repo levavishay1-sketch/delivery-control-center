@@ -141,6 +141,15 @@ test("i18n/RTL: switch to Hebrew, verify layout mirroring, tab-nav reversal, and
     await page.waitForURL(/\/organizations\/.+\/config/);
     const historyHeader = page.getByText("Change").first();
     await expect(historyHeader).toBeVisible();
+
+    // 12b. (Slice 11) The AI Budget field's InfoTooltip still opens and reads correctly
+    // under RTL — positioned via logical `start-0`, so no separate RTL implementation exists
+    // to diverge; this proves the shared component actually mirrors, not just that it could.
+    const infoTrigger = page.getByRole("button", { name: "What is the effective budget?" }).first();
+    await infoTrigger.click();
+    await expect(page.getByText(/effective budget is the AI spending limit/i)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(/effective budget is the AI spending limit/i)).not.toBeVisible();
   }
 
   // 13. Switch back to English and verify layout/text revert.

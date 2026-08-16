@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/FormField";
+import { InfoTooltip } from "@/components/ui/InfoTooltip";
 
 type Scope = "ORGANIZATION" | "CLIENT" | "PROJECT";
 
@@ -124,6 +125,13 @@ export function ConfigBudgetPanel({ scope, id, effective }: { scope: Scope; id: 
       className="flex flex-wrap items-center gap-2 text-xs"
     >
       <span className="text-neutral-500 dark:text-neutral-400">Effective budget:</span>
+      <InfoTooltip label="What is the effective budget?">
+        The effective budget is the AI spending limit that actually applies here right now. If
+        this {SCOPE_LABEL[scope]} has no override of its own, it inherits the nearest ancestor
+        scope&apos;s budget (organization → client → project). Setting a value below creates an
+        override for this {SCOPE_LABEL[scope]} specifically; resetting removes the override and
+        falls back to inheritance again.
+      </InfoTooltip>
       <span className="font-mono">{effective.value ? `$${effective.value}` : "No limit"}</span>
       {effective.sourceScope && (
         <span className="text-neutral-400">

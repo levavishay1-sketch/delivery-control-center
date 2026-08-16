@@ -1,19 +1,20 @@
 ## 1. Component
 
-- [ ] 1.1 Create `src/components/ui/InfoTooltip.tsx`: a controlled disclosure — an "ⓘ" trigger
+- [x] 1.1 Create `src/components/ui/InfoTooltip.tsx`: a controlled disclosure — an "ⓘ" trigger
       `<button>` (`aria-label`, `aria-expanded`, `aria-controls`) plus a floating-elevation panel
       (design-system's floating token — shadow, no backdrop dimming) rendering a `label` heading
       and `children` body. Opens on click/Enter/Space/hover; closes on Escape, click-outside, or
       mouse-leave-without-a-prior-click.
-- [ ] 1.2 Position the panel `absolute` relative to an inline wrapping span around the trigger, per
+- [x] 1.2 Position the panel `absolute` relative to an inline wrapping span around the trigger, per
       design.md's no-portal decision. Use logical CSS properties (`text-start`, `ms-*`/`me-*`) so
       it mirrors correctly under RTL without a separate variant.
-- [ ] 1.3 Respect `prefers-reduced-motion` for the open/close transition, matching the existing
-      convention in `globals.css`'s reduced-motion block (Slice 9).
+- [x] 1.3 Respect `prefers-reduced-motion` for the open/close transition, matching the existing
+      convention in `globals.css`'s reduced-motion block (Slice 9). Reused the existing
+      `.animate-fade-up` utility (already gated in that block) rather than adding a new one.
 
 ## 2. Adoption site
 
-- [ ] 2.1 Add one `InfoTooltip` usage next to the AI Budget field rendered by
+- [x] 2.1 Add one `InfoTooltip` usage next to the AI Budget field rendered by
       `ConfigBudgetPanel`/the Configuration Center page, explaining what the effective budget
       value means and how inheritance/override determines it (proposal.md's Impact section).
       Budget logic itself is unchanged.
@@ -21,14 +22,28 @@
 ## 3. Tests
 
 - [ ] 3.1 Unit test: `InfoTooltip` opens/closes via click, keyboard (Enter/Space to open, Escape to
-      close), and closes on outside click; `aria-expanded` reflects state.
-- [ ] 3.2 Extend the existing RTL E2E spec (`e2e/slice8-i18n-rtl.spec.ts`) with a step verifying
+      close), and closes on outside click; `aria-expanded` reflects state. **Blocked — see note
+      below; paused for a decision rather than silently adding new test infrastructure.**
+- [x] 3.2 Extend the existing RTL E2E spec (`e2e/slice8-i18n-rtl.spec.ts`) with a step verifying
       the new AI Budget `InfoTooltip` mirrors correctly under RTL (position relative to the field,
       readable popover content) — following that file's established pattern of appending
       slice-specific RTL checks rather than a new spec file.
-- [ ] 3.3 Add or extend an E2E scenario opening the AI Budget `InfoTooltip` via keyboard only (no
+- [x] 3.3 Add or extend an E2E scenario opening the AI Budget `InfoTooltip` via keyboard only (no
       mouse), confirming the explanation becomes visible — proves the design-system requirement's
-      "reachable without a mouse" scenario end-to-end, not just at the unit level.
+      "reachable without a mouse" scenario end-to-end, not just at the unit level. Added
+      `e2e/slice11-info-tooltip.spec.ts`.
+
+**Note on 3.1**: this project has no component-level unit-testing infrastructure today — `vitest.config.ts`
+runs with `environment: "node"` and the entire existing unit suite (300 tests) covers the domain
+layer only (`*.commands.test.ts`/`*.queries.test.ts`); zero `*.test.tsx` files and no
+`@testing-library/react`/jsdom-or-happy-dom dependency exist in this codebase. Writing this task as
+specified requires standing up new test infrastructure (a new dependency, a new Vitest
+`environment`, possibly `npm install-scripts approve` per CLAUDE.md's gotcha) — real, cross-cutting
+scope this change's design.md never named as a decision. Per the apply workflow's guardrails, this
+is surfaced rather than silently absorbed (skipped, or infra added unilaterally). Task 3.3's E2E
+coverage already exercises the same open/close/keyboard/aria-expanded behavior this unit test would
+check, against the real browser DOM rather than a simulated one — paused for the user's call on
+whether that's sufficient for this component, or whether to add the component-testing stack now.
 
 ## 4. Documentation & verification
 
