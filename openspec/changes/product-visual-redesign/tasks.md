@@ -280,9 +280,11 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 11. Constitution
 
-- [ ] 11.1 Migrate `src/app/projects/[id]/constitution/page.tsx`'s page
-      chrome to `Panel`/design-system tokens; verify the now-shared
-      `ApprovalGate`/`DraftButton` (Task Group 4) render correctly here.
+- [x] 11.1 Migrated `src/app/projects/[id]/constitution/page.tsx`'s page
+      chrome to `Panel`/design-system tokens; verified the now-shared
+      `ApprovalGate`/`DraftButton` (Task Group 4) render correctly here —
+      live check with zero console errors, "Draft with AI" renders as
+      the consistent primary `Button`.
 
 ## 12. Configuration Center
 
