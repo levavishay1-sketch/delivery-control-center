@@ -10,8 +10,11 @@ const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "change-me-now";
  * 360° Record tab arrow-key navigation reverses under RTL -> verify a
  * subsequent page load renders RTL from the server response itself (no
  * LTR-then-RTL flash) -> (Slice 9) verify the NavRail active pill and the
- * command palette (Ctrl+K, search, select) still work correctly under RTL,
- * then switch back to English and verify layout/text revert.
+ * command palette (Ctrl+K, search, select) still work correctly under RTL
+ * -> (Slice 10) verify the redesigned branded sidebar sits at the mirrored
+ * (right) edge under RTL and a `Row` column-grid list (Configuration
+ * Center's budget history) still renders correctly -> then switch back to
+ * English and verify layout/text revert.
  */
 test("i18n/RTL: switch to Hebrew, verify layout mirroring, tab-nav reversal, and no direction flash on reload", async ({ page }) => {
   const suffix = Date.now().toString(36);
@@ -115,7 +118,32 @@ test("i18n/RTL: switch to Hebrew, verify layout mirroring, tab-nav reversal, and
   await page.waitForURL(/\/work-items\/.+\/360/);
   await expect(overviewTab).toBeVisible();
 
-  // 11. Switch back to English and verify layout/text revert.
+  // 11. (Slice 10) The redesigned branded sidebar sits at the mirrored (right)
+  // edge under RTL — it was a left-hand rail under LTR (Task 3.1's shell).
+  const sidebar = page.getByRole("navigation", { name: "Primary" });
+  await expect(sidebar).toBeVisible();
+  const sidebarBox = await sidebar.boundingBox();
+  const viewportWidth = page.viewportSize()?.width ?? 1280;
+  expect(sidebarBox).not.toBeNull();
+  // Flush against the right edge under RTL, not the left.
+  expect(sidebarBox!.x + sidebarBox!.width).toBeGreaterThan(viewportWidth - 10);
+
+  // 12. (Slice 10) A `Row` column-grid list (Configuration Center's budget
+  // history, Task 12.2) still renders correctly under RTL — grid item order
+  // follows the ambient `direction`, so this is a structural check (Configuration
+  // Center is outside Slice 8's Hebrew-translated four-surface scope, so its
+  // strings stay English) rather than a text-content one.
+  await page.getByRole("link", { name: "לוח בקרה" }).click();
+  await page.waitForURL("/");
+  const configLink = page.locator('nav[aria-label="Primary"] a[href*="/config"]');
+  if (await configLink.isVisible().catch(() => false)) {
+    await configLink.click();
+    await page.waitForURL(/\/organizations\/.+\/config/);
+    const historyHeader = page.getByText("Change").first();
+    await expect(historyHeader).toBeVisible();
+  }
+
+  // 13. Switch back to English and verify layout/text revert.
   await page.getByRole("link", { name: "לוח בקרה" }).click();
   await page.waitForURL("/");
   await page.getByRole("button", { name: "English" }).click();

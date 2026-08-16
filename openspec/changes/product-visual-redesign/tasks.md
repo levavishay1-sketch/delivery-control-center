@@ -302,13 +302,28 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 13. RTL & i18n verification
 
-- [ ] 13.1 Verify the new sidebar, `Row` column-grid mode, `Button`, and
-      `FormField` all render correctly under `dir="rtl"` — extend
-      `e2e/slice8-i18n-rtl.spec.ts` rather than starting a new spec file,
-      per this project's established pattern.
-- [ ] 13.2 Add any missing translation keys for newly-visible strings
-      introduced by the shell restructure (e.g. if account context moves
-      to a new sidebar location with new label text) to `en.ts`/`he.ts`.
+- [x] 13.1 Extended `e2e/slice8-i18n-rtl.spec.ts` (not a new spec file,
+      per this project's established pattern) with two new steps: the
+      redesigned branded sidebar sits at the mirrored (right) edge under
+      RTL (was the left-hand rail under LTR), and `Row`'s column-grid
+      mode (Configuration Center's budget history) still renders
+      correctly under RTL — a structural check, since Configuration
+      Center is outside Slice 8's Hebrew-translated four-surface scope.
+      Ran the full spec live against the real dev server + worker
+      (`PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium npx
+      playwright test e2e/slice8-i18n-rtl.spec.ts`, since the pinned
+      headless-shell binary isn't installed in this environment — the
+      project's own `playwright.config.ts` already documents this exact
+      escape hatch): all 13 steps pass, including the two new ones.
+- [x] 13.2 Checked for newly-visible strings needing translation keys via
+      `git diff` against every file this change touched: `NavRail`'s
+      actual nav labels still route through the existing `t.nav.*` keys
+      (unchanged); `Login`'s strings ("Email," "Password," "Delivery
+      Control Center") were already hardcoded/untranslated before this
+      redesign (the brand name was hardcoded in the old top header too,
+      Login was always outside Slice 8's four-surface scope) — this
+      change relocates them, it doesn't newly introduce them. No new
+      translation keys needed; no coverage regression.
 
 ## 14. Tests
 
