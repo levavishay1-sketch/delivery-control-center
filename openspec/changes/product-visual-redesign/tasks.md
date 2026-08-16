@@ -223,11 +223,19 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 8. Audit Trail
 
-- [ ] 8.1 Migrate `src/app/audit/page.tsx`'s filter form to `FormField`/
-      `Button`.
-- [ ] 8.2 Replace its hand-rolled event-row markup with the shared
+- [x] 8.1 Migrated `src/app/audit/page.tsx`'s filter form to
+      `FormField`/`Button`. Pagination links needed a button-styled
+      `Link`, which surfaced that `Button` had no way to render as a
+      link (no `asChild`/Slot primitive in this codebase's dependencies)
+      — exported `buttonClasses()`/`buttonStyle()` from `Button.tsx` so
+      a `Link` can apply the identical visual treatment directly, rather
+      than either adding an unsupported prop or hand-approximating the
+      styling a second time.
+- [x] 8.2 Replaced its hand-rolled event-row markup with the shared
       `AuditEventRow` (2.5), keeping its existing server-side query-param
-      pagination.
+      pagination. Verified live: filters, event rows (including a
+      variable-length meta line and a JSON detail dump), and pagination
+      controls all render correctly with zero console errors.
 
 ## 9. Pipeline Detail
 

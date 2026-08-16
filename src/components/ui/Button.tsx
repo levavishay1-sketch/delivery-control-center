@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes } from "react";
 
 export type ButtonVariant = "primary" | "secondary" | "destructive";
+export type ButtonSize = "sm" | "md";
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
@@ -13,14 +14,28 @@ const VARIANT_STYLE: Partial<Record<ButtonVariant, React.CSSProperties>> = {
   primary: { backgroundImage: "var(--gradient-accent)" },
 };
 
-const SIZE_CLASSES = {
+const SIZE_CLASSES: Record<ButtonSize, string> = {
   sm: "gap-1.5 rounded-md px-3 py-1.5 text-xs",
   md: "gap-2 rounded-md px-4 py-2 text-sm",
-} as const;
+};
+
+/**
+ * Shared class string + inline style for the button visual treatment, so a
+ * `Link` that needs to look like a button (no `asChild`/Slot primitive in
+ * this codebase's dependency set) can apply the exact same styling as
+ * `<Button>` instead of a hand-picked approximation.
+ */
+export function buttonClasses(variant: ButtonVariant = "secondary", size: ButtonSize = "md", className = "") {
+  return `inline-flex shrink-0 items-center justify-center whitespace-nowrap font-medium disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`;
+}
+
+export function buttonStyle(variant: ButtonVariant = "secondary"): React.CSSProperties | undefined {
+  return VARIANT_STYLE[variant];
+}
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  size?: keyof typeof SIZE_CLASSES;
+  size?: ButtonSize;
 }
 
 /**
@@ -30,12 +45,5 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * hand-picking its own color/border/radius.
  */
 export function Button({ variant = "secondary", size = "md", className = "", type = "button", ...props }: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={`inline-flex shrink-0 items-center whitespace-nowrap font-medium disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
-      style={VARIANT_STYLE[variant]}
-      {...props}
-    />
-  );
+  return <button type={type} className={buttonClasses(variant, size, className)} style={buttonStyle(variant)} {...props} />;
 }

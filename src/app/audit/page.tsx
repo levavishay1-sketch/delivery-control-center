@@ -2,10 +2,13 @@ import Link from "next/link";
 import { listAuditEvents, getAuditActors, ACTION_CATEGORIES, type ActionCategoryKey } from "@/domain/audit/queries";
 import { listProjectsWithCounts } from "@/domain/project/queries";
 import { requireAuthContext } from "@/domain/shared/session";
+import { Button, buttonClasses } from "@/components/ui/Button";
+import { FormField, Input, Select } from "@/components/ui/FormField";
+import { RowList, RowEmpty } from "@/components/ui/Row";
+import { AuditEventRow } from "@/components/ui/AuditEventRow";
 
 export const dynamic = "force-dynamic";
 
-const ACTOR_ICON: Record<string, string> = { SYSTEM: "⚙️", AI: "🤖", USER: "🧑" };
 const PAGE_SIZES = [20, 50, 100];
 
 function firstParam(value: string | string[] | undefined): string | undefined {
@@ -51,165 +54,134 @@ export default async function AuditTrailPage({ searchParams }: PageProps<"/audit
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-xl font-semibold">Audit Trail</h1>
-        <p className="text-sm opacity-60">Every decision, draft, approval, and cost — in order, nothing hidden.</p>
-        <p className="mt-1 text-xs opacity-50">
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          Every decision, draft, approval, and cost — in order, nothing hidden.
+        </p>
+        <p className="mt-1 text-xs text-neutral-400">
           Showing {from}–{to} of {total} events{hasFilters ? " (filtered)" : ""}
         </p>
       </div>
 
-      <form method="GET" className="flex flex-wrap items-end gap-3 rounded-lg border border-black/10 dark:border-white/15 p-4">
-        <div className="flex flex-col gap-1">
-          <label htmlFor="project" className="text-xs opacity-70">
-            Project
-          </label>
-          <select id="project" name="project" defaultValue={projectId ?? ""} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+      <form method="GET" className="flex flex-wrap items-end gap-3 rounded-card border border-border-hairline bg-surface-muted p-4">
+        <FormField label="Project" htmlFor="project">
+          <Select id="project" name="project" defaultValue={projectId ?? ""}>
             <option value="">All projects</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </FormField>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="actor" className="text-xs opacity-70">
-            Actor
-          </label>
-          <select id="actor" name="actor" defaultValue={actorId ?? ""} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+        <FormField label="Actor" htmlFor="actor">
+          <Select id="actor" name="actor" defaultValue={actorId ?? ""}>
             <option value="">All actors</option>
             {actors.map((a) => (
               <option key={a.id} value={a.id}>
                 {a.label}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </FormField>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="action" className="text-xs opacity-70">
-            Action
-          </label>
-          <select id="action" name="action" defaultValue={actionCategory ?? ""} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+        <FormField label="Action" htmlFor="action">
+          <Select id="action" name="action" defaultValue={actionCategory ?? ""}>
             <option value="">All actions</option>
             {ACTION_CATEGORIES.map((c) => (
               <option key={c.key} value={c.key}>
                 {c.label}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </FormField>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="from" className="text-xs opacity-70">
-            From
-          </label>
-          <input
-            id="from"
-            type="date"
-            name="from"
-            defaultValue={firstParam(sp.from) ?? ""}
-            className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-          />
-        </div>
+        <FormField label="From" htmlFor="from">
+          <Input id="from" type="date" name="from" defaultValue={firstParam(sp.from) ?? ""} />
+        </FormField>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="to" className="text-xs opacity-70">
-            To
-          </label>
-          <input
-            id="to"
-            type="date"
-            name="to"
-            defaultValue={firstParam(sp.to) ?? ""}
-            className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-          />
-        </div>
+        <FormField label="To" htmlFor="to">
+          <Input id="to" type="date" name="to" defaultValue={firstParam(sp.to) ?? ""} />
+        </FormField>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="pageSize" className="text-xs opacity-70">
-            Rows per page
-          </label>
-          <select id="pageSize" name="pageSize" defaultValue={String(pageSize)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+        <FormField label="Rows per page" htmlFor="pageSize">
+          <Select id="pageSize" name="pageSize" defaultValue={String(pageSize)}>
             {PAGE_SIZES.map((size) => (
               <option key={size} value={size}>
                 {size}
               </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </FormField>
 
         <div className="flex gap-2">
-          <button type="submit" className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background">
+          <Button type="submit" variant="primary">
             Apply Filters
-          </button>
+          </Button>
           {hasFilters && (
-            <Link href="/audit" className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]">
+            <Link href="/audit" className={buttonClasses("secondary")}>
               Clear Filters
             </Link>
           )}
         </div>
       </form>
 
-      <div className="flex flex-col divide-y divide-black/10 dark:divide-white/10 rounded-lg border border-black/10 dark:border-white/15">
+      <RowList>
         {events.map((event) => (
-          <div key={event.id} className="flex flex-col gap-1 px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm">
-                {ACTOR_ICON[event.actor]} {event.action}
-              </span>
-              <time className="shrink-0 text-xs opacity-50" title={event.createdAt.toISOString()}>
-                {event.createdAt.toLocaleString()}
-              </time>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs opacity-50">
-              {event.actorName && <span>by {event.actorName}</span>}
-              {event.workItem?.pipeline && (
-                <Link href={`/pipelines/${event.workItem.pipeline.id}`} className="underline">
-                  {event.workItem.title}
-                </Link>
-              )}
-              {!event.workItem && event.pipeline && (
-                <Link href={`/pipelines/${event.pipeline.id}`} className="underline">
-                  {event.pipeline.workItem.title}
-                </Link>
-              )}
-              {event.project && !event.workItem && !event.pipeline && <span>{event.project.name}</span>}
-              {event.stage && <span>· {event.stage.type}</span>}
-            </div>
-            {event.detail !== null && event.detail !== undefined && (
-              <pre className="mt-1 whitespace-pre-wrap rounded bg-black/[.03] dark:bg-white/[.05] p-2 text-xs font-mono">
-                {JSON.stringify(event.detail)}
-              </pre>
-            )}
-          </div>
+          <AuditEventRow
+            key={event.id}
+            actor={event.actor}
+            action={event.action}
+            time={event.createdAt.toLocaleString()}
+            timeTitle={event.createdAt.toISOString()}
+            detail={event.detail}
+            meta={
+              <>
+                {event.actorName && <span>by {event.actorName}</span>}
+                {event.workItem?.pipeline && (
+                  <Link href={`/pipelines/${event.workItem.pipeline.id}`} className="text-accent hover:underline">
+                    {event.workItem.title}
+                  </Link>
+                )}
+                {!event.workItem && event.pipeline && (
+                  <Link href={`/pipelines/${event.pipeline.id}`} className="text-accent hover:underline">
+                    {event.pipeline.workItem.title}
+                  </Link>
+                )}
+                {event.project && !event.workItem && !event.pipeline && <span>{event.project.name}</span>}
+                {event.stage && <span>· {event.stage.type}</span>}
+              </>
+            }
+          />
         ))}
-        {events.length === 0 && (
-          <p className="px-4 py-6 text-sm opacity-50">{hasFilters ? "No events match these filters." : "No events recorded yet."}</p>
-        )}
-      </div>
+        {events.length === 0 && <RowEmpty>{hasFilters ? "No events match these filters." : "No events recorded yet."}</RowEmpty>}
+      </RowList>
 
       {totalPages > 1 && (
         <nav aria-label="Audit trail pagination" className="flex items-center justify-between text-sm">
           {page > 1 ? (
-            <Link href={pageHref(page - 1)} className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 hover:bg-black/[.03] dark:hover:bg-white/[.04]">
+            <Link href={pageHref(page - 1)} className={buttonClasses("secondary", "sm")}>
               Previous
             </Link>
           ) : (
-            <span className="rounded border border-black/10 dark:border-white/10 px-3 py-1.5 opacity-40">Previous</span>
+            <Button variant="secondary" size="sm" disabled>
+              Previous
+            </Button>
           )}
-          <span className="opacity-60">
+          <span className="text-neutral-500 dark:text-neutral-400">
             Page {page} of {totalPages}
           </span>
           {page < totalPages ? (
-            <Link href={pageHref(page + 1)} className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 hover:bg-black/[.03] dark:hover:bg-white/[.04]">
+            <Link href={pageHref(page + 1)} className={buttonClasses("secondary", "sm")}>
               Next
             </Link>
           ) : (
-            <span className="rounded border border-black/10 dark:border-white/10 px-3 py-1.5 opacity-40">Next</span>
+            <Button variant="secondary" size="sm" disabled>
+              Next
+            </Button>
           )}
         </nav>
       )}
