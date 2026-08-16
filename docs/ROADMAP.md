@@ -206,7 +206,7 @@ re-litigate:
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
 | 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
 | 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/archive/2026-08-16-product-visual-redesign/` |
-| 11 | ⓘ info/explanation shared primitive | In progress | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | `openspec/changes/info-tooltip-primitive/` |
+| 11 | ⓘ info/explanation shared primitive | **Done** | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | `openspec/changes/info-tooltip-primitive/` (implemented, not yet archived) |
 | 12 | Client-owned Repository model + Clients hub | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | — |
 | 13 | Client information sources (expanded `IntegrationType`) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | — |
 | 14 | Repository SDD status check + bootstrap on connect | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.3, §7 | — |
@@ -513,6 +513,19 @@ The vision is one coherent product direction, deliberately broken into 11
 independently-scoped, dependency-ordered slices (per this project's
 one-change-per-slice convention and CLAUDE.md's "prefer several small
 changes" rule) rather than one large change:
+
+**Slice 11 status:** Done. Implemented the shared `InfoTooltip` component
+(`src/components/ui/InfoTooltip.tsx` — click/Enter/Space/hover to open,
+Escape/click-outside/mouse-leave-without-a-pin to close, positioned via
+logical CSS properties for automatic RTL mirroring) and adopted it once,
+on Configuration Center's AI Budget field. Covered by two E2E specs
+(`e2e/slice11-info-tooltip.spec.ts` for keyboard-only reveal/dismiss, and
+an extension to `e2e/slice8-i18n-rtl.spec.ts` for RTL). One task
+(a component-level unit test) was paused mid-implementation and resolved
+by explicit user decision to skip, since this project has no
+component-testing infrastructure yet (Vitest runs `environment: "node"`;
+the existing suite is domain-layer only) — deferred as its own future
+decision rather than bundled into this slice.
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
   every AI-facing slice after it should be built to use it from the start.

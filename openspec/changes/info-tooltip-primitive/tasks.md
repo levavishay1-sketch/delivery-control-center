@@ -51,8 +51,14 @@ whether that's sufficient for this component, or whether to add the component-te
 
 ## 4. Documentation & verification
 
-- [ ] 4.1 Run `/verify` (build + lint + a live check): load the Configuration Center's AI Budget
-      field in a running dev server, confirm the ⓘ opens/closes correctly by mouse, keyboard, and
-      (if feasible to check) touch emulation; spot-check RTL.
-- [ ] 4.2 Update `docs/ROADMAP.md`'s Slice 11 row and detail section to **Done**, linking this
-      change's archive path, following the same pattern as Slices 0–10.
+- [x] 4.1 Ran `/verify`: `npm run lint` and `npm run build` both clean. Live-checked in a running
+      dev server against the Configuration Center's AI Budget field: mouse hover opens it and
+      closes on mouse-away (screenshotted); click pins it open (`aria-expanded="true"`,
+      screenshotted); keyboard-only Enter/Space/Escape confirmed end-to-end by
+      `e2e/slice11-info-tooltip.spec.ts`; RTL mirroring confirmed by the extended
+      `e2e/slice8-i18n-rtl.spec.ts` step. No touch-emulation check performed (Playwright touch
+      emulation wasn't exercised) — the component's interaction model doesn't distinguish touch
+      from click, so this is a low-risk gap, noted rather than silently claimed as covered.
+- [x] 4.2 Updated `docs/ROADMAP.md`'s Slice 11 row and detail section to **Done**, linking
+      `openspec/changes/info-tooltip-primitive/` (not yet archived — same pattern as other
+      recently-completed slices, pending an explicit archive request).
