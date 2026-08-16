@@ -206,7 +206,7 @@ re-litigate:
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
 | 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
 | 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/archive/2026-08-16-product-visual-redesign/` |
-| 11 | ⓘ info/explanation shared primitive | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | — |
+| 11 | ⓘ info/explanation shared primitive | In progress | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | `openspec/changes/info-tooltip-primitive/` |
 | 12 | Client-owned Repository model + Clients hub | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | — |
 | 13 | Client information sources (expanded `IntegrationType`) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | — |
 | 14 | Repository SDD status check + bootstrap on connect | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.3, §7 | — |
