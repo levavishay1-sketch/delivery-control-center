@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 export function SyncButton({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -20,10 +21,10 @@ export function SyncButton({ projectId }: { projectId: string }) {
 
   return (
     <span className="inline-flex items-center gap-2">
-      <button onClick={onClick} disabled={pending} className="text-sm underline opacity-70 hover:opacity-100 disabled:opacity-40">
+      <Button variant="secondary" size="sm" onClick={onClick} disabled={pending}>
         {pending ? "Syncing…" : "Sync"}
-      </button>
-      {message && <span className="text-xs opacity-60">{message}</span>}
+      </Button>
+      {message && <span className="text-xs text-neutral-500 dark:text-neutral-400">{message}</span>}
     </span>
   );
 }

@@ -266,11 +266,17 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 10. Project Settings
 
-- [ ] 10.1 Migrate `src/app/projects/[id]/settings/page.tsx`'s page
-      chrome to `Panel`/design-system tokens.
-- [ ] 10.2 Migrate `ConnectorConfigForm.tsx` to `FormField`/`Button`.
-- [ ] 10.3 Migrate `SyncButton.tsx`, `ConflictResolutionPanel.tsx`,
-      `RepositoryLinkForm.tsx` to `Button` and status tokens.
+- [x] 10.1 Migrated `src/app/projects/[id]/settings/page.tsx`'s page
+      chrome to `Panel`/design-system tokens. Connector/sync-run raw
+      color maps (`text-emerald-600`/`text-red-600`/`text-blue-600`)
+      replaced with `StatusBadge` + local `StatusTone` maps
+      (`CONNECTOR_STATUS_TONES`, `RUN_STATUS_TONES`), following the same
+      pattern as Task Groups 4 and 6.
+- [x] 10.2 Migrated `ConnectorConfigForm.tsx` to `FormField`/`Button`.
+- [x] 10.3 Migrated `SyncButton.tsx`, `ConflictResolutionPanel.tsx`,
+      `RepositoryLinkForm.tsx` to `Button` and status tokens. Verified
+      live: connector status badge, type selector, and Save button all
+      render correctly with zero console errors.
 
 ## 11. Constitution
 

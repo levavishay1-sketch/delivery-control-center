@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 interface OpenConflict {
   id: string;
@@ -38,35 +39,27 @@ export function ConflictResolutionPanel({ conflicts }: { conflicts: OpenConflict
   return (
     <div className="flex flex-col gap-2">
       {conflicts.map((conflict) => (
-        <div key={conflict.id} className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
-          <p className="font-medium text-amber-600 dark:text-amber-400">
+        <div key={conflict.id} className="rounded-card border border-status-warning/30 bg-status-warning-bg p-3 text-xs">
+          <p className="font-medium text-status-warning">
             &ldquo;{conflict.workItem.title}&rdquo; — {conflict.field}
           </p>
-          <p className="mt-1 opacity-70">
+          <p className="mt-1 text-neutral-600 dark:text-neutral-300">
             Current (manual): <span className="font-mono">{conflict.currentValue}</span>
           </p>
-          <p className="opacity-70">
+          <p className="text-neutral-600 dark:text-neutral-300">
             Incoming (sync): <span className="font-mono">{conflict.incomingValue}</span>
           </p>
           <div className="mt-2 flex gap-2">
-            <button
-              onClick={() => resolve(conflict.id, "KEPT_MANUAL")}
-              disabled={pendingId !== null}
-              className="rounded border border-black/15 dark:border-white/20 px-2 py-1 disabled:opacity-40"
-            >
+            <Button variant="secondary" size="sm" onClick={() => resolve(conflict.id, "KEPT_MANUAL")} disabled={pendingId !== null}>
               {pendingId === conflict.id ? "…" : "Keep manual"}
-            </button>
-            <button
-              onClick={() => resolve(conflict.id, "ACCEPTED_INCOMING")}
-              disabled={pendingId !== null}
-              className="rounded bg-foreground px-2 py-1 text-background disabled:opacity-40"
-            >
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => resolve(conflict.id, "ACCEPTED_INCOMING")} disabled={pendingId !== null}>
               {pendingId === conflict.id ? "…" : "Accept incoming"}
-            </button>
+            </Button>
           </div>
         </div>
       ))}
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </div>
   );
 }

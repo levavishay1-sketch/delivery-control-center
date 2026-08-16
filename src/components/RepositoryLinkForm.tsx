@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 interface Repository {
   id: string;
@@ -43,19 +44,19 @@ export function RepositoryLinkForm({ projectId, repository }: { projectId: strin
     <div className="mt-2 flex items-center gap-2">
       {repository ? (
         <>
-          <span className="text-xs opacity-70">
+          <span className="text-xs text-neutral-500 dark:text-neutral-400">
             Linked: {repository.owner}/{repository.name}
           </span>
-          <button onClick={unlink} disabled={pending} className="rounded border border-black/15 dark:border-white/20 px-2 py-1 text-xs disabled:opacity-40">
+          <Button variant="destructive" size="sm" onClick={unlink} disabled={pending}>
             {pending ? "…" : "Unlink"}
-          </button>
+          </Button>
         </>
       ) : (
-        <button onClick={link} disabled={pending} className="rounded bg-foreground px-2 py-1 text-xs text-background disabled:opacity-40">
+        <Button variant="primary" size="sm" onClick={link} disabled={pending}>
           {pending ? "Linking…" : "Link repository"}
-        </button>
+        </Button>
       )}
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </div>
   );
 }

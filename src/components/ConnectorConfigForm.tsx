@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { FormField, Input, Select } from "@/components/ui/FormField";
 
 type ConnectorType = "MANUAL" | "JIRA" | "AZURE_DEVOPS" | "GITHUB";
 
@@ -61,43 +63,33 @@ export function ConnectorConfigForm({ projectId, currentType }: { projectId: str
   const fields = CONFIG_FIELDS[type];
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2">
-      <label className="flex items-center gap-2 text-xs">
-        <span className="opacity-60">Type</span>
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value as ConnectorType)}
-          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-xs"
-        >
+    <form onSubmit={onSubmit} className="flex flex-col gap-3">
+      <FormField label="Type" htmlFor="connector-type" className="max-w-xs">
+        <Select id="connector-type" value={type} onChange={(e) => setType(e.target.value as ConnectorType)}>
           <option value="MANUAL">Manual</option>
           <option value="JIRA">Jira</option>
           <option value="AZURE_DEVOPS">Azure DevOps</option>
           <option value="GITHUB">GitHub</option>
-        </select>
-      </label>
+        </Select>
+      </FormField>
 
       {fields.map((field) => (
-        <label key={field.key} className="flex items-center gap-2 text-xs">
-          <span className="w-40 opacity-60">{field.label}</span>
-          <input
+        <FormField key={field.key} label={field.label} htmlFor={`connector-${field.key}`} className="max-w-xs">
+          <Input
+            id={`connector-${field.key}`}
             type={field.secret ? "password" : "text"}
             value={config[field.key] ?? ""}
             onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
-            className="w-56 rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-xs"
           />
-        </label>
+        </FormField>
       ))}
 
       <div className="flex items-center gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="w-fit rounded bg-foreground px-3 py-1 text-xs font-medium text-background disabled:opacity-40"
-        >
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? "Saving…" : "Save connector"}
-        </button>
-        {success && <span className="text-xs text-green-600 dark:text-green-400">Saved</span>}
-        {error && <span className="text-xs text-red-500">{error}</span>}
+        </Button>
+        {success && <span className="text-xs text-status-healthy">Saved</span>}
+        {error && <span className="text-xs text-status-critical">{error}</span>}
       </div>
     </form>
   );
