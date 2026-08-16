@@ -21,9 +21,13 @@
 
 ## 3. Tests
 
-- [ ] 3.1 Unit test: `InfoTooltip` opens/closes via click, keyboard (Enter/Space to open, Escape to
-      close), and closes on outside click; `aria-expanded` reflects state. **Blocked — see note
-      below; paused for a decision rather than silently adding new test infrastructure.**
+- [x] 3.1 Unit test: `InfoTooltip` opens/closes via click, keyboard (Enter/Space to open, Escape to
+      close), and closes on outside click; `aria-expanded` reflects state. **Resolved as
+      intentionally not done** — user chose "skip for now" when asked, given this project has no
+      component-testing infrastructure (see note below) and the E2E coverage in 3.2/3.3 already
+      exercises the same open/close/keyboard/aria-expanded behavior against a real browser.
+      Standing up `@testing-library/react`/jsdom is deferred to its own future decision, not
+      bundled into this slice.
 - [x] 3.2 Extend the existing RTL E2E spec (`e2e/slice8-i18n-rtl.spec.ts`) with a step verifying
       the new AI Budget `InfoTooltip` mirrors correctly under RTL (position relative to the field,
       readable popover content) — following that file's established pattern of appending
