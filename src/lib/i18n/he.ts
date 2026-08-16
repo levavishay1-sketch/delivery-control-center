@@ -10,6 +10,7 @@ export const he: Translations = {
   nav: {
     dashboard: "לוח בקרה",
     attentionCenter: "מרכז התראות",
+    clients: "לקוחות",
     auditTrail: "יומן ביקורת",
     configuration: "הגדרות",
     signOut: "התנתקות",

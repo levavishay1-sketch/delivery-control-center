@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
 
-/** A project's linked repository, if any, via its connector. */
+/** A project's linked repository, if any, via its `ProjectRepository` link (Slice 12 — a repository may be shared across projects, so this no longer assumes the project's own connector created it). */
 export async function getRepositoryForProject(projectId: string) {
-  return db.repository.findFirst({ where: { connector: { projectId } } });
+  const link = await db.projectRepository.findFirst({ where: { projectId }, include: { repository: true } });
+  return link?.repository ?? null;
 }
 
 /** A connector's linked repository, if any — used by the webhook route, which addresses a connector directly. */

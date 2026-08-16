@@ -50,7 +50,7 @@ async function makePullRequest(project: { id: string }, merged: boolean, testSta
   const connector = await getOrCreateConnectorForProject(project.id);
   const repository = await db.repository.upsert({
     where: { connectorId: connector.id },
-    create: { connectorId: connector.id, owner: "acme", name: "widgets", externalId: "1" },
+    create: { connectorId: connector.id, clientId, owner: "acme", name: "widgets", externalId: "1" },
     update: {},
   });
   const pullRequest = await db.pullRequest.create({

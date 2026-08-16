@@ -120,13 +120,52 @@ describe("linkRepository", () => {
 });
 
 describe("unlinkRepository", () => {
-  it("removes the repository record", async () => {
+  it("removes the project's link but keeps the client-owned Repository record", async () => {
     const project = await makeGithubProject("Unlink Repo Project");
     const repository = await linkRepository(managerCtx, project.id);
 
-    await unlinkRepository(managerCtx, repository.id);
+    await unlinkRepository(managerCtx, project.id, repository.id);
+
+    const link = await db.projectRepository.findFirst({ where: { projectId: project.id, repositoryId: repository.id } });
+    expect(link).toBeNull();
 
     const found = await db.repository.findUnique({ where: { id: repository.id } });
-    expect(found).toBeNull();
+    expect(found).not.toBeNull();
+  });
+
+  it("reuses an existing client repository when a second project links the same one, without duplicating it", async () => {
+    // Isolated org/client (rather than the module-level clientId shared by every other test in
+    // this file, which all mock the same "acme/widgets" fetchRepository result) so the
+    // find-or-create-by-client counts below aren't polluted by sibling tests' own links.
+    const org = await db.organization.create({ data: { name: "Shared Repo Org", slug: `shared-repo-org-${Date.now()}` } });
+    orgIds.push(org.id);
+    const client = await db.client.create({ data: { organizationId: org.id, name: "Shared Repo Client", slug: "shared-repo" } });
+    const manager = await db.user.create({ data: { email: `shared-repo-manager-${Date.now()}@test.local`, name: "Shared Repo Manager" } });
+    await db.clientMembership.create({ data: { userId: manager.id, clientId: client.id, role: "MANAGER" } });
+    const ctx: AuthContext = { userId: manager.id, displayName: "Shared Repo Manager", isOrgAdmin: false, memberships: [{ clientId: client.id, role: "MANAGER" }] };
+
+    async function makeSharedGithubProject(name: string) {
+      const project = await createProject(ctx, {
+        clientId: client.id,
+        name,
+        key: `${name.replace(/[^A-Z]/gi, "").slice(0, 6).toUpperCase()}${Date.now().toString(36).toUpperCase()}`,
+      });
+      await configureConnector(ctx, project.id, { type: "GITHUB", config: { owner: "acme", repo: "widgets", token: "ghp_x" } });
+      return project;
+    }
+
+    const projectA = await makeSharedGithubProject("Shared Repo Project A");
+    const repoA = await linkRepository(ctx, projectA.id);
+
+    const projectB = await makeSharedGithubProject("Shared Repo Project B");
+    const repoB = await linkRepository(ctx, projectB.id);
+
+    expect(repoB.id).toBe(repoA.id);
+
+    const totalRepos = await db.repository.count({ where: { clientId: client.id, owner: "acme", name: "widgets" } });
+    expect(totalRepos).toBe(1);
+
+    const linkCount = await db.projectRepository.count({ where: { repositoryId: repoA.id } });
+    expect(linkCount).toBe(2);
   });
 });

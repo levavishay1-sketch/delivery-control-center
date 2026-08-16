@@ -22,7 +22,9 @@ function accessibleClientIds(ctx: AuthContext): string[] | undefined {
  */
 export async function getItemsNeedingAttention(ctx: AuthContext) {
   const clientIds = accessibleClientIds(ctx);
-  const projectScope = clientIds ? { clientId: { in: clientIds } } : undefined;
+  // Slice 12 — excludes work under a deactivated client (an active-work surface, unlike the
+  // Clients hub, where a deactivated client's items stay visible).
+  const projectScope = { client: { active: true }, ...(clientIds ? { clientId: { in: clientIds } } : {}) };
 
   const [decisions, blockers, risks, deadlines, approvalGates, pausedClarifications, syncConflicts] = await Promise.all([
     db.decision.findMany({

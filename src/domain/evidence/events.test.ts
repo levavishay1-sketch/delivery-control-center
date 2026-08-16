@@ -43,7 +43,7 @@ async function makeRepository(name: string) {
     key: `${name.replace(/[^A-Z]/gi, "").slice(0, 6).toUpperCase()}${Date.now().toString(36).toUpperCase()}`,
   });
   const connector = await getOrCreateConnectorForProject(project.id);
-  return db.repository.create({ data: { connectorId: connector.id, owner: "acme", name: "widgets", externalId: "1" } });
+  return db.repository.create({ data: { connectorId: connector.id, clientId, owner: "acme", name: "widgets", externalId: "1" } });
 }
 
 describe("recordPushEvent", () => {

@@ -2,6 +2,7 @@ export const en = {
   nav: {
     dashboard: "Dashboard",
     attentionCenter: "Attention Center",
+    clients: "Clients",
     auditTrail: "Audit Trail",
     configuration: "Configuration",
     signOut: "Sign out",

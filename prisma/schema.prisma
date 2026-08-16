@@ -335,6 +335,10 @@ model Client {
   // Slice 3 — unset means no spending limit for this client. A project's own
   // aiBudgetUsd, if set, overrides this one (see design.md decision 4).
   aiBudgetUsd       Decimal?     @db.Decimal(10, 4)
+  // Slice 12 — deactivate/reactivate, not delete: historical data (projects, work items,
+  // audit trail, cost records) is preserved; a deactivated client's active work is excluded
+  // from Dashboard/Attention Center but remains reachable from its own detail page.
+  active            Boolean      @default(true)
   createdAt         DateTime     @default(now())
   updatedAt         DateTime     @updatedAt
 
@@ -342,6 +346,9 @@ model Client {
   memberships     ClientMembership[]
   budgetOverrides BudgetOverride[]
   configChanges   ConfigChange[]
+  // Slice 12 — a client's repository pool, independent of which project's connector
+  // originally created each one (see Repository.clientId below).
+  repositories    Repository[]
 
   @@unique([organizationId, slug])
 }
@@ -366,6 +373,9 @@ model Project {
   // migration and the backfill (see design.md Migration Plan); every Project
   // has exactly one Connector once the backfill has run.
   connector       Connector?
+  // Slice 12 — repositories this project has linked from its client's pool (may be shared
+  // with other projects under the same client; see ProjectRepository).
+  repositoryLinks ProjectRepository[]
 
   @@unique([clientId, key])
 }
@@ -842,6 +852,12 @@ model Repository {
   id          String    @id @default(cuid())
   connectorId String    @unique
   connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  // Slice 12 — a Repository is owned by the Client, not exclusively by the connector/project
+  // that first linked it (design.md decision: connectorId stays for the sync/webhook machinery
+  // that already keys off it; clientId is what makes the repository reusable across the
+  // client's other projects via ProjectRepository).
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
   owner       String
   name        String
   externalId  String
@@ -853,6 +869,23 @@ model Repository {
   testRuns     TestRun[]
   builds       Build[]
   deployments  Deployment[]
+  // Slice 12 — every project this repository is linked to (find-or-create by client in
+  // linkRepository means more than one project can share the same Repository row).
+  projectLinks ProjectRepository[]
+
+  @@index([clientId])
+}
+
+/** Slice 12 — many-to-many: which of a client's repositories a project has linked as relevant. */
+model ProjectRepository {
+  id           String     @id @default(cuid())
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([projectId, repositoryId])
 }
 
 model Commit {

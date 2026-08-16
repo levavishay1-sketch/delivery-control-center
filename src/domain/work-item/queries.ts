@@ -115,7 +115,8 @@ export async function getHighRiskWorkItems(ctx: AuthContext) {
     where: {
       risk: { in: ["HIGH", "CRITICAL"] },
       status: { notIn: ["COMPLETED", "CLOSED"] },
-      project: clientIds ? { clientId: { in: clientIds } } : undefined,
+      // Slice 12 — excludes work under a deactivated client (active-work surface only).
+      project: { client: { active: true }, ...(clientIds ? { clientId: { in: clientIds } } : {}) },
     },
     include: { owner: true, project: true, pipeline: true },
   });
@@ -132,7 +133,8 @@ export async function getUpcomingDeadlines(ctx: AuthContext, withinDays = 7) {
     where: {
       dueDate: { lte: cutoff, not: null },
       status: { notIn: ["COMPLETED", "CLOSED"] },
-      project: clientIds ? { clientId: { in: clientIds } } : undefined,
+      // Slice 12 — excludes work under a deactivated client (active-work surface only).
+      project: { client: { active: true }, ...(clientIds ? { clientId: { in: clientIds } } : {}) },
     },
     orderBy: { dueDate: "asc" },
     include: { owner: true, project: true, pipeline: true },

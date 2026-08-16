@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { listProjectsForHome } from "@/domain/project/queries";
-import { listClients, listClientMembers } from "@/domain/client/queries";
+import { listActiveClients, listClientMembers } from "@/domain/client/queries";
 import { listRecentAuditEvents } from "@/domain/audit/queries";
 import { getItemsNeedingAttention } from "@/domain/attention/queries";
 import { getClientAiCost } from "@/domain/agent/queries";
@@ -51,7 +51,7 @@ export default async function HomePage() {
   const t = getDictionary(locale);
   const [projects, clients, attention, recentEvents, organizations] = await Promise.all([
     listProjectsForHome(ctx),
-    listClients(ctx),
+    listActiveClients(ctx),
     getItemsNeedingAttention(ctx),
     listRecentAuditEvents(ctx, 10),
     ctx.isOrgAdmin ? listOrganizations() : Promise.resolve([]),

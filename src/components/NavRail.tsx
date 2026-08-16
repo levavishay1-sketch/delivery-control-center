@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AlertCircle, LayoutDashboard, LogOut, ScrollText, Settings } from "lucide-react";
+import { AlertCircle, Building2, LayoutDashboard, LogOut, ScrollText, Settings } from "lucide-react";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import type { Locale } from "@/lib/i18n/locales";
 import type { Translations } from "@/lib/i18n/en";
@@ -64,6 +64,7 @@ export function NavRail({ configHref, t, locale, userEmail, onSignOut }: NavRail
 
   const isDashboard = pathname === "/";
   const isAttention = pathname.startsWith("/attention");
+  const isClients = pathname.startsWith("/clients");
   const isAudit = pathname.startsWith("/audit");
   const isConfig = !!configHref && pathname.startsWith(configHref);
 
@@ -94,6 +95,10 @@ export function NavRail({ configHref, t, locale, userEmail, onSignOut }: NavRail
         <Link href="/attention" className={itemClass(isAttention)} style={itemStyle(isAttention)} aria-current={isAttention ? "page" : undefined}>
           <AlertCircle className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
           {t.nav.attentionCenter}
+        </Link>
+        <Link href="/clients" className={itemClass(isClients)} style={itemStyle(isClients)} aria-current={isClients ? "page" : undefined}>
+          <Building2 className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+          {t.nav.clients}
         </Link>
         <Link href="/audit" className={itemClass(isAudit)} style={itemStyle(isAudit)} aria-current={isAudit ? "page" : undefined}>
           <ScrollText className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />

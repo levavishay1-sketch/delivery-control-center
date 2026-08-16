@@ -28,7 +28,7 @@ export async function DELETE(_req: Request, routeCtx: RouteContext<"/api/project
     const ctx = await requireAuthContext();
     const repository = await getRepositoryForProject(id);
     if (!repository) throw new NotFoundError("Repository not found");
-    await unlinkRepository(ctx, repository.id);
+    await unlinkRepository(ctx, id, repository.id);
     return NextResponse.json({ unlinked: true });
   } catch (err) {
     if (err instanceof DomainError) {

@@ -8,7 +8,7 @@ export async function listClients(ctx: AuthContext) {
   return db.client.findMany({
     where: clientIds ? { id: { in: clientIds } } : undefined,
     orderBy: { createdAt: "desc" },
-    include: { organization: true },
+    include: { organization: true, _count: { select: { projects: true } } },
   });
 }
 
@@ -17,6 +17,46 @@ export async function getClientById(ctx: AuthContext, id: string) {
   if (!client) return null;
   requireClientRole(ctx, client.id, ALL_ROLES);
   return client;
+}
+
+/** Slice 12 — same access-scoping as listClients, narrowed to clients excluded from active-work surfaces (Dashboard/Attention Center). */
+export async function listActiveClients(ctx: AuthContext) {
+  const clientIds = ctx.isOrgAdmin ? undefined : ctx.memberships.map((m) => m.clientId);
+  return db.client.findMany({
+    where: { active: true, ...(clientIds ? { id: { in: clientIds } } : {}) },
+    orderBy: { createdAt: "desc" },
+    include: { organization: true },
+  });
+}
+
+/**
+ * Slice 12 — a client's projects, its repository pool (via the new client-owned Repository.clientId,
+ * across all its projects), and its connectors, for the Clients hub detail page.
+ */
+export async function getClientDetail(ctx: AuthContext, id: string) {
+  const client = await db.client.findUnique({ where: { id } });
+  if (!client) return null;
+  requireClientRole(ctx, client.id, ALL_ROLES);
+
+  const [projects, repositories] = await Promise.all([
+    db.project.findMany({
+      where: { clientId: id },
+      include: { connector: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    db.repository.findMany({
+      where: { clientId: id },
+      include: { projectLinks: { include: { project: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  return {
+    client,
+    projects,
+    repositories,
+    connectors: projects.map((p) => p.connector).filter((c) => c !== null),
+  };
 }
 
 /** Users with a membership on this client — for owner/executor pickers. Requires at least read access. */

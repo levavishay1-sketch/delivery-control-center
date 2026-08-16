@@ -39,7 +39,7 @@ async function makeProjectWithPullRequest(name: string) {
   });
   await configureConnector(managerCtx, project.id, { type: "GITHUB", config: { owner: "acme", repo: "widgets", token: "ghp_x" } });
   const connector = await getOrCreateConnectorForProject(project.id);
-  const repository = await db.repository.create({ data: { connectorId: connector.id, owner: "acme", name: "widgets", externalId: "1" } });
+  const repository = await db.repository.create({ data: { connectorId: connector.id, clientId, owner: "acme", name: "widgets", externalId: "1" } });
   const pullRequest = await db.pullRequest.create({
     data: { repositoryId: repository.id, number: 1, title: "Add feature", url: "https://x/pull/1" },
   });

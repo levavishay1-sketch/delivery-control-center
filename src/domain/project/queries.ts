@@ -7,11 +7,15 @@ function accessibleClientIds(ctx: AuthContext): string[] | undefined {
   return ctx.isOrgAdmin ? undefined : ctx.memberships.map((m) => m.clientId);
 }
 
-/** Projects with their client, work items, and pipeline status, for the home page list — scoped to ctx's accessible clients. */
+/**
+ * Projects with their client, work items, and pipeline status, for the home page list — scoped to
+ * ctx's accessible clients. Excludes projects under a deactivated client (Slice 12 — Dashboard is
+ * an active-work surface; the Clients hub is where a deactivated client's projects stay visible).
+ */
 export async function listProjectsForHome(ctx: AuthContext) {
   const clientIds = accessibleClientIds(ctx);
   return db.project.findMany({
-    where: clientIds ? { clientId: { in: clientIds } } : undefined,
+    where: { client: { active: true }, ...(clientIds ? { clientId: { in: clientIds } } : {}) },
     orderBy: { createdAt: "desc" },
     include: {
       client: true,

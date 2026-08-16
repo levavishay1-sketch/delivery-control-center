@@ -207,7 +207,7 @@ re-litigate:
 | 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
 | 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/archive/2026-08-16-product-visual-redesign/` |
 | 11 | ⓘ info/explanation shared primitive | **Done** | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | `openspec/changes/info-tooltip-primitive/` (implemented, not yet archived) |
-| 12 | Client-owned Repository model + Clients hub | In progress | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | `openspec/changes/client-repository-model/` |
+| 12 | Client-owned Repository model + Clients hub | **Done** | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | `openspec/changes/client-repository-model/` (implemented, not yet archived) |
 | 13 | Client information sources (expanded `IntegrationType`) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | — |
 | 14 | Repository SDD status check + bootstrap on connect | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.3, §7 | — |
 | 15 | Repository/source relevance recommendation | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.4 | — |
@@ -526,6 +526,34 @@ by explicit user decision to skip, since this project has no
 component-testing infrastructure yet (Vitest runs `environment: "node"`;
 the existing suite is domain-layer only) — deferred as its own future
 decision rather than bundled into this slice.
+
+**Slice 12 status:** Done. Added `Repository.clientId` (backfilled via
+`connectorId → connector.projectId → project.clientId`, then made
+`NOT NULL`, per this project's three-step migration convention) and a new
+`ProjectRepository` join table, so a repository is client-owned and
+reusable across projects; `linkRepository` now finds-or-creates by
+`(clientId, owner, name)` instead of by `connectorId`, and
+`unlinkRepository` removes only the requesting project's link rather than
+deleting a repository that may still be shared. Wired real Client CRUD end
+to end — `updateClient`/`deactivateClient`/`reactivateClient` (the latter
+added per explicit user instruction, alongside a matching
+`tenancy` spec requirement, so Create/Edit/Deactivate/Reactivate are all
+first-class) — with `POST/PATCH /api/clients`,
+`POST /api/clients/[id]/{deactivate,reactivate}` routes and
+`AddClientForm`/`EditClientForm`/`ClientActivationControl` UI (the latter
+using Slice 11's `InfoTooltip` to explain what deactivation does and does
+not do). Added the `/clients` hub (list + detail pages) and a "Clients"
+NavRail entry, and excluded deactivated clients' projects from the
+Dashboard and Attention Center (`listActiveClients`, plus a
+`client.active` filter on `getItemsNeedingAttention`'s underlying
+queries). Repository-creation decoupling (a repository connectable with
+zero projects) stays out of scope, deferred to Slice 13 as proposed.
+Covered by unit tests (`src/domain/client/commands.test.ts`,
+`src/domain/evidence/commands.test.ts`'s reuse/unlink cases) and two new
+E2E specs (`e2e/slice12-client-lifecycle.spec.ts`) for the full
+create/edit/deactivate/reactivate lifecycle and cross-project repository
+reuse; build, lint, and an RTL spot-check of both new pages all verified
+live.
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
   every AI-facing slice after it should be built to use it from the start.

@@ -25,10 +25,13 @@ function mapCheckRunStatus(status: string, conclusion: string | null): TestRunSt
 }
 
 /**
- * Links a project's GitHub repository as its source of engineering evidence (design.md decision
- * 1: one Repository per Connector, reusing its auth/config), then runs a bounded catch-up fetch
- * inline (design.md decision 4) for commits, pull requests, and each pull request's check runs —
- * not queued through the Job runtime, since this is a one-time, bounded, user-initiated action.
+ * Links a project's GitHub repository as its source of engineering evidence, through that
+ * project's `Connector`. Finds-or-creates the `Repository` by `(clientId, owner, name)` (Slice 12
+ * design.md decision: a repository is owned by the client, so a second project under the same
+ * client linking the same GitHub repo reuses the existing row via `ProjectRepository` instead of
+ * duplicating it) rather than by `connectorId`. Runs a bounded catch-up fetch inline (design.md
+ * decision 4) for commits, pull requests, and each pull request's check runs — not queued through
+ * the Job runtime, since this is a one-time, bounded, user-initiated action.
  */
 export async function linkRepository(ctx: AuthContext, projectId: string) {
   const project = await getProjectById(projectId);
@@ -40,16 +43,29 @@ export async function linkRepository(ctx: AuthContext, projectId: string) {
     throw new ValidationError("Linking a repository requires a configured GitHub connector.");
   }
 
-  const existing = await db.repository.findUnique({ where: { connectorId: connector.id } });
-  if (existing) throw new ValidationError("This project already has a linked repository.");
+  const existingLink = await db.projectRepository.findFirst({ where: { projectId } });
+  if (existingLink) throw new ValidationError("This project already has a linked repository.");
 
   const config = decryptIntegrationConfig("GITHUB", connector.config as Record<string, unknown> | null);
   const fetched = await fetchRepository(config ?? null);
 
+  const existingRepo = await db.repository.findFirst({
+    where: { clientId: project.clientId, owner: fetched.owner, name: fetched.name },
+  });
+
   const repository = await db.$transaction(async (tx) => {
-    const repo = await tx.repository.create({
-      data: { connectorId: connector.id, owner: fetched.owner, name: fetched.name, externalId: fetched.externalId },
-    });
+    const repo =
+      existingRepo ??
+      (await tx.repository.create({
+        data: {
+          connectorId: connector.id,
+          clientId: project.clientId,
+          owner: fetched.owner,
+          name: fetched.name,
+          externalId: fetched.externalId,
+        },
+      }));
+    await tx.projectRepository.create({ data: { projectId: project.id, repositoryId: repo.id } });
     await recordAuditEvent(tx, {
       projectId: project.id,
       actor: "USER",
@@ -130,16 +146,23 @@ async function runCatchUpFetch(repositoryId: string, config: Record<string, unkn
   }
 }
 
-/** Removes a project's linked repository and every commit/PR/test-run/build/deployment recorded under it. */
-export async function unlinkRepository(ctx: AuthContext, repositoryId: string) {
-  const repository = await db.repository.findUnique({ where: { id: repositoryId }, include: { connector: true } });
-  if (!repository) throw new NotFoundError("Repository not found");
-  const project = await getProjectById(repository.connector.projectId);
+/**
+ * Removes the link between a project and its repository (Slice 12: a `Repository` is owned by
+ * the client, not this project, and may still be linked to other projects — unlinking removes
+ * only this project's `ProjectRepository` row, never the shared `Repository` and its recorded
+ * commits/PRs/test runs).
+ */
+export async function unlinkRepository(ctx: AuthContext, projectId: string, repositoryId: string) {
+  const project = await getProjectById(projectId);
   if (!project) throw new NotFoundError("Project not found");
   requireClientRole(ctx, project.clientId, WRITE_ROLES);
 
+  const link = await db.projectRepository.findFirst({ where: { projectId, repositoryId } });
+  if (!link) throw new NotFoundError("Repository not linked to this project");
+  const repository = await db.repository.findUniqueOrThrow({ where: { id: repositoryId } });
+
   return db.$transaction(async (tx) => {
-    await tx.repository.delete({ where: { id: repositoryId } });
+    await tx.projectRepository.delete({ where: { id: link.id } });
     await recordAuditEvent(tx, {
       projectId: project.id,
       actor: "USER",
