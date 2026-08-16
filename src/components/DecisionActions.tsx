@@ -24,7 +24,7 @@ export function DecisionActions({ decisionId, onDecided }: { decisionId: string;
   }
 
   return (
-    <div className="flex flex-col gap-1">
+    <div className="flex w-fit flex-col gap-1 self-start">
       <ApproveRejectButtons onApprove={() => decide("approve")} onReject={() => decide("reject")} pending={pending} />
       {error && <p className="text-xs text-status-critical">{error}</p>}
     </div>

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 export function RemoveDependencyButton({ dependencyId, onRemoved }: { dependencyId: string; onRemoved?: () => void }) {
   const router = useRouter();
@@ -23,10 +24,10 @@ export function RemoveDependencyButton({ dependencyId, onRemoved }: { dependency
 
   return (
     <span className="flex flex-col items-end gap-0.5">
-      <button onClick={remove} disabled={pending} className="text-xs text-red-500 underline disabled:opacity-50">
+      <Button variant="destructive" size="sm" onClick={remove} disabled={pending}>
         {pending ? "Removing…" : "Remove"}
-      </button>
-      {error && <span className="text-xs text-red-500">{error}</span>}
+      </Button>
+      {error && <span className="text-xs text-status-critical">{error}</span>}
     </span>
   );
 }

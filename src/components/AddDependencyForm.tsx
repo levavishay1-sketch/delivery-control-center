@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Input, Select } from "@/components/ui/FormField";
 
 interface ProjectItem {
   id: string;
@@ -48,35 +50,37 @@ export function AddDependencyForm({
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]">
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         + Add Dependency
-      </button>
+      </Button>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded border border-black/10 dark:border-white/15 p-3">
-      <select value={dependsOnWorkItemId} onChange={(e) => setDependsOnWorkItemId(e.target.value)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-md border border-border-hairline bg-surface p-3">
+      <Select value={dependsOnWorkItemId} onChange={(e) => setDependsOnWorkItemId(e.target.value)} aria-label="Depends on">
         {candidates.map((c) => (
-          <option key={c.id} value={c.id}>{c.title}</option>
+          <option key={c.id} value={c.id}>
+            {c.title}
+          </option>
         ))}
-      </select>
-      <input
+      </Select>
+      <Input
         required
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason for the dependency"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Reason"
       />
       <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50">
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? "Adding…" : "Add Dependency"}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="text-sm opacity-70 hover:opacity-100">
+        </Button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>
           Cancel
-        </button>
+        </Button>
       </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </form>
   );
 }

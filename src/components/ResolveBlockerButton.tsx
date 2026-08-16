@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 /** onResolved, if given (e.g. the Quick View drawer, whose data isn't a Server Component), is called instead of router.refresh(). */
 export function ResolveBlockerButton({ blockerId, onResolved }: { blockerId: string; onResolved?: () => void }) {
@@ -23,15 +24,11 @@ export function ResolveBlockerButton({ blockerId, onResolved }: { blockerId: str
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        onClick={resolve}
-        disabled={pending}
-        className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-      >
+    <div className="flex w-fit flex-col gap-1 self-start">
+      <Button variant="primary" size="sm" onClick={resolve} disabled={pending}>
         {pending ? "Resolving…" : "Resolve Blocker"}
-      </button>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      </Button>
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </div>
   );
 }

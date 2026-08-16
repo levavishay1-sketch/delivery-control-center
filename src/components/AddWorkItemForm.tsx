@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Input, Textarea } from "@/components/ui/FormField";
 
 export function AddWorkItemForm({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -29,40 +31,36 @@ export function AddWorkItemForm({ projectId }: { projectId: string }) {
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="text-sm underline opacity-70 hover:opacity-100">
+      <button type="button" onClick={() => setOpen(true)} className="text-sm text-accent hover:underline">
         + Add work item
       </button>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded border border-black/10 dark:border-white/15 p-3">
-      <input
+    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-md border border-border-hairline bg-surface p-3">
+      <Input
         required
         autoFocus
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Work item title"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Work item title"
       />
-      <textarea
+      <Textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         placeholder="Description"
         rows={2}
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Description"
       />
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={pending}
-          className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
-        >
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? "Creating…" : "Create work item"}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="text-sm opacity-70 hover:opacity-100">
+        </Button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

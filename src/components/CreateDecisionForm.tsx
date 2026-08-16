@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/FormField";
 
 export function CreateDecisionForm({ workItemId, onCreated }: { workItemId: string; onCreated?: () => void }) {
   const router = useRouter();
@@ -38,51 +40,46 @@ export function CreateDecisionForm({ workItemId, onCreated }: { workItemId: stri
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]">
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         Create Decision
-      </button>
+      </Button>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded border border-black/10 dark:border-white/15 p-3">
-      <input
+    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-md border border-border-hairline bg-surface p-3">
+      <Input
         required
         autoFocus
         value={question}
         onChange={(e) => setQuestion(e.target.value)}
         placeholder="Question (what needs to be decided?)"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Question"
       />
-      <input
+      <Input
         required
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason (why is this decision needed?)"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Reason"
       />
-      <input
+      <Input
         required
         value={impact}
         onChange={(e) => setImpact(e.target.value)}
         placeholder="Impact (consequence of the decision)"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Impact"
       />
-      <input
-        type="date"
-        value={deadline}
-        onChange={(e) => setDeadline(e.target.value)}
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-      />
+      <Input type="date" value={deadline} onChange={(e) => setDeadline(e.target.value)} aria-label="Deadline" />
       <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="rounded bg-amber-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? "Creating…" : "Create Decision"}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="text-sm opacity-70 hover:opacity-100">
+        </Button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>
           Cancel
-        </button>
+        </Button>
       </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </form>
   );
 }

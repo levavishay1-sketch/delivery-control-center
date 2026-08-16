@@ -138,19 +138,40 @@ the duplicate-text bug is gone after the fix.
 
 ## 5. Dashboard, Attention Center, Quick View
 
-- [ ] 5.1 Apply the new shell/workspace container and any token changes
-      to `src/app/page.tsx` and `src/app/attention/page.tsx` — both
-      already design-system-token-driven, so this is adoption of the new
-      shell/spacing, not a rewrite.
-- [ ] 5.2 Migrate `AddProjectForm.tsx` and `AddWorkItemForm.tsx` (both
-      currently raw-legacy) to the new `Button`/`FormField` primitives.
-- [ ] 5.3 Migrate `CreateBlockerForm.tsx`, `CreateDecisionForm.tsx`,
+- [x] 5.1 The new shell/workspace container applies automatically via
+      `layout.tsx` (Task Group 3) to every page including these — no
+      per-page change needed here; verified live below.
+- [x] 5.2 Migrated `AddProjectForm.tsx` and `AddWorkItemForm.tsx` (both
+      previously raw-legacy) to `Button`/`FormField`/`Input`/`Select`.
+- [x] 5.3 Migrated `CreateBlockerForm.tsx`, `CreateDecisionForm.tsx`,
       `ResolveBlockerButton.tsx`, `AddDependencyForm.tsx`,
-      `RemoveDependencyButton.tsx` to `Button`/`FormField`, reusing
-      `ApproveRejectButtons` (2.4) where applicable.
-- [ ] 5.4 Verify `QuickViewDrawer` and its embedded `OverviewTab`/
-      `DependenciesTab`/`TimelineTab` render correctly with the migrated
-      forms above (they're shared between Quick View and the 360 page).
+      `RemoveDependencyButton.tsx` to `Button`/`FormField`. Consolidated
+      their previously-inconsistent submit-button colors (red for
+      blocker, amber for decision, emerald for resolve/add — three ad
+      hoc choices, exactly the "every feature chooses its own color"
+      problem the redesign exists to fix) onto the same `primary`
+      variant every other "Create X" action already uses; `Remove` maps
+      to `destructive` (a real removal), matching the same reasoning
+      Task Group 4 applied to Approve/Reject.
+- [x] 5.4 Verified `QuickViewDrawer` and its embedded `OverviewTab`/
+      `DependenciesTab`/`TimelineTab` live against the migrated forms —
+      Edit/Create Blocker/Create Decision all render as consistent
+      `Button`s with zero console errors.
+
+**Bug found and fixed during live verification, not caught by build/
+lint**: `ResolveBlockerButton` and `DecisionActions` rendered as a
+full-width purple bar spanning the entire row on the Attention Center,
+not a compact button. Root cause: the Attention Center defines its own
+local `Row` component (`flex flex-col gap-1.5`, distinct from
+`ui/Row.tsx`) with no `items-start`, so flexbox's default
+`align-items: stretch` stretched the button's direct wrapping `<div>`
+to the row's full width — a pre-existing layout characteristic (the old
+raw `<button>` had the identical wrapper), only now visible because this
+session is the first time these components were actually visually
+verified live rather than just built/linted. Fixed in the components
+themselves (`w-fit self-start` on the outer wrapper) rather than
+patching every call site's parent, so it can't recur wherever else
+these are placed.
 
 ## 6. 360° Delivery Record
 

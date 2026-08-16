@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Input, Select } from "@/components/ui/FormField";
 
 interface Member {
   id: string;
@@ -53,49 +55,46 @@ export function CreateBlockerForm({
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="rounded border border-black/15 dark:border-white/20 px-3 py-1.5 text-sm hover:bg-black/[.03] dark:hover:bg-white/[.04]">
+      <Button variant="secondary" size="sm" onClick={() => setOpen(true)}>
         Create Blocker
-      </button>
+      </Button>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded border border-black/10 dark:border-white/15 p-3">
-      <input
+    <form onSubmit={onSubmit} className="flex flex-col gap-2 rounded-md border border-border-hairline bg-surface p-3">
+      <Input
         required
         autoFocus
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason (why is this blocked?)"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Reason"
       />
-      <input
+      <Input
         required
         value={requiredAction}
         onChange={(e) => setRequiredAction(e.target.value)}
         placeholder="Required action (what needs to happen?)"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+        aria-label="Required action"
       />
-      <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+      <Select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} aria-label="Owner">
         {members.map((m) => (
-          <option key={m.id} value={m.id}>{m.name ?? m.email}</option>
+          <option key={m.id} value={m.id}>
+            {m.name ?? m.email}
+          </option>
         ))}
-      </select>
-      <input
-        value={impact}
-        onChange={(e) => setImpact(e.target.value)}
-        placeholder="Impact (optional)"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-      />
+      </Select>
+      <Input value={impact} onChange={(e) => setImpact(e.target.value)} placeholder="Impact (optional)" aria-label="Impact" />
       <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+        <Button type="submit" variant="primary" size="sm" disabled={pending}>
           {pending ? "Creating…" : "Create Blocker"}
-        </button>
-        <button type="button" onClick={() => setOpen(false)} className="text-sm opacity-70 hover:opacity-100">
+        </Button>
+        <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(false)}>
           Cancel
-        </button>
+        </Button>
       </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </form>
   );
 }

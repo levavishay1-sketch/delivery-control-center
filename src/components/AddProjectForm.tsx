@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { FormField, Input, Select } from "@/components/ui/FormField";
 
 interface ClientOption {
   id: string;
@@ -50,114 +52,99 @@ export function AddProjectForm({ clients }: { clients: ClientOption[] }) {
 
   if (clients.length === 0) {
     return (
-      <p className="text-sm opacity-60">
+      <p className="text-sm text-neutral-500 dark:text-neutral-400">
         Create a client before adding a project (see <code>npm run db:seed</code> for a default one).
       </p>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3 rounded-lg border border-black/10 dark:border-white/15 p-4">
-      <div className="flex flex-col gap-1">
-        <label className="text-xs opacity-70">Client</label>
-        <select
-          aria-label="Client"
-          value={clientId}
-          onChange={(e) => setClientId(e.target.value)}
-          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-        >
+    <form onSubmit={onSubmit} className="flex flex-wrap items-end gap-3 rounded-card border border-border-hairline bg-surface p-4">
+      <FormField label="Client" htmlFor="add-project-client">
+        <Select id="add-project-client" aria-label="Client" value={clientId} onChange={(e) => setClientId(e.target.value)}>
           {clients.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
             </option>
           ))}
-        </select>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs opacity-70">Project name</label>
-        <input
+        </Select>
+      </FormField>
+      <FormField label="Project name" htmlFor="add-project-name" required>
+        <Input
+          id="add-project-name"
           aria-label="Project name"
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Delivery Control Center"
-          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
         />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs opacity-70">Key</label>
-        <input
+      </FormField>
+      <FormField label="Key" htmlFor="add-project-key" required>
+        <Input
+          id="add-project-key"
           aria-label="Key"
           required
           value={key}
           onChange={(e) => setKey(e.target.value.toUpperCase())}
           placeholder="DCC"
-          className="w-24 rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+          className="w-24"
         />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs opacity-70">Integration</label>
-        <select
+      </FormField>
+      <FormField label="Integration" htmlFor="add-project-integration">
+        <Select
+          id="add-project-integration"
           value={integrationType}
           onChange={(e) => setIntegrationType(e.target.value as "MANUAL" | "JIRA")}
-          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
         >
           <option value="MANUAL">Manual</option>
           <option value="JIRA">Jira</option>
-        </select>
-      </div>
+        </Select>
+      </FormField>
       {integrationType === "JIRA" && (
-        <div className="flex w-full flex-wrap gap-3 rounded border border-black/10 dark:border-white/10 p-3">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs opacity-70">Jira base URL</label>
-            <input
+        <div className="flex w-full flex-wrap gap-3 rounded-md border border-border-hairline bg-surface-muted p-3">
+          <FormField label="Jira base URL" htmlFor="add-project-jira-url" required>
+            <Input
+              id="add-project-jira-url"
               required
               value={jiraBaseUrl}
               onChange={(e) => setJiraBaseUrl(e.target.value)}
               placeholder="https://your-org.atlassian.net"
-              className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs opacity-70">Jira email</label>
-            <input
+          </FormField>
+          <FormField label="Jira email" htmlFor="add-project-jira-email" required>
+            <Input
+              id="add-project-jira-email"
               required
               type="email"
               value={jiraEmail}
               onChange={(e) => setJiraEmail(e.target.value)}
-              className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs opacity-70">Jira API token</label>
-            <input
+          </FormField>
+          <FormField label="Jira API token" htmlFor="add-project-jira-token" required>
+            <Input
+              id="add-project-jira-token"
               required
               type="password"
               value={jiraApiToken}
               onChange={(e) => setJiraApiToken(e.target.value)}
-              className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs opacity-70">Jira project key</label>
-            <input
+          </FormField>
+          <FormField label="Jira project key" htmlFor="add-project-jira-key" required>
+            <Input
+              id="add-project-jira-key"
               required
               value={jiraProjectKey}
               onChange={(e) => setJiraProjectKey(e.target.value.toUpperCase())}
               placeholder="PROJ"
-              className="w-28 rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
+              className="w-28"
             />
-          </div>
+          </FormField>
         </div>
       )}
-      <button
-        type="submit"
-        disabled={pending}
-        className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50"
-      >
+      <Button type="submit" variant="primary" disabled={pending}>
         {pending ? "Adding…" : "Add project"}
-      </button>
-      {error && <p className="w-full text-xs text-red-500">{error}</p>}
+      </Button>
+      {error && <p className="w-full text-xs text-status-critical">{error}</p>}
     </form>
   );
 }
