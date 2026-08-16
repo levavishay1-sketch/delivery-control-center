@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -33,3 +35,15 @@ jobs:
       - run: npm run build
 
       - run: npm test
+
+      - name: OpenSpec — validate specs & active changes
+        run: |
+          npx openspec validate --specs --strict
+          npx openspec validate --changes --strict
+
+      - name: OpenSpec — require a change for behavioral diffs
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: bash scripts/check-openspec-compliance.sh
