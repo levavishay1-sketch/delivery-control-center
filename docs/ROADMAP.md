@@ -206,6 +206,17 @@ re-litigate:
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
 | 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
 | 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/archive/2026-08-16-product-visual-redesign/` |
+| 11 | ⓘ info/explanation shared primitive | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | — |
+| 12 | Client-owned Repository model + Clients hub | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | — |
+| 13 | Client information sources (expanded `IntegrationType`) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | — |
+| 14 | Repository SDD status check + bootstrap on connect | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.3, §7 | — |
+| 15 | Repository/source relevance recommendation | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.4 | — |
+| 16 | Project-wide Planner (dependency map + status board + focus + parallel) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.9, §5.13 | — |
+| 17 | AI Recommendation card + executor recommendation/estimate | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §4, §5.7 | — |
+| 18 | Task/subtask decomposition materialization & approval | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.5 | — |
+| 19 | Cascading assignment with owner-decides conflict detection | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.6 | — |
+| 20 | AI model knowledge snapshot (weekly Claude-docs refresh) + model selection | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.8, §3 | — |
+| 21 | Configuration Center generalization (beyond budget) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §6.3 | — |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -483,6 +494,84 @@ pre-existing failure predating this change, verified via a throwaway
 `git worktree` on the prior commit, and one already-documented
 non-idempotent-test-design gap from Slice 9 — neither a regression
 from this change; see `tasks.md`'s Task Group 14 for detail).
+
+### Slices 11–21 — Product Vision & Flow Blueprint
+
+*(Source: `docs/roadmap-sources/2026-08-16-product-vision-blueprint.md` — a
+multi-turn conversation on 2026-08-16 that analyzed the HTML mock against
+the current implementation, produced a full gap analysis, then a
+consolidated end-to-end product vision (Client → Repositories → Project →
+SDD discovery → relevance → decomposition → approval → assignment →
+AI/developer recommendation → model selection → dependency/parallel
+execution → questions/blockers → Git → evidence → completion → full
+visibility), refined by nine user clarifications and five final resolved
+decisions. Explicitly approved by the user as the target direction before
+any of these slices is scoped further. The source file is authoritative;
+this is a summary index only.)*
+
+The vision is one coherent product direction, deliberately broken into 11
+independently-scoped, dependency-ordered slices (per this project's
+one-change-per-slice convention and CLAUDE.md's "prefer several small
+changes" rule) rather than one large change:
+
+- **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
+  every AI-facing slice after it should be built to use it from the start.
+- **Slice 12** — the foundational structural change: `Repository` becomes
+  client-owned (not project-owned), with a `ProjectRepository` join for
+  project-level selection; Client CRUD (`createClient()` already exists in
+  code but is unreachable — no route, no UI) wired end-to-end; a new
+  Clients hub page. Highest-leverage, highest-risk-because-structural;
+  most later slices sit on top of it.
+- **Slice 13** — broadens `Connector`/`IntegrationType` (today a closed
+  `MANUAL | JIRA | AZURE_DEVOPS | GITHUB` enum, project-scoped) into a
+  client-owned, expanded (still closed) enum covering the real range of a
+  client's information sources.
+- **Slice 14** — the moment a repository is first connected, check whether
+  SDD already exists for it and, if not, run an actual bootstrap pass
+  (not just a summary) producing a baseline Constitution for the existing
+  codebase — independent of any Project or Task, governed by the
+  OpenSpec-alignment principle below.
+- **Slice 15** — AI recommends which of a client's already-discovered
+  repositories/sources are relevant to a new Project/Task, with reasoning,
+  never a silent auto-attach.
+- **Slice 16** — the Planner: a project-wide dependency map + status-lane
+  board (switchable), focus mode, and parallel-safe-task explanation.
+  Extends `DependencyGraph.tsx`'s existing layered-layout/focus engine
+  (today scoped to one item's neighborhood inside the 360° Record) to
+  whole-project scope. Independent of 12–15; can proceed in parallel.
+- **Slice 17** — the shared "AI Recommendation card" pattern (what/why/
+  assumptions/estimated time/estimated cost/what happens under each
+  alternative), applied first to the AI-vs-developer executor
+  recommendation, always including an AI-execution time/cost estimate even
+  when AI isn't the recommended choice.
+- **Slice 18** — materializes the SDD pipeline's existing `TASKS` stage
+  artifact into real, individually-assignable child `WorkItem` rows behind
+  an explicit approval gate, for any Work Item where SDD principles call
+  for decomposition — not restricted to Projects only.
+- **Slice 19** — cascading Project→Task assignment that never silently
+  overwrites an explicit task-level assignment: detects the conflict and
+  presents the owner full context and every option, no default
+  pre-selected, reusing Configuration Center's Preview→Confirm-impact
+  pattern for the prompt itself.
+- **Slice 20** — a weekly (Sunday 07:00) job that fetches and extracts
+  model/pricing/capability information from
+  `platform.claude.com/docs/en/about-claude/models/overview` into a
+  structured, dated knowledge snapshot, and uses it to recommend which
+  model should execute a given AI task and why — replacing any hardcoded
+  model-cost assumption.
+- **Slice 21** — generalizes Configuration Center's existing scope-
+  inheritance + Preview→Confirm-impact pattern (real today, but AI-budget
+  only) to the full field taxonomy identified in the vision (gates,
+  evidence rules, test rules, branch/PR policy, source mapping, and the
+  new recommendation factor weights).
+
+Two governing principles apply across all eleven slices, not just one:
+all AI execution goes through the same SDD pipeline — there is no separate,
+lighter-weight execution path, so Slice 14/18's design must extend the
+existing pipeline rather than invent a parallel one; and the SDD pipeline's
+own transitions should follow OpenSpec's actual propose → apply → archive,
+spec-anchored principles (the same ones this codebase's own development
+already runs on), not a bespoke state machine.
 
 ## Definition of Done, for every future slice (source: `§6`)
 
