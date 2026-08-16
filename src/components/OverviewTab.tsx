@@ -247,10 +247,10 @@ export function OverviewTab({
       <div>
         <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
           <span>{t.overview.progressLabel}</span>
-          <span>{workItem.progress}%</span>
+          <span className="tabular-nums">{workItem.progress}%</span>
         </div>
-        <div className="mt-1 h-1.5 w-full rounded-full bg-surface-muted">
-          <div className="h-1.5 rounded-full bg-accent" style={{ width: `${workItem.progress}%` }} />
+        <div className="mt-1.5 h-2 w-full rounded-full bg-surface-muted">
+          <div className="h-2 rounded-full" style={{ width: `${workItem.progress}%`, backgroundImage: "var(--gradient-accent)" }} />
         </div>
       </div>
 

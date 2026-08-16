@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { Button } from "@/components/ui/Button";
 
 interface GraphNode {
   id: string;
@@ -87,36 +88,32 @@ export function DependencyGraph({ nodes, edges, focusNodeId, truncated }: { node
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => setTransform((t) => ({ ...t, scale: Math.min(2.5, t.scale + 0.2) }))}
-          className="rounded border border-black/15 dark:border-white/20 px-2 py-1 text-xs"
           aria-label="Zoom in"
         >
           +
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => setTransform((t) => ({ ...t, scale: Math.max(0.3, t.scale - 0.2) }))}
-          className="rounded border border-black/15 dark:border-white/20 px-2 py-1 text-xs"
           aria-label="Zoom out"
         >
           −
-        </button>
-        <button
-          type="button"
-          onClick={() => setTransform({ x: 40, y: 40, scale: 1 })}
-          className="rounded border border-black/15 dark:border-white/20 px-2 py-1 text-xs"
-        >
+        </Button>
+        <Button variant="secondary" size="sm" onClick={() => setTransform({ x: 40, y: 40, scale: 1 })}>
           Reset view
-        </button>
-        {truncated && <span className="text-xs text-amber-600 dark:text-amber-400">Graph truncated — too many connected items to show all.</span>}
+        </Button>
+        {truncated && <span className="text-xs text-status-warning">Graph truncated — too many connected items to show all.</span>}
       </div>
 
       <svg
         ref={svgRef}
         viewBox="0 0 600 320"
-        className="h-80 w-full touch-none rounded-lg border border-black/10 dark:border-white/15 bg-black/[.02] dark:bg-white/[.03]"
+        className="h-80 w-full touch-none rounded-card border border-border-hairline bg-surface-muted"
         onWheel={onWheel}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}

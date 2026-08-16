@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Textarea } from "@/components/ui/FormField";
 
 interface CompletionPolicy {
   satisfied: boolean;
@@ -52,17 +54,19 @@ export function EvidenceTab({
 
   if (policy.satisfied) {
     return (
-      <p className="text-sm text-emerald-600 dark:text-emerald-400">
-        {hasException ? "Completion exception approved — this work item can be completed without further evidence." : "Completion policy satisfied — a merged pull request with passing tests is linked."}
+      <p className="text-sm text-status-healthy">
+        {hasException
+          ? "Completion exception approved — this work item can be completed without further evidence."
+          : "Completion policy satisfied — a merged pull request with passing tests is linked."}
       </p>
     );
   }
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-        <p className="font-medium text-amber-600 dark:text-amber-400">Completion policy not yet satisfied</p>
-        <ul className="mt-1 list-disc pl-4 text-xs opacity-80">
+      <div className="rounded-card border border-status-warning/30 bg-status-warning-bg p-3 text-sm">
+        <p className="font-medium text-status-warning">Completion policy not yet satisfied</p>
+        <ul className="mt-1 list-disc pl-4 text-xs text-neutral-600 dark:text-neutral-300">
           {(policy.missing ?? []).map((item) => (
             <li key={item}>{item}</li>
           ))}
@@ -71,25 +75,20 @@ export function EvidenceTab({
 
       {canManage && (
         <div className="flex flex-col gap-2">
-          <label htmlFor="exception-reason" className="text-xs opacity-70">
+          <label htmlFor="exception-reason" className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
             Approve a completion exception
           </label>
-          <textarea
+          <Textarea
             id="exception-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Reason this work item can complete without qualifying evidence"
-            className="rounded border border-border-hairline bg-transparent p-2 text-xs"
             rows={2}
           />
-          <button
-            onClick={approve}
-            disabled={pending}
-            className="self-start rounded bg-foreground px-2 py-1 text-xs text-background disabled:opacity-40"
-          >
+          <Button variant="primary" size="sm" onClick={approve} disabled={pending} className="self-start">
             {pending ? "Approving…" : "Approve exception"}
-          </button>
-          {error && <p className="text-xs text-red-500">{error}</p>}
+          </Button>
+          {error && <p className="text-xs text-status-critical">{error}</p>}
         </div>
       )}
     </div>

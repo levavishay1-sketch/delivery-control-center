@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { FormField, Input, Select, Textarea } from "@/components/ui/FormField";
 
 interface Member {
   id: string;
@@ -76,99 +78,87 @@ export function EditWorkItemForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3 rounded-lg border border-black/10 dark:border-white/15 p-4">
-      <div className="flex flex-col gap-1">
-        <label className="text-xs opacity-70">Title</label>
-        <input
-          required
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-        />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs opacity-70">Description</label>
-        <textarea
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          rows={3}
-          className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-        />
-      </div>
+    <form onSubmit={onSubmit} className="flex flex-col gap-3 rounded-card border border-border-hairline bg-surface p-4">
+      <FormField label="Title" htmlFor="edit-wi-title" required>
+        <Input id="edit-wi-title" required value={title} onChange={(e) => setTitle(e.target.value)} />
+      </FormField>
+      <FormField label="Description" htmlFor="edit-wi-description">
+        <Textarea id="edit-wi-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
+      </FormField>
       <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs opacity-70">Risk</label>
-          <select value={risk} onChange={(e) => setRisk(e.target.value)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+        <FormField label="Risk" htmlFor="edit-wi-risk">
+          <Select id="edit-wi-risk" value={risk} onChange={(e) => setRisk(e.target.value)}>
             {["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((r) => (
-              <option key={r} value={r}>{r}</option>
+              <option key={r} value={r}>
+                {r}
+              </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs opacity-70">Priority</label>
-          <select value={priority} onChange={(e) => setPriority(e.target.value)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+          </Select>
+        </FormField>
+        <FormField label="Priority" htmlFor="edit-wi-priority">
+          <Select id="edit-wi-priority" value={priority} onChange={(e) => setPriority(e.target.value)}>
             {["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((p) => (
-              <option key={p} value={p}>{p}</option>
+              <option key={p} value={p}>
+                {p}
+              </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs opacity-70">Owner</label>
-          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+          </Select>
+        </FormField>
+        <FormField label="Owner" htmlFor="edit-wi-owner">
+          <Select id="edit-wi-owner" value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
             <option value="">Unassigned</option>
             {members.map((m) => (
-              <option key={m.id} value={m.id}>{m.name ?? m.email}</option>
+              <option key={m.id} value={m.id}>
+                {m.name ?? m.email}
+              </option>
             ))}
-          </select>
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs opacity-70">Executor type</label>
-          <select value={executorType} onChange={(e) => setExecutorType(e.target.value)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+          </Select>
+        </FormField>
+        <FormField label="Executor type" htmlFor="edit-wi-executor-type">
+          <Select id="edit-wi-executor-type" value={executorType} onChange={(e) => setExecutorType(e.target.value)}>
             {["UNASSIGNED", "HUMAN", "AI_AGENT", "HYBRID"].map((t) => (
-              <option key={t} value={t}>{t}</option>
+              <option key={t} value={t}>
+                {t}
+              </option>
             ))}
-          </select>
-        </div>
+          </Select>
+        </FormField>
         {executorType === "HUMAN" && (
-          <div className="flex flex-col gap-1">
-            <label className="text-xs opacity-70">Executor</label>
-            <select value={executorId} onChange={(e) => setExecutorId(e.target.value)} className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm">
+          <FormField label="Executor" htmlFor="edit-wi-executor">
+            <Select id="edit-wi-executor" value={executorId} onChange={(e) => setExecutorId(e.target.value)}>
               <option value="">Unassigned</option>
               {members.map((m) => (
-                <option key={m.id} value={m.id}>{m.name ?? m.email}</option>
+                <option key={m.id} value={m.id}>
+                  {m.name ?? m.email}
+                </option>
               ))}
-            </select>
-          </div>
+            </Select>
+          </FormField>
         )}
-        <div className="flex flex-col gap-1">
-          <label className="text-xs opacity-70">Due date</label>
+        <FormField label="Due date" htmlFor="edit-wi-due-date">
+          <Input id="edit-wi-due-date" type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        </FormField>
+        <FormField label={`Progress (${progress}%)`} htmlFor="edit-wi-progress">
           <input
-            type="date"
-            value={dueDate}
-            onChange={(e) => setDueDate(e.target.value)}
-            className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1">
-          <label className="text-xs opacity-70">Progress ({progress}%)</label>
-          <input
+            id="edit-wi-progress"
             type="range"
             min={0}
             max={100}
             value={progress}
             onChange={(e) => setProgress(Number(e.target.value))}
+            className="accent-accent"
           />
-        </div>
+        </FormField>
       </div>
       <div className="flex gap-2">
-        <button type="submit" disabled={pending} className="rounded bg-foreground px-3 py-1.5 text-sm font-medium text-background disabled:opacity-50">
+        <Button type="submit" variant="primary" disabled={pending}>
           {pending ? "Saving…" : "Save changes"}
-        </button>
-        <button type="button" onClick={onDone} className="text-sm opacity-70 hover:opacity-100">
+        </Button>
+        <Button type="button" variant="secondary" onClick={onDone}>
           Cancel
-        </button>
+        </Button>
       </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </form>
   );
 }

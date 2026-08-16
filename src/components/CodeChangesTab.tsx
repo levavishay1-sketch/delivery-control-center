@@ -2,6 +2,9 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Button } from "@/components/ui/Button";
+import { Select } from "@/components/ui/FormField";
+import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 
 interface TestRunSummary {
   id: string;
@@ -29,10 +32,10 @@ interface CandidatePullRequest {
   url: string;
 }
 
-const STATE_COLOR: Record<string, string> = {
-  MERGED: "text-violet-600 dark:text-violet-400",
-  OPEN: "text-emerald-600 dark:text-emerald-400",
-  CLOSED: "opacity-60",
+const STATE_TONES: Record<string, StatusTone> = {
+  MERGED: "ai",
+  OPEN: "healthy",
+  CLOSED: "inactive",
 };
 
 function ciStatus(testRuns: TestRunSummary[]): string {
@@ -95,25 +98,24 @@ export function CodeChangesTab({
   return (
     <div className="flex flex-col gap-3">
       {evidence.length === 0 ? (
-        <p className="text-sm opacity-60">No pull requests linked yet.</p>
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">No pull requests linked yet.</p>
       ) : (
         <div className="flex flex-col gap-2">
           {evidence.map((pr) => (
-            <div key={pr.evidenceId} className="rounded border border-border-hairline p-3 text-sm">
+            <div key={pr.evidenceId} className="rounded-card border border-border-hairline bg-surface p-3 text-sm">
               <div className="flex items-center justify-between">
-                <a href={pr.url} target="_blank" rel="noreferrer" className="font-medium underline">
+                <a href={pr.url} target="_blank" rel="noreferrer" className="font-medium text-accent hover:underline">
                   #{pr.number} {pr.title}
                 </a>
                 {canManage && (
-                  <button onClick={() => unlink(pr.evidenceId)} disabled={pending} className="text-xs opacity-60 hover:opacity-100 disabled:opacity-30">
+                  <Button variant="secondary" size="sm" onClick={() => unlink(pr.evidenceId)} disabled={pending}>
                     Unlink
-                  </button>
+                  </Button>
                 )}
               </div>
-              <p className="mt-1 text-xs">
-                <span className={STATE_COLOR[pr.state] ?? "opacity-60"}>{pr.state}</span>
-                <span className="opacity-60"> · CI {ciStatus(pr.testRuns)}</span>
-              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <StatusBadge tone={STATE_TONES[pr.state] ?? "inactive"} label={pr.state} reason={`CI ${ciStatus(pr.testRuns)}`} />
+              </div>
             </div>
           ))}
         </div>
@@ -121,26 +123,22 @@ export function CodeChangesTab({
 
       {canManage && candidatePullRequests.length > 0 && (
         <div className="flex items-center gap-2">
-          <select
-            value={selected}
-            onChange={(e) => setSelected(e.target.value)}
-            className="rounded border border-border-hairline bg-transparent px-2 py-1 text-xs"
-          >
+          <Select value={selected} onChange={(e) => setSelected(e.target.value)} className="w-auto" aria-label="Pull request to link">
             {candidatePullRequests.map((pr) => (
               <option key={pr.id} value={pr.id}>
                 #{pr.number} {pr.title}
               </option>
             ))}
-          </select>
-          <button onClick={link} disabled={pending} className="rounded bg-foreground px-2 py-1 text-xs text-background disabled:opacity-40">
+          </Select>
+          <Button variant="primary" size="sm" onClick={link} disabled={pending}>
             {pending ? "Linking…" : "Link pull request"}
-          </button>
+          </Button>
         </div>
       )}
       {canManage && candidatePullRequests.length === 0 && evidence.length === 0 && (
-        <p className="text-xs opacity-50">No pull requests available to link yet — link a repository in project settings first.</p>
+        <p className="text-xs text-neutral-400">No pull requests available to link yet — link a repository in project settings first.</p>
       )}
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </div>
   );
 }

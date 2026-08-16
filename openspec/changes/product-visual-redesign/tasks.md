@@ -175,19 +175,40 @@ these are placed.
 
 ## 6. 360° Delivery Record
 
-- [ ] 6.1 Migrate `EditWorkItemForm.tsx` (currently raw-legacy, styled
+- [x] 6.1 Migrated `EditWorkItemForm.tsx` (previously raw-legacy, styled
       inconsistently with the `OverviewTab` read view it toggles with)
-      to `Button`/`FormField`.
-- [ ] 6.2 Migrate `EvidenceTab.tsx`, `CodeChangesTab.tsx`, `TestsTab.tsx`
-      (currently hybrid) fully onto design-system tokens/components.
-- [ ] 6.3 Migrate `DependencyGraph.tsx`'s non-SVG chrome (zoom/reset
-      buttons, legend) to `Button`; leave the SVG node/edge coloring as
-      direct hex values per its existing documented rationale (small,
-      hand-rolled visualization, not a token-driven surface).
-- [ ] 6.4 Replace `OverviewTab`'s hand-rolled linear progress bar with
-      either the new `Row` column-grid pattern or a linear variant
-      consistent with `ui/Meter`'s existing track+fill visual language
-      (do not silently keep two unrelated "progress" treatments).
+      to `Button`/`FormField`. Confirmed live: toggling Edit now shows a
+      visually consistent form instead of a style mismatch.
+- [x] 6.2 Migrated `EvidenceTab.tsx`, `CodeChangesTab.tsx`, `TestsTab.tsx`
+      (previously hybrid) fully onto design-system tokens/components —
+      their ad hoc `STATE_COLOR`/`STATUS_COLOR` maps (a PR's MERGED/OPEN/
+      CLOSED state, a test run's PASSED/FAILED/PENDING status) replaced
+      with `StatusBadge` and local `StatusTone` maps, following the same
+      pattern as Task Group 4's `STAGE_STATUS_TONES`.
+- [x] 6.3 Migrated `DependencyGraph.tsx`'s non-SVG chrome (zoom/reset
+      buttons) to `Button`; left the SVG node/edge coloring as direct hex
+      values per its existing documented rationale (small, hand-rolled
+      visualization, not a token-driven surface) — only its container
+      border/background moved to `rounded-card border-border-hairline
+      bg-surface-muted` tokens.
+- [x] 6.4 Reviewed `OverviewTab`'s progress bar against `ui/Meter`: it
+      already used `bg-surface-muted`/`bg-accent` design-system tokens
+      (not raw hex), so the "two unrelated treatments" risk was about
+      shape (linear vs. circular), not color. A circular gauge doesn't
+      fit well inline among the other detail-grid fields (Due date,
+      Risk, ...) the way it does as `Meter`'s own standalone budget-
+      usage stat, so kept the linear shape but aligned its color source
+      with `Meter`'s: fill now uses `var(--gradient-accent)` (the same
+      token `IconBadge`/`StatTile` gradients derive from) instead of a
+      flat `bg-accent`, plus `tabular-nums` on the percentage and a
+      slightly larger track for the redesign's "generous" density.
+
+Verified live (dev server + seeded DB): 360° Record page, Edit form
+toggle, and the Code tab all render with zero console/page errors under
+the new shell. (One transient 22,232px-tall `fullPage` screenshot from
+an earlier capture attempt was investigated via direct DOM measurement —
+no element was actually oversized — and did not reproduce on a clean
+re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 7. Login
 
