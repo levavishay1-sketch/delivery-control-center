@@ -212,11 +212,14 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 7. Login
 
-- [ ] 7.1 Migrate `src/app/login/page.tsx` (currently the only page with
-      zero design-system-token usage) to the new shell's page-header
-      pattern, `Button`, and `FormField` — this page renders before
-      `session?.user` exists, so it does not get the sidebar, but does
-      get the new page background/workspace container treatment.
+- [x] 7.1 Migrated `src/app/login/page.tsx` (previously the only page
+      with zero design-system-token usage) to `Button`/`FormField`.
+      Since removing the old global top header (Task Group 3) took away
+      the only place the product name was shown to a signed-out visitor,
+      added a small brand mark + wordmark above the sign-in card here so
+      that identity isn't lost, not just token-swapped styling. Verified
+      live: default state and the invalid-credentials error state
+      (`?error=1`) both render correctly with zero console errors.
 
 ## 8. Audit Trail
 
