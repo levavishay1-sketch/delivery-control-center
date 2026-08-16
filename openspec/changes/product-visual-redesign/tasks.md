@@ -28,23 +28,43 @@
 
 ## 2. Shared primitives
 
-- [ ] 2.1 Add `src/components/ui/Button.tsx`: `primary`/`secondary`/
-      `destructive` variants per design.md decision 5, one size/radius/
-      padding scale.
-- [ ] 2.2 Add a form-field primitive (`src/components/ui/FormField.tsx`
-      or similar) wrapping `input`/`select`/`textarea` with shared
-      border/padding/radius/focus/required/error presentation.
-- [ ] 2.3 Extend `src/components/ui/Row.tsx` with an optional `columns`
-      prop (CSS grid, `text-start` per cell) per design.md decision 3;
-      add an optional `RowListHeader` sibling for column headers.
-- [ ] 2.4 Extract `ApproveRejectButtons` (comment-optional) as the shared
-      building block `ApprovalGate`/`DecisionActions` will both use, per
-      design.md decision 4.
-- [ ] 2.5 Add `AuditEventRow` (actor icon, action text, relative time,
-      actor/project/pipeline meta line, optional detail dump) per
-      design.md decision 4's audit-feed convergence — used by both the
-      Audit Trail page and `TimelineTab`, each keeping its own
-      pagination mechanism.
+- [x] 2.1 Added `src/components/ui/Button.tsx`: `primary` (accent
+      gradient, matches `IconBadge`'s existing gradient pattern),
+      `secondary` (neutral bordered), `destructive` (critical-status-
+      colored) variants, one size/radius/padding scale (`sm`/`md`).
+- [x] 2.2 Added `src/components/ui/FormField.tsx`: a `FormField` label
+      wrapper (label/required-marker/hint/error) plus shared-styled
+      `Input`/`Select`/`Textarea` wrapping the native elements with one
+      border/padding/radius/focus treatment.
+- [x] 2.3 Extended `src/components/ui/Row.tsx` with an optional `columns`
+      prop (CSS grid, `text-start` per cell — grid item order follows
+      the ambient `direction`, so RTL mirrors for free) and an optional
+      `RowListHeader` sibling for column headers.
+- [x] 2.4 Added `src/components/ui/ApproveRejectButtons.tsx` — confirmed
+      via direct diff that `ApprovalGate.tsx`/`ConstitutionApprovalGate.tsx`
+      are byte-for-byte identical except the fetch path, and
+      `DecisionActions.tsx` duplicates the same button pair verbatim
+      (down to the exact class strings). Built as a controlled/
+      presentational component (caller owns pending/error state, since
+      `ApprovalGate` also gates an adjacent comment field `DecisionActions`
+      doesn't have) — Approve maps to the `primary` Button variant, Reject
+      to `destructive`, matching the exact 3-variant set design.md
+      decision 5 scoped (not a new 4th "success" variant).
+- [x] 2.5 Added `AuditEventRow`. Refined during implementation: design.md
+      decision 3 anticipated a rigid column-grid for "the reference's
+      activity table," but reading the real audit-event data (Task Group
+      8's investigation) found each event's meta line is genuinely
+      variable — 0–3 optional pieces (actor name / linked pipeline or
+      project / stage type) — plus an optional multi-line JSON detail
+      dump, none of which fits a fixed column grid without truncation.
+      `AuditEventRow` instead reuses `Row`'s existing flex-column mode
+      (`className="flex-col items-start gap-1"`), the exact pattern the
+      Dashboard's recent-activity list already ships — restyled, not
+      reinvented. The column-grid mode built in 2.3 gets its real,
+      well-fitted use in Task Group 12 (`ConfigHistoryList`'s old-value/
+      new-value/changed-by/when rows, which genuinely are fixed,
+      comparable fields), fulfilling the design-system delta spec's
+      column-grid requirement there instead of forcing it here.
 
 ## 3. Application shell
 

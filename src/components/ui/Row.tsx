@@ -20,13 +20,27 @@ export function Row({
   children,
   href,
   className = "",
+  columns,
 }: {
   children: ReactNode;
   href?: string;
   className?: string;
+  /** CSS `grid-template-columns` value. When set, the row lays out its
+   * children as aligned grid columns instead of a single flex line — for
+   * collections with multiple comparable fields per item (e.g. an audit
+   * feed's actor/action/project/time), per design-system spec's
+   * column-grid row requirement. Grid item order follows the ambient
+   * `direction`, so RTL mirrors for free — no separate handling needed. */
+  columns?: string;
 }) {
+  const layout = columns ? "grid items-center" : "flex items-center";
   const content = (
-    <div className={`flex items-center gap-3 px-4 py-3 ${className}`}>{children}</div>
+    <div
+      className={`${layout} gap-3 px-4 py-3 text-start ${className}`}
+      style={columns ? { gridTemplateColumns: columns } : undefined}
+    >
+      {children}
+    </div>
   );
   if (href) {
     return (
@@ -36,6 +50,18 @@ export function Row({
     );
   }
   return content;
+}
+
+/** Optional column-header row for a `RowList` using `Row`'s `columns` mode. */
+export function RowListHeader({ columns, children, className = "" }: { columns: string; children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={`grid items-center gap-3 border-b border-border-hairline bg-surface-muted px-4 py-2 text-2xs font-semibold uppercase tracking-wide text-neutral-500 text-start dark:text-neutral-400 ${className}`}
+      style={{ gridTemplateColumns: columns }}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function RowEmpty({ children }: { children: ReactNode }) {
