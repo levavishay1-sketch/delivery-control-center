@@ -208,7 +208,7 @@ re-litigate:
 | 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/archive/2026-08-16-product-visual-redesign/` |
 | 11 | ⓘ info/explanation shared primitive | **Done** | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | `openspec/changes/info-tooltip-primitive/` (implemented, not yet archived) |
 | 12 | Client-owned Repository model + Clients hub | **Done** | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | `openspec/changes/archive/2026-08-16-client-repository-model/` |
-| 13 | Client information sources (expanded `IntegrationType`) | Proposed | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | `openspec/changes/client-information-sources/` |
+| 13 | Client information sources (expanded `IntegrationType`) | **Done** | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | `openspec/changes/client-information-sources/` (implemented, not yet archived) |
 | 14 | Repository SDD status check + bootstrap on connect | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.3, §7 | — |
 | 15 | Repository/source relevance recommendation | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.4 | — |
 | 16 | Project-wide Planner (dependency map + status board + focus + parallel) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.9, §5.13 | — |
@@ -554,6 +554,25 @@ E2E specs (`e2e/slice12-client-lifecycle.spec.ts`) for the full
 create/edit/deactivate/reactivate lifecycle and cross-project repository
 reuse; build, lint, and an RTL spot-check of both new pages all verified
 live.
+
+**Slice 13 status:** Done. Added `Connector.clientId` (same three-step
+migration pattern as Slice 12's `Repository.clientId`) so a client's
+connectors are queryable directly rather than derived via
+`projects.map(p => p.connector)`; `getClientDetail` now reads them straight
+from `clientId`. Expanded `IntegrationType` with five new closed-enum
+values (`CRM`, `TEAMS`, `MCP`, `CUSTOM_API`, `OTHER`) naming the vision's
+information-source categories — deliberately left unreachable through
+`configureConnector`/`ConnectorConfigForm`, governed by the existing
+"unimplemented connector type" `connector-management` requirement (now
+modified to name them explicitly), since no real adapter exists for any of
+them yet. No UI, route, or sync-engine change beyond that — `Connector`
+stays 1:1 with `Project`, per the proposal's explicit non-goals. Covered by
+new unit tests (`src/domain/client/queries.test.ts`) and verified live:
+build, lint, a direct DB check confirming all nine enum values exist and
+every `Connector.clientId` matches its project's client, and a browser
+check confirming the connector-type selector still shows only the original
+four options while the Clients hub's Connectors panel renders correctly
+off the new query.
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
   every AI-facing slice after it should be built to use it from the start.

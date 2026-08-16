@@ -13,12 +13,22 @@ import type { SyncCounts } from "@/domain/connector/sync";
 
 type DbClient = typeof db | Prisma.TransactionClient;
 
-/** Mirrors the backfill migration's authType inference — kept in one place so a newly created Connector and a backfilled one agree. */
+/**
+ * Mirrors the backfill migration's authType inference — kept in one place so a newly created
+ * Connector and a backfilled one agree. Slice 13's five new IntegrationType values have no real
+ * adapter yet and stay unreachable through configureConnector's zod enum — these entries exist
+ * only so the type-level Record<IntegrationType, string> stays exhaustive.
+ */
 export const DEFAULT_AUTH_TYPE: Record<IntegrationType, string> = {
   MANUAL: "none",
   JIRA: "api_token",
   AZURE_DEVOPS: "pat",
   GITHUB: "token",
+  CRM: "none",
+  TEAMS: "none",
+  MCP: "none",
+  CUSTOM_API: "none",
+  OTHER: "none",
 };
 
 /**
@@ -40,6 +50,7 @@ export async function getOrCreateConnectorForProject(projectId: string, client: 
   return client.connector.create({
     data: {
       projectId,
+      clientId: project.clientId,
       type: "MANUAL",
       mode: "PULL",
       authType: DEFAULT_AUTH_TYPE.MANUAL,

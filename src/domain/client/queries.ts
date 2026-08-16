@@ -30,15 +30,17 @@ export async function listActiveClients(ctx: AuthContext) {
 }
 
 /**
- * Slice 12 — a client's projects, its repository pool (via the new client-owned Repository.clientId,
- * across all its projects), and its connectors, for the Clients hub detail page.
+ * Slice 12/13 — a client's projects, its repository pool (via the client-owned
+ * Repository.clientId, across all its projects), and its connectors (via the client-owned
+ * Connector.clientId, Slice 13 — queried directly rather than derived from each project's own
+ * connector), for the Clients hub detail page.
  */
 export async function getClientDetail(ctx: AuthContext, id: string) {
   const client = await db.client.findUnique({ where: { id } });
   if (!client) return null;
   requireClientRole(ctx, client.id, ALL_ROLES);
 
-  const [projects, repositories] = await Promise.all([
+  const [projects, repositories, connectors] = await Promise.all([
     db.project.findMany({
       where: { clientId: id },
       include: { connector: true },
@@ -49,14 +51,13 @@ export async function getClientDetail(ctx: AuthContext, id: string) {
       include: { projectLinks: { include: { project: true } } },
       orderBy: { createdAt: "desc" },
     }),
+    db.connector.findMany({
+      where: { clientId: id },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
-  return {
-    client,
-    projects,
-    repositories,
-    connectors: projects.map((p) => p.connector).filter((c) => c !== null),
-  };
+  return { client, projects, repositories, connectors };
 }
 
 /** Users with a membership on this client — for owner/executor pickers. Requires at least read access. */

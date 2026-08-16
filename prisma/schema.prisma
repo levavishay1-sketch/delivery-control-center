@@ -15,6 +15,14 @@ enum IntegrationType {
   JIRA
   AZURE_DEVOPS
   GITHUB
+  // Slice 13 — named client information-source categories (design.md decision: a closed,
+  // category-level enum, not vendor-specific values). Not yet selectable/configurable anywhere;
+  // gated by the same "unimplemented connector type" requirement as any type with no real adapter.
+  CRM
+  TEAMS
+  MCP
+  CUSTOM_API
+  OTHER
 }
 
 enum StageType {
@@ -349,6 +357,8 @@ model Client {
   // Slice 12 — a client's repository pool, independent of which project's connector
   // originally created each one (see Repository.clientId below).
   repositories    Repository[]
+  // Slice 13 — a client's connectors, queryable directly (see Connector.clientId below).
+  connectors      Connector[]
 
   @@unique([organizationId, slug])
 }
@@ -752,6 +762,11 @@ model Connector {
   id           String          @id @default(cuid())
   projectId    String          @unique
   project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Slice 13 — client-level attribution alongside the existing required projectId (design.md
+  // decision: mirrors Repository.clientId from Slice 12 — projectId stays the sync engine's key,
+  // clientId is what makes a client's connectors queryable directly, e.g. from the Clients hub).
+  clientId     String
+  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
   type         IntegrationType @default(MANUAL)
   mode         ConnectorMode   @default(PULL)
   authType     String
@@ -767,6 +782,8 @@ model Connector {
   webhookDeliveries WebhookDelivery[]
   syncConflicts     SyncConflict[]
   repository        Repository?
+
+  @@index([clientId])
 }
 
 // Slice 4 — one row per sync attempt-cycle (one Job's full retry lifecycle),

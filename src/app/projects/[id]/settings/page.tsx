@@ -73,7 +73,9 @@ export default async function ProjectSettingsPage({ params }: PageProps<"/projec
 
         {canManage && (
           <div className="mt-3">
-            <ConnectorConfigForm projectId={project.id} currentType={connector.type} />
+            {/* Slice 13's five new IntegrationType values are never written by configureConnector's
+                zod schema, so a Connector's type here is always one of the four this form knows. */}
+            <ConnectorConfigForm projectId={project.id} currentType={connector.type as "MANUAL" | "JIRA" | "AZURE_DEVOPS" | "GITHUB"} />
           </div>
         )}
       </Panel>

@@ -30,6 +30,7 @@ export async function createProject(ctx: AuthContext, input: CreateProjectInput)
     await tx.connector.create({
       data: {
         projectId: project.id,
+        clientId: input.clientId,
         type: integrationType,
         mode: "PULL",
         authType: DEFAULT_AUTH_TYPE[integrationType],
