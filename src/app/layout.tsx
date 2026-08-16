@@ -27,6 +27,11 @@ export const metadata: Metadata = {
   description: "Transparent, gated, audited software delivery.",
 };
 
+async function handleSignOut() {
+  "use server";
+  await signOut({ redirectTo: "/login" });
+}
+
 export default async function RootLayout({ children }: LayoutProps<"/">) {
   const session = await auth();
   const organizations = session?.user?.isOrgAdmin ? await listOrganizations() : [];
@@ -40,34 +45,25 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       dir={LOCALES[locale].dir}
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      <body className="min-h-full flex flex-col bg-surface-page">
         <LocaleProvider locale={locale}>
           <div className="flex flex-1">
-            {session?.user && <NavRail configHref={configHref} t={t} locale={locale} />}
-            <div className="flex flex-1 flex-col">
-              <header className="border-b border-border-hairline">
-                <div className="flex items-center justify-between px-6 py-3">
-                  <span className="text-sm font-semibold">Delivery Control Center</span>
-                  {session?.user && (
-                    <form
-                      action={async () => {
-                        "use server";
-                        await signOut({ redirectTo: "/login" });
-                      }}
-                      className="flex items-center gap-3"
-                    >
-                      <span className="text-xs text-neutral-500 dark:text-neutral-400">{session.user.email}</span>
-                      <button
-                        type="submit"
-                        className="rounded-md px-2 py-1 text-xs text-neutral-500 hover:bg-surface-muted hover:text-foreground dark:text-neutral-400"
-                      >
-                        {t.nav.signOut}
-                      </button>
-                    </form>
-                  )}
-                </div>
-              </header>
-              <main className="w-full flex-1 px-6 py-8">{children}</main>
+            {session?.user && (
+              <NavRail
+                configHref={configHref}
+                t={t}
+                locale={locale}
+                userEmail={session.user.email ?? ""}
+                onSignOut={handleSignOut}
+              />
+            )}
+            {/* The shell's white, rounded workspace container (design.md decision 6) — replaces the
+                previous top header bar + edge-to-edge main content with a single contained surface
+                inset from the sidebar/viewport, matching the reference's "designed product surface." */}
+            <div className="flex-1 p-5 sm:p-6">
+              <main className="min-h-[calc(100vh-2.5rem)] w-full rounded-shell border border-border-hairline bg-surface p-6 shadow-(--shadow-floating) sm:p-8">
+                {children}
+              </main>
             </div>
           </div>
           {session?.user && (

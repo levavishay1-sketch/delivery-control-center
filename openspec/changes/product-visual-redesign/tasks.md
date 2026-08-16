@@ -68,18 +68,25 @@
 
 ## 3. Application shell
 
-- [ ] 3.1 Rebuild `NavRail` as a permanently-expanded branded sidebar
-      (drop the `w-14` icon-only breakpoint) using `--color-sidebar-
-      surface`, per design.md decision 6: product identity at top, nav
-      items with icon+label, existing `aria-current` active-pill logic
-      kept and restyled, account context (email + sign-out, moved from
-      the top header) at the bottom.
-- [ ] 3.2 Restructure `src/app/layout.tsx`: remove the separate top
-      header strip, fold its content into the sidebar (3.1) and each
-      page's own header row; wrap `{children}` in the new white
-      `--surface` workspace container inset from the sidebar/viewport
-      edges against the `--surface-page` background.
-- [ ] 3.3 Verify `QuickViewDrawer` and `CommandPalette` (both already
+- [x] 3.1 Rebuilt `NavRail` as a permanently-expanded 240px branded
+      sidebar (dropped the `w-14` icon-only breakpoint) using
+      `bg-sidebar-surface`, per design.md decision 6: brand mark+
+      wordmark at top, nav items with icon+label, existing
+      `aria-current` active-pill logic kept and restyled, account
+      context (avatar initials + email + sign-out, moved from the old
+      top header) at the bottom. The sign-out form's Server Action
+      (`handleSignOut`) is now defined in `layout.tsx` and passed to
+      `NavRail` as an `onSignOut` prop — Server Actions passed as props
+      to a Client Component is a supported Next.js pattern, so the form
+      itself could move without becoming a client-side fetch.
+- [x] 3.2 Restructured `src/app/layout.tsx`: removed the separate top
+      header strip; `body` now carries `bg-surface-page`; `{children}`
+      is wrapped in a `rounded-shell border bg-surface shadow-(--shadow-
+      floating)` workspace container inset from the sidebar/viewport
+      via padding on its parent. Applies even when logged out (Login
+      page gets the workspace-container treatment without the sidebar,
+      per Task Group 7).
+- [x] 3.3 Verified `QuickViewDrawer` and `CommandPalette` (both already
       token-driven) render correctly against the new shell — no
       functional change expected, visual check only.
 
