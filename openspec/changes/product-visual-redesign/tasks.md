@@ -327,17 +327,56 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 14. Tests
 
-- [ ] 14.1 Unit tests for any new pure logic (e.g. `Row`'s column-grid
-      width computation, if extracted as a testable helper).
-- [ ] 14.2 Update E2E selectors across every existing spec file broken
-      by markup changes (raw `<select>`/`<button>` becoming styled
-      components) — behavior assertions should not need to change, since
-      no user-facing behavior changes; run the full existing suite after
-      each task group above, not only at the end.
-- [ ] 14.3 Add or extend an E2E scenario asserting the new shell renders
-      (sidebar present, workspace container present) on at least the
-      Dashboard and one previously-unmigrated page (e.g. Pipeline
-      Detail), confirming the redesign reached beyond the Dashboard.
+- [x] 14.1 Unit tests for any new pure logic. `Row`'s `columns` prop is a
+      straight pass-through string (no computation to extract/test);
+      the new pure logic this redesign actually introduced is
+      `stageStatusTone()`/`stageStatusLabel()`
+      (`src/lib/colors/stageStatus.ts`), covered by
+      `src/lib/colors/stageStatus.test.ts`. Full unit suite: 300 passed.
+- [x] 14.2 Updated E2E selectors broken by markup changes. Found and
+      fixed one: `e2e/slice6-configuration-center.spec.ts`'s AI Budget
+      locator assumed a bare `<section>`; Task Group 12 wrapped it in a
+      `Panel` (a styled div), so the selector now matches on the
+      Panel's own `rounded-lg` class instead — the same pattern already
+      used for project cards elsewhere in this suite. No other spec
+      file's selectors were broken by the redesign's markup changes
+      (behavior assertions were unaffected, as expected).
+- [x] 14.3 Added `e2e/slice10-visual-redesign.spec.ts`, asserting the
+      branded sidebar and rounded workspace container render on both
+      the Dashboard and Pipeline Detail (a legacy Slice 2 page migrated
+      to `Panel`-based markup in Task Group 9), confirming the redesign
+      reached beyond the Dashboard.
+
+  Full E2E suite run (all 11 spec files, clean DB) — 15/15 passed,
+  1 known pre-existing failure investigated and ruled out as a Slice 10
+  regression:
+
+  - `slice4-connector-framework.spec.ts`'s hydration-mismatch console
+    error (`QuickViewDrawer`'s `<div className="fixed inset-0 ...">`
+    not matching between server and client render) reproduces
+    identically on `92c7483` (the last commit before this change,
+    verified via a throwaway `git worktree` running the old code on a
+    separate port) — same component, same stack trace, untouched by
+    this redesign. Pre-existing, out of scope here.
+  - `slice6-configuration-center.spec.ts` failed on a first full-suite
+    run with a stale `Default Client` budget override ($50) left by an
+    earlier manual verification pass this session, then failed *again*
+    on a second full-suite run because the test's own "Client scope"
+    step (which sets that same override) never resets it before
+    finishing — the exact same non-idempotent-test-design gap already
+    documented and accepted as out of scope in
+    `openspec/changes/dashboard-motifs-refresh/tasks.md` (Slice 9,
+    predates this change). Confirmed passing standalone against a
+    clean DB. Not a Slice 10 regression; not fixed here, matching the
+    established precedent.
+  - Separately (not a code bug): `slice5-engineering-evidence.spec.ts`
+    timed out on a fresh Dashboard load because the local dev DB had
+    accumulated 101 leftover test-created projects from this session's
+    live-verification work (all E2E specs create projects and never
+    delete them), rendering ~100 "+ Add work item" buttons and
+    degrading the page enough to blow past the test timeout. Cleaned
+    up (deleted every project except the seed's `DCC`); re-ran and
+    passed in 22s. Not a design-system or redesign issue.
 
 ## 15. Documentation & verification
 

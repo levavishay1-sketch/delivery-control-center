@@ -11,6 +11,8 @@ const ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || "change-me-now";
  * Confirms the redesign reached beyond the Dashboard into the rest of the product.
  */
 test("visual redesign: branded shell renders on the Dashboard and on a migrated legacy page (Pipeline Detail)", async ({ page }) => {
+  test.setTimeout(60_000);
+
   const consoleErrors: string[] = [];
   page.on("console", (msg) => {
     if (msg.type() === "error") consoleErrors.push(msg.text());
@@ -18,7 +20,7 @@ test("visual redesign: branded shell renders on the Dashboard and on a migrated 
   page.on("pageerror", (err) => consoleErrors.push(err.message));
 
   const suffix = Date.now().toString(36);
-  const projectKey = `S10E2E${suffix}`.toUpperCase().slice(0, 10);
+  const projectKey = `S10${suffix}`.toUpperCase().slice(0, 10);
   const projectName = `Slice10 E2E ${suffix}`;
   const workItemTitle = `Shell check item ${suffix}`;
 
@@ -34,13 +36,25 @@ test("visual redesign: branded shell renders on the Dashboard and on a migrated 
   await expect(sidebar.getByText("Delivery Control")).toBeVisible();
   await expect(page.locator("main.rounded-shell")).toBeVisible();
 
-  // --- Create a project + work item, start its pipeline, and reach Pipeline Detail ---
+  // --- Create a project, draft and approve its Constitution (a pipeline start precondition),
+  // then add a work item and start its pipeline to reach Pipeline Detail ---
   await page.getByLabel("Project name").fill(projectName);
   await page.getByLabel("Key").fill(projectKey);
   await page.getByRole("button", { name: "Add project" }).click();
   const projectHeading = page.getByRole("heading", { name: projectName });
   await expect(projectHeading).toBeVisible();
   const projectCard = page.locator("div.rounded-lg", { has: projectHeading });
+
+  await projectCard.getByRole("link", { name: "Constitution" }).click();
+  await page.waitForURL(/\/projects\/.+\/constitution/);
+  await page.getByRole("button", { name: "Draft with AI" }).click();
+  await expect(page.getByText("Awaiting gate approval")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("APPROVED", { exact: true })).toBeVisible({ timeout: 10_000 });
+  await page.getByRole("link", { name: "← Back to Dashboard" }).click();
+  await page.waitForURL("/");
+  await expect(projectHeading).toBeVisible();
+
   await projectCard.getByText("+ Add work item").click();
   await projectCard.getByPlaceholder("Work item title").fill(workItemTitle);
   await projectCard.getByRole("button", { name: "Create work item" }).click();
