@@ -62,10 +62,12 @@ link, in the same transaction as today.
 
 **`Client.active` is a plain `Boolean @default(true)`, not a nullable `deactivatedAt`.** A single
 boolean is sufficient for every scenario in the spec delta (hide from active-work surfaces, show
-distinguished in the hub) and matches this project's existing convention of small, precise fields
-over inferring status from a timestamp's nullability (e.g. `WorkStatus` is its own enum, not
-inferred). If a future slice needs "when was it deactivated," that's an additive audit-event
-concern, not a reason to complicate this field now.
+distinguished in the hub, and — since deactivate/reactivate are both part of the Client lifecycle
+per the spec — flip cleanly in either direction) and matches this project's existing convention of
+small, precise fields over inferring status from a timestamp's nullability (e.g. `WorkStatus` is
+its own enum, not inferred). If a future slice needs "when was it deactivated," that's an additive
+audit-event concern, not a reason to complicate this field now. Deactivate and reactivate are two
+symmetric commands over the same field (`active: false` / `active: true`), not a one-way door.
 
 **Deactivation filters Dashboard/Attention, not `listClients`/`getClientById`.** Those two
 existing queries are reused as-is for the Clients hub (which must show inactive clients,

@@ -47,3 +47,17 @@ Attention Center) going forward.
 - **WHEN** a client is deactivated
 - **THEN** none of its projects, work items, audit events, or cost records are deleted or altered
   beyond the client's own active flag
+
+### Requirement: An org admin can reactivate a deactivated Client
+The system SHALL let an org admin reactivate a previously deactivated `Client`, restoring its
+visibility on active-work surfaces (Dashboard, Attention Center), and SHALL reject the request for
+any user who is not an org admin.
+
+#### Scenario: Org admin reactivates a client
+- **WHEN** an org admin reactivates a previously deactivated client
+- **THEN** the client is marked active again and its projects reappear on the Dashboard and
+  Attention Center
+
+#### Scenario: Non-admin attempts to reactivate a client
+- **WHEN** a user who is not an org admin attempts to reactivate a client
+- **THEN** the request is rejected and the client's inactive state is unchanged

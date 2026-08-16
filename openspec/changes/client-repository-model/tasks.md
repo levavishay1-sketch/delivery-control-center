@@ -12,12 +12,13 @@
 - [ ] 2.1 Add `updateClient(ctx, id, { name, slug })` to `src/domain/client/commands.ts` —
       `requireOrgAdmin`, mirrors `createProject`'s single-transaction pattern where relevant.
 - [ ] 2.2 Add `deactivateClient(ctx, id)` — `requireOrgAdmin`, sets `active: false`. Does not
-      touch any related row. (Reactivation is intentionally not in this slice's spec delta —
-      raise separately if it's actually needed rather than adding it unscoped here.)
-- [ ] 2.3 Add `listActiveClients(ctx)` (or extend `listClients` with an `activeOnly` option) for
+      touch any related row.
+- [ ] 2.3 Add `reactivateClient(ctx, id)` — `requireOrgAdmin`, sets `active: true`. Symmetric with
+      2.2, per the spec's Create/Edit/Deactivate/Reactivate lifecycle.
+- [ ] 2.4 Add `listActiveClients(ctx)` (or extend `listClients` with an `activeOnly` option) for
       Dashboard/Attention Center call sites, reusing `listClients`'s existing access-scoping
       logic rather than duplicating it.
-- [ ] 2.4 Add `getClientDetail(ctx, id)` returning the client plus its projects, its repositories
+- [ ] 2.5 Add `getClientDetail(ctx, id)` returning the client plus its projects, its repositories
       (via the new `clientId`, across all projects), and its connectors — for the Clients hub
       detail page.
 
@@ -38,15 +39,17 @@
 - [ ] 4.1 `POST /api/clients` using `createClient`, mirroring `POST /api/projects`'s pattern
       (typed body, 400 on missing fields, `DomainError` → status mapping).
 - [ ] 4.2 `PATCH /api/clients/[id]` using `updateClient`.
-- [ ] 4.3 `POST /api/clients/[id]/deactivate` using `deactivateClient`.
+- [ ] 4.3 `POST /api/clients/[id]/deactivate` using `deactivateClient` and
+      `POST /api/clients/[id]/reactivate` using `reactivateClient`.
 
 ## 5. UI: Client CRUD forms
 
 - [ ] 5.1 New Client form (name, slug), reachable from the Clients hub, using the `FormField`/
       `Button` primitives (Slice 10) — mirrors `AddProjectForm`'s shape.
 - [ ] 5.2 Edit Client form (name, slug) on the client detail page.
-- [ ] 5.3 Deactivate action on the client detail page, with an `InfoTooltip` (Slice 11)
-      explaining what deactivation does and does not do (data is preserved, not deleted).
+- [ ] 5.3 Deactivate/Reactivate action on the client detail page (whichever applies to the
+      client's current state), with an `InfoTooltip` (Slice 11) explaining what deactivation does
+      and does not do (data is preserved, not deleted, and it can be reactivated later).
 
 ## 6. UI: Clients hub
 
@@ -74,7 +77,7 @@
       for the *same* project is still rejected.
 - [ ] 8.3 E2E: create a client, edit it, deactivate it, confirm it disappears from
       Dashboard/Attention Center but remains visible (marked inactive) in the Clients hub and its
-      own detail page.
+      own detail page, then reactivate it and confirm it reappears on the Dashboard.
 - [ ] 8.4 E2E: link a GitHub repository to one project, then link the *same* repository to a
       second project under the same client (via a second GitHub connector pointed at the same
       repo, or the stub-server pattern used in `e2e/slice5-engineering-evidence.spec.ts`); confirm
