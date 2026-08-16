@@ -10,7 +10,8 @@ import { requireAuthContext } from "@/domain/shared/session";
 import { AddProjectForm } from "@/components/AddProjectForm";
 import { AddWorkItemForm } from "@/components/AddWorkItemForm";
 import { SyncButton } from "@/components/SyncButton";
-import { StageBadge } from "@/components/StageBadge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { stageStatusTone, stageStatusLabel } from "@/lib/colors/stageStatus";
 import { QuickViewLink } from "@/components/QuickViewLink";
 import { StartPipelineButton } from "@/components/StartPipelineButton";
 import { ConfigBudgetPanel } from "@/components/ConfigBudgetPanel";
@@ -327,7 +328,13 @@ export default async function HomePage() {
                           )}
                           <span className="flex items-center gap-3">
                             <span className="text-neutral-400">{item.pipeline?.currentStage}</span>
-                            {item.pipeline && <StageBadge status={item.pipeline.status} />}
+                            {item.pipeline && (
+                              <StatusBadge
+                                tone={stageStatusTone(item.pipeline.status)}
+                                label={stageStatusLabel(item.pipeline.status)}
+                                reason={`Currently at the ${stageStatusLabel(item.pipeline.currentStage)} stage`}
+                              />
+                            )}
                             {!item.pipeline && <StartPipelineButton workItemId={item.id} compact />}
                             <QuickViewLink workItemId={item.id} className="text-xs text-accent hover:underline">
                               Quick View

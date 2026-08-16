@@ -92,24 +92,49 @@
 
 ## 4. Consolidation
 
-- [ ] 4.1 Diff `ApprovalGate.tsx` and `ConstitutionApprovalGate.tsx` to
-      confirm they differ only in API path (per this session's
-      investigation), then merge into one `ApprovalGate` taking an
-      `apiBasePath` prop; delete `ConstitutionApprovalGate.tsx`; update
-      the Constitution page's import.
-- [ ] 4.2 Diff `DraftButton.tsx` and `ConstitutionDraftButton.tsx`
-      likewise; merge into one `DraftButton` taking `apiBasePath`/
-      `pollPath` props; delete `ConstitutionDraftButton.tsx`; update the
-      Constitution page's import.
-- [ ] 4.3 Rewrite `DecisionActions` to use the extracted
+- [x] 4.1 Confirmed via direct read that `ApprovalGate.tsx`/
+      `ConstitutionApprovalGate.tsx` were byte-for-byte identical except
+      the API path; merged into one `ApprovalGate` taking an
+      `apiBasePath` prop, rebuilt on `ApproveRejectButtons`/`Input`;
+      deleted `ConstitutionApprovalGate.tsx`; updated the Constitution
+      page's import and the Pipeline Detail page's call site.
+- [x] 4.2 Confirmed `DraftButton.tsx`/`ConstitutionDraftButton.tsx`
+      differed in more than the API path: drafting a Constitution
+      creates a *new* one whose id (needed for the status poll) only
+      exists in the response body, unlike a stage's already-known id.
+      Merged into one `DraftButton` — **found and fixed a real runtime
+      bug in the same pass**: the first merge parameterized this by a
+      `resolvePollPath(res)` function prop, which crashed immediately
+      ("Functions cannot be passed directly to Client Components unless
+      ... marked with 'use server'") because the callers are Server
+      Components and only Server Actions can cross that boundary as
+      functions. Redesigned around a serializable `target` discriminated
+      union (`{kind:"stage", stageId}` | `{kind:"constitution",
+      projectId}`) instead, with the response-dependent poll-path logic
+      moved inside the Client Component itself. Deleted
+      `ConstitutionDraftButton.tsx`; updated all 3 call sites (Pipeline
+      Detail ×2, Constitution page ×2).
+- [x] 4.3 Rewrote `DecisionActions` to use the extracted
       `ApproveRejectButtons` (Task 2.4) instead of its own hand-rolled
       button markup.
-- [ ] 4.4 Add `STAGE_STATUS_TONES` (pipeline/stage status → `StatusTone`)
-      per design.md decision 4's mapping; replace every `StageBadge`
-      call site with `StatusBadge`, supplying the stage's own label/
-      description as the required `reason`; delete `StageBadge.tsx`.
-- [ ] 4.5 Delete `BudgetForm.tsx` (confirmed dead code — not imported by
-      any current page/component).
+- [x] 4.4 Added `src/lib/colors/stageStatus.ts`'s `STAGE_STATUS_TONES`
+      map (pipeline/stage status → `StatusTone`) per design.md decision
+      4's mapping; replaced every `StageBadge` call site (Dashboard,
+      Pipeline Detail ×2, Constitution page) with `StatusBadge`,
+      supplying the stage's own label/description as the required
+      `reason`; deleted `StageBadge.tsx`. Caught and fixed a visible
+      duplicate-text bug this introduced on the Pipeline Detail page:
+      `StatusBadge`'s new `reason` already showed the stage's
+      description, which a separate pre-existing paragraph directly
+      below it was also showing — removed the now-redundant paragraph.
+- [x] 4.5 Deleted `BudgetForm.tsx` (confirmed dead code — not imported by
+      any current page/component; grep across `src/` found zero
+      importers).
+
+Verified live (dev server + seeded DB, not just build/lint): Pipeline
+Detail and Constitution pages both render with zero console/page errors,
+the merged `DraftButton` and `StatusBadge` render correctly in place, and
+the duplicate-text bug is gone after the fix.
 
 ## 5. Dashboard, Attention Center, Quick View
 

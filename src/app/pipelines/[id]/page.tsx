@@ -5,7 +5,8 @@ import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { getStageConfigOrFallback } from "@/lib/config";
 import { WRITE_ROLES } from "@/domain/shared/authz";
-import { StageBadge } from "@/components/StageBadge";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { stageStatusTone, stageStatusLabel } from "@/lib/colors/stageStatus";
 import { DraftButton } from "@/components/DraftButton";
 import { ApprovalGate } from "@/components/ApprovalGate";
 import { ClarifyPanel } from "@/components/ClarifyPanel";
@@ -65,7 +66,11 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
           <p className="mt-1 text-sm opacity-70 whitespace-pre-wrap">{pipeline.workItem.description}</p>
         )}
         <div className="mt-2 flex items-center gap-3">
-          <StageBadge status={pipeline.status} />
+          <StatusBadge
+            tone={stageStatusTone(pipeline.status)}
+            label={stageStatusLabel(pipeline.status)}
+            reason={`Currently at the ${stageStatusLabel(pipeline.currentStage)} stage`}
+          />
           <Link href={`/work-items/${pipeline.workItem.id}/360`} className="text-xs underline opacity-70 hover:opacity-100">
             360° Record →
           </Link>
@@ -87,9 +92,12 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
             >
               <div className="flex items-center justify-between">
                 <h2 className="font-medium">{stageConfig.label}</h2>
-                {stage ? <StageBadge status={stage.status} /> : <StageBadge status="PENDING" />}
+                <StatusBadge
+                  tone={stageStatusTone(stage?.status ?? "PENDING")}
+                  label={stageStatusLabel(stage?.status ?? "PENDING")}
+                  reason={stageConfig.description}
+                />
               </div>
-              <p className="mt-1 text-xs opacity-60">{stageConfig.description}</p>
 
               {stage?.content && (
                 <pre className="mt-3 whitespace-pre-wrap rounded bg-black/[.03] dark:bg-white/[.05] p-3 text-xs font-mono">
@@ -149,7 +157,7 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
               {isCurrent && stage && (stage.status === "PENDING" || stage.status === "REJECTED") && (
                 <div className="mt-3">
                   <DraftButton
-                    stageId={stage.id}
+                    target={{ kind: "stage", stageId: stage.id }}
                     label={stage.status === "REJECTED" ? "Redraft" : "Draft with AI"}
                     canApprove={canManage}
                   />
@@ -158,8 +166,8 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
 
               {!isCurrent && stage && stage.status === "DONE" && flaggedStageTypes.has(stageConfig.type) && (
                 <div className="mt-3">
-                  <p className="mb-1 text-xs text-red-500">Flagged by Analyze — redraft required to unblock the pipeline.</p>
-                  <DraftButton stageId={stage.id} label="Redraft" canApprove={canManage} />
+                  <p className="mb-1 text-xs text-status-critical">Flagged by Analyze — redraft required to unblock the pipeline.</p>
+                  <DraftButton target={{ kind: "stage", stageId: stage.id }} label="Redraft" canApprove={canManage} />
                 </div>
               )}
 
@@ -183,9 +191,9 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
               {stage && stage.status === "PENDING_APPROVAL" && (
                 <div className="mt-3">
                   {ctx.isOrgAdmin || (userRole && stageConfig.approverRoles?.includes(userRole)) ? (
-                    <ApprovalGate stageId={stage.id} />
+                    <ApprovalGate apiBasePath={`/api/stages/${stage.id}`} />
                   ) : (
-                    <p className="rounded border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-600 dark:text-amber-400">
+                    <p className="rounded-md border border-status-warning/30 bg-status-warning-bg p-3 text-xs text-status-warning">
                       Awaiting gate approval — only {(stageConfig.approverRoles ?? []).join(" or ")} can approve this stage.
                     </p>
                   )}

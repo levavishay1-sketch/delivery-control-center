@@ -2,8 +2,16 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ApproveRejectButtons } from "@/components/ui/ApproveRejectButtons";
+import { Input } from "@/components/ui/FormField";
 
-export function ApprovalGate({ stageId }: { stageId: string }) {
+/**
+ * Approve/reject gate — merged from the formerly byte-for-byte-identical
+ * `ApprovalGate`/`ConstitutionApprovalGate` (design-system spec's
+ * "Duplicate status and action components are consolidated" requirement),
+ * parameterized by `apiBasePath` instead of duplicated per entity type.
+ */
+export function ApprovalGate({ apiBasePath }: { apiBasePath: string }) {
   const router = useRouter();
   const [comment, setComment] = useState("");
   const [pending, setPending] = useState<"approve" | "reject" | null>(null);
@@ -12,7 +20,7 @@ export function ApprovalGate({ stageId }: { stageId: string }) {
   async function decide(decision: "approve" | "reject") {
     setPending(decision);
     setError(null);
-    const res = await fetch(`/api/stages/${stageId}/${decision}`, {
+    const res = await fetch(`${apiBasePath}/${decision}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ comment: comment || undefined }),
@@ -26,32 +34,16 @@ export function ApprovalGate({ stageId }: { stageId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded border border-amber-500/30 bg-amber-500/5 p-3">
-      <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Awaiting gate approval</p>
-      <input
+    <div className="flex flex-col gap-2 rounded-md border border-status-warning/30 bg-status-warning-bg p-3">
+      <p className="text-xs font-medium text-status-warning">Awaiting gate approval</p>
+      <Input
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         placeholder="Comment (optional)"
         aria-label="Approval comment"
-        className="rounded border border-black/15 dark:border-white/20 bg-transparent px-2 py-1 text-sm"
       />
-      <div className="flex gap-2">
-        <button
-          onClick={() => decide("approve")}
-          disabled={pending !== null}
-          className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending === "approve" ? "Approving…" : "Approve"}
-        </button>
-        <button
-          onClick={() => decide("reject")}
-          disabled={pending !== null}
-          className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending === "reject" ? "Rejecting…" : "Reject"}
-        </button>
-      </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      <ApproveRejectButtons onApprove={() => decide("approve")} onReject={() => decide("reject")} pending={pending} />
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </div>
   );
 }

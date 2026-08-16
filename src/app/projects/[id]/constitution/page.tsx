@@ -6,9 +6,10 @@ import { getEffectiveBudget, listConfigHistory } from "@/domain/config/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { WRITE_ROLES } from "@/domain/shared/authz";
-import { StageBadge } from "@/components/StageBadge";
-import { ConstitutionDraftButton } from "@/components/ConstitutionDraftButton";
-import { ConstitutionApprovalGate } from "@/components/ConstitutionApprovalGate";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { stageStatusTone, stageStatusLabel } from "@/lib/colors/stageStatus";
+import { DraftButton } from "@/components/DraftButton";
+import { ApprovalGate } from "@/components/ApprovalGate";
 import { ConfigBudgetPanel } from "@/components/ConfigBudgetPanel";
 import { ConfigHistoryList } from "@/components/ConfigHistoryList";
 
@@ -79,7 +80,13 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
           <h2 id="constitution-heading" className="font-medium">
             Constitution{latest ? ` — v${latest.version}` : ""}
           </h2>
-          {latest && <StageBadge status={latest.status} />}
+          {latest && (
+            <StatusBadge
+              tone={stageStatusTone(latest.status)}
+              label={stageStatusLabel(latest.status)}
+              reason="Governs every pipeline started under this project"
+            />
+          )}
         </div>
         <p className="mt-1 text-xs opacity-60">
           The project&apos;s governing principles and constraints. Every pipeline started under this project
@@ -90,7 +97,11 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
         {!latest && (
           <div className="mt-3">
             <p className="mb-2 text-sm opacity-70">No Constitution has been drafted for this project yet.</p>
-            <ConstitutionDraftButton projectId={project.id} label="Draft with AI" canApprove={canManage} />
+            <DraftButton
+              target={{ kind: "constitution", projectId: project.id }}
+              label="Draft with AI"
+              canApprove={canManage}
+            />
           </div>
         )}
 
@@ -110,8 +121,8 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
 
             {DRAFTABLE_STATUSES.has(latest.status) && (
               <div className="mt-3">
-                <ConstitutionDraftButton
-                  projectId={project.id}
+                <DraftButton
+                  target={{ kind: "constitution", projectId: project.id }}
                   label={latest.status === "REJECTED" ? "Redraft (new version)" : "Draft with AI"}
                   canApprove={canManage}
                 />
@@ -120,7 +131,7 @@ export default async function ProjectConstitutionPage({ params }: PageProps<"/pr
 
             {latest.status === "PENDING_APPROVAL" && (
               <div className="mt-3">
-                <ConstitutionApprovalGate constitutionId={latest.id} />
+                <ApprovalGate apiBasePath={`/api/constitutions/${latest.id}`} />
               </div>
             )}
           </>

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { ApproveRejectButtons } from "@/components/ui/ApproveRejectButtons";
 
 /** onDecided, if given (e.g. the Quick View drawer, whose data isn't a Server Component), is called instead of router.refresh(). */
 export function DecisionActions({ decisionId, onDecided }: { decisionId: string; onDecided?: () => void }) {
@@ -24,23 +25,8 @@ export function DecisionActions({ decisionId, onDecided }: { decisionId: string;
 
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex gap-2">
-        <button
-          onClick={() => decide("approve")}
-          disabled={pending !== null}
-          className="rounded bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending === "approve" ? "Approving…" : "Approve"}
-        </button>
-        <button
-          onClick={() => decide("reject")}
-          disabled={pending !== null}
-          className="rounded bg-red-600 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {pending === "reject" ? "Rejecting…" : "Reject"}
-        </button>
-      </div>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+      <ApproveRejectButtons onApprove={() => decide("approve")} onReject={() => decide("reject")} pending={pending} />
+      {error && <p className="text-xs text-status-critical">{error}</p>}
     </div>
   );
 }
