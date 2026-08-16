@@ -205,7 +205,7 @@ re-litigate:
 | 7 | Design system foundation & premium UI refresh | **Done** | `2026-08-15-design-system-direction.md` | `openspec/changes/archive/2026-08-15-slice-7-design-system-refresh/` |
 | 8 | i18n readiness & RTL support (Hebrew/English) | **Done** | `2026-08-15-i18n-rtl-support.md` | `openspec/changes/archive/2026-08-15-i18n-rtl-support/` |
 | 9 | Dashboard motifs refresh (budget usage meter, real global search, nav polish) | **Done** | `2026-08-15-dashboard-motifs-direction.md` | `openspec/changes/dashboard-motifs-refresh/` (implemented, not yet archived) |
-| 10 | Product-wide visual redesign (reference-driven design system overhaul) | Scoped, not started | `2026-08-16-product-visual-redesign-reference.md` | — |
+| 10 | Product-wide visual redesign (reference-driven design system overhaul) | **Done** | `2026-08-16-product-visual-redesign-reference.md` | `openspec/changes/product-visual-redesign/` (implemented, not yet archived) |
 
 "Scoped" means the source document's own scope for that slice (below) is
 authoritative and ready for an OpenSpec proposal — it does **not** mean a
@@ -438,7 +438,7 @@ archived — this row was previously left as "Scoped, not started" after the
 table above was updated to Done; corrected here so the two don't drift, per
 CLAUDE.md's spec-anchored rule).
 
-### Slice 10 — Product-wide visual redesign (reference-driven design system overhaul)
+### Slice 10 — Product-wide visual redesign (reference-driven design system overhaul) — **Done**
 
 *(Source: `docs/roadmap-sources/2026-08-16-product-visual-redesign-reference.md`
 — a direct user requirement given in conversation on 2026-08-16, attaching a
@@ -469,7 +469,19 @@ a branded sidebar) rather than running two competing systems side by side —
 the OpenSpec proposal must resolve this reconciliation explicitly in
 `design.md`, not silently.
 
-Ready for an OpenSpec proposal; no plan written or approved yet.
+Implemented per `openspec/changes/product-visual-redesign/` (not yet
+archived): design tokens, application shell (branded sidebar + rounded
+workspace container), shared primitives (`Button`, `FormField`, `Row`
+column-grid mode, `ApproveRejectButtons`, `AuditEventRow`), and every
+existing screen migrated to them (Dashboard, Attention Center, Quick
+View, 360° Record, login, Audit Trail, Pipeline Detail, Project
+Settings, Constitution, Configuration Center) — reaching beyond the
+Dashboard used as the reference's visual example, per this slice's own
+scope. Full existing E2E suite re-run clean against a fresh DB (one
+pre-existing failure predating this change, verified via a throwaway
+`git worktree` on the prior commit, and one already-documented
+non-idempotent-test-design gap from Slice 9 — neither a regression
+from this change; see `tasks.md`'s Task Group 14 for detail).
 
 ## Definition of Done, for every future slice (source: `§6`)
 

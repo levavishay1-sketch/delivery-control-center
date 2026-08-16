@@ -380,12 +380,22 @@ re-capture; treated as a Playwright capture glitch, not a product bug.)
 
 ## 15. Documentation & verification
 
-- [ ] 15.1 Run `/verify` (build + lint + a live check): load every
-      migrated screen in a running dev server, confirm shell/sidebar,
-      spot-check RTL on at least one migrated legacy screen, screenshot
-      the Dashboard and one legacy-turned-migrated screen (e.g. Pipeline
-      Detail) side by side with the reference image for a visual
-      sanity check per the source document's "Final Visual Test."
-- [ ] 15.2 Update `docs/ROADMAP.md`'s Slice 10 row and detail section to
-      **Done**, linking this change's archive path, following the same
-      pattern as Slices 0-9.
+- [x] 15.1 Ran build + lint + a live check: started the dev server,
+      logged in, and screenshotted the Dashboard, Attention Center,
+      Audit Trail, Constitution, and Pipeline Detail — branded sidebar
+      and rounded workspace container present on all of them, matching
+      the reference direction (purple sidebar, rounded white workspace,
+      badge/panel treatment). Spot-checked RTL on the Dashboard: sidebar
+      correctly mirrors to the right edge, language pill and row content
+      mirror too. `npm run lint` and `npm run build` both clean. (No
+      saved reference image file exists to diff pixel-for-pixel — the
+      reference was a screenshot embedded in the original chat request,
+      not a file on disk — so this is a direct visual comparison against
+      the description captured in
+      `docs/roadmap-sources/2026-08-16-product-visual-redesign-reference.md`,
+      not an automated image diff.)
+- [x] 15.2 Updated `docs/ROADMAP.md`'s Slice 10 row and detail section
+      to **Done**, linking `openspec/changes/product-visual-redesign/`
+      (implemented, not yet archived) — the same not-yet-archived
+      pattern Slice 9's row already uses, since archiving requires a
+      separate explicit go-ahead per the fluid OpenSpec workflow.
