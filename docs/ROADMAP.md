@@ -750,6 +750,31 @@ multi-choice SDD Activation set (Continue-Without-SDD / Postpone /
 Return-to-Discovery, §25-27), and Requirement revisioning (per Decision
 5's standing deferral).
 
+**Slice 18 status:** Scoped, not started. Proposed 2026-08-18 as
+`task-decomposition-materialization`; OpenSpec planning artifacts at
+`openspec/changes/task-decomposition-materialization/`. Per the
+gap-analysis Part 3 row for Slice 18: "§26-27 (SDD → Authoritative Work →
+Structured Platform Representation → Visual Work Graph) — strong match ...
+**Still roughly accurate**, but should decompose from a Requirement's SDD
+output once Requirement exists (Decision 3), not only from a WorkItem's
+own pipeline." Requirement now exists (Slice 15, above) — its "Start SDD"
+action creates a root WorkItem + Pipeline that flows through the standard
+SDD pipeline like any other, so this slice is the direct next link:
+turning an approved TASKS stage's drafted task list into real, assignable
+child WorkItems, which is what actually completes the Requirement →
+execution loop end to end. Bounded scope (see the change's design.md for
+the full non-goals list): the TASKS stage's AI output gains a structured,
+Zod-validated `taskDrafts` list alongside its existing prose content —
+reusing ANALYZE's existing `AnalysisFinding` structured-side-channel
+pattern verbatim, not a new mechanism; a new `TaskDraft` record per
+drafted task; and one explicit "Materialize" action, gated on the TASKS
+stage already being approved (`status === "DONE"`, only reachable through
+its existing approval gate — unchanged by this slice), that creates a real
+child WorkItem for each selected draft via the existing `createWorkItem`
+command. Explicitly deferred: the full cross-item Visual Work Graph (Slice
+16, separate), recursive/nested decomposition, and a generic Child/Bulk
+Approval pattern (§51-52) beyond simple multi-select.
+
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
@@ -795,10 +820,12 @@ Return-to-Discovery, §25-27), and Requirement revisioning (per Decision
   alternative), applied first to the AI-vs-developer executor
   recommendation, always including an AI-execution time/cost estimate even
   when AI isn't the recommended choice.
-- **Slice 18** — materializes the SDD pipeline's existing `TASKS` stage
-  artifact into real, individually-assignable child `WorkItem` rows behind
-  an explicit approval gate, for any Work Item where SDD principles call
-  for decomposition — not restricted to Projects only.
+- **Slice 18** *(proposed 2026-08-18 as `task-decomposition-materialization`
+  — see the dedicated status block below; this line is now a summary only,
+  not the scope of record)* — materializes the SDD pipeline's existing
+  `TASKS` stage artifact into real, individually-assignable child
+  `WorkItem` rows behind an explicit selection step, distinct from the
+  stage's own approval gate.
 - **Slice 19** — cascading Project→Task assignment that never silently
   overwrites an explicit task-level assignment: detects the conflict and
   presents the owner full context and every option, no default
