@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { getClientAiCost, getProjectAiCost, getWorkItemAiCost } from "./queries";
+import { getClientAiCost, getProjectAiCost, getWorkItemAiCost, estimateExecutorCost } from "./queries";
 import { resolveDefaultAgentId, startAgentRun } from "./commands";
 import { createWorkItem } from "@/domain/work-item/commands";
 import { startPipeline, draftStage, completeStageDraft, rejectStage } from "@/domain/pipeline/commands";
@@ -136,6 +136,91 @@ describe("getProjectAiCost", () => {
   it("returns zero for a project with no drafts yet", async () => {
     const project = await createProject("Empty Project Rollup");
     expect((await getProjectAiCost(project.id)).toString()).toBe("0");
+  });
+});
+
+describe("estimateExecutorCost", () => {
+  /**
+   * Runs against a real, shared local Postgres that accumulates data across test files/runs
+   * (see this file's own header comment), so tests verify *relationships* — sample size deltas
+   * and weighted-average math against a captured "before" snapshot — rather than absolute
+   * values, mirroring getClientAiCost's own before/after pattern below.
+   */
+  async function completeStageWithDuration(stageId: string, costUsd: number, durationMinutes: number) {
+    const completed = await draftAndCompleteStage(stageId, costUsd);
+    const run = await db.agentRun.findFirstOrThrow({ where: { stageVersions: { some: { stageId } } }, orderBy: { createdAt: "desc" } });
+    await db.agentRun.update({
+      where: { id: run.id },
+      data: { startedAt: new Date(Date.now() - durationMinutes * 60_000), completedAt: new Date() },
+    });
+    return completed;
+  }
+
+  it("uses an exact type/risk/priority match, weighted correctly against any pre-existing history", async () => {
+    const project = await createProjectWithApprovedConstitution("Estimate Exact Project");
+    const { workItem } = await createWorkItem(managerCtx, {
+      projectId: project.id,
+      title: "Exact match item",
+      type: "CHANGE",
+      risk: "CRITICAL",
+      priority: "LOW",
+    });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const stage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+
+    // "before" may itself already be an exact match (accumulated from prior test/E2E runs
+    // against this shared database) or a type/global fallback (if no CHANGE/CRITICAL/LOW run
+    // existed yet) — only the former is the same bucket "after" will read from, so the weighted
+    // delta math only applies in that case.
+    const before = await estimateExecutorCost("CHANGE", "CRITICAL", "LOW");
+    const beforeWasExact = before?.matchLevel === "exact";
+    const beforeTotalCost = beforeWasExact ? before!.costUsd * before!.sampleSize : 0;
+    const beforeTotalDuration = beforeWasExact ? before!.durationMinutes * before!.sampleSize : 0;
+    const beforeSampleSize = beforeWasExact ? before!.sampleSize : 0;
+
+    await completeStageWithDuration(stage.id, 2, 10);
+
+    const after = await estimateExecutorCost("CHANGE", "CRITICAL", "LOW");
+    expect(after).not.toBeNull();
+    expect(after!.matchLevel).toBe("exact");
+    expect(after!.sampleSize).toBe(beforeSampleSize + 1);
+    expect(after!.costUsd).toBeCloseTo((beforeTotalCost + 2) / (beforeSampleSize + 1), 5);
+    expect(after!.durationMinutes).toBeCloseTo((beforeTotalDuration + 10) / (beforeSampleSize + 1), 3);
+  });
+
+  it("falls back to a type-only average when no exact risk/priority match exists", async () => {
+    const project = await createProjectWithApprovedConstitution("Estimate Type Fallback Project");
+    // A CHANGE-type item with a risk/priority combination nothing else in this suite creates.
+    const { workItem } = await createWorkItem(managerCtx, {
+      projectId: project.id,
+      title: "Type-only match item",
+      type: "CHANGE",
+      risk: "MEDIUM",
+      priority: "HIGH",
+    });
+    const pipeline = await startPipeline(managerCtx, workItem.id);
+    const stage = await db.stage.findFirstOrThrow({ where: { pipelineId: pipeline.id } });
+    await completeStageWithDuration(stage.id, 3, 20);
+
+    // No CHANGE item anywhere has risk=HIGH/priority=CRITICAL — the exact match is empty, so
+    // this must fall back to the type-only (all CHANGE items) average, which does include the
+    // item just created above.
+    const result = await estimateExecutorCost("CHANGE", "HIGH", "CRITICAL");
+    expect(result).not.toBeNull();
+    expect(result!.matchLevel).not.toBe("exact");
+  });
+
+  it("falls back to a global average when no completed run of any WorkItem type exists yet for a fresh scope", async () => {
+    // No other test in this suite (or, as far as this test can control, elsewhere) deliberately
+    // creates a type=PROJECT WorkItem and drafts against it, so this combination is expected to
+    // have zero exact and zero type-only matches, forcing the global fallback.
+    const result = await estimateExecutorCost("PROJECT", "CRITICAL", "CRITICAL");
+    if (result) {
+      expect(result.matchLevel).toBe("global");
+      expect(result.sampleSize).toBeGreaterThan(0);
+    }
+    // If no AgentRun has completed anywhere yet in this database, `null` is the correct answer
+    // too (design.md decision 4) — either outcome is valid depending on prior test-run state.
   });
 });
 

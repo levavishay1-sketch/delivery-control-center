@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { Prisma } from "@/generated/prisma/client";
+import { Prisma, type WorkItemType, type RiskLevel, type PriorityLevel } from "@/generated/prisma/client";
 import type { AuthContext } from "@/domain/shared/context";
 import { requireClientRole, ALL_ROLES, WRITE_ROLES } from "@/domain/shared/authz";
 
@@ -185,6 +185,59 @@ export async function getAgentRunSummary(ctx: AuthContext, runId: string) {
   const { id, agentId, agent, status, promptTokens, completionTokens, costUsd, startedAt, completedAt, createdAt } =
     loaded.run;
   return { id, agentId, agent, status, promptTokens, completionTokens, costUsd, startedAt, completedAt, createdAt };
+}
+
+export interface ExecutorCostEstimate {
+  costUsd: number;
+  durationMinutes: number;
+  sampleSize: number;
+  /** How closely the sample matched the target WorkItem — narrows the "why" shown to the user (Slice 17 design.md decision 1). */
+  matchLevel: "exact" | "type" | "global";
+}
+
+async function averageCompletedRuns(where: { type?: WorkItemType; risk?: RiskLevel; priority?: PriorityLevel }) {
+  const runs = await db.agentRun.findMany({
+    where: {
+      completedAt: { not: null },
+      costUsd: { not: null },
+      stageVersions: { some: { stage: { pipeline: { workItem: where } } } },
+    },
+    select: { costUsd: true, startedAt: true, completedAt: true },
+  });
+  if (runs.length === 0) return null;
+
+  const totalCost = runs.reduce((sum, r) => sum + (r.costUsd?.toNumber() ?? 0), 0);
+  const totalDurationMs = runs.reduce((sum, r) => sum + (r.completedAt!.getTime() - r.startedAt.getTime()), 0);
+  return {
+    costUsd: totalCost / runs.length,
+    durationMinutes: totalDurationMs / runs.length / 60_000,
+    sampleSize: runs.length,
+  };
+}
+
+/**
+ * Slice 17 — an estimated AI-execution cost/duration for a WorkItem of this shape, averaged over
+ * completed AgentRuns (a failed run never gets costUsd/completedAt, so this naturally counts only
+ * successful attempts). Falls back from an exact type+risk+priority match to a type-only match to
+ * a global average across every completed run, so a fresh installation with thin history still
+ * gets an honest (if broader) estimate rather than nothing; returns null only when there is no
+ * completed AgentRun anywhere yet (design.md decision 1).
+ */
+export async function estimateExecutorCost(
+  workItemType: WorkItemType,
+  risk: RiskLevel,
+  priority: PriorityLevel
+): Promise<ExecutorCostEstimate | null> {
+  const exact = await averageCompletedRuns({ type: workItemType, risk, priority });
+  if (exact) return { ...exact, matchLevel: "exact" };
+
+  const typeOnly = await averageCompletedRuns({ type: workItemType });
+  if (typeOnly) return { ...typeOnly, matchLevel: "type" };
+
+  const global = await averageCompletedRuns({});
+  if (global) return { ...global, matchLevel: "global" };
+
+  return null;
 }
 
 /** Total AI drafting cost across every project under a client, plus every Discovery run for one of its repositories (Slice 14). */

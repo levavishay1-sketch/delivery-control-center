@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { EditWorkItemForm } from "@/components/EditWorkItemForm";
+import { AiRecommendationCard } from "@/components/AiRecommendationCard";
 import { CreateBlockerForm } from "@/components/CreateBlockerForm";
 import { CreateDecisionForm } from "@/components/CreateDecisionForm";
 import { ResolveBlockerButton } from "@/components/ResolveBlockerButton";
@@ -243,6 +244,10 @@ export function OverviewTab({
           <dd className="font-medium">{workItem.priority}</dd>
         </div>
       </dl>
+
+      {canManage && workItem.executorType === "UNASSIGNED" && (
+        <AiRecommendationCard workItemId={workItem.id} onEditDeveloper={() => setEditing(true)} />
+      )}
 
       <div>
         <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
