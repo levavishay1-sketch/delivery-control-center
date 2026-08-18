@@ -34,13 +34,18 @@ export async function listActiveClients(ctx: AuthContext) {
  * Repository.clientId, across all its projects), and its connectors (via the client-owned
  * Connector.clientId, Slice 13 — queried directly rather than derived from each project's own
  * connector), for the Clients hub detail page.
+ *
+ * Slice 22 — topLevelOpenWorkItems: every WorkItem across the client's projects with no parent
+ * and an open status, spanning every WorkItemType — for the Tasks panel. Reuses the
+ * `notIn: ["COMPLETED", "CLOSED"]` "open" convention getHighRiskWorkItems/getUpcomingDeadlines
+ * already use (src/domain/work-item/queries.ts), rather than inventing a new one.
  */
 export async function getClientDetail(ctx: AuthContext, id: string) {
   const client = await db.client.findUnique({ where: { id } });
   if (!client) return null;
   requireClientRole(ctx, client.id, ALL_ROLES);
 
-  const [projects, repositories, connectors] = await Promise.all([
+  const [projects, repositories, connectors, topLevelOpenWorkItems] = await Promise.all([
     db.project.findMany({
       where: { clientId: id },
       include: { connector: true },
@@ -55,9 +60,14 @@ export async function getClientDetail(ctx: AuthContext, id: string) {
       where: { clientId: id },
       orderBy: { createdAt: "desc" },
     }),
+    db.workItem.findMany({
+      where: { parentId: null, status: { notIn: ["COMPLETED", "CLOSED"] }, project: { clientId: id } },
+      select: { id: true, title: true, type: true, status: true, projectId: true },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
 
-  return { client, projects, repositories, connectors };
+  return { client, projects, repositories, connectors, topLevelOpenWorkItems };
 }
 
 /** Users with a membership on this client — for owner/executor pickers. Requires at least read access. */

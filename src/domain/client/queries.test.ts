@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { getClientDetail } from "./queries";
 import { createProject } from "@/domain/project/commands";
+import { createWorkItem, updateWorkItemStatus } from "@/domain/work-item/commands";
 import type { AuthContext } from "@/domain/shared/context";
 
 /**
@@ -47,5 +48,51 @@ describe("getClientDetail", () => {
     const connector = await db.connector.findUniqueOrThrow({ where: { projectId: project.id } });
     const projectRow = await db.project.findUniqueOrThrow({ where: { id: project.id } });
     expect(connector.clientId).toBe(projectRow.clientId);
+  });
+});
+
+/** Slice 22 — the Client Tasks section: every top-level (parentless), open WorkItem across the client's projects, of any type. */
+describe("getClientDetail — topLevelOpenWorkItems", () => {
+  it("includes every top-level type and excludes a child even when its top-level parent is shown", async () => {
+    const project = await createProject(managerCtx, { clientId, name: "Tasks Section Test", key: `TSK${Date.now().toString(36).toUpperCase()}` });
+    const { workItem: parent } = await createWorkItem(managerCtx, { projectId: project.id, title: "Top-level PROJECT item", type: "PROJECT" });
+    const { workItem: child } = await createWorkItem(managerCtx, { projectId: project.id, title: "Child task", parentId: parent.id });
+    const { workItem: standaloneTask } = await createWorkItem(managerCtx, { projectId: project.id, title: "Standalone top-level task" });
+    const { workItem: standaloneBug } = await createWorkItem(managerCtx, { projectId: project.id, title: "Standalone top-level bug", type: "BUG" });
+
+    const detail = await getClientDetail(managerCtx, clientId);
+    const ids = detail!.topLevelOpenWorkItems.map((w) => w.id);
+
+    expect(ids).toContain(parent.id);
+    expect(ids).toContain(standaloneTask.id);
+    expect(ids).toContain(standaloneBug.id);
+    expect(ids).not.toContain(child.id);
+  });
+
+  it("excludes a top-level work item once it is CLOSED", async () => {
+    // COMPLETED is excluded by the same status:{notIn:[...]} array-membership filter as CLOSED,
+    // so this one case is sufficient — reaching COMPLETED itself requires satisfying the
+    // evidence-driven completion policy (Slice 5), unrelated to this feature.
+    const project = await createProject(managerCtx, { clientId, name: "Tasks Section Status Test", key: `TSS${Date.now().toString(36).toUpperCase()}` });
+    const { workItem: closed } = await createWorkItem(managerCtx, { projectId: project.id, title: "Closed item" });
+    await updateWorkItemStatus(managerCtx, closed.id, "CLOSED");
+
+    const detail = await getClientDetail(managerCtx, clientId);
+    expect(detail!.topLevelOpenWorkItems.map((w) => w.id)).not.toContain(closed.id);
+  });
+
+  it("does not include another client's work items", async () => {
+    const otherOrg = await db.organization.create({ data: { name: "Other Client Org", slug: `other-client-org-${Date.now()}` } });
+    orgIds.push(otherOrg.id);
+    const otherClient = await db.client.create({ data: { organizationId: otherOrg.id, name: "Other Client", slug: `other-client-${Date.now()}` } });
+    const otherProject = await db.project.create({
+      data: { clientId: otherClient.id, name: "Other Project", key: `OTH${Date.now().toString(36).toUpperCase()}` },
+    });
+    const otherItem = await db.workItem.create({
+      data: { projectId: otherProject.id, source: "MANUAL", externalId: `manual-other-${Date.now()}`, title: "Other client's item", status: "OPEN" },
+    });
+
+    const detail = await getClientDetail(managerCtx, clientId);
+    expect(detail!.topLevelOpenWorkItems.map((w) => w.id)).not.toContain(otherItem.id);
   });
 });

@@ -20,6 +20,31 @@ const REQUIREMENT_STATUS_TONE = {
   DECLINED: "inactive",
 } as const;
 
+/** Slice 22 — only the open statuses ever reach this panel (COMPLETED/CLOSED are filtered out by the query), but every WorkStatus value is mapped for type completeness. */
+const WORK_STATUS_TONE = {
+  DRAFT: "inactive",
+  OPEN: "active",
+  IN_PROGRESS: "active",
+  DECISION_REQUIRED: "warning",
+  BLOCKED: "critical",
+  REVIEW: "warning",
+  APPROVED: "healthy",
+  COMPLETED: "healthy",
+  CLOSED: "inactive",
+} as const;
+
+const WORK_STATUS_REASON = {
+  DRAFT: "Not yet submitted for approval",
+  OPEN: "Ready to start",
+  IN_PROGRESS: "Currently being worked on",
+  DECISION_REQUIRED: "Waiting on a decision",
+  BLOCKED: "Blocked",
+  REVIEW: "In review",
+  APPROVED: "Approved, not yet started",
+  COMPLETED: "Completed",
+  CLOSED: "Closed",
+} as const;
+
 export default async function ClientDetailPage({ params }: PageProps<"/clients/[id]">) {
   const { id } = await params;
   const ctx = await requireAuthContext();
@@ -30,7 +55,7 @@ export default async function ClientDetailPage({ params }: PageProps<"/clients/[
   });
   if (!detail) notFound();
 
-  const { client, projects, repositories, connectors } = detail;
+  const { client, projects, repositories, connectors, topLevelOpenWorkItems } = detail;
   const requirements = await listRequirementsForClient(ctx, id);
 
   const userRole = ctx.memberships.find((m) => m.clientId === id)?.role;
@@ -103,6 +128,33 @@ export default async function ClientDetailPage({ params }: PageProps<"/clients/[
                 />
               </Row>
             ))}
+          </RowList>
+        )}
+      </Panel>
+
+      <Panel title="Tasks">
+        {topLevelOpenWorkItems.length === 0 ? (
+          <PanelEmpty>No top-level open work items.</PanelEmpty>
+        ) : (
+          <RowList>
+            {topLevelOpenWorkItems.map((item) => {
+              const project = projects.find((p) => p.id === item.projectId);
+              return (
+                <Row key={item.id} href={`/work-items/${item.id}/360`} columns="1fr auto">
+                  <div>
+                    <p className="font-medium">{item.title}</p>
+                    <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                      {item.type} · {project ? project.name : "Unknown project"}
+                    </p>
+                  </div>
+                  <StatusBadge
+                    tone={WORK_STATUS_TONE[item.status]}
+                    label={item.status}
+                    reason={WORK_STATUS_REASON[item.status]}
+                  />
+                </Row>
+              );
+            })}
           </RowList>
         )}
       </Panel>
