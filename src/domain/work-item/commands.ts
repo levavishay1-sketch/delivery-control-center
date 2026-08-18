@@ -81,6 +81,12 @@ export async function createWorkItem(ctx: AuthContext, rawInput: CreateWorkItemI
     }
   }
 
+  // Slice 19 — a WorkItem created without its own explicit executor inherits the Project's
+  // default (falling back to today's UNASSIGNED if the Project has none set).
+  const hasExplicitExecutor = input.executorType !== undefined || input.executorId !== undefined;
+  const executorType = hasExplicitExecutor ? (input.executorType ?? "UNASSIGNED") : project.defaultExecutorType;
+  const executorId = hasExplicitExecutor ? input.executorId : (project.defaultExecutorId ?? undefined);
+
   const workItem = await db.$transaction(async (tx) => {
     const created = await tx.workItem.create({
       data: {
@@ -95,8 +101,9 @@ export async function createWorkItem(ctx: AuthContext, rawInput: CreateWorkItemI
         ownerId: input.ownerId ?? ctx.userId,
         risk: input.risk ?? "MEDIUM",
         priority: input.priority ?? "MEDIUM",
-        executorType: input.executorType ?? "UNASSIGNED",
-        executorId: input.executorId,
+        executorType,
+        executorId,
+        assignmentSource: hasExplicitExecutor ? "EXPLICIT" : "INHERITED",
         dueDate: input.dueDate,
       },
     });
@@ -123,6 +130,10 @@ export async function updateWorkItem(ctx: AuthContext, id: string, rawInput: Upd
   if (!project) throw new NotFoundError("Project not found");
   requireClientRole(ctx, project.clientId, WRITE_ROLES);
 
+  // Slice 19 — a direct edit to the executor always marks it EXPLICIT, symmetric with how a
+  // Project-level cascade marks a WorkItem INHERITED (design.md decision 3).
+  const executorEdited = input.executorType !== undefined || input.executorId !== undefined;
+
   return db.$transaction(async (tx) => {
     const updated = await tx.workItem.update({
       where: { id },
@@ -134,6 +145,7 @@ export async function updateWorkItem(ctx: AuthContext, id: string, rawInput: Upd
         ownerId: input.ownerId,
         executorType: input.executorType,
         executorId: input.executorId,
+        assignmentSource: executorEdited ? "EXPLICIT" : undefined,
         dueDate: input.dueDate,
         progress: input.progress,
       },

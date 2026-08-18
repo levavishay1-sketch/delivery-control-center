@@ -231,6 +231,14 @@ enum ExecutorType {
   UNASSIGNED
 }
 
+// Slice 19 — tracks whether a WorkItem's current executor was set directly on the item
+// (EXPLICIT) or is following the Project's default executor (INHERITED). Governs whether a
+// Project-level default-executor cascade touches this WorkItem automatically.
+enum AssignmentSource {
+  EXPLICIT
+  INHERITED
+}
+
 enum DecisionStatus {
   OPEN
   APPROVED
@@ -274,6 +282,7 @@ model User {
   configChangesMade              ConfigChange[]        @relation("ConfigChangeChangedBy")
   triggeredRepositoryDiscoveries RepositoryDiscovery[] @relation("RepositoryDiscoveryTriggeredBy")
   createdRequirements            Requirement[]         @relation("RequirementCreatedBy")
+  defaultExecutorForProjects     Project[]             @relation("ProjectDefaultExecutor")
 }
 
 model Account {
@@ -391,6 +400,13 @@ model Project {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  // Slice 19 — the executor new/unassigned WorkItems inherit (WorkItem.assignmentSource).
+  // Separate from any ownerId concept (accountability, always defaults to the creator) — see
+  // design.md decision 1.
+  defaultExecutorType ExecutorType @default(UNASSIGNED)
+  defaultExecutorId   String?
+  defaultExecutor     User?        @relation("ProjectDefaultExecutor", fields: [defaultExecutorId], references: [id], onDelete: SetNull)
+
   workItems       WorkItem[]
   auditEvents     AuditEvent[]
   constitutions   Constitution[]
@@ -462,6 +478,11 @@ model WorkItem {
   executorType ExecutorType  @default(UNASSIGNED)
   executorId   String?
   executor     User?         @relation("WorkItemExecutor", fields: [executorId], references: [id], onDelete: SetNull)
+  // Slice 19 — whether the current executor was set directly on this item (EXPLICIT) or is
+  // following the Project's default executor (INHERITED). Defaults to INHERITED: every
+  // pre-existing WorkItem backfills as INHERITED (design.md decision 4) since no Project has a
+  // default executor set yet, so this is a no-op until a project lead sets one.
+  assignmentSource AssignmentSource @default(INHERITED)
   dueDate      DateTime?
   progress     Int           @default(0)
   aiCost       Decimal       @default(0) @db.Decimal(10, 4)

@@ -231,3 +231,46 @@ describe("addParentWorkItem", () => {
 // Sync execution itself (runConnectorSync) and its Job-runtime wiring (triggerSync, SyncRun
 // lifecycle) are covered in src/domain/connector/commands.test.ts and sync.test.ts — sync no
 // longer runs synchronously through this module (see Task Group 3, design.md decision 2).
+
+describe("assignmentSource (Slice 19)", () => {
+  it("a new work item with no explicit executor and no Project default is UNASSIGNED/INHERITED (today's behavior, unchanged)", async () => {
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "No default, no explicit" });
+    expect(workItem.executorType).toBe("UNASSIGNED");
+    expect(workItem.assignmentSource).toBe("INHERITED");
+  });
+
+  it("a new work item with no explicit executor inherits a set Project default", async () => {
+    await db.project.update({ where: { id: projectId }, data: { defaultExecutorType: "HUMAN", defaultExecutorId: viewerUserId } });
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Inherits default" });
+    expect(workItem.executorType).toBe("HUMAN");
+    expect(workItem.executorId).toBe(viewerUserId);
+    expect(workItem.assignmentSource).toBe("INHERITED");
+    await db.project.update({ where: { id: projectId }, data: { defaultExecutorType: "UNASSIGNED", defaultExecutorId: null } });
+  });
+
+  it("a new work item with an explicit executor is not overridden by the Project default", async () => {
+    await db.project.update({ where: { id: projectId }, data: { defaultExecutorType: "HUMAN", defaultExecutorId: viewerUserId } });
+    const { workItem } = await createWorkItem(managerCtx, {
+      projectId,
+      title: "Explicit wins",
+      executorType: "AI_AGENT",
+    });
+    expect(workItem.executorType).toBe("AI_AGENT");
+    expect(workItem.assignmentSource).toBe("EXPLICIT");
+    await db.project.update({ where: { id: projectId }, data: { defaultExecutorType: "UNASSIGNED", defaultExecutorId: null } });
+  });
+
+  it("updateWorkItem setting an executor flips assignmentSource to EXPLICIT", async () => {
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Starts inherited" });
+    expect(workItem.assignmentSource).toBe("INHERITED");
+
+    const updated = await updateWorkItem(managerCtx, workItem.id, { executorType: "AI_AGENT" });
+    expect(updated.assignmentSource).toBe("EXPLICIT");
+  });
+
+  it("updateWorkItem not touching the executor leaves assignmentSource unchanged", async () => {
+    const { workItem } = await createWorkItem(managerCtx, { projectId, title: "Untouched executor" });
+    const updated = await updateWorkItem(managerCtx, workItem.id, { title: "Renamed" });
+    expect(updated.assignmentSource).toBe("INHERITED");
+  });
+});

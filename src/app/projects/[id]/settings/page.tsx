@@ -5,6 +5,7 @@ import { getOrCreateConnectorForProject } from "@/domain/connector/commands";
 import { listSyncRuns } from "@/domain/connector/queries";
 import { listOpenConflicts } from "@/domain/connector/conflicts";
 import { getRepositoryForProject } from "@/domain/evidence/queries";
+import { listClientMembers } from "@/domain/client/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
 import { WRITE_ROLES } from "@/domain/shared/authz";
@@ -12,6 +13,7 @@ import { ConnectorConfigForm } from "@/components/ConnectorConfigForm";
 import { ConflictResolutionPanel } from "@/components/ConflictResolutionPanel";
 import { SyncButton } from "@/components/SyncButton";
 import { RepositoryLinkForm } from "@/components/RepositoryLinkForm";
+import { DefaultExecutorForm } from "@/components/DefaultExecutorForm";
 import { Panel } from "@/components/ui/Panel";
 import { StatusBadge, type StatusTone } from "@/components/ui/StatusBadge";
 
@@ -39,10 +41,11 @@ export default async function ProjectSettingsPage({ params }: PageProps<"/projec
   if (!project) notFound();
 
   const connector = await getOrCreateConnectorForProject(project.id);
-  const [syncRuns, openConflicts, repository] = await Promise.all([
+  const [syncRuns, openConflicts, repository, members] = await Promise.all([
     listSyncRuns(connector.id),
     listOpenConflicts(ctx, project.id),
     getRepositoryForProject(project.id),
+    listClientMembers(ctx, project.clientId),
   ]);
 
   const userRole = ctx.memberships.find((m) => m.clientId === project.clientId)?.role;
@@ -82,6 +85,27 @@ export default async function ProjectSettingsPage({ params }: PageProps<"/projec
                 zod schema, so a Connector's type here is always one of the four this form knows. */}
             <ConnectorConfigForm projectId={project.id} currentType={connector.type as "MANUAL" | "JIRA" | "AZURE_DEVOPS" | "GITHUB"} />
           </div>
+        )}
+      </Panel>
+
+      <Panel title="Default Executor">
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          The executor new and unassigned work items inherit. Changing it won&apos;t silently overwrite a work item that already has its own
+          explicit executor.
+        </p>
+        {canManage ? (
+          <div className="mt-3">
+            <DefaultExecutorForm
+              projectId={project.id}
+              current={{ executorType: project.defaultExecutorType, executorId: project.defaultExecutorId }}
+              members={members.map((m) => ({ id: m.id, name: m.name, email: m.email }))}
+            />
+          </div>
+        ) : (
+          <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+            Current default: {project.defaultExecutorType}
+            {project.defaultExecutorId && ` (${members.find((m) => m.id === project.defaultExecutorId)?.name ?? project.defaultExecutorId})`}
+          </p>
         )}
       </Panel>
 

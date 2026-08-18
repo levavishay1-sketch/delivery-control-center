@@ -1,55 +1,58 @@
 ## 1. Data model & migration
 
-- [ ] 1.1 Add `Project.defaultExecutorType` (`ExecutorType`, default `UNASSIGNED`) and
+- [x] 1.1 Add `Project.defaultExecutorType` (`ExecutorType`, default `UNASSIGNED`) and
       `Project.defaultExecutorId` (nullable FK to `User`) to `prisma/schema.prisma`.
-- [ ] 1.2 Add `WorkItem.assignmentSource` (`AssignmentSource` enum: `EXPLICIT` | `INHERITED`,
+- [x] 1.2 Add `WorkItem.assignmentSource` (`AssignmentSource` enum: `EXPLICIT` | `INHERITED`,
       default `INHERITED`) to `prisma/schema.prisma`.
-- [ ] 1.3 Write and run the migration; regenerate the Prisma client. Every existing WorkItem
+- [x] 1.3 Write and run the migration; regenerate the Prisma client. Every existing WorkItem
       backfills to `assignmentSource=INHERITED` via the column default (design.md decision 5) — no
       separate backfill script needed since no existing Project has a default executor set yet.
 
 ## 2. Domain layer — assignment on WorkItem creation/update
 
-- [ ] 2.1 `createWorkItem` (`src/domain/work-item/commands.ts`): when no explicit `executorType`/
+- [x] 2.1 `createWorkItem` (`src/domain/work-item/commands.ts`): when no explicit `executorType`/
       `executorId` is given, look up the Project's default executor and use it, setting
       `assignmentSource=INHERITED`; when an explicit executor is given, set
       `assignmentSource=EXPLICIT`.
-- [ ] 2.2 `updateWorkItem`: when `executorType`/`executorId` is included in the update, set
+- [x] 2.2 `updateWorkItem`: when `executorType`/`executorId` is included in the update, set
       `assignmentSource=EXPLICIT` (design.md decision 3 — a direct edit always marks it explicit,
       symmetric with how a cascade marks it inherited).
 
 ## 3. Domain layer — cascade preview & apply
 
-- [ ] 3.1 `previewAssignmentCascade(ctx, projectId, newExecutor)` in
+- [x] 3.1 `previewAssignmentCascade(ctx, projectId, newExecutor)` in
       `src/domain/project/commands.ts`: read access check, returns the WorkItems currently
       `INHERITED`/`UNASSIGNED` (would be reassigned automatically) and those currently `EXPLICIT`
       (would only be reassigned under `REASSIGN_ALL`) — id/title/current executor for each, no
-      writes.
-- [ ] 3.2 `applyAssignmentCascade(ctx, projectId, newExecutor, option)` — `option` is a required
+      writes. (Uses `assignmentSource` alone to split the sets — a `UNASSIGNED` executor with no
+      explicit choice behind it is always `INHERITED` per design.md decision 4, so a separate
+      `executorType==="UNASSIGNED"` check would be redundant and, worse, would wrongly pull an
+      explicitly-set-to-unassigned `EXPLICIT` item into the auto-cascaded set.)
+- [x] 3.2 `applyAssignmentCascade(ctx, projectId, newExecutor, option)` — `option` is a required
       `"INHERITED_ONLY" | "REASSIGN_ALL"` Zod enum, no default. In one transaction: updates the
       Project's `defaultExecutorType`/`defaultExecutorId`; under `INHERITED_ONLY`, reassigns every
       `INHERITED`/`UNASSIGNED` WorkItem to the new executor (staying `INHERITED`); under
       `REASSIGN_ALL`, also reassigns every `EXPLICIT` WorkItem (becoming `INHERITED` — design.md
       decision 3).
-- [ ] 3.3 Audit events: one for the Project default-executor change (naming the chosen option),
+- [x] 3.3 Audit events: one for the Project default-executor change (naming the chosen option),
       one per cascaded WorkItem reassignment (old executor, new executor, and that it resulted
       from a Project-level cascade) — all in the same transaction as the writes they describe.
-- [ ] 3.4 Access control: `requireClientRole(ctx, project.clientId, WRITE_ROLES)` on both preview
+- [x] 3.4 Access control: `requireClientRole(ctx, project.clientId, WRITE_ROLES)` on both preview
       and apply — read-only users can't trigger or even preview a cascade they can't apply.
 
 ## 4. UI — Project Settings
 
-- [ ] 4.1 A new "Default Executor" section on `src/app/projects/[id]/settings/page.tsx`: shows the
+- [x] 4.1 A new "Default Executor" section on `src/app/projects/[id]/settings/page.tsx`: shows the
       Project's current default executor, a control to propose a new one.
-- [ ] 4.2 Preview step: on proposing a new default, calls `previewAssignmentCascade` and shows the
+- [x] 4.2 Preview step: on proposing a new default, calls `previewAssignmentCascade` and shows the
       affected (`INHERITED`/`UNASSIGNED`) and unaffected (`EXPLICIT`) WorkItem lists.
-- [ ] 4.3 Confirm step: two explicit buttons ("Apply to unassigned only" / "Reassign everyone"),
+- [x] 4.3 Confirm step: two explicit buttons ("Apply to unassigned only" / "Reassign everyone"),
       neither visually pre-selected/default-styled; clicking one calls `applyAssignmentCascade`
       with that option and refreshes.
 
 ## 5. Tests
 
-- [ ] 5.1 Unit tests: new WorkItem with no executor inherits the Project default
+- [x] 5.1 Unit tests: new WorkItem with no executor inherits the Project default
       (`assignmentSource=INHERITED`); new WorkItem with an explicit executor is not overridden
       (`assignmentSource=EXPLICIT`); Project with no default leaves new WorkItems `UNASSIGNED`
       (today's behavior, unchanged); `updateWorkItem` setting an executor flips
@@ -58,11 +61,19 @@
       `UNASSIGNED` items; under `REASSIGN_ALL` touches every item and flips previously-`EXPLICIT`
       ones to `INHERITED`; a read-only user is refused on both preview and apply; audit events are
       recorded for the Project change and each cascaded WorkItem.
-- [ ] 5.2 E2E: create a Project, create one WorkItem with an explicit executor and one without,
+- [x] 5.2 E2E: create a Project, create one WorkItem with an explicit executor and one without,
       set a Project default executor, preview the cascade, confirm "apply to unassigned only",
       verify only the unassigned item moved; change the default again, confirm "reassign
       everyone", verify the previously-explicit item now also shows the new executor —
-      `e2e/cascading-task-assignment.spec.ts`.
+      `e2e/cascading-task-assignment.spec.ts`. Found and fixed a real bug while writing this: the
+      test's own premature `page.goto()` right after clicking a cascade-confirm button raced the
+      in-flight POST and aborted it server-side (`SyntaxError: Unexpected end of JSON input` in
+      `default-executor/route.ts`'s `request.json()`) — not a Slice 19 domain bug, a test-timing
+      bug; fixed by waiting for the form to reset to its pre-preview state (which only happens
+      after the POST resolves) before navigating away. Also avoided repeatedly opening/closing
+      the Quick View drawer (a known pre-existing hydration-mismatch flake trigger, same symptom
+      documented in the Slice 16 status block) by capturing each item's 360° Record URL once and
+      reusing direct navigation. Passing, stable across 2 consecutive runs.
 
 ## 6. Documentation & verification
 
