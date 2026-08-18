@@ -870,6 +870,43 @@ Owner/Decision-Owner/Approval/Tests/Changes graph overlay (Decision-Owner
 and Change history don't exist yet in this codebase per Decision 5's
 standing deferral, so they can't be overlaid regardless).
 
+**Slice 19 status:** Proposed 2026-08-18 as `cascading-task-assignment`;
+OpenSpec planning artifacts at
+`openspec/changes/cascading-task-assignment/`. Per the gap-analysis Part 3
+row for Slice 19, this was flagged "Needs re-scoping — should likely be
+reframed as the general Responsibility Transfer mechanism §23 describes,
+with cascading assignment as one instance of it." §23 of
+`2026-08-17-core-product-definition.md` is a one-paragraph principle
+("Authorized users may transfer: Ownership, Decision Ownership — during
+the lifecycle of: Project, Initiative, Requirement, Feature, Bug, Task,
+Subtask, Change") spanning entity types that don't exist yet (Initiative,
+Feature, Change) and a Decision Ownership concept with no current
+equivalent. The old blueprint's §5.6 is the only source with concrete
+mechanism detail and its scope — Project → Task (WorkItem) *executor*
+assignment specifically, not `ownerId` (a separate, already-specified,
+always-defaults-to-creator concept) — is a buildable subset of §23's
+broader scope. Chosen as the next slice over 17/20/21 after research
+confirmed it's the most grounded of the four remaining: Slice 17 still
+blocked (needs Blocker criticality/Execution Readiness, neither exists);
+Slice 20 needs a wholly new scheduling primitive invented from scratch (no
+cron/recurring-job mechanism exists — the Job runtime is claim-based/
+on-demand only); Slice 21 requires inventing four entirely new domain
+concepts (evidence rules, test rules, branch/PR policy, source mapping)
+before generalization work can even start. Slice 19 needs only one new
+concept — a Project-level default executor — reusing WorkItem's
+already-real `executorType`/`executorId` fields (default `UNASSIGNED`, a
+genuine "nobody assigned" state) at the task level. Bounded scope (see the
+change's design.md for the full decision log): `Project.defaultExecutorType`/
+`defaultExecutorId`; a new `WorkItem.assignmentSource`
+(`EXPLICIT`/`INHERITED`) flag; a Preview→Confirm cascade flow (modeled
+UX-wise, not code-wise, on Configuration Center's existing pattern) with
+two explicit options and no default pre-selected — apply only to
+inherited/unassigned WorkItems, or also reassign explicit ones. Explicitly
+deferred: `ownerId` cascade/assignment (separate concept, untouched);
+Decision Ownership transfer and any entity type beyond Project/WorkItem
+(§23's full scope); generalizing Configuration Center's `ConfigChange`
+machinery itself (Slice 21's job).
+
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
@@ -924,11 +961,13 @@ standing deferral, so they can't be overlaid regardless).
   `TASKS` stage artifact into real, individually-assignable child
   `WorkItem` rows behind an explicit selection step, distinct from the
   stage's own approval gate.
-- **Slice 19** — cascading Project→Task assignment that never silently
-  overwrites an explicit task-level assignment: detects the conflict and
-  presents the owner full context and every option, no default
-  pre-selected, reusing Configuration Center's Preview→Confirm-impact
-  pattern for the prompt itself.
+- **Slice 19** *(proposed 2026-08-18 as `cascading-task-assignment` — see
+  the dedicated status block above; this line is now a summary only, not
+  the scope of record)* — cascading Project→Task assignment that never
+  silently overwrites an explicit task-level assignment: detects the
+  conflict and presents the owner full context and every option, no
+  default pre-selected, reusing Configuration Center's Preview→Confirm-
+  impact pattern for the prompt itself.
 - **Slice 20** — a weekly (Sunday 07:00) job that fetches and extracts
   model/pricing/capability information from
   `platform.claude.com/docs/en/about-claude/models/overview` into a
