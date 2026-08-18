@@ -77,12 +77,12 @@
 
 ## 6. Documentation & verification
 
-- [ ] 6.1 Update `docs/ROADMAP.md`'s Slice 19 entry: mark status, summarize what was built (mirror
+- [x] 6.1 Update `docs/ROADMAP.md`'s Slice 19 entry: mark status, summarize what was built (mirror
       the Slice 16/18 status-block format), and note the deferred non-goals explicitly (ownerId,
       Decision Ownership, other entity types, Configuration Center generalization).
 - [ ] 6.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
       existing suite has no new failures beyond the already-known pre-existing baseline (verify
       via the temporary-checkout method used for prior slices if any new failure appears).
-- [ ] 6.3 Live verification: open a project with a mix of explicit and unassigned WorkItems in the
+- [x] 6.3 Live verification: open a project with a mix of explicit and unassigned WorkItems in the
       browser, set a default executor, preview and confirm both cascade options, confirm the
       resulting executor assignments and audit trail entries match.

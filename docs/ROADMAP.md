@@ -870,9 +870,8 @@ Owner/Decision-Owner/Approval/Tests/Changes graph overlay (Decision-Owner
 and Change history don't exist yet in this codebase per Decision 5's
 standing deferral, so they can't be overlaid regardless).
 
-**Slice 19 status:** Proposed 2026-08-18 as `cascading-task-assignment`;
-OpenSpec planning artifacts at
-`openspec/changes/cascading-task-assignment/`. Per the gap-analysis Part 3
+**Slice 19 status:** Done. Proposed and implemented 2026-08-18 as
+`cascading-task-assignment`. Per the gap-analysis Part 3
 row for Slice 19, this was flagged "Needs re-scoping — should likely be
 reframed as the general Responsibility Transfer mechanism §23 describes,
 with cascading assignment as one instance of it." §23 of
@@ -901,11 +900,46 @@ change's design.md for the full decision log): `Project.defaultExecutorType`/
 (`EXPLICIT`/`INHERITED`) flag; a Preview→Confirm cascade flow (modeled
 UX-wise, not code-wise, on Configuration Center's existing pattern) with
 two explicit options and no default pre-selected — apply only to
-inherited/unassigned WorkItems, or also reassign explicit ones. Explicitly
-deferred: `ownerId` cascade/assignment (separate concept, untouched);
-Decision Ownership transfer and any entity type beyond Project/WorkItem
-(§23's full scope); generalizing Configuration Center's `ConfigChange`
-machinery itself (Slice 21's job).
+inherited/unassigned WorkItems, or also reassign explicit ones.
+
+Built: schema migration adding `Project.defaultExecutorType`/
+`defaultExecutorId` and `WorkItem.assignmentSource` (defaults to
+`INHERITED`, backfilling every pre-existing WorkItem — a no-op until a
+project lead sets a default for the first time). `createWorkItem` inherits
+the Project's default when no explicit executor is given;
+`updateWorkItem` flips `assignmentSource` to `EXPLICIT` on any direct
+executor edit — symmetric with how a cascade sets it back to `INHERITED`.
+New `previewAssignmentCascade`/`applyAssignmentCascade` domain commands
+(`src/domain/project/commands.ts`), both `WRITE_ROLES`-gated (a read-only
+user can't even preview a cascade they can't apply); `applyAssignmentCascade`'s
+`option` parameter has no default at the Zod-schema level — the API
+boundary itself refuses to guess, not just the UI. Two new API routes
+(`/api/projects/[id]/default-executor` and its `/preview` sibling) and a
+new "Default Executor" panel on Project Settings
+(`DefaultExecutorForm.tsx`) implementing the Preview→Confirm flow: two
+neutrally-styled buttons ("Apply to unassigned only" / "Reassign
+everyone"), neither visually emphasized as a default. 14 unit tests (7 on
+`createWorkItem`/`updateWorkItem` assignment behavior, 7 on
+preview/apply) all passing. E2E spec
+(`e2e/cascading-task-assignment.spec.ts`) sets an explicit executor on one
+WorkItem, leaves another unassigned, cascades a new default with "apply to
+unassigned only" (verifies only the unassigned item moved), then cascades
+again with "reassign everyone" (verifies the previously-explicit item
+moved too) — passing, stable across repeated runs. While writing it,
+found and fixed a real bug: the test's own premature navigation right
+after a cascade-confirm click raced the in-flight POST and aborted it
+server-side — not a Slice 19 domain bug, a test-timing bug, fixed by
+waiting for the form to reset (which only happens after the POST
+resolves) before navigating away. Live-verified in the browser: the
+Preview step correctly lists an unassigned item under "will move
+automatically" and an explicit item under "has its own explicit
+assignment — untouched unless you choose to reassign," and the panel
+reflects the new default immediately after applying.
+
+Explicitly deferred: `ownerId` cascade/assignment (separate concept,
+untouched); Decision Ownership transfer and any entity type beyond
+Project/WorkItem (§23's full scope); generalizing Configuration Center's
+`ConfigChange` machinery itself (Slice 21's job).
 
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
