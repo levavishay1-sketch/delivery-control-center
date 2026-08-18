@@ -4,6 +4,7 @@ import {
   fetchCommits,
   fetchPullRequests,
   fetchRepository,
+  fetchRepositorySnapshot,
   githubAdapter,
   verifyGithubSignature,
 } from "./github";
@@ -203,6 +204,65 @@ describe("fetchCheckRuns", () => {
         completedAt: "2026-08-02T00:05:00Z",
       },
     ]);
+  });
+});
+
+describe("fetchRepositorySnapshot", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function base64(text: string): string {
+    return Buffer.from(text, "utf-8").toString("base64");
+  }
+
+  it("fetches the root listing, README, and any present known manifest file", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { name: "README.md", type: "file" },
+          { name: "package.json", type: "file" },
+          { name: "src", type: "dir" },
+        ],
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ content: base64("# Widgets"), encoding: "base64" }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ content: base64('{"name":"widgets"}'), encoding: "base64" }),
+      });
+
+    const snapshot = await fetchRepositorySnapshot(VALID_CONFIG);
+    expect(snapshot).toEqual({
+      rootListing: ["README.md", "package.json", "src"],
+      readme: { path: "README.md", content: "# Widgets" },
+      manifests: [{ path: "package.json", content: '{"name":"widgets"}' }],
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("returns no README/manifests when neither is present at the root, without extra fetches", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ name: "src", type: "dir" }, { name: "LICENSE", type: "file" }],
+    });
+
+    const snapshot = await fetchRepositorySnapshot(VALID_CONFIG);
+    expect(snapshot).toEqual({ rootListing: ["src", "LICENSE"], readme: undefined, manifests: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws when the root listing request fails", async () => {
+    const fetchMock = fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404, statusText: "Not Found", text: async () => "repo not found" });
+
+    await expect(fetchRepositorySnapshot(VALID_CONFIG)).rejects.toThrow(/GitHub request failed/);
   });
 });
 

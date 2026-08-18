@@ -96,3 +96,45 @@ describe("mockExecutor.executeStage — redraft feedback (Task Group 9)", () => 
     expect(withRejection.promptTokens).toBeGreaterThan(withoutRejection.promptTokens);
   });
 });
+
+describe("mockExecutor.executeRepositoryDiscovery (Slice 14)", () => {
+  it("cites the README as evidence for purpose when one is present", async () => {
+    const result = await mockExecutor.executeRepositoryDiscovery({
+      owner: "acme",
+      repo: "widgets",
+      rootListing: ["README.md", "package.json", "src"],
+      readme: { path: "README.md", content: "# Widgets\nA widget factory." },
+      manifests: [{ path: "package.json", content: '{"name":"widgets"}' }],
+    });
+    expect(result.findings.purpose.evidence).toEqual(["README.md"]);
+    expect(result.findings.stack.evidence).toEqual(["package.json"]);
+    expect(result.findings.unknowns.some((u) => u.includes("purpose"))).toBe(false);
+  });
+
+  it("marks purpose and stack as unknown, not fabricated, when no README/manifest is present", async () => {
+    const result = await mockExecutor.executeRepositoryDiscovery({
+      owner: "acme",
+      repo: "widgets",
+      rootListing: ["src", "LICENSE"],
+      manifests: [],
+    });
+    expect(result.findings.purpose.evidence).toEqual([]);
+    expect(result.findings.stack.evidence).toEqual([]);
+    expect(result.findings.unknowns.some((u) => u.includes("purpose"))).toBe(true);
+    expect(result.findings.unknowns.some((u) => u.includes("stack"))).toBe(true);
+  });
+
+  it("never claims modules/apis/dataStores/testing/conventions beyond the root-level snapshot", async () => {
+    const result = await mockExecutor.executeRepositoryDiscovery({
+      owner: "acme",
+      repo: "widgets",
+      rootListing: ["src"],
+      manifests: [],
+    });
+    expect(result.findings.modules.evidence).toEqual([]);
+    expect(result.findings.apis.evidence).toEqual([]);
+    expect(result.findings.dataStores.evidence).toEqual([]);
+    expect(result.findings.testing.evidence).toEqual([]);
+    expect(result.findings.conventions.evidence).toEqual([]);
+  });
+});

@@ -180,6 +180,83 @@ export async function fetchCheckRuns(config: Record<string, unknown> | null, ref
   }));
 }
 
+export interface RepositorySnapshotFile {
+  path: string;
+  content: string;
+}
+
+export interface RepositorySnapshot {
+  rootListing: string[];
+  readme?: RepositorySnapshotFile;
+  manifests: RepositorySnapshotFile[];
+}
+
+interface ContentsListingEntry {
+  name: string;
+  type: string;
+}
+
+interface ContentsFileResponse {
+  content: string;
+  encoding: string;
+}
+
+// Slice 14 — the fixed, well-known dependency-manifest filenames Discovery checks for at the
+// repository root. Deliberately not a deep/recursive scan (design.md's Non-Goals) — this is a
+// single-level, bounded fetch, not a full clone.
+const KNOWN_MANIFEST_FILES = ["package.json", "requirements.txt", "go.mod", "pom.xml", "Gemfile", "Cargo.toml"];
+
+async function fetchOptionalFileContent(
+  baseUrl: string,
+  owner: string,
+  repo: string,
+  path: string,
+  token: string
+): Promise<string | null> {
+  const res = await fetch(`${baseUrl}/repos/${owner}/${repo}/contents/${path}`, { headers: githubHeaders(token) });
+  if (res.status === 404) return null;
+  if (!res.ok) {
+    throw new Error(`GitHub request failed: ${res.status} ${res.statusText} — ${await res.text()}`);
+  }
+  const data = (await res.json()) as ContentsFileResponse;
+  if (data.encoding !== "base64") {
+    throw new Error(`Unexpected GitHub contents encoding "${data.encoding}" for ${path}.`);
+  }
+  return Buffer.from(data.content, "base64").toString("utf-8");
+}
+
+/**
+ * Fetches a bounded, single-level evidence snapshot for Repository Discovery (design.md's
+ * "Evidence gathering" decision): the root directory listing, the README if present, and any of a
+ * fixed set of well-known dependency-manifest files present at the root. Every returned file's
+ * content is real, fetched content — never fabricated — so a Discovery analysis can cite these
+ * paths as genuine evidence.
+ */
+export async function fetchRepositorySnapshot(config: Record<string, unknown> | null): Promise<RepositorySnapshot> {
+  const { owner, repo, token, baseUrl } = resolveConfig(config);
+
+  const rootRes = await fetch(`${baseUrl}/repos/${owner}/${repo}/contents/`, { headers: githubHeaders(token) });
+  if (!rootRes.ok) {
+    throw new Error(`GitHub request failed: ${rootRes.status} ${rootRes.statusText} — ${await rootRes.text()}`);
+  }
+  const rootEntries = (await rootRes.json()) as ContentsListingEntry[];
+  const rootListing = rootEntries.map((entry) => entry.name);
+
+  const readmeName = rootEntries.find((entry) => entry.type === "file" && /^readme(\.|$)/i.test(entry.name))?.name;
+  const readmeContent = readmeName ? await fetchOptionalFileContent(baseUrl, owner, repo, readmeName, token) : null;
+  const readme: RepositorySnapshotFile | undefined =
+    readmeName && readmeContent !== null ? { path: readmeName, content: readmeContent } : undefined;
+
+  const manifests: RepositorySnapshotFile[] = [];
+  for (const manifestName of KNOWN_MANIFEST_FILES) {
+    if (!rootListing.includes(manifestName)) continue;
+    const content = await fetchOptionalFileContent(baseUrl, owner, repo, manifestName, token);
+    if (content !== null) manifests.push({ path: manifestName, content });
+  }
+
+  return { rootListing, readme, manifests };
+}
+
 /**
  * Verifies a GitHub webhook delivery's HMAC-SHA256 signature (the `X-Hub-Signature-256` header,
  * formatted `sha256=<hex>`), per GitHub's own documented scheme:

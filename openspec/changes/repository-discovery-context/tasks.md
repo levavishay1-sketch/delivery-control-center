@@ -1,23 +1,23 @@
 ## Task Group 1: Data model & migration
 
-- [ ] Add `DiscoveryStatus` enum (`RUNNING`, `SUCCEEDED`, `FAILED`) to `prisma/schema.prisma`.
-- [ ] Add `RUN_REPOSITORY_DISCOVERY` to the existing `JobType` enum.
-- [ ] Add `RepositoryDiscovery` model: `id`, `repositoryId` (FK → `Repository`, `onDelete: Cascade`),
+- [x] Add `DiscoveryStatus` enum (`RUNNING`, `SUCCEEDED`, `FAILED`) to `prisma/schema.prisma`.
+- [x] Add `RUN_REPOSITORY_DISCOVERY` to the existing `JobType` enum.
+- [x] Add `RepositoryDiscovery` model: `id`, `repositoryId` (FK → `Repository`, `onDelete: Cascade`),
       `version Int`, `status DiscoveryStatus @default(RUNNING)`, `findings Json?`, `aiModel
       String?`, `promptTokens Int?`, `completionTokens Int?`, `costUsd Decimal? @db.Decimal(10,
       4)`, `agentRunId String?` (FK → `AgentRun`, `onDelete: SetNull`), `lastError String?`,
       `triggeredByUserId String` (FK → `User`, `onDelete: Restrict`), `startedAt DateTime
       @default(now())`, `completedAt DateTime?`. `@@unique([repositoryId, version])`,
       `@@index([repositoryId])`.
-- [ ] Add the reverse relations: `Repository.discoveries RepositoryDiscovery[]`,
+- [x] Add the reverse relations: `Repository.discoveries RepositoryDiscovery[]`,
       `AgentRun.repositoryDiscoveries RepositoryDiscovery[]`, and a named `User` relation for
       `triggeredByUser` (mirrors `ClarifyQuestion`'s `"ClarifyQuestionAnsweredBy"` pattern).
-- [ ] Run `prisma migrate dev` to generate and apply the migration; verify it's purely additive
+- [x] Run `prisma migrate dev` to generate and apply the migration; verify it's purely additive
       (no column changes on existing tables).
 
 ## Task Group 2: Repository content fetch (GitHub)
 
-- [ ] Add `fetchRepositorySnapshot(config: Record<string, unknown> | null)` to
+- [x] Add `fetchRepositorySnapshot(config: Record<string, unknown> | null)` to
       `src/lib/integrations/github.ts`: resolves `{ owner, repo, token, baseUrl }` via the existing
       `resolveConfig`, fetches the root directory listing
       (`GET /repos/{owner}/{repo}/contents/`), then fetches content (base64-decoded) for any
@@ -25,33 +25,38 @@
       `Cargo.toml` present in that listing. Returns `{ rootListing: string[], readme?: { path:
       string; content: string }, manifests: { path: string; content: string }[] }`. Throws on a
       non-2xx root-listing response; tolerates 404s on individual optional files.
-- [ ] Unit tests (`github.test.ts`, extending the existing stub-server pattern used for
+- [x] Unit tests (`github.test.ts`, extending the existing stub-server pattern used for
       `fetchWorkItems`): root listing + README + one manifest present; root listing with no
       README/manifest present (empty optional fields, not an error); root-listing fetch failure
       throws.
 
 ## Task Group 3: AI output schema & executor
 
-- [ ] Add `repositoryDiscoveryFindingsSchema` to `src/lib/agents/types.ts`, matching design.md's
+- [x] Add `repositoryDiscoveryFindingsSchema` to `src/lib/agents/types.ts`, matching design.md's
       findings shape (`purpose`/`stack`/`structure`/`modules`/`apis`/`dataStores`/`testing`/
       `conventions`, each `{ summary: string, evidence: string[] }`, plus `unknowns: string[]`).
       Add `RepositoryDiscoveryContext` (owner, repo, the fetched snapshot) and
       `RepositoryDiscoveryResult` (`findings`, `aiModel`, `promptTokens`, `completionTokens`,
       `costUsd`) interfaces. Add `executeRepositoryDiscovery(context):
       Promise<RepositoryDiscoveryResult>` to the `AgentExecutor` interface.
-- [ ] Add `config/prompts/repository-discovery.md`: instructions (fetched snapshot content
+- [x] Add `config/prompts/repository-discovery.md`: instructions (fetched snapshot content
       templated in) + `<!-- DISCOVERY_FINDINGS -->` marker + output template, following
       `analyze.md`'s existing shape.
-- [ ] Implement `executeRepositoryDiscovery` in `mockExecutor.ts`: deterministic, built from the
+- [x] Implement `executeRepositoryDiscovery` in `mockExecutor.ts`: deterministic, built from the
       fetched snapshot directly (e.g. cite `package.json`'s path when present in `manifests`,
       summarize README's first lines for `purpose`), matching the "evidence-grounded, not
       fabricated" property without a real model.
-- [ ] Implement `executeRepositoryDiscovery` in `claudeExecutor.ts`: fill the new prompt template,
+- [x] Implement `executeRepositoryDiscovery` in `claudeExecutor.ts`: fill the new prompt template,
       call Claude, `parseDiscoveryFindings` (structurally identical to the existing
       `parseAnalysisFindings`, validated against `repositoryDiscoveryFindingsSchema`).
-- [ ] Unit tests for both executors' `executeRepositoryDiscovery` (mirrors existing
-      `mockExecutor.test.ts` coverage for ANALYZE) and for `parseDiscoveryFindings`'s
-      malformed-JSON / schema-failure error paths.
+- [x] Unit tests for `mockExecutor`'s `executeRepositoryDiscovery` (mirrors existing
+      `mockExecutor.test.ts` coverage for ANALYZE: evidence citation when present, honest
+      `unknowns` when absent, no claims beyond the root-level snapshot). `claudeExecutor.ts` has no
+      existing unit-test coverage anywhere in this codebase (it calls the real Anthropic SDK; only
+      `mockExecutor` is unit-tested today) — `parseDiscoveryFindings`'s error paths follow the same
+      untested-by-convention pattern as `parseClarifyQuestions`/`parseAnalysisFindings`, not a new
+      gap introduced by this slice. `tsc --noEmit` confirms both executors satisfy the extended
+      `AgentExecutor` interface.
 
 ## Task Group 4: Budget extension
 

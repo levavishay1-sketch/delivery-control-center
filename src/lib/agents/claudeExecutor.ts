@@ -1,17 +1,26 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { StageType } from "@/generated/prisma/client";
 import { getStageConfig, loadPromptTemplate } from "@/lib/config";
-import { analysisFindingsSchema, clarifyQuestionsSchema, summarizeAnalysisFindings } from "./types";
+import {
+  analysisFindingsSchema,
+  clarifyQuestionsSchema,
+  repositoryDiscoveryFindingsSchema,
+  summarizeAnalysisFindings,
+} from "./types";
 import type {
   AgentExecutor,
   AnalysisFindingDraft,
   ConstitutionExecutionContext,
+  RepositoryDiscoveryExecutionContext,
+  RepositoryDiscoveryExecutionResult,
+  RepositoryDiscoveryFindings,
   StageExecutionContext,
   StageExecutionResult,
 } from "./types";
 
 const CLARIFY_QUESTIONS_MARKER = "<!-- CLARIFY_QUESTIONS -->";
 const ANALYZE_FINDINGS_MARKER = "<!-- ANALYZE_FINDINGS -->";
+const DISCOVERY_FINDINGS_MARKER = "<!-- DISCOVERY_FINDINGS -->";
 
 /**
  * Parses the structured-questions block a CLARIFY draft can return instead of
@@ -78,6 +87,51 @@ function parseAnalysisFindings(text: string): AnalysisFindingDraft[] {
     throw new Error(`ANALYZE response's findings failed validation: ${result.error.message}`);
   }
   return result.data;
+}
+
+/**
+ * Parses a Repository Discovery draft's structured findings — always required, same discipline as
+ * parseAnalysisFindings above (see repository-discovery-context/design.md).
+ */
+function parseDiscoveryFindings(text: string): RepositoryDiscoveryFindings {
+  const markerIdx = text.indexOf(DISCOVERY_FINDINGS_MARKER);
+  if (markerIdx === -1) {
+    throw new Error("Repository Discovery response did not include the required findings marker.");
+  }
+
+  const rest = text
+    .slice(markerIdx + DISCOVERY_FINDINGS_MARKER.length)
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/, "")
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rest);
+  } catch {
+    throw new Error("Repository Discovery response included the findings marker but the JSON that followed could not be parsed.");
+  }
+
+  const result = repositoryDiscoveryFindingsSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(`Repository Discovery response's findings failed validation: ${result.error.message}`);
+  }
+  return result.data;
+}
+
+function fillDiscoveryInstructions(template: string, context: RepositoryDiscoveryExecutionContext): string {
+  const instructions = template.slice(0, template.indexOf("<!-- OUTPUT TEMPLATE"));
+  const manifestsContent = context.manifests.length
+    ? context.manifests.map((m) => `### ${m.path}\n${m.content}`).join("\n\n")
+    : "(none present)";
+  return instructions
+    .replaceAll("{{owner}}", context.owner)
+    .replaceAll("{{repo}}", context.repo)
+    .replaceAll("{{rootListing}}", context.rootListing.join(", ") || "(empty)")
+    .replaceAll("{{readmePath}}", context.readme?.path ?? "(none present)")
+    .replaceAll("{{readmeContent}}", context.readme?.content ?? "(none present)")
+    .replaceAll("{{manifestsContent}}", manifestsContent);
 }
 
 const MODEL = process.env.AI_MODEL || "claude-sonnet-5";
@@ -190,5 +244,13 @@ export const claudeExecutor: AgentExecutor = {
     const rawTemplate = loadPromptTemplate("constitution.md");
     const prompt = fillConstitutionInstructions(rawTemplate, context);
     return callClaude(prompt, "CONSTITUTION");
+  },
+
+  async executeRepositoryDiscovery(context: RepositoryDiscoveryExecutionContext): Promise<RepositoryDiscoveryExecutionResult> {
+    const rawTemplate = loadPromptTemplate("repository-discovery.md");
+    const prompt = fillDiscoveryInstructions(rawTemplate, context);
+    const { text, promptTokens, completionTokens, costUsd } = await getClaudeResponse(prompt, "REPOSITORY_DISCOVERY");
+    const findings = parseDiscoveryFindings(text);
+    return { findings, aiModel: MODEL, promptTokens, completionTokens, costUsd };
   },
 };

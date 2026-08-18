@@ -73,6 +73,48 @@ export interface ConstitutionExecutionContext {
   projectKey: string;
 }
 
+const discoveryFindingSchema = z.object({
+  summary: z.string().min(1),
+  evidence: z.array(z.string()),
+});
+
+/**
+ * Validates a Repository Discovery draft's structured findings before it's ever treated as
+ * authoritative — same "AI output -> schema -> domain command" discipline as
+ * analysisFindingsSchema above (see repository-discovery-context/design.md's "Findings schema"
+ * decision). Always required, never omitted, mirroring ANALYZE's own findings requirement.
+ */
+export const repositoryDiscoveryFindingsSchema = z.object({
+  purpose: discoveryFindingSchema,
+  stack: discoveryFindingSchema,
+  structure: discoveryFindingSchema,
+  modules: discoveryFindingSchema,
+  apis: discoveryFindingSchema,
+  dataStores: discoveryFindingSchema,
+  testing: discoveryFindingSchema,
+  conventions: discoveryFindingSchema,
+  unknowns: z.array(z.string()),
+});
+
+export type RepositoryDiscoveryFindings = z.infer<typeof repositoryDiscoveryFindingsSchema>;
+
+/** Repository Discovery is Repository-scoped, independent of any Project/WorkItem — see design.md's Context. */
+export interface RepositoryDiscoveryExecutionContext {
+  owner: string;
+  repo: string;
+  rootListing: string[];
+  readme?: { path: string; content: string };
+  manifests: { path: string; content: string }[];
+}
+
+export interface RepositoryDiscoveryExecutionResult {
+  findings: RepositoryDiscoveryFindings;
+  aiModel: string;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+}
+
 /**
  * What drafts stage content. `mockExecutor` fills prompt templates directly;
  * a real implementation would call out to an LLM using the same prompt
@@ -81,4 +123,5 @@ export interface ConstitutionExecutionContext {
 export interface AgentExecutor {
   executeStage(stageType: StageType, context: StageExecutionContext): Promise<StageExecutionResult>;
   executeConstitution(context: ConstitutionExecutionContext): Promise<StageExecutionResult>;
+  executeRepositoryDiscovery(context: RepositoryDiscoveryExecutionContext): Promise<RepositoryDiscoveryExecutionResult>;
 }

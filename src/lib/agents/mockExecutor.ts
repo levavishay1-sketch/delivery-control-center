@@ -5,6 +5,9 @@ import type {
   AgentExecutor,
   AnalysisFindingDraft,
   ConstitutionExecutionContext,
+  RepositoryDiscoveryExecutionContext,
+  RepositoryDiscoveryExecutionResult,
+  RepositoryDiscoveryFindings,
   StageExecutionContext,
   StageExecutionResult,
 } from "./types";
@@ -80,6 +83,64 @@ function extractMockClarifyQuestions(description: string): string[] | null {
 
 function fillConstitutionTemplate(template: string, context: ConstitutionExecutionContext): string {
   return template.replaceAll("{{projectName}}", context.projectName).replaceAll("{{projectKey}}", context.projectKey);
+}
+
+const NOT_DETERMINABLE = "Not determinable from the root-level snapshot (no deeper repository crawl performed).";
+const ROOT_LISTING_EVIDENCE = ["."];
+
+/**
+ * Deterministic mock stand-in for a real model's Discovery analysis: builds findings directly
+ * from the fetched snapshot rather than guessing, so the "evidence-grounded, not fabricated"
+ * property holds even without a real LLM (design.md's mockExecutor decision).
+ */
+function buildMockDiscoveryFindings(context: RepositoryDiscoveryExecutionContext): RepositoryDiscoveryFindings {
+  const { readme, manifests, rootListing } = context;
+  const manifestPaths = manifests.map((m) => m.path);
+  const unknowns: string[] = [];
+
+  const purpose = readme
+    ? { summary: `Described by its README (${readme.path}).`, evidence: [readme.path] }
+    : { summary: NOT_DETERMINABLE, evidence: [] };
+  if (!readme) unknowns.push("purpose (no README present at the root)");
+
+  const stack =
+    manifestPaths.length > 0
+      ? { summary: `Dependency manifest(s) present: ${manifestPaths.join(", ")}.`, evidence: manifestPaths }
+      : { summary: NOT_DETERMINABLE, evidence: [] };
+  if (manifestPaths.length === 0) unknowns.push("stack (no known dependency manifest present at the root)");
+
+  const structure = { summary: `Root directory contains: ${rootListing.join(", ") || "(empty)"}.`, evidence: ROOT_LISTING_EVIDENCE };
+
+  const empty = { summary: NOT_DETERMINABLE, evidence: [] as string[] };
+  unknowns.push("modules/domains (requires a deeper repository crawl, out of scope for this slice)");
+  unknowns.push("APIs (requires a deeper repository crawl, out of scope for this slice)");
+  unknowns.push("data stores (requires a deeper repository crawl, out of scope for this slice)");
+  unknowns.push("testing approach (requires a deeper repository crawl, out of scope for this slice)");
+  unknowns.push("conventions (requires a deeper repository crawl, out of scope for this slice)");
+
+  return {
+    purpose,
+    stack,
+    structure,
+    modules: empty,
+    apis: empty,
+    dataStores: empty,
+    testing: empty,
+    conventions: empty,
+    unknowns,
+  };
+}
+
+function summarizeDiscoveryFindings(findings: RepositoryDiscoveryFindings): string {
+  const lines = [
+    `- **Purpose**: ${findings.purpose.summary}`,
+    `- **Stack**: ${findings.stack.summary}`,
+    `- **Structure**: ${findings.structure.summary}`,
+  ];
+  if (findings.unknowns.length > 0) {
+    lines.push(`- **Unknowns**: ${findings.unknowns.join("; ")}`);
+  }
+  return lines.join("\n");
 }
 
 function estimateTokens(text: string): number {
@@ -180,5 +241,18 @@ export const mockExecutor: AgentExecutor = {
       completionTokens,
       costUsd,
     };
+  },
+
+  async executeRepositoryDiscovery(context: RepositoryDiscoveryExecutionContext): Promise<RepositoryDiscoveryExecutionResult> {
+    const findings = buildMockDiscoveryFindings(context);
+    const promptSize = context.rootListing.join(" ").length + (context.readme?.content.length ?? 0) +
+      context.manifests.reduce((sum, m) => sum + m.content.length, 0);
+    const promptTokens = estimateTokens(`${context.owner}/${context.repo} ${" ".repeat(promptSize)}`);
+    const completionTokens = estimateTokens(summarizeDiscoveryFindings(findings));
+    const costUsd =
+      Math.round((promptTokens * PROMPT_COST_PER_TOKEN + completionTokens * COMPLETION_COST_PER_TOKEN) * 10000) /
+      10000;
+
+    return { findings, aiModel: "mock-agent-v1", promptTokens, completionTokens, costUsd };
   },
 };

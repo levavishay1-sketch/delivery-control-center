@@ -60,6 +60,9 @@ enum JobType {
   DRAFT_STAGE
   DRAFT_CONSTITUTION
   SYNC_PROJECT
+  // Slice 14 — Repository Discovery runs through the same Job runtime as
+  // every other AI-drafting action; see design.md's Migration Plan.
+  RUN_REPOSITORY_DISCOVERY
 }
 
 enum JobStatus {
@@ -86,6 +89,15 @@ enum StageVersionTrigger {
 // Slice 3 — see openspec/changes/slice-3-agents-as-execution-resources/design.md
 // decision 1: one AgentRun per Job attempt-cycle, not per individual retry.
 enum AgentRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+// Slice 14 — a RepositoryDiscovery run's own lifecycle, mirroring
+// AgentRunStatus (see design.md's "RepositoryDiscovery is a new top-level
+// model" decision).
+enum DiscoveryStatus {
   RUNNING
   SUCCEEDED
   FAILED
@@ -250,16 +262,17 @@ model User {
   approvals   Approval[]
   auditEvents AuditEvent[]
 
-  ownedWorkItems               WorkItem[]            @relation("WorkItemOwner")
-  executedWorkItems            WorkItem[]            @relation("WorkItemExecutor")
-  ownedBlockers                Blocker[]             @relation("BlockerOwner")
-  decidedDecisions             Decision[]            @relation("DecisionApprover")
-  answeredClarifyQuestions     ClarifyQuestion[]     @relation("ClarifyQuestionAnsweredBy")
-  approvedBudgetOverrides      BudgetOverride[]      @relation("BudgetOverrideApprovedBy")
-  manualFieldEdits             FieldProvenance[]     @relation("FieldProvenanceActor")
-  resolvedSyncConflicts        SyncConflict[]        @relation("SyncConflictResolvedBy")
-  approvedCompletionExceptions CompletionException[] @relation("CompletionExceptionApprover")
-  configChangesMade            ConfigChange[]        @relation("ConfigChangeChangedBy")
+  ownedWorkItems                 WorkItem[]            @relation("WorkItemOwner")
+  executedWorkItems              WorkItem[]            @relation("WorkItemExecutor")
+  ownedBlockers                  Blocker[]             @relation("BlockerOwner")
+  decidedDecisions               Decision[]            @relation("DecisionApprover")
+  answeredClarifyQuestions       ClarifyQuestion[]     @relation("ClarifyQuestionAnsweredBy")
+  approvedBudgetOverrides        BudgetOverride[]      @relation("BudgetOverrideApprovedBy")
+  manualFieldEdits               FieldProvenance[]     @relation("FieldProvenanceActor")
+  resolvedSyncConflicts          SyncConflict[]        @relation("SyncConflictResolvedBy")
+  approvedCompletionExceptions   CompletionException[] @relation("CompletionExceptionApprover")
+  configChangesMade              ConfigChange[]        @relation("ConfigChangeChangedBy")
+  triggeredRepositoryDiscoveries RepositoryDiscovery[] @relation("RepositoryDiscoveryTriggeredBy")
 }
 
 model Account {
@@ -688,10 +701,11 @@ model AgentRun {
   completedAt      DateTime?
   createdAt        DateTime       @default(now())
 
-  stages             Stage[]
-  stageVersions      StageVersion[]
-  constitutions      Constitution[]
-  consumedByOverride BudgetOverride?
+  stages                Stage[]
+  stageVersions         StageVersion[]
+  constitutions         Constitution[]
+  consumedByOverride    BudgetOverride?
+  repositoryDiscoveries RepositoryDiscovery[]
 
   @@index([agentId, status])
 }
@@ -889,11 +903,45 @@ model Repository {
   // Slice 12 — every project this repository is linked to (find-or-create by client in
   // linkRepository means more than one project can share the same Repository row).
   projectLinks ProjectRepository[]
+  // Slice 14 — every Discovery run (versioned) ever produced for this repository.
+  discoveries  RepositoryDiscovery[]
 
   @@index([clientId])
 }
 
-/** Slice 12 — many-to-many: which of a client's repositories a project has linked as relevant. */
+// Slice 14 — one versioned, evidence-cited AI analysis per repository, triggered explicitly by a
+// user (design.md: mirrors Constitution's shape exactly — versioned, never overwritten in place;
+// see design.md's "RepositoryDiscovery is a new top-level model" decision). RepositoryContext
+// (the spec's "current understanding" concept) is a query over the latest SUCCEEDED row here, not
+// a separate table.
+model RepositoryDiscovery {
+  id                String          @id @default(cuid())
+  repositoryId      String
+  repository        Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  version           Int
+  status            DiscoveryStatus @default(RUNNING)
+  // Zod-validated repositoryDiscoveryFindingsSchema output — never written until validated
+  // (design.md's "Findings schema, validated by Zod before every write" decision).
+  findings          Json?
+  aiModel           String?
+  promptTokens      Int?
+  completionTokens  Int?
+  costUsd           Decimal?        @db.Decimal(10, 4)
+  agentRunId        String?
+  agentRun          AgentRun?       @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  lastError         String?
+  triggeredByUserId String
+  triggeredByUser   User            @relation("RepositoryDiscoveryTriggeredBy", fields: [triggeredByUserId], references: [id], onDelete: Restrict)
+  startedAt         DateTime        @default(now())
+  completedAt       DateTime?
+
+  @@unique([repositoryId, version])
+  @@index([repositoryId])
+}
+
+/**
+ * Slice 12 — many-to-many: which of a client's repositories a project has linked as relevant.
+ */
 model ProjectRepository {
   id           String     @id @default(cuid())
   projectId    String
