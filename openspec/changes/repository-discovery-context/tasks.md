@@ -1,0 +1,152 @@
+## Task Group 1: Data model & migration
+
+- [ ] Add `DiscoveryStatus` enum (`RUNNING`, `SUCCEEDED`, `FAILED`) to `prisma/schema.prisma`.
+- [ ] Add `RUN_REPOSITORY_DISCOVERY` to the existing `JobType` enum.
+- [ ] Add `RepositoryDiscovery` model: `id`, `repositoryId` (FK → `Repository`, `onDelete: Cascade`),
+      `version Int`, `status DiscoveryStatus @default(RUNNING)`, `findings Json?`, `aiModel
+      String?`, `promptTokens Int?`, `completionTokens Int?`, `costUsd Decimal? @db.Decimal(10,
+      4)`, `agentRunId String?` (FK → `AgentRun`, `onDelete: SetNull`), `lastError String?`,
+      `triggeredByUserId String` (FK → `User`, `onDelete: Restrict`), `startedAt DateTime
+      @default(now())`, `completedAt DateTime?`. `@@unique([repositoryId, version])`,
+      `@@index([repositoryId])`.
+- [ ] Add the reverse relations: `Repository.discoveries RepositoryDiscovery[]`,
+      `AgentRun.repositoryDiscoveries RepositoryDiscovery[]`, and a named `User` relation for
+      `triggeredByUser` (mirrors `ClarifyQuestion`'s `"ClarifyQuestionAnsweredBy"` pattern).
+- [ ] Run `prisma migrate dev` to generate and apply the migration; verify it's purely additive
+      (no column changes on existing tables).
+
+## Task Group 2: Repository content fetch (GitHub)
+
+- [ ] Add `fetchRepositorySnapshot(config: Record<string, unknown> | null)` to
+      `src/lib/integrations/github.ts`: resolves `{ owner, repo, token, baseUrl }` via the existing
+      `resolveConfig`, fetches the root directory listing
+      (`GET /repos/{owner}/{repo}/contents/`), then fetches content (base64-decoded) for any
+      `README*` entry and any of `package.json`/`requirements.txt`/`go.mod`/`pom.xml`/`Gemfile`/
+      `Cargo.toml` present in that listing. Returns `{ rootListing: string[], readme?: { path:
+      string; content: string }, manifests: { path: string; content: string }[] }`. Throws on a
+      non-2xx root-listing response; tolerates 404s on individual optional files.
+- [ ] Unit tests (`github.test.ts`, extending the existing stub-server pattern used for
+      `fetchWorkItems`): root listing + README + one manifest present; root listing with no
+      README/manifest present (empty optional fields, not an error); root-listing fetch failure
+      throws.
+
+## Task Group 3: AI output schema & executor
+
+- [ ] Add `repositoryDiscoveryFindingsSchema` to `src/lib/agents/types.ts`, matching design.md's
+      findings shape (`purpose`/`stack`/`structure`/`modules`/`apis`/`dataStores`/`testing`/
+      `conventions`, each `{ summary: string, evidence: string[] }`, plus `unknowns: string[]`).
+      Add `RepositoryDiscoveryContext` (owner, repo, the fetched snapshot) and
+      `RepositoryDiscoveryResult` (`findings`, `aiModel`, `promptTokens`, `completionTokens`,
+      `costUsd`) interfaces. Add `executeRepositoryDiscovery(context):
+      Promise<RepositoryDiscoveryResult>` to the `AgentExecutor` interface.
+- [ ] Add `config/prompts/repository-discovery.md`: instructions (fetched snapshot content
+      templated in) + `<!-- DISCOVERY_FINDINGS -->` marker + output template, following
+      `analyze.md`'s existing shape.
+- [ ] Implement `executeRepositoryDiscovery` in `mockExecutor.ts`: deterministic, built from the
+      fetched snapshot directly (e.g. cite `package.json`'s path when present in `manifests`,
+      summarize README's first lines for `purpose`), matching the "evidence-grounded, not
+      fabricated" property without a real model.
+- [ ] Implement `executeRepositoryDiscovery` in `claudeExecutor.ts`: fill the new prompt template,
+      call Claude, `parseDiscoveryFindings` (structurally identical to the existing
+      `parseAnalysisFindings`, validated against `repositoryDiscoveryFindingsSchema`).
+- [ ] Unit tests for both executors' `executeRepositoryDiscovery` (mirrors existing
+      `mockExecutor.test.ts` coverage for ANALYZE) and for `parseDiscoveryFindings`'s
+      malformed-JSON / schema-failure error paths.
+
+## Task Group 4: Budget extension
+
+- [ ] Add `checkClientBudget(clientId: string): Promise<BudgetCheckResult>` to
+      `src/domain/agent/commands.ts`, reusing the existing private `checkBudgetAtScope` helper:
+      client tier first, else organization, else `{ allowed: true, scope: null, ... }`. No changes
+      to the existing `checkBudget`.
+- [ ] Add a `repositoryDiscoveries` aggregate leg to `getClientAiCost` and `getOrganizationAiCost`
+      in `src/domain/agent/queries.ts` (via `repository.clientId` / `repository.client.organizationId`
+      respectively), summed alongside the existing `stages`/`constitutions` legs. Leave
+      `getProjectAiCost` unchanged.
+- [ ] Extend `loadAgentRunWithClientId` (`agent/queries.ts`) with a third resolution leg:
+      `run.repositoryDiscoveries[0].repository.clientId`, plus the mid-draft fallback through
+      `run.job.payload.repositoryDiscoveryId` (mirrors the existing `stageId`/`constitutionId`
+      fallback branches).
+- [ ] Unit tests: `checkClientBudget` blocks/allows correctly at each tier (client set, client
+      unset falling to org, neither set); `getClientAiCost`/`getOrganizationAiCost` include a
+      completed Discovery run's cost; `getAgentRunDetail`/`getAgentRunSummary` correctly resolve
+      and authorize against a Discovery-run's client.
+
+## Task Group 5: Domain commands & queries
+
+- [ ] `src/domain/repository-discovery/commands.ts`:
+  - `runRepositoryDiscovery(ctx, repositoryId)`: loads the repository, `requireClientRole(ctx,
+    repository.clientId, WRITE_ROLES)`, calls `checkClientBudget` and refuses (matching
+    `startPipeline`'s existing refusal shape) if not allowed, computes the next `version` (max
+    existing + 1, or 1), creates the `RepositoryDiscovery` row (`status: RUNNING`,
+    `triggeredByUserId: ctx.userId`) and enqueues a `RUN_REPOSITORY_DISCOVERY` job
+    (`idempotencyKey: repository-discovery-${discovery.id}`) in the same transaction, and records
+    an audit event.
+  - `completeRepositoryDiscovery(discoveryId, result, agentRunId)`: in a transaction, updates the
+    `RepositoryDiscovery` row (`findings`, `status: SUCCEEDED`, `aiModel`/token/cost cache,
+    `completedAt`, `agentRunId`), calls `completeAgentRun`, records an audit event.
+  - `revertRepositoryDiscoveryFailure(discoveryId, error, jobId)`: in a transaction, marks the
+    `RepositoryDiscovery` `FAILED` with `lastError`/`completedAt`, marks the owning `AgentRun`
+    failed (`exhausted: true`), records an audit event.
+  - `getRepositoryDiscoveryForRun(discoveryId)`: worker-side loader (discovery + repository +
+    repository's connector, for the fetch step).
+- [ ] `src/domain/repository-discovery/queries.ts`:
+  - `getRepositoryContext(ctx, repositoryId)`: `requireClientRole(ctx, repository.clientId,
+    ALL_ROLES)`, returns the latest `SUCCEEDED` discovery's `findings` + `completedAt`, or `null`
+    if none.
+  - `listRepositoryDiscoveries(ctx, repositoryId)`: same authz, every version newest-first
+    (status, cost, timestamps — not full findings, matching the run-summary-vs-detail pattern
+    elsewhere).
+- [ ] Unit tests: trigger creates a versioned row + enqueues a job + audits; trigger refused for a
+      read-only user; trigger refused over budget; a second trigger creates version 2, not
+      overwriting version 1; complete/fail transitions update state and audit correctly;
+      `getRepositoryContext` returns the latest succeeded version's findings and `null` when none
+      exist yet.
+
+## Task Group 6: Job runtime wiring
+
+- [ ] `worker.ts`: add `handleRunRepositoryDiscoveryJob(payload, jobId)` — loads the discovery via
+      `getRepositoryDiscoveryForRun`, decrypts the repository's connector config, calls
+      `fetchRepositorySnapshot`, resolves `resolveDefaultAgentId()`, `startAgentRun(agentId,
+      jobId)`, calls `getAgentExecutor().executeRepositoryDiscovery(...)`, then
+      `completeRepositoryDiscovery(discoveryId, result, run.id)`. Add
+      `handleRunRepositoryDiscoveryExhausted` calling `revertRepositoryDiscoveryFailure`. Register
+      both in the `handlers` map under `RUN_REPOSITORY_DISCOVERY`.
+- [ ] Integration-style test (or extend an existing job-runtime test) confirming a queued
+      `RUN_REPOSITORY_DISCOVERY` job is claimed and processed end-to-end against the mock executor.
+
+## Task Group 7: API routes
+
+- [ ] `POST /api/repositories/[id]/discovery`: calls `runRepositoryDiscovery`, 403 on
+      authorization failure, 400/409 with the budget error message on refusal, 200 with the created
+      discovery row on success. Follow the existing route conventions (typed body validation,
+      `NextResponse.json`).
+- [ ] Route test (unit or E2E-adjacent) covering success, forbidden, and budget-refused paths.
+
+## Task Group 8: UI
+
+- [ ] New `/repositories/[id]/page.tsx`: repository header (owner/name), a Discovery panel showing
+      `getRepositoryContext`'s current summary (each field's `summary` + an evidence list) with a
+      completed-at label, or an empty state with a "Run Discovery" button when none exists yet; a
+      run-history list from `listRepositoryDiscoveries` (status badges reusing `StatusBadge`,
+      cost, timestamps). Reuses Slice 7/10's `Panel`/`Row`/`Button`/`StatusBadge` primitives and
+      Slice 11's `InfoTooltip` for the "context can go stale" explanation.
+- [ ] "Run Discovery" button: a small `"use client"` island posting to the new route and
+      `router.refresh()`, following the existing mutation-island pattern used elsewhere (e.g.
+      `RepositoryLinkForm`).
+- [ ] Wire the client detail view's existing repository rows (Slice 12) to link to
+      `/repositories/[id]` — no other change to that page.
+- [ ] Loading/empty/error/permission-denied states per this project's Definition of Done.
+- [ ] E2E spec: view a repository with no Discovery yet (empty state, button visible to a
+      write-capable user, hidden/disabled for a read-only user) → trigger a run → see it complete
+      (against the mock executor) → findings and evidence visible, run appears in history → trigger
+      again → a second version appears without losing the first.
+
+## Task Group 9: Documentation & verification
+
+- [ ] Update `docs/ROADMAP.md`'s Slice 14 row to **Done**, linking this archived change.
+- [ ] `npm run build`, `npm run lint`, full unit + E2E suite green.
+- [ ] Live verification: seed a real (or stubbed-GitHub) repository, trigger Discovery through the
+      UI, confirm the findings render with evidence citations and the run appears in the audit
+      trail and the client's AI cost total; confirm a budget-exceeded client refuses the trigger
+      with a clear error.
