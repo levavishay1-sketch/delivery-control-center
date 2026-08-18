@@ -37,7 +37,12 @@ export default async function HomePage() {
         const clientProjects = projectsByClient.get(client.id) ?? [];
         return (
           <section key={client.id} className="flex flex-col gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide opacity-60">{client.name}</h2>
+            <Link
+              href={`/clients/${client.id}`}
+              className="text-sm font-semibold uppercase tracking-wide opacity-60 hover:opacity-100 w-fit"
+            >
+              {client.name}
+            </Link>
             {clientProjects.length === 0 && <p className="text-sm opacity-50">No projects for this client yet.</p>}
             <div className="flex flex-col gap-6">
               {clientProjects.map((project) => (
