@@ -60,26 +60,26 @@
 
 ## Task Group 4: Budget extension
 
-- [ ] Add `checkClientBudget(clientId: string): Promise<BudgetCheckResult>` to
+- [x] Add `checkClientBudget(clientId: string): Promise<BudgetCheckResult>` to
       `src/domain/agent/commands.ts`, reusing the existing private `checkBudgetAtScope` helper:
       client tier first, else organization, else `{ allowed: true, scope: null, ... }`. No changes
       to the existing `checkBudget`.
-- [ ] Add a `repositoryDiscoveries` aggregate leg to `getClientAiCost` and `getOrganizationAiCost`
+- [x] Add a `repositoryDiscoveries` aggregate leg to `getClientAiCost` and `getOrganizationAiCost`
       in `src/domain/agent/queries.ts` (via `repository.clientId` / `repository.client.organizationId`
       respectively), summed alongside the existing `stages`/`constitutions` legs. Leave
       `getProjectAiCost` unchanged.
-- [ ] Extend `loadAgentRunWithClientId` (`agent/queries.ts`) with a third resolution leg:
+- [x] Extend `loadAgentRunWithClientId` (`agent/queries.ts`) with a third resolution leg:
       `run.repositoryDiscoveries[0].repository.clientId`, plus the mid-draft fallback through
       `run.job.payload.repositoryDiscoveryId` (mirrors the existing `stageId`/`constitutionId`
       fallback branches).
-- [ ] Unit tests: `checkClientBudget` blocks/allows correctly at each tier (client set, client
+- [x] Unit tests: `checkClientBudget` blocks/allows correctly at each tier (client set, client
       unset falling to org, neither set); `getClientAiCost`/`getOrganizationAiCost` include a
       completed Discovery run's cost; `getAgentRunDetail`/`getAgentRunSummary` correctly resolve
       and authorize against a Discovery-run's client.
 
 ## Task Group 5: Domain commands & queries
 
-- [ ] `src/domain/repository-discovery/commands.ts`:
+- [x] `src/domain/repository-discovery/commands.ts`:
   - `runRepositoryDiscovery(ctx, repositoryId)`: loads the repository, `requireClientRole(ctx,
     repository.clientId, WRITE_ROLES)`, calls `checkClientBudget` and refuses (matching
     `startPipeline`'s existing refusal shape) if not allowed, computes the next `version` (max
@@ -95,18 +95,23 @@
     failed (`exhausted: true`), records an audit event.
   - `getRepositoryDiscoveryForRun(discoveryId)`: worker-side loader (discovery + repository +
     repository's connector, for the fetch step).
-- [ ] `src/domain/repository-discovery/queries.ts`:
+  - Implementation note: `BudgetExceededError`'s `projectId` constructor param was widened to
+    `string | undefined` (was required `string`) — Discovery has no Project to pass. Existing
+    callers (`draftConstitution`/`draftStage`) are unaffected since they still pass a real
+    `projectId`; the one JSON-serializing consumer (`.../constitution/draft/route.ts`) already
+    tolerates `undefined` becoming absent in the response.
+- [x] `src/domain/repository-discovery/queries.ts`:
   - `getRepositoryContext(ctx, repositoryId)`: `requireClientRole(ctx, repository.clientId,
     ALL_ROLES)`, returns the latest `SUCCEEDED` discovery's `findings` + `completedAt`, or `null`
     if none.
   - `listRepositoryDiscoveries(ctx, repositoryId)`: same authz, every version newest-first
     (status, cost, timestamps — not full findings, matching the run-summary-vs-detail pattern
     elsewhere).
-- [ ] Unit tests: trigger creates a versioned row + enqueues a job + audits; trigger refused for a
+- [x] Unit tests: trigger creates a versioned row + enqueues a job + audits; trigger refused for a
       read-only user; trigger refused over budget; a second trigger creates version 2, not
       overwriting version 1; complete/fail transitions update state and audit correctly;
       `getRepositoryContext` returns the latest succeeded version's findings and `null` when none
-      exist yet.
+      exist yet. Full suite (333 tests, 42 files) green — no regressions.
 
 ## Task Group 6: Job runtime wiring
 

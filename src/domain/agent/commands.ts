@@ -176,6 +176,28 @@ export async function checkBudget(clientId: string, projectId: string): Promise<
   return { allowed: true, scope: null, scopeId: null, budgetUsd: null, accruedUsd: null };
 }
 
+/**
+ * Slice 14 — the budget check for a repository-scoped AI action (Repository Discovery), which has
+ * no Project of its own: client tier first, else organization, else unbounded. A separate public
+ * function rather than an optional `projectId` on `checkBudget` (design.md's "Budget" decision) —
+ * the two scope-resolution orders (project→client→org vs. client→org) share `checkBudgetAtScope`
+ * but not each other's control flow.
+ */
+export async function checkClientBudget(clientId: string): Promise<BudgetCheckResult> {
+  const client = await db.client.findUniqueOrThrow({ where: { id: clientId } });
+
+  if (client.aiBudgetUsd !== null) {
+    return checkBudgetAtScope("client", clientId, client.aiBudgetUsd);
+  }
+
+  const organization = await db.organization.findUniqueOrThrow({ where: { id: client.organizationId } });
+  if (organization.aiBudgetUsd !== null) {
+    return checkBudgetAtScope("organization", organization.id, organization.aiBudgetUsd);
+  }
+
+  return { allowed: true, scope: null, scopeId: null, budgetUsd: null, accruedUsd: null };
+}
+
 async function checkBudgetAtScope(
   scope: "client" | "project" | "organization",
   scopeId: string,

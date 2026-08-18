@@ -48,7 +48,8 @@ export class BudgetExceededError extends ConflictError {
     message: string,
     public readonly scope: "client" | "project" | "organization",
     public readonly clientId: string,
-    public readonly projectId: string,
+    /** Unset for a repository-scoped action (Slice 14's Discovery), which has no Project. */
+    public readonly projectId: string | undefined,
     /** Set only when scope is "organization" — the organization's own id, needed to approve an override at that scope (Slice 6). */
     public readonly organizationId: string | null = null
   ) {

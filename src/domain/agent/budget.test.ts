@@ -1,8 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
-import { approveBudgetOverride, checkBudget, resolveDefaultAgentId, startAgentRun } from "./commands";
+import { approveBudgetOverride, checkBudget, checkClientBudget, completeAgentRun, resolveDefaultAgentId, startAgentRun } from "./commands";
+import { getAgentRunDetail, getAgentRunSummary, getClientAiCost, getOrganizationAiCost } from "./queries";
 import { createWorkItem } from "@/domain/work-item/commands";
 import { startPipeline, draftStage, completeStageDraft, rejectStage } from "@/domain/pipeline/commands";
+import { createProject } from "@/domain/project/commands";
+import { configureConnector, getOrCreateConnectorForProject } from "@/domain/connector/commands";
 import { ConflictError, ForbiddenError } from "@/domain/shared/errors";
 import type { AuthContext } from "@/domain/shared/context";
 
@@ -49,6 +52,37 @@ async function draftAndCompleteStage(stageId: string, costUsd: number) {
     { content: "# Draft", aiModel: "mock-agent-v1", promptTokens: 10, completionTokens: 10, costUsd },
     run.id
   );
+}
+
+/** Slice 14 — a client-owned Repository, created the same way linking.test.ts's helper does. */
+async function createRepositoryForClient(name: string) {
+  const project = await createProject(managerCtx, {
+    clientId,
+    name,
+    key: `${name.replace(/[^A-Z]/gi, "").slice(0, 6).toUpperCase()}${Date.now().toString(36).toUpperCase()}${Math.floor(Math.random() * 1000)}`,
+  });
+  await configureConnector(managerCtx, project.id, { type: "GITHUB", config: { owner: "acme", repo: name, token: "ghp_x" } });
+  const connector = await getOrCreateConnectorForProject(project.id);
+  return db.repository.create({ data: { connectorId: connector.id, clientId, owner: "acme", name, externalId: `${Date.now()}` } });
+}
+
+/** Slice 14 — a completed RepositoryDiscovery run with a given cost, bypassing the Job/worker path (same rationale as draftAndCompleteStage above). */
+async function createCompletedDiscovery(repositoryId: string, costUsd: number) {
+  const agentId = await resolveDefaultAgentId();
+  const run = await db.agentRun.create({ data: { agentId, status: "RUNNING" } });
+  await completeAgentRun(run.id, { promptTokens: 10, completionTokens: 10, costUsd });
+  const discovery = await db.repositoryDiscovery.create({
+    data: {
+      repositoryId,
+      version: 1,
+      status: "SUCCEEDED",
+      agentRunId: run.id,
+      triggeredByUserId: managerCtx.userId,
+      costUsd,
+      completedAt: new Date(),
+    },
+  });
+  return { discovery, run };
 }
 
 beforeAll(async () => {
@@ -153,6 +187,74 @@ describe("checkBudget", () => {
     } finally {
       await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: null } });
     }
+  });
+});
+
+describe("checkClientBudget (Slice 14)", () => {
+  it("allows a Discovery run when neither the client nor the organization has a budget configured", async () => {
+    const repository = await createRepositoryForClient("checkclientbudget-unset");
+    const result = await checkClientBudget(repository.clientId);
+    expect(result.allowed).toBe(true);
+    expect(result.scope).toBeNull();
+  });
+
+  it("blocks a Discovery run once the client's accrued cost meets its budget", async () => {
+    await db.client.update({ where: { id: clientId }, data: { aiBudgetUsd: 0.01 } });
+    try {
+      const repository = await createRepositoryForClient("checkclientbudget-tight");
+      await createCompletedDiscovery(repository.id, 0.01);
+      const result = await checkClientBudget(clientId);
+      expect(result.scope).toBe("client");
+      expect(result.allowed).toBe(false);
+    } finally {
+      await db.client.update({ where: { id: clientId }, data: { aiBudgetUsd: null } });
+    }
+  });
+
+  it("falls through to the organization when the client has no budget configured", async () => {
+    await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: 1000 } });
+    try {
+      const result = await checkClientBudget(clientId);
+      expect(result.scope).toBe("organization");
+      expect(result.allowed).toBe(true);
+      expect(result.scopeId).toBe(organizationId);
+    } finally {
+      await db.organization.update({ where: { id: organizationId }, data: { aiBudgetUsd: null } });
+    }
+  });
+});
+
+describe("getClientAiCost / getOrganizationAiCost include Discovery runs (Slice 14)", () => {
+  it("a client's AI cost total includes a completed Discovery run for one of its repositories", async () => {
+    const before = await getClientAiCost(clientId);
+    const repository = await createRepositoryForClient("clientaicost-discovery");
+    await createCompletedDiscovery(repository.id, 0.5);
+    const after = await getClientAiCost(clientId);
+    expect(after.minus(before).toNumber()).toBeCloseTo(0.5, 4);
+  });
+
+  it("an organization's AI cost total includes a completed Discovery run under one of its clients", async () => {
+    const before = await getOrganizationAiCost(organizationId);
+    const repository = await createRepositoryForClient("orgaicost-discovery");
+    await createCompletedDiscovery(repository.id, 0.25);
+    const after = await getOrganizationAiCost(organizationId);
+    expect(after.minus(before).toNumber()).toBeCloseTo(0.25, 4);
+  });
+});
+
+describe("Discovery AgentRun visibility resolves through its repository's client (Slice 14)", () => {
+  it("getAgentRunSummary resolves and authorizes a Discovery run via the repository's client", async () => {
+    const repository = await createRepositoryForClient("agentrunvisibility-discovery");
+    const { run } = await createCompletedDiscovery(repository.id, 0.1);
+    const summary = await getAgentRunSummary(managerCtx, run.id);
+    expect(summary?.id).toBe(run.id);
+  });
+
+  it("getAgentRunDetail resolves and authorizes a Discovery run via the repository's client", async () => {
+    const repository = await createRepositoryForClient("agentrundetail-discovery");
+    const { run } = await createCompletedDiscovery(repository.id, 0.1);
+    const detail = await getAgentRunDetail(managerCtx, run.id);
+    expect(detail?.id).toBe(run.id);
   });
 });
 

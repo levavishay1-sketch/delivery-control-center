@@ -54,9 +54,9 @@ export async function getProjectAiCost(projectId: string) {
   return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD);
 }
 
-/** Total AI drafting cost across every project under every client in an organization (Slice 6 — the fallback budget scope above Client). */
+/** Total AI drafting cost across every project under every client in an organization (Slice 6 — the fallback budget scope above Client), plus every Discovery run for one of its repositories (Slice 14). */
 export async function getOrganizationAiCost(organizationId: string) {
-  const [stages, constitutions] = await Promise.all([
+  const [stages, constitutions, repositoryDiscoveries] = await Promise.all([
     db.agentRun.aggregate({
       where: { stageVersions: { some: { stage: { pipeline: { workItem: { project: { client: { organizationId } } } } } } } },
       _sum: { costUsd: true },
@@ -65,8 +65,12 @@ export async function getOrganizationAiCost(organizationId: string) {
       where: { constitutions: { some: { project: { client: { organizationId } } } } },
       _sum: { costUsd: true },
     }),
+    db.agentRun.aggregate({
+      where: { repositoryDiscoveries: { some: { repository: { client: { organizationId } } } } },
+      _sum: { costUsd: true },
+    }),
   ]);
-  return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD);
+  return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD).add(repositoryDiscoveries._sum.costUsd ?? ZERO_USD);
 }
 
 /**
@@ -87,15 +91,21 @@ async function loadAgentRunWithClientId(runId: string) {
         include: { stage: { include: { pipeline: { include: { workItem: { include: { project: true } } } } } } },
       },
       constitutions: { take: 1, include: { project: true } },
+      // Slice 14 — a Discovery run's owning client, resolved the same optional-chain way as the
+      // other two legs above.
+      repositoryDiscoveries: { take: 1, include: { repository: true } },
     },
   });
   if (!run) return null;
 
   let clientId: string | null =
-    run.stageVersions[0]?.stage.pipeline.workItem.project.clientId ?? run.constitutions[0]?.project.clientId ?? null;
+    run.stageVersions[0]?.stage.pipeline.workItem.project.clientId ??
+    run.constitutions[0]?.project.clientId ??
+    run.repositoryDiscoveries[0]?.repository.clientId ??
+    null;
 
   if (!clientId && run.job) {
-    const payload = run.job.payload as { stageId?: string; constitutionId?: string };
+    const payload = run.job.payload as { stageId?: string; constitutionId?: string; repositoryDiscoveryId?: string };
     if (payload.stageId) {
       const stage = await db.stage.findUnique({
         where: { id: payload.stageId },
@@ -108,6 +118,12 @@ async function loadAgentRunWithClientId(runId: string) {
         include: { project: true },
       });
       clientId = constitution?.project.clientId ?? null;
+    } else if (payload.repositoryDiscoveryId) {
+      const discovery = await db.repositoryDiscovery.findUnique({
+        where: { id: payload.repositoryDiscoveryId },
+        include: { repository: true },
+      });
+      clientId = discovery?.repository.clientId ?? null;
     }
   }
 
@@ -171,9 +187,9 @@ export async function getAgentRunSummary(ctx: AuthContext, runId: string) {
   return { id, agentId, agent, status, promptTokens, completionTokens, costUsd, startedAt, completedAt, createdAt };
 }
 
-/** Total AI drafting cost across every project under a client. */
+/** Total AI drafting cost across every project under a client, plus every Discovery run for one of its repositories (Slice 14). */
 export async function getClientAiCost(clientId: string) {
-  const [stages, constitutions] = await Promise.all([
+  const [stages, constitutions, repositoryDiscoveries] = await Promise.all([
     db.agentRun.aggregate({
       where: { stageVersions: { some: { stage: { pipeline: { workItem: { project: { clientId } } } } } } },
       _sum: { costUsd: true },
@@ -182,6 +198,10 @@ export async function getClientAiCost(clientId: string) {
       where: { constitutions: { some: { project: { clientId } } } },
       _sum: { costUsd: true },
     }),
+    db.agentRun.aggregate({
+      where: { repositoryDiscoveries: { some: { repository: { clientId } } } },
+      _sum: { costUsd: true },
+    }),
   ]);
-  return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD);
+  return (stages._sum.costUsd ?? ZERO_USD).add(constitutions._sum.costUsd ?? ZERO_USD).add(repositoryDiscoveries._sum.costUsd ?? ZERO_USD);
 }
