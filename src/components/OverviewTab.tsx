@@ -246,8 +246,9 @@ export function OverviewTab({
       </dl>
 
       {canManage && workItem.executorType === "UNASSIGNED" && (
-        <AiRecommendationCard workItemId={workItem.id} onEditDeveloper={() => setEditing(true)} />
+        <AiRecommendationCard kind="executor" workItemId={workItem.id} onEditDeveloper={() => setEditing(true)} />
       )}
+      {canManage && workItem.executorType === "AI_AGENT" && <AiRecommendationCard kind="model" workItemId={workItem.id} />}
 
       <div>
         <div className="flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">

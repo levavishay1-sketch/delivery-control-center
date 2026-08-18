@@ -44,6 +44,27 @@ describe("enqueueJob", () => {
     const count = await db.job.count({ where: { idempotencyKey } });
     expect(count).toBe(1);
   });
+
+  it("holds a job QUEUED-but-unclaimable until the given scheduledAt (Slice 20)", async () => {
+    const scheduledAt = new Date(Date.now() + 60_000);
+    const job = await enqueueJob("DRAFT_STAGE", {}, key("enqueue-scheduled"), db, scheduledAt);
+    createdJobIds.push(job.id);
+
+    expect(job.status).toBe("QUEUED");
+    expect(job.scheduledAt.toISOString()).toBe(scheduledAt.toISOString());
+
+    const claimed = await claimJobs("worker-a", 50);
+    expect(claimed.map((j) => j.id)).not.toContain(job.id);
+  });
+
+  it("defaults scheduledAt to now (immediately claimable) when omitted", async () => {
+    const before = Date.now();
+    const job = await enqueueJob("DRAFT_STAGE", {}, key("enqueue-default-scheduled"));
+    createdJobIds.push(job.id);
+
+    expect(job.scheduledAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(job.scheduledAt.getTime()).toBeLessThanOrEqual(Date.now());
+  });
 });
 
 describe("claimJobs", () => {

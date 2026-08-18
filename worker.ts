@@ -20,6 +20,12 @@ import {
 } from "@/domain/repository-discovery/commands";
 import { decryptIntegrationConfig } from "@/lib/integrations";
 import { fetchRepositorySnapshot } from "@/lib/integrations/github";
+import { extractModelFacts, fetchModelSnapshotSource } from "@/lib/integrations/modelKnowledgeSource";
+import {
+  ensureModelSnapshotJobScheduled,
+  recordModelSnapshotAttempt,
+  scheduleNextModelSnapshotFetch,
+} from "@/domain/model-snapshot/commands";
 import type { Job } from "@/generated/prisma/client";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
@@ -143,11 +149,39 @@ async function handleRunRepositoryDiscoveryExhausted(payload: JobPayload, error:
   await revertRepositoryDiscoveryFailure(discoveryId, error, jobId);
 }
 
+// Slice 20 — a self-requeuing weekly job. Unlike every other job type, both its success path and
+// its onExhausted path reschedule the next run (design.md Decision 4): a transient outage of the
+// source page must not silently end the weekly cadence. A non-2xx/network fetch failure inside
+// handleFetchModelSnapshotJob is left to throw, so the existing retry/backoff applies before
+// onExhausted's own reschedule kicks in.
+async function handleFetchModelSnapshotJob(): Promise<void> {
+  const rawHtml = await fetchModelSnapshotSource();
+  const extractedModels = extractModelFacts(rawHtml);
+
+  await recordModelSnapshotAttempt(
+    extractedModels.length > 0
+      ? { status: "SUCCESS", rawContent: rawHtml, extractedModels }
+      : {
+          status: "FAILED",
+          rawContent: rawHtml,
+          failureReason: "No recognizable model/pricing/context-window facts found on the source page.",
+        }
+  );
+
+  await scheduleNextModelSnapshotFetch();
+}
+
+async function handleFetchModelSnapshotExhausted(_payload: JobPayload, error: string): Promise<void> {
+  await recordModelSnapshotAttempt({ status: "FAILED", rawContent: "", failureReason: error });
+  await scheduleNextModelSnapshotFetch();
+}
+
 const handlers: Partial<Record<Job["type"], JobTypeHandlers>> = {
   DRAFT_STAGE: { run: handleDraftStageJob, onExhausted: handleDraftStageExhausted },
   DRAFT_CONSTITUTION: { run: handleDraftConstitutionJob, onExhausted: handleDraftConstitutionExhausted },
   SYNC_PROJECT: { run: handleSyncProjectJob, onExhausted: handleSyncProjectExhausted },
   RUN_REPOSITORY_DISCOVERY: { run: handleRunRepositoryDiscoveryJob, onExhausted: handleRunRepositoryDiscoveryExhausted },
+  FETCH_MODEL_SNAPSHOT: { run: handleFetchModelSnapshotJob, onExhausted: handleFetchModelSnapshotExhausted },
 };
 
 async function processJob(job: Job): Promise<void> {
@@ -191,6 +225,11 @@ process.on("SIGTERM", () => {
 });
 
 async function pollLoop(): Promise<void> {
+  // Slice 20 — self-healing bootstrap: guarantees the weekly snapshot cadence resumes after a
+  // worker restart or in a fresh environment, without a one-time seed-script entry (design.md
+  // Decision 3).
+  await ensureModelSnapshotJobScheduled();
+
   console.log(`[worker ${workerId}] started, polling every ${POLL_INTERVAL_MS}ms`);
   while (running) {
     const jobs = await claimJobs(workerId, BATCH_SIZE);

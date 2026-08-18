@@ -29,12 +29,19 @@ export function computeBackoffDelayMs(attempts: number): number {
  * change" and "enqueue the job" would leave a stage/Constitution stuck in a
  * drafting state with no job ever created to move it out, defeating the
  * crash-durability this job runtime exists for.
+ *
+ * `scheduledAt`, when given, holds the job QUEUED until that time instead of
+ * making it immediately claimable — `claimJobs` already filters on
+ * `scheduledAt <= now()`, so this is the one addition a self-requeuing
+ * weekly job (Slice 20) needs; every existing caller is unaffected since the
+ * parameter is optional and defaults to today's immediate-claim behavior.
  */
 export async function enqueueJob(
   type: JobType,
   payload: Record<string, unknown>,
   idempotencyKey: string,
-  client: DbClient = db
+  client: DbClient = db,
+  scheduledAt?: Date
 ): Promise<Job> {
   const input = enqueueJobSchema.parse({ type, payload, idempotencyKey });
 
@@ -47,6 +54,7 @@ export async function enqueueJob(
         type: input.type as JobType,
         payload: input.payload as Prisma.InputJsonValue,
         idempotencyKey: input.idempotencyKey,
+        ...(scheduledAt ? { scheduledAt } : {}),
       },
     });
   } catch (err) {

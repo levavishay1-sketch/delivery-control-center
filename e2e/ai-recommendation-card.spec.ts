@@ -55,10 +55,13 @@ test("ai recommendation card: renders for an unassigned work item, assigning to 
   await expect(card.getByRole("button", { name: "Assign to AI" })).toBeVisible();
   await expect(card.getByRole("button", { name: "Assign to a developer" })).toBeVisible();
 
-  // --- Assigning to AI updates the executor and the card no longer renders ---
+  // --- Assigning to AI updates the executor; the executor-recommendation card (with its
+  // --- "Assign to AI"/"Assign to a developer" actions) unmounts. A separate model-recommendation
+  // --- card (Slice 20) now renders in its place, sharing the same aria-label — see
+  // --- ai-model-knowledge-snapshot.spec.ts for that card's own coverage.
   await card.getByRole("button", { name: "Assign to AI" }).click();
   await expect(page.getByText("AI Agent")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByLabel("AI recommendation")).toHaveCount(0);
+  await expect(page.getByLabel("AI recommendation").getByRole("button", { name: "Assign to AI" })).toHaveCount(0);
 
   expect(consoleErrors, `Console errors: ${consoleErrors.join("\n")}`).toEqual([]);
 });

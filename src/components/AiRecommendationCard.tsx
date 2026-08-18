@@ -4,37 +4,56 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 
-interface Recommendation {
+interface EstimateShape {
+  costUsd: number;
+  durationMinutes: number;
+  sampleSize: number;
+  matchLevel: "exact" | "type" | "global";
+}
+
+interface ExecutorRecommendation {
   recommended: "AI_AGENT" | "HUMAN";
   why: string;
   assumptions: string[];
-  aiEstimate: { costUsd: number; durationMinutes: number; sampleSize: number; matchLevel: "exact" | "type" | "global" } | null;
+  aiEstimate: EstimateShape | null;
 }
 
+interface ModelRecommendation {
+  model: string;
+  why: string;
+  assumptions: string[];
+  aiEstimate: EstimateShape | null;
+  snapshotFetchedAt: string | null;
+}
+
+type CardProps =
+  | { kind: "executor"; workItemId: string; onEditDeveloper: () => void }
+  | { kind: "model"; workItemId: string };
+
 /**
- * Slice 17 — the shared AI Recommendation card shape (What/Why/Assumptions/Estimated time/
- * Estimated cost/What happens under each alternative/a single override action). Self-fetching,
- * matching this codebase's established client-island pattern (e.g. QuickViewDrawer).
+ * The shared AI Recommendation card shape (What/Why/Assumptions/Estimated time/Estimated cost/an
+ * override action where one exists), with two instances today: AI-vs-developer executor choice
+ * (Slice 17, has an override action) and AI model selection (Slice 20, confirm-only —
+ * design.md Decision 5, no cross-model comparison/override in this slice). Self-fetching, matching
+ * this codebase's established client-island pattern (e.g. QuickViewDrawer).
  */
-export function AiRecommendationCard({
-  workItemId,
-  onEditDeveloper,
-}: {
-  workItemId: string;
-  /** Opens the existing executor-picker flow (EditWorkItemForm's HUMAN case) instead of the card duplicating a user picker (design.md decision 6). */
-  onEditDeveloper: () => void;
-}) {
+export function AiRecommendationCard(props: CardProps) {
   const router = useRouter();
-  const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+  const [data, setData] = useState<ExecutorRecommendation | ModelRecommendation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
 
+  const fetchUrl =
+    props.kind === "executor"
+      ? `/api/work-items/${props.workItemId}/recommendation`
+      : `/api/work-items/${props.workItemId}/recommendation/model`;
+
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/work-items/${workItemId}/recommendation`)
+    fetch(fetchUrl)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
-        if (!cancelled) setRecommendation(data);
+      .then((d) => {
+        if (!cancelled) setData(d);
       })
       .catch(() => {
         if (!cancelled) setError("Could not load a recommendation.");
@@ -42,11 +61,11 @@ export function AiRecommendationCard({
     return () => {
       cancelled = true;
     };
-  }, [workItemId]);
+  }, [fetchUrl]);
 
   async function assignToAi() {
     setAssigning(true);
-    const res = await fetch(`/api/work-items/${workItemId}`, {
+    const res = await fetch(`/api/work-items/${props.workItemId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ executorType: "AI_AGENT" }),
@@ -60,15 +79,31 @@ export function AiRecommendationCard({
   }
 
   if (error) return null;
-  if (!recommendation) return null;
+  if (!data) return null;
 
-  const { recommended, why, assumptions, aiEstimate } = recommendation;
+  const { why, assumptions, aiEstimate } = data;
+  const verdictLabel =
+    props.kind === "executor"
+      ? (data as ExecutorRecommendation).recommended === "AI_AGENT"
+        ? "AI"
+        : "Developer"
+      : (data as ModelRecommendation).model;
+  const snapshotFetchedAt = props.kind === "model" ? (data as ModelRecommendation).snapshotFetchedAt : undefined;
+  const freshnessLabel =
+    props.kind === "model"
+      ? snapshotFetchedAt
+        ? `As of ${new Date(snapshotFetchedAt).toLocaleDateString()}`
+        : "No knowledge snapshot yet — using built-in defaults"
+      : null;
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border-hairline bg-surface-muted p-3" aria-label="AI recommendation">
-      <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
-        Recommended: {recommended === "AI_AGENT" ? "AI" : "Developer"}
-      </p>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          Recommended: {verdictLabel}
+        </p>
+        {freshnessLabel && <p className="text-xs text-neutral-500 dark:text-neutral-400">{freshnessLabel}</p>}
+      </div>
       <p className="text-sm text-foreground">{why}</p>
       {assumptions.length > 0 && (
         <ul className="list-inside list-disc text-xs text-neutral-500 dark:text-neutral-400">
@@ -79,7 +114,7 @@ export function AiRecommendationCard({
       )}
 
       <div className="rounded-md border border-border-hairline bg-surface p-2 text-xs">
-        <p className="font-medium text-foreground">If you choose AI</p>
+        <p className="font-medium text-foreground">{props.kind === "executor" ? "If you choose AI" : "Estimated AI execution"}</p>
         {aiEstimate ? (
           <p className="text-neutral-500 dark:text-neutral-400">
             Estimated cost: ${aiEstimate.costUsd.toFixed(2)} · Estimated time: {aiEstimate.durationMinutes.toFixed(0)} min
@@ -87,18 +122,26 @@ export function AiRecommendationCard({
         ) : (
           <p className="text-neutral-500 dark:text-neutral-400">No cost/time history available yet to estimate.</p>
         )}
-        <p className="mt-2 font-medium text-foreground">If you choose a developer instead</p>
-        <p className="text-neutral-500 dark:text-neutral-400">The AI estimate above no longer applies — developer effort isn&apos;t estimated by this system.</p>
+        {props.kind === "executor" && (
+          <>
+            <p className="mt-2 font-medium text-foreground">If you choose a developer instead</p>
+            <p className="text-neutral-500 dark:text-neutral-400">
+              The AI estimate above no longer applies — developer effort isn&apos;t estimated by this system.
+            </p>
+          </>
+        )}
       </div>
 
-      <div className="flex gap-2">
-        <Button variant="secondary" size="sm" disabled={assigning} onClick={assignToAi}>
-          {assigning ? "Assigning…" : "Assign to AI"}
-        </Button>
-        <Button variant="secondary" size="sm" disabled={assigning} onClick={onEditDeveloper}>
-          Assign to a developer
-        </Button>
-      </div>
+      {props.kind === "executor" && (
+        <div className="flex gap-2">
+          <Button variant="secondary" size="sm" disabled={assigning} onClick={assignToAi}>
+            {assigning ? "Assigning…" : "Assign to AI"}
+          </Button>
+          <Button variant="secondary" size="sm" disabled={assigning} onClick={props.onEditDeveloper}>
+            Assign to a developer
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

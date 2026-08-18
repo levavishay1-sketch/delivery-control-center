@@ -63,6 +63,9 @@ enum JobType {
   // Slice 14 — Repository Discovery runs through the same Job runtime as
   // every other AI-drafting action; see design.md's Migration Plan.
   RUN_REPOSITORY_DISCOVERY
+  // Slice 20 — self-requeuing weekly job; see ai-model-knowledge-snapshot's
+  // design.md Decision 1/4 for why it reschedules itself even on exhaustion.
+  FETCH_MODEL_SNAPSHOT
 }
 
 enum JobStatus {
@@ -1200,4 +1203,24 @@ model AuditEvent {
   @@index([pipelineId, createdAt])
   @@index([projectId, createdAt])
   @@index([workItemId, createdAt])
+}
+
+enum ModelSnapshotStatus {
+  SUCCESS
+  FAILED
+}
+
+// Slice 20 — a standalone, dated fact table (not mutated in place), mirroring
+// RepositoryDiscovery's versioned-record shape. See ai-model-knowledge-snapshot's
+// design.md Decision 7 for why extractedModels holds loosely-typed text
+// fragments rather than strictly-parsed numeric fields.
+model ModelSnapshot {
+  id              String              @id @default(cuid())
+  fetchedAt       DateTime            @default(now())
+  status          ModelSnapshotStatus
+  rawContent      String
+  extractedModels Json
+  failureReason   String?
+
+  @@index([status, fetchedAt])
 }
