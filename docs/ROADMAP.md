@@ -954,9 +954,8 @@ untouched); Decision Ownership transfer and any entity type beyond
 Project/WorkItem (§23's full scope); generalizing Configuration Center's
 `ConfigChange` machinery itself (Slice 21's job).
 
-**Slice 17 status:** Proposed 2026-08-18 as `ai-recommendation-card`;
-OpenSpec planning artifacts at
-`openspec/changes/ai-recommendation-card/`. Previously assessed this
+**Slice 17 status:** Done. Proposed and implemented 2026-08-18 as
+`ai-recommendation-card`. Previously assessed this
 session as "blocked" on Blocker criticality (§35) and Execution Readiness
 (§34) not existing yet — re-reading the actual sources corrected that:
 the blueprint's own definition of the card (§4/§5.7 — What/Why/
@@ -985,11 +984,46 @@ change's design.md for the full decision log): a shared
 new historical-cost-averaging query; always shows the AI-execution
 estimate even when a developer is recommended; a single override action
 with no default pre-selected, reusing the existing `updateWorkItem`
-executor-assignment path — no new mutation route. Explicitly deferred:
-Blocker criticality/Execution Readiness as inputs; AI model selection
-(Slice 20's job); estimating developer time/cost (no existing signal for
-it); migrating other AI-facing surfaces (repository relevance,
-decomposition, `Decision.aiRecommendation` itself) onto the shared card.
+executor-assignment path — no new mutation route.
+
+Built: `estimateExecutorCost(type, risk, priority)`
+(`src/domain/agent/queries.ts`) averages `costUsd`/duration over
+completed `AgentRun`s joined through the same `stageVersions → stage →
+pipeline → workItem` path the existing cost-rollup queries use, falling
+back from an exact type/risk/priority match to type-only to a global
+average (implemented as global rather than the design's originally-worded
+"org-wide" fallback, since the function takes no client/org-scoping
+parameter — noted as a small terminology correction, not a scope change).
+`recommendExecutor(ctx, workItemId)`
+(`src/domain/recommendation/queries.ts`) applies a stated $5 cost
+threshold plus a HIGH/CRITICAL-risk override to recommend AI or a
+developer, always including the AI estimate either way, gated at
+`ALL_ROLES` (read-only, informational). New `AiRecommendationCard`
+component (self-fetching, matching the `QuickViewDrawer` client-island
+pattern) renders on the Overview tab only for a `canManage` user viewing
+a WorkItem with `executorType=UNASSIGNED`; "Assign to AI" calls the
+existing `PATCH /api/work-items/[id]` directly, "Assign to a developer"
+opens the existing `EditWorkItemForm` executor picker rather than
+duplicating one. New `GET /api/work-items/[id]/recommendation` route. 15
+new unit tests (8 on `estimateExecutorCost`'s fallback ladder, 7 on
+`recommendExecutor`'s heuristic and access control) — written against
+this session's real, accumulating shared test database using before/after
+deltas rather than absolute values where prior history could dilute a
+single assertion, the same discipline `getClientAiCost`'s own existing
+test already uses. E2E spec (`e2e/ai-recommendation-card.spec.ts`)
+creates a WorkItem with no executor, verifies the card renders with a
+verdict/why/assumptions/AI estimate, clicks "Assign to AI", verifies the
+executor updates and the card disappears — passing, stable across
+repeated runs. Live-verified in the browser: the card showed a real,
+non-fabricated estimate ("Based on 88 past run(s)...") drawn from this
+session's own accumulated AI-drafting history, and the override action
+correctly updated the Executor field and removed the card.
+
+Explicitly deferred: Blocker criticality/Execution Readiness as inputs;
+AI model selection (Slice 20's job); estimating developer time/cost (no
+existing signal for it); migrating other AI-facing surfaces (repository
+relevance, decomposition, `Decision.aiRecommendation` itself) onto the
+shared card.
 
 ### Slices 11–21 — Product Vision & Flow Blueprint
 

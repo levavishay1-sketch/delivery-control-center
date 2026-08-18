@@ -52,21 +52,21 @@
 
 ## 4. Tests
 
-- [ ] 4.1 E2E: create a WorkItem with no executor, verify the recommendation card renders with a
+- [x] 4.1 E2E: create a WorkItem with no executor, verify the recommendation card renders with a
       What/Why/Assumptions/estimate shown, click "Assign to AI", verify the WorkItem's executor
       becomes `AI_AGENT` and the card no longer renders (executor no longer unassigned) —
-      `e2e/ai-recommendation-card.spec.ts`.
+      `e2e/ai-recommendation-card.spec.ts`. Passing, stable across 2 consecutive runs.
 
 ## 5. Documentation & verification
 
-- [ ] 5.1 Update `docs/ROADMAP.md`'s Slice 17 entry: mark status, summarize what was built (mirror
+- [x] 5.1 Update `docs/ROADMAP.md`'s Slice 17 entry: mark status, summarize what was built (mirror
       the Slice 16/18/19 status-block format), and note the deferred non-goals explicitly (Blocker
       criticality, Execution Readiness, model selection, developer time/cost estimation, migrating
       other AI-facing surfaces onto the shared card).
 - [ ] 5.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
       existing suite has no new failures beyond the already-known pre-existing baseline (verify
       via the temporary-checkout method used for prior slices if any new failure appears).
-- [ ] 5.3 Live verification: open a WorkItem with no executor in the browser, confirm the
+- [x] 5.3 Live verification: open a WorkItem with no executor in the browser, confirm the
       recommendation card renders with a real (not fabricated) estimate for a project with AI
       drafting history, confirm both override buttons work, confirm the card disappears once an
       executor is assigned.
