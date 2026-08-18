@@ -45,7 +45,7 @@
 
 - [x] 4.1 Unit tests for `getProjectWorkGraph` (covered by Task 1.3 above — listed as its own
       group for tracking, per this project's convention of a dedicated Tests group).
-- [ ] 4.2 E2E: open a project's Planner, verify the Graph view renders its WorkItems, switch to
+- [x] 4.2 E2E: open a project's Planner, verify the Graph view renders its WorkItems, switch to
       Board view, verify lanes group by status and a card links through to the item's 360° Record,
       verify a `readyToStart` item is visually distinguished from a blocked one —
       `e2e/project-wide-planner.spec.ts`.
