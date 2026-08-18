@@ -1116,8 +1116,14 @@ assertion to confirm only that the executor-specific "Assign to AI"
 button is gone.
 
 Full verification: build, lint, and typecheck clean; 411/411 unit tests
-passing. Full E2E suite: [PENDING — fill in after the background run
-completes].
+passing. Full E2E suite: 21 passed, 6 failed — exactly the known
+baseline set (`slice5-engineering-evidence.spec.ts`,
+`slice6-configuration-center.spec.ts` confirmed pre-existing;
+`slice12-client-lifecycle.spec.ts`, `slice14-repository-discovery.spec.ts`,
+`slice4-connector-framework.spec.ts`, `slice8-i18n-rtl.spec.ts`
+confirmed environmental flakiness earlier this session), no new
+failures. Both `e2e/ai-model-knowledge-snapshot.spec.ts` scenarios and
+the updated `e2e/ai-recommendation-card.spec.ts` passed.
 
 Explicitly deferred: an admin-facing manual "run now" trigger for the
 snapshot job (the weekly self-requeue alone satisfies this slice;

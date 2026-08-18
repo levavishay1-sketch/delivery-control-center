@@ -117,9 +117,16 @@
 
 ## 10. Documentation & verification
 
-- [ ] 10.1 Update `docs/ROADMAP.md`'s Slice 20 status block with the build summary, following the
+- [x] 10.1 Update `docs/ROADMAP.md`'s Slice 20 status block with the build summary, following the
       established pattern (what was built, deferred, and the full verification result).
-- [ ] 10.2 Run build, lint, typecheck, the full unit test suite, and this change's E2E spec;
+- [x] 10.2 Run build, lint, typecheck, the full unit test suite, and this change's E2E spec;
       confirm no regressions using the temporary-checkout diagnostic method against the pre-slice
       baseline commit if any new-looking E2E failure appears, per this session's established
-      practice.
+      practice. Build/lint/typecheck clean; 411/411 unit tests passing. Full E2E suite: 21 passed,
+      6 failed — all 6 exactly match the baseline set already confirmed pre-existing/environmentally
+      flaky earlier this session (`slice5-engineering-evidence.spec.ts`,
+      `slice6-configuration-center.spec.ts`, `slice12-client-lifecycle.spec.ts`,
+      `slice14-repository-discovery.spec.ts`, `slice4-connector-framework.spec.ts`,
+      `slice8-i18n-rtl.spec.ts`); no new-looking failure appeared, so the temporary-checkout
+      diagnostic wasn't needed. Both `ai-model-knowledge-snapshot.spec.ts` scenarios and the
+      updated `ai-recommendation-card.spec.ts` passed.
