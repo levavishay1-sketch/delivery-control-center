@@ -254,7 +254,7 @@ re-litigate:
 | 11 | ⓘ info/explanation shared primitive | **Done** | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | `openspec/changes/info-tooltip-primitive/` (implemented, not yet archived) |
 | 12 | Client-owned Repository model + Clients hub | **Done** | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | `openspec/changes/archive/2026-08-16-client-repository-model/` |
 | 13 | Client information sources (expanded `IntegrationType`) | **Done** | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | `openspec/changes/archive/2026-08-16-client-information-sources/` |
-| 14 | Repository Discovery & Context (bootstrap on connect) — re-scoped 2026-08-18 | Scoped, not started | `2026-08-17-core-product-definition.md` §8-13, `2026-08-17-core-product-definition-gap-analysis.md` Part 3 | — |
+| 14 | Repository Discovery & Context (bootstrap on connect) — re-scoped 2026-08-18 | **Done** | `2026-08-17-core-product-definition.md` §8-13, `2026-08-17-core-product-definition-gap-analysis.md` Part 3 | `openspec/changes/archive/2026-08-18-repository-discovery-context/` |
 | 15 | Repository/source relevance recommendation | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.4 | — |
 | 16 | Project-wide Planner (dependency map + status board + focus + parallel) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.9, §5.13 | — |
 | 17 | AI Recommendation card + executor recommendation/estimate | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §4, §5.7 | — |
@@ -619,14 +619,39 @@ check confirming the connector-type selector still shows only the original
 four options while the Clients hub's Connectors panel renders correctly
 off the new query.
 
-**Slice 14 status:** Re-scoped 2026-08-18, ready for an OpenSpec proposal.
-The old blueprint's one-paragraph scope (§5.3: connect-time SDD check +
-bootstrap) is superseded by `2026-08-17-core-product-definition.md` §8-13,
-which is far more detailed and introduces System Context (§12-13) as a
-separate concept the old blueprint never named — see the gap-analysis's
-Part 3 row for Slice 14. Re-scoped, bounded scope for this slice
-specifically (deliberately smaller than all of §8-13, per CLAUDE.md's
-"prefer several small changes" rule):
+**Slice 14 status:** Done. Re-scoped 2026-08-18 (see below), implemented and
+archived the same day. The old blueprint's one-paragraph scope (§5.3:
+connect-time SDD check + bootstrap) is superseded by
+`2026-08-17-core-product-definition.md` §8-13, which is far more detailed
+and introduces System Context (§12-13) as a separate concept the old
+blueprint never named — see the gap-analysis's Part 3 row for Slice 14.
+As built: `RepositoryDiscovery` (versioned, evidence-cited findings, one
+row per run) + a `DiscoveryStatus`/`RUN_REPOSITORY_DISCOVERY` `JobType`
+addition; `fetchRepositorySnapshot` (bounded root-listing + README +
+known-manifest fetch via the GitHub Contents API); `executeRepositoryDiscovery`
+on both `AgentExecutor` implementations, Zod-validated the same way
+`ANALYZE`'s findings are; `checkClientBudget` (client → organization,
+no project tier) extending the existing budget-check pattern; the
+`src/domain/repository-discovery/` domain layer
+(`runRepositoryDiscovery`/`completeRepositoryDiscovery`/
+`revertRepositoryDiscoveryFailure`, `getRepositoryContext`/
+`listRepositoryDiscoveries`); a `worker.ts` handler reusing the existing
+Job dispatch table; `POST`/`GET /api/repositories/[id]/discovery`; a new
+`/repositories/[id]` detail page (linked from the Clients hub's existing
+repository rows) showing the current context or an empty state with a
+"Run Discovery" trigger, plus run history. Covered by new unit tests
+across `github.test.ts`, `mockExecutor.test.ts`, `budget.test.ts`, and
+`repository-discovery/commands.test.ts`, and a new E2E spec
+(`e2e/slice14-repository-discovery.spec.ts`) against a stub GitHub server.
+Verified live in-browser (admin and viewer roles) including the real
+GitHub API integration's error/retry path (a deliberately invalid token
+produced a genuine `401`, retried with backoff, then surfaced as a
+`FAILED` run). Full suite green except one pre-existing
+`slice5-engineering-evidence.spec.ts` failure, reproduced identically
+against the pre-Slice-14 commit via a throwaway `git worktree` — not a
+regression from this change. Bounded scope for this slice specifically
+(deliberately smaller than all of §8-13, per CLAUDE.md's "prefer several
+small changes" rule):
 
 - New `RepositoryDiscovery` record: one AI-produced, versioned, evidence-cited
   structured analysis per `Repository` — purpose, stack, structure,

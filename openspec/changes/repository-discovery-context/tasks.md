@@ -180,9 +180,16 @@
 
 ## Task Group 9: Documentation & verification
 
-- [ ] Update `docs/ROADMAP.md`'s Slice 14 row to **Done**, linking this archived change.
-- [ ] `npm run build`, `npm run lint`, full unit + E2E suite green.
-- [ ] Live verification: seed a real (or stubbed-GitHub) repository, trigger Discovery through the
-      UI, confirm the findings render with evidence citations and the run appears in the audit
-      trail and the client's AI cost total; confirm a budget-exceeded client refuses the trigger
-      with a clear error.
+- [x] Updated `docs/ROADMAP.md`'s Slice 14 row to **Done**, linking this archived change, and
+      expanded its status block with the as-built summary.
+- [x] `npm run build`, `npm run lint`, `tsc --noEmit`, full unit suite (333 tests, 42 files) all
+      green.
+- [x] Live verification: seeded a real repository (GitHub connector with a deliberately invalid
+      token, so the worker's request hits the real `api.github.com`), triggered Discovery through
+      the UI — confirmed the real 401 response, retry-with-backoff, and eventual `FAILED` state
+      with `lastError` all render correctly; separately verified the `SUCCEEDED` render (evidence
+      citations, "as of" label, run history, cost) and that a read-only (`VIEWER`) user sees the
+      Context panel but not the trigger button. Budget-refusal path covered by
+      `commands.test.ts`'s "refuses to trigger once the client's AI budget is exceeded" test
+      (asserts the clear `BudgetExceededError` message and that no row is created) rather than
+      re-driven through the browser, since it's the same domain command either way.
