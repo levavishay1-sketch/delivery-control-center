@@ -82,6 +82,16 @@ per Requirement). No slice's status changes as a result of this entry or
 that resolution alone — re-scoping Slice 14 (or any other) against these
 decisions is still a separate, later step.
 
+**`docs/roadmap-sources/2026-08-18-client-tasks-section.md`** — a
+standalone, ad hoc user feature request received 2026-08-18 (not part of
+the Slices 11–21 Product Vision & Flow Blueprint sequence): a new "Tasks"
+section on the Client detail page, listing every top-level (parentless)
+open `WorkItem` across the client's projects, of any type. Two material
+ambiguities in the original wording ("REQUIRED," and which "Project" is
+meant) were resolved via direct clarification with the user before scoping;
+both the original request and the resolved answers are recorded verbatim in
+that file. Scoped as Slice 22 below.
+
 ## Gap register (source: Part 2.2, 45 items)
 
 The full item-by-item comparison between the vision and what's built.
@@ -1220,6 +1230,22 @@ existing pipeline rather than invent a parallel one; and the SDD pipeline's
 own transitions should follow OpenSpec's actual propose → apply → archive,
 spec-anchored principles (the same ones this codebase's own development
 already runs on), not a bespoke state machine.
+
+### Slice 22 — Client "Tasks" section (top-level open work items)
+
+*(Source: `docs/roadmap-sources/2026-08-18-client-tasks-section.md` — a
+standalone, ad hoc user request, not part of the Slices 11–21 blueprint
+sequence. Scoped, not started.)*
+
+A new "Tasks" panel on the Client detail page, listing every top-level
+(`parentId IS NULL`) open (`status` not `COMPLETED`/`CLOSED`) `WorkItem`
+across the client's projects, of any `WorkItemType`
+(`PROJECT`/`TASK`/`BUG`/`CHANGE`) — a WorkItem with a parent (e.g. a Task
+materialized under a PROJECT-type WorkItem) is excluded, even though its
+ancestor is shown. Two clarifications resolved before scoping: "REQUIRED"
+means any submitted work item (not a new field), and "Project" here means
+a `WorkItem` of `type: PROJECT`, distinct from the page's existing
+separate "Projects" panel (the `Project` model's own list, unaffected).
 
 ## Definition of Done, for every future slice (source: `§6`)
 
