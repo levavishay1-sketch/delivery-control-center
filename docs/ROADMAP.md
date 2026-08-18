@@ -92,6 +92,20 @@ meant) were resolved via direct clarification with the user before scoping;
 both the original request and the resolved answers are recorded verbatim in
 that file. Scoped as Slice 22 below.
 
+**`docs/roadmap-sources/2026-08-18-client-area-product-model.md`** — a
+discovery-only request received 2026-08-18: a target product model for the
+Client area (exactly three sections — WORK ITEMS, REPOSITORIES,
+CONNECTIONS — plus a non-section "ADD REQUIRED" intake action), explicitly
+scoped as inspection/reporting only, with no code, schema, routes, or
+OpenSpec changes to be created in response. It builds directly on the
+2026-08-17 core-product-definition source above: "REQUIRED" here is the
+same flexible, optionally-Project-linked intake concept already resolved
+there as `Requirement` (Decision 3), and reaffirms the single-Project-
+mechanism / Dashboard-links-to-the-same-Projects rule already implicit in
+the existing `clients-hub` spec. No slice is scoped from this entry alone —
+the discovery findings and any resulting slice scope are recorded
+separately once produced.
+
 ## Gap register (source: Part 2.2, 45 items)
 
 The full item-by-item comparison between the vision and what's built.
