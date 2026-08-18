@@ -13,6 +13,13 @@ import { getAgentExecutor } from "@/lib/agents";
 import { completeSyncRun, failSyncRun, startSyncRun } from "@/domain/connector/commands";
 import { getSyncRunByJobId } from "@/domain/connector/queries";
 import { runConnectorSync } from "@/domain/connector/sync";
+import {
+  completeRepositoryDiscovery,
+  getRepositoryDiscoveryForRun,
+  revertRepositoryDiscoveryFailure,
+} from "@/domain/repository-discovery/commands";
+import { decryptIntegrationConfig } from "@/lib/integrations";
+import { fetchRepositorySnapshot } from "@/lib/integrations/github";
 import type { Job } from "@/generated/prisma/client";
 
 const POLL_INTERVAL_MS = Number(process.env.WORKER_POLL_INTERVAL_MS ?? 2000);
@@ -109,10 +116,38 @@ async function handleSyncProjectExhausted(payload: JobPayload, error: string, jo
   if (run) await failSyncRun(run.id, error);
 }
 
+async function handleRunRepositoryDiscoveryJob(payload: JobPayload, jobId: string): Promise<void> {
+  const discoveryId = payload.repositoryDiscoveryId as string;
+  const discovery = await getRepositoryDiscoveryForRun(discoveryId);
+  const { repository } = discovery;
+
+  const config = decryptIntegrationConfig("GITHUB", repository.connector.config as Record<string, unknown> | null);
+  const snapshot = await fetchRepositorySnapshot(config ?? null);
+
+  const agentId = await resolveDefaultAgentId();
+  const run = await startAgentRun(agentId, jobId);
+
+  const result = await getAgentExecutor().executeRepositoryDiscovery({
+    owner: repository.owner,
+    repo: repository.name,
+    rootListing: snapshot.rootListing,
+    readme: snapshot.readme,
+    manifests: snapshot.manifests,
+  });
+
+  await completeRepositoryDiscovery(discoveryId, result, run.id);
+}
+
+async function handleRunRepositoryDiscoveryExhausted(payload: JobPayload, error: string, jobId: string): Promise<void> {
+  const discoveryId = payload.repositoryDiscoveryId as string;
+  await revertRepositoryDiscoveryFailure(discoveryId, error, jobId);
+}
+
 const handlers: Partial<Record<Job["type"], JobTypeHandlers>> = {
   DRAFT_STAGE: { run: handleDraftStageJob, onExhausted: handleDraftStageExhausted },
   DRAFT_CONSTITUTION: { run: handleDraftConstitutionJob, onExhausted: handleDraftConstitutionExhausted },
   SYNC_PROJECT: { run: handleSyncProjectJob, onExhausted: handleSyncProjectExhausted },
+  RUN_REPOSITORY_DISCOVERY: { run: handleRunRepositoryDiscoveryJob, onExhausted: handleRunRepositoryDiscoveryExhausted },
 };
 
 async function processJob(job: Job): Promise<void> {

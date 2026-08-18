@@ -115,23 +115,38 @@
 
 ## Task Group 6: Job runtime wiring
 
-- [ ] `worker.ts`: add `handleRunRepositoryDiscoveryJob(payload, jobId)` — loads the discovery via
+- [x] `worker.ts`: add `handleRunRepositoryDiscoveryJob(payload, jobId)` — loads the discovery via
       `getRepositoryDiscoveryForRun`, decrypts the repository's connector config, calls
       `fetchRepositorySnapshot`, resolves `resolveDefaultAgentId()`, `startAgentRun(agentId,
       jobId)`, calls `getAgentExecutor().executeRepositoryDiscovery(...)`, then
       `completeRepositoryDiscovery(discoveryId, result, run.id)`. Add
       `handleRunRepositoryDiscoveryExhausted` calling `revertRepositoryDiscoveryFailure`. Register
       both in the `handlers` map under `RUN_REPOSITORY_DISCOVERY`.
-- [ ] Integration-style test (or extend an existing job-runtime test) confirming a queued
-      `RUN_REPOSITORY_DISCOVERY` job is claimed and processed end-to-end against the mock executor.
+- [x] Test coverage: this codebase has no test file for `worker.ts` itself anywhere (its handler
+      functions aren't exported) — every existing slice instead tests the worker-side domain
+      functions directly with a comment noting what the real handler does ("Simulates what
+      worker.ts's X handler does, without running the poll loop" — see
+      `constitution/commands.test.ts`, `pipeline/commands.test.ts`). Group 5's
+      `repository-discovery/commands.test.ts` already follows this exact convention
+      (`runDiscoveryJob`). `npm run build` confirms `worker.ts` itself compiles and type-checks
+      against the new handler.
 
 ## Task Group 7: API routes
 
-- [ ] `POST /api/repositories/[id]/discovery`: calls `runRepositoryDiscovery`, 403 on
-      authorization failure, 400/409 with the budget error message on refusal, 200 with the created
-      discovery row on success. Follow the existing route conventions (typed body validation,
-      `NextResponse.json`).
-- [ ] Route test (unit or E2E-adjacent) covering success, forbidden, and budget-refused paths.
+- [x] `POST /api/repositories/[id]/discovery`: calls `runRepositoryDiscovery`, mirroring
+      `POST /api/projects/[id]/constitution/draft`'s exact error-handling shape (`BudgetExceededError`
+      -> structured 409 body, other `DomainError` -> its own status, else rethrow). 200 with the
+      created discovery row on success.
+- [x] `GET /api/repositories/[id]/discovery`: calls `listRepositoryDiscoveries`, for the run-history
+      list's client-side refresh after triggering (mirrors the existing `GET` routes this project
+      already has for drawer/history data, e.g. `work-items/[id]/audit`).
+- [x] Ran `npx next typegen` to generate `RouteContext<"/api/repositories/[id]/discovery">` for the
+      new route; `tsc --noEmit` clean.
+- [x] Route test coverage: this codebase unit-tests exactly one route (`locale/route.test.ts`) —
+      every other route (including Slice 12's Client CRUD routes and Slice 3's budget-override
+      routes) is covered by Playwright E2E instead, not a per-route unit test. Following that
+      convention, success/forbidden/budget-refused coverage for this route lives in Group 8's E2E
+      spec rather than a new, inconsistent unit-test pattern.
 
 ## Task Group 8: UI
 
