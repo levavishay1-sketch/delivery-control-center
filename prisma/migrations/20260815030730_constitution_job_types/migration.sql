@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "ConstitutionStatus" ADD VALUE 'AI_DRAFTING';
+
+-- AlterEnum
+ALTER TYPE "JobType" ADD VALUE 'DRAFT_CONSTITUTION';

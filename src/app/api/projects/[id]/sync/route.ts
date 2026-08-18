@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { syncProjectWorkItems } from "@/domain/work-item/commands";
+import { triggerSyncForProject } from "@/domain/connector/commands";
 import { requireAuthContext } from "@/domain/shared/session";
 import { DomainError } from "@/domain/shared/errors";
 
@@ -8,8 +8,8 @@ export async function POST(_req: Request, routeCtx: RouteContext<"/api/projects/
 
   try {
     const ctx = await requireAuthContext();
-    const result = await syncProjectWorkItems(ctx, id);
-    return NextResponse.json(result);
+    const job = await triggerSyncForProject(ctx, id);
+    return NextResponse.json({ queued: true, jobId: job.id }, { status: 202 });
   } catch (err) {
     if (err instanceof DomainError) {
       return NextResponse.json({ error: err.message }, { status: err.status });

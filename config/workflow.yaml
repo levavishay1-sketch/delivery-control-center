@@ -4,33 +4,89 @@
 # the app code hardcodes stage order or gate rules — lib/config.ts loads this
 # at runtime, so changing the pipeline means editing this file, not the code.
 
+# Slice 2 — CONSTITUTION is deliberately not a stage here: it's promoted to a
+# project-scoped, versioned artifact drafted/approved once per project (see
+# src/domain/constitution/), referenced by every pipeline started under it via
+# Pipeline.constitutionVersion, rather than drafted per work item. ANALYZE and
+# IMPLEMENT joined this list once their prompt templates existed (Task Groups
+# 7 and 11) — IMPLEMENT stays an AI-drafted document, not real code execution
+# (design.md's Non-Goals), mechanically identical to DEPLOY below it.
+#
+# approverRoles (Task Group 8): an explicit list of roles allowed to
+# approve/reject that stage's gate — not a hierarchy (design.md Decision 6).
+# MANAGER is included in every list by convention. Required (and validated
+# non-empty by lib/config.ts) for every requiresApproval: true stage; omitted
+# for auto-completing stages, which have no human gate to approve.
+#
+# Slice 3 — each stage's optional `agent` key names an entry from the
+# `agents:` registry below, routing that stage type to a specific configured
+# agent (design.md Decision 3). Unset means "use the default agent" — every
+# stage below is currently unset, so an un-migrated pipeline's behavior is
+# unchanged (this file's `agents:` default entry already matches today's
+# env-driven executor choice — see the registry's own comment).
 stages:
-  - type: CONSTITUTION
-    label: Constitution
-    description: Non-negotiable principles and constraints the delivery must respect.
-    promptTemplate: constitution.md
-    requiresApproval: true
-
   - type: SPEC
     label: Specification
     description: What is being built and why, from the work item's intent.
     promptTemplate: spec.md
     requiresApproval: true
+    approverRoles: [PROJECT_MANAGER, MANAGER]
+
+  - type: CLARIFY
+    label: Clarify
+    description: Structured questions for a human when the AI lacks information it needs, instead of guessing.
+    promptTemplate: clarify.md
+    requiresApproval: false
 
   - type: PLAN
     label: Plan
     description: The technical approach and architecture for implementing the SPEC.
     promptTemplate: plan.md
     requiresApproval: true
+    approverRoles: [TECH_LEAD, MANAGER]
 
   - type: TASKS
     label: Tasks
     description: Concrete, ordered implementation tasks derived from the Plan.
     promptTemplate: tasks.md
     requiresApproval: true
+    approverRoles: [TECH_LEAD, MANAGER]
+
+  - type: ANALYZE
+    label: Analyze
+    description: Read-only consistency check across the Spec, Plan, and Tasks. A Critical finding blocks advancing until the flagged stage is redrafted.
+    promptTemplate: analyze.md
+    requiresApproval: false
+
+  - type: IMPLEMENT
+    label: Implement
+    description: A record of what was built for each Task, once Analyze is clean.
+    promptTemplate: implement.md
+    requiresApproval: true
+    approverRoles: [TECH_LEAD, MANAGER]
 
   - type: DEPLOY
     label: Deploy
     description: Deployment/rollout record for the completed work.
     promptTemplate: deploy.md
     requiresApproval: true
+    approverRoles: [TECH_LEAD, MANAGER]
+
+# Slice 3 — the Agent registry (design.md Decision 3). Each entry seeds/
+# matches an Agent row by name (src/domain/agent/commands.ts's
+# syncAgentRegistry). Exactly one entry must have `default: true`, validated
+# at config-load time (lib/config.ts's loadAgents). "mock-agent-v1" is the
+# default here because that's this codebase's actual current fallback
+# behavior with no ANTHROPIC_API_KEY configured — the same executor every
+# existing seeded/test draft in this repo was already produced by, so
+# treating it as the default keeps an un-migrated pipeline's behavior
+# unchanged (Migration Plan step 3).
+agents:
+  - name: mock-agent-v1
+    provider: mock
+    model: mock-agent-v1
+    default: true
+
+  - name: claude-sonnet-5
+    provider: claude
+    model: claude-sonnet-5

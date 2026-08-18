@@ -1,6 +1,7 @@
 import { db } from "../src/lib/db";
-import { createPipeline } from "../src/domain/pipeline/commands";
+import { startPipeline } from "../src/domain/pipeline/commands";
 import { hashPassword } from "../src/domain/shared/password";
+import type { AuthContext } from "../src/domain/shared/context";
 
 async function main() {
   const adminEmail = "admin@example.com";
@@ -56,7 +57,6 @@ async function main() {
       clientId: client.id,
       name: "Delivery Control Center Demo",
       key: "DCC",
-      integrationType: "MANUAL",
     },
   });
 
@@ -75,13 +75,41 @@ async function main() {
         description:
           "Users currently have to email support to reset their password. Add a self-service " +
           "'forgot password' flow that emails a reset link and lets the user set a new password.",
-        status: "open",
+        status: "OPEN",
       },
     }));
 
+  // startPipeline requires an APPROVED Constitution to exist first. Seeding creates one
+  // directly (already APPROVED) rather than going through the job-backed draftConstitution
+  // flow, which needs a running worker to complete — not available in a one-shot script.
+  const existingConstitution = await db.constitution.findFirst({
+    where: { projectId: project.id },
+    orderBy: { version: "desc" },
+  });
+  if (!existingConstitution) {
+    await db.constitution.create({
+      data: {
+        projectId: project.id,
+        version: 1,
+        status: "APPROVED",
+        content:
+          "# Constitution — Delivery Control Center Demo\n\n" +
+          "## Principles\n" +
+          "- Ship the smallest change that fully satisfies each work item's intent.\n" +
+          "- Every decision that affects scope, cost, or timeline is recorded in the audit trail.\n" +
+          "- No stage advances past a gate without an explicit human approval.\n",
+        approvedAt: new Date(),
+      },
+    });
+    console.log(`Seeded an APPROVED Constitution v1 for project "${project.name}".`);
+  }
+
+  const adminUser = await db.user.findUniqueOrThrow({ where: { email: adminEmail } });
+  const adminCtx: AuthContext = { userId: adminUser.id, displayName: "Org Admin", isOrgAdmin: true, memberships: [] };
+
   const hasPipeline = await db.pipeline.findUnique({ where: { workItemId: workItem.id } });
   if (!hasPipeline) {
-    await createPipeline(workItem.id);
+    await startPipeline(adminCtx, workItem.id);
     console.log(`Seeded project "${project.name}" with work item "${workItem.title}" and a fresh pipeline.`);
   } else {
     console.log("Seed data already present — nothing to do.");

@@ -14,6 +14,15 @@ enum IntegrationType {
   MANUAL
   JIRA
   AZURE_DEVOPS
+  GITHUB
+  // Slice 13 — named client information-source categories (design.md decision: a closed,
+  // category-level enum, not vendor-specific values). Not yet selectable/configurable anywhere;
+  // gated by the same "unimplemented connector type" requirement as any type with no real adapter.
+  CRM
+  TEAMS
+  MCP
+  CUSTOM_API
+  OTHER
 }
 
 enum StageType {
@@ -22,6 +31,12 @@ enum StageType {
   PLAN
   TASKS
   DEPLOY
+  // Slice 2 — CONSTITUTION stays for historical Stage rows (pipelines created
+  // before Slice 2 ran a per-work-item Constitution stage); new pipelines'
+  // stageSequence never includes it — see the project-scoped Constitution model.
+  CLARIFY
+  ANALYZE
+  IMPLEMENT
 }
 
 enum StageStatus {
@@ -31,6 +46,135 @@ enum StageStatus {
   APPROVED
   REJECTED
   DONE
+  // Slice 2 — set when a CLARIFY stage's draft returns questions instead of
+  // content; left only once every ClarifyQuestion for the stage is answered.
+  AWAITING_CLARIFICATION
+}
+
+// Slice 2 — job runtime (see openspec/changes/2026-08-15-slice-2-sdd-subsystem/design.md).
+// DRAFT_CONSTITUTION was added alongside DRAFT_STAGE (not deferred to a later
+// slice as design.md's Non-Goals originally implied): Constitution drafting is
+// a real AI call subject to the same crash-durability goal as Stage drafting,
+// and the job runtime's claim/retry mechanics are already type-agnostic.
+enum JobType {
+  DRAFT_STAGE
+  DRAFT_CONSTITUTION
+  SYNC_PROJECT
+  // Slice 14 — Repository Discovery runs through the same Job runtime as
+  // every other AI-drafting action; see design.md's Migration Plan.
+  RUN_REPOSITORY_DISCOVERY
+  // Slice 20 — self-requeuing weekly job; see ai-model-knowledge-snapshot's
+  // design.md Decision 1/4 for why it reschedules itself even on exhaustion.
+  FETCH_MODEL_SNAPSHOT
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ConstitutionStatus {
+  DRAFT
+  // Set while a DRAFT_CONSTITUTION job is in flight; mirrors StageStatus.AI_DRAFTING.
+  AI_DRAFTING
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+enum StageVersionTrigger {
+  DRAFT
+  REDRAFT
+}
+
+// Slice 3 — see openspec/changes/slice-3-agents-as-execution-resources/design.md
+// decision 1: one AgentRun per Job attempt-cycle, not per individual retry.
+enum AgentRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+// Slice 14 — a RepositoryDiscovery run's own lifecycle, mirroring
+// AgentRunStatus (see design.md's "RepositoryDiscovery is a new top-level
+// model" decision).
+enum DiscoveryStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum FindingSeverity {
+  INFO
+  WARNING
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Slice 4 — see openspec/changes/slice-4-connector-framework/design.md.
+enum ConnectorMode {
+  PULL
+  PUSH
+  BOTH
+}
+
+// SCHEDULED is recorded as data only in this slice — no scheduler runs syncs
+// on a timer yet (see design.md Non-Goals).
+enum SyncMode {
+  MANUAL
+  SCHEDULED
+}
+
+enum ConnectorStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+// One row per Job attempt-cycle, same granularity rule as AgentRunStatus
+// (design.md decision 2).
+enum SyncRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
+enum ProvenanceSource {
+  SYNC
+  MANUAL
+}
+
+enum ConflictResolution {
+  KEPT_MANUAL
+  ACCEPTED_INCOMING
+}
+
+// Slice 5 — see openspec/changes/slice-5-engineering-evidence/design.md.
+enum PullRequestState {
+  OPEN
+  MERGED
+  CLOSED
+}
+
+enum TestRunStatus {
+  PENDING
+  PASSED
+  FAILED
+}
+
+enum BuildStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum DeploymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
 }
 
 enum PipelineStatus {
@@ -48,6 +192,60 @@ enum AuditActor {
   SYSTEM
   AI
   USER
+}
+
+enum WorkItemType {
+  PROJECT
+  TASK
+  BUG
+  CHANGE
+}
+
+enum WorkStatus {
+  DRAFT
+  OPEN
+  IN_PROGRESS
+  DECISION_REQUIRED
+  BLOCKED
+  REVIEW
+  APPROVED
+  COMPLETED
+  CLOSED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ExecutorType {
+  HUMAN
+  AI_AGENT
+  HYBRID
+  UNASSIGNED
+}
+
+// Slice 19 — tracks whether a WorkItem's current executor was set directly on the item
+// (EXPLICIT) or is following the Project's default executor (INHERITED). Governs whether a
+// Project-level default-executor cascade touches this WorkItem automatically.
+enum AssignmentSource {
+  EXPLICIT
+  INHERITED
+}
+
+enum DecisionStatus {
+  OPEN
+  APPROVED
+  REJECTED
 }
 
 // Auth.js-shaped tables. Only Credentials + JWT sessions are wired up in
@@ -74,6 +272,19 @@ model User {
   memberships ClientMembership[]
   approvals   Approval[]
   auditEvents AuditEvent[]
+
+  ownedWorkItems                 WorkItem[]            @relation("WorkItemOwner")
+  executedWorkItems              WorkItem[]            @relation("WorkItemExecutor")
+  ownedBlockers                  Blocker[]             @relation("BlockerOwner")
+  decidedDecisions               Decision[]            @relation("DecisionApprover")
+  answeredClarifyQuestions       ClarifyQuestion[]     @relation("ClarifyQuestionAnsweredBy")
+  approvedBudgetOverrides        BudgetOverride[]      @relation("BudgetOverrideApprovedBy")
+  manualFieldEdits               FieldProvenance[]     @relation("FieldProvenanceActor")
+  resolvedSyncConflicts          SyncConflict[]        @relation("SyncConflictResolvedBy")
+  approvedCompletionExceptions   CompletionException[] @relation("CompletionExceptionApprover")
+  configChangesMade              ConfigChange[]        @relation("ConfigChangeChangedBy")
+  triggeredRepositoryDiscoveries RepositoryDiscovery[] @relation("RepositoryDiscoveryTriggeredBy")
+  defaultExecutorForProjects     Project[]             @relation("ProjectDefaultExecutor")
 }
 
 model Account {
@@ -132,75 +343,292 @@ model ClientMembership {
 }
 
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  // Slice 6 — top of the AI-budget inheritance chain (Organization -> Client -> Project);
+  // unset means no spending limit at this scope, same convention as Client/Project.
+  aiBudgetUsd Decimal? @db.Decimal(10, 4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  clients Client[]
+  clients         Client[]
+  configChanges   ConfigChange[]
+  budgetOverrides BudgetOverride[]
 }
 
 model Client {
-  id               String       @id @default(cuid())
-  organizationId   String
-  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name             String
-  slug             String
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name              String
+  slug              String
   integrationConfig Json?
-  aiConfig         Json?
-  createdAt        DateTime     @default(now())
-  updatedAt        DateTime     @updatedAt
+  aiConfig          Json?
+  // Slice 3 — unset means no spending limit for this client. A project's own
+  // aiBudgetUsd, if set, overrides this one (see design.md decision 4).
+  aiBudgetUsd       Decimal?     @db.Decimal(10, 4)
+  // Slice 12 — deactivate/reactivate, not delete: historical data (projects, work items,
+  // audit trail, cost records) is preserved; a deactivated client's active work is excluded
+  // from Dashboard/Attention Center but remains reachable from its own detail page.
+  active            Boolean      @default(true)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
 
-  projects    Project[]
-  memberships ClientMembership[]
+  projects        Project[]
+  memberships     ClientMembership[]
+  budgetOverrides BudgetOverride[]
+  configChanges   ConfigChange[]
+  // Slice 12 — a client's repository pool, independent of which project's connector
+  // originally created each one (see Repository.clientId below).
+  repositories    Repository[]
+  // Slice 13 — a client's connectors, queryable directly (see Connector.clientId below).
+  connectors      Connector[]
+  // Slice 15 (this change) — a client's connections to external sources/services
+  connections     Connection[]
 
   @@unique([organizationId, slug])
 }
 
 model Project {
-  id                String          @id @default(cuid())
-  clientId          String
-  client            Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  name              String
-  key               String
-  integrationType   IntegrationType @default(MANUAL)
-  integrationConfig Json?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  name        String
+  key         String
+  // Slice 3 — unset means "use the client's budget" (see Client.aiBudgetUsd).
+  aiBudgetUsd Decimal? @db.Decimal(10, 4)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  workItems   WorkItem[]
-  auditEvents AuditEvent[]
+  // Slice 19 — the executor new/unassigned WorkItems inherit (WorkItem.assignmentSource).
+  // Separate from any ownerId concept (accountability, always defaults to the creator) — see
+  // design.md decision 1.
+  defaultExecutorType ExecutorType @default(UNASSIGNED)
+  defaultExecutorId   String?
+  defaultExecutor     User?        @relation("ProjectDefaultExecutor", fields: [defaultExecutorId], references: [id], onDelete: SetNull)
+
+  workItems       WorkItem[]
+  auditEvents     AuditEvent[]
+  constitutions   Constitution[]
+  budgetOverrides BudgetOverride[]
+  configChanges   ConfigChange[]
+  // Slice 4 — nullable only during the migration window between the additive
+  // migration and the backfill (see design.md Migration Plan); every Project
+  // has exactly one Connector once the backfill has run.
+  connector       Connector?
+  // Slice 12 — repositories this project has linked from its client's pool (may be shared
+  // with other projects under the same client; see ProjectRepository).
+  repositoryLinks ProjectRepository[]
 
   @@unique([clientId, key])
 }
 
+// Slice 2 — project-scoped, versioned Constitution. Promoted out of the
+// per-work-item pipeline (see StageType.CONSTITUTION's comment): drafted and
+// approved once per project, referenced by every pipeline started under it.
+model Constitution {
+  id               String             @id @default(cuid())
+  projectId        String
+  project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version          Int
+  content          String?
+  status           ConstitutionStatus @default(DRAFT)
+  aiModel          String?
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal?           @db.Decimal(10, 4)
+  // Slice 3 — the AgentRun that produced this version's content. Nullable:
+  // pre-Slice-3 rows and never-drafted rows have none. aiModel/promptTokens/
+  // completionTokens/costUsd above stay in sync as a cache of this run's
+  // values (see design.md decision 2) — not replaced by this FK.
+  agentRunId       String?
+  agentRun         AgentRun?          @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  createdAt        DateTime           @default(now())
+  approvedAt       DateTime?
+
+  @@unique([projectId, version])
+}
+
 model WorkItem {
-  id          String   @id @default(cuid())
+  id          String          @id @default(cuid())
   projectId   String
-  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   source      IntegrationType
   externalId  String
   externalUrl String?
   title       String
   description String?
-  status      String   @default("open")
-  syncedAt    DateTime @default(now())
-  createdAt   DateTime @default(now())
+  status      WorkStatus      @default(OPEN)
+  syncedAt    DateTime        @default(now())
+  createdAt   DateTime        @default(now())
 
-  pipeline Pipeline?
+  // Slice 1 — delivery model extension. `source` (above) already serves the
+  // role a separate "sourceMode" field would have; not duplicated.
+  type         WorkItemType  @default(TASK)
+  parentId     String?
+  parent       WorkItem?     @relation("WorkItemHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children     WorkItem[]    @relation("WorkItemHierarchy")
+  risk         RiskLevel     @default(MEDIUM)
+  priority     PriorityLevel @default(MEDIUM)
+  ownerId      String?
+  owner        User?         @relation("WorkItemOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  executorType ExecutorType  @default(UNASSIGNED)
+  executorId   String?
+  executor     User?         @relation("WorkItemExecutor", fields: [executorId], references: [id], onDelete: SetNull)
+  // Slice 19 — whether the current executor was set directly on this item (EXPLICIT) or is
+  // following the Project's default executor (INHERITED). Defaults to INHERITED: every
+  // pre-existing WorkItem backfills as INHERITED (design.md decision 4) since no Project has a
+  // default executor set yet, so this is a no-op until a project lead sets one.
+  assignmentSource AssignmentSource @default(INHERITED)
+  dueDate      DateTime?
+  progress     Int           @default(0)
+  aiCost       Decimal       @default(0) @db.Decimal(10, 4)
+
+  pipeline     Pipeline?
+  blockers     Blocker[]
+  decisions    Decision[]
+  dependsOn    Dependency[] @relation("DependentWorkItem")
+  dependedOnBy Dependency[] @relation("DependencyTarget")
+  auditEvents  AuditEvent[]
+
+  // Slice 4 — per-field sync/manual-edit tracking and open sync conflicts.
+  fieldProvenance FieldProvenance[]
+  syncConflicts   SyncConflict[]
+
+  // Slice 5 — engineering evidence and completion-policy exceptions.
+  evidences            Evidence[]
+  completionExceptions CompletionException[]
+
+  // Slice 18 — set when this WorkItem was materialized from a TaskDraft (see
+  // TaskDraft.materializedWorkItemId above); null for every other WorkItem-creation path.
+  materializedFromTaskDraft TaskDraft?
+
+  // Slice 15 (this change) — work item attachments for characterization (file uploads)
+  attachments   WorkItemAttachment[]
+  // Slice 15 (this change) — related repositories for this work item (many-to-many via WorkItemRepository)
+  repositoryLinks WorkItemRepository[]
 
   @@unique([projectId, source, externalId])
+  @@index([projectId, status])
+  @@index([parentId])
+}
+
+// Slice 15 (this change) — file attachments for work items, stored directly in Postgres
+model WorkItemAttachment {
+  id         String   @id @default(cuid())
+  workItemId String
+  workItem   WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  filename   String
+  mimeType   String
+  size       Int
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  @@index([workItemId])
+}
+
+// Slice 15 (this change) — many-to-many: which repositories are related to a work item
+model WorkItemRepository {
+  id           String     @id @default(cuid())
+  workItemId   String
+  workItem     WorkItem   @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([workItemId, repositoryId])
+  @@index([repositoryId])
+}
+
+// Slice 15 (this change) — client-level list of connections to external sources/services
+model Connection {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  source    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+}
+
+model Dependency {
+  id                  String   @id @default(cuid())
+  workItemId          String
+  workItem            WorkItem @relation("DependentWorkItem", fields: [workItemId], references: [id], onDelete: Cascade)
+  dependsOnWorkItemId String
+  dependsOnWorkItem   WorkItem @relation("DependencyTarget", fields: [dependsOnWorkItemId], references: [id], onDelete: Cascade)
+  reason              String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([workItemId, dependsOnWorkItemId])
+}
+
+model Blocker {
+  id             String    @id @default(cuid())
+  blockingItemId String
+  blockingItem   WorkItem  @relation(fields: [blockingItemId], references: [id], onDelete: Cascade)
+  ownerId        String
+  owner          User      @relation("BlockerOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  reason         String
+  requiredAction String
+  blockedSince   DateTime  @default(now())
+  impact         String?
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([blockingItemId, resolvedAt])
+}
+
+model Decision {
+  id               String         @id @default(cuid())
+  workItemId       String
+  workItem         WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  question         String
+  reason           String
+  impact           String
+  aiRecommendation String?
+  aiConfidence     Decimal?       @db.Decimal(5, 2)
+  deadline         DateTime?
+  approverId       String?
+  approver         User?          @relation("DecisionApprover", fields: [approverId], references: [id], onDelete: SetNull)
+  status           DecisionStatus @default(OPEN)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  resolvedAt       DateTime?
+
+  @@index([workItemId, status])
 }
 
 model Pipeline {
-  id            String         @id @default(cuid())
-  workItemId    String         @unique
-  workItem      WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Cascade)
-  currentStage  StageType      @default(CONSTITUTION)
-  status        PipelineStatus @default(ACTIVE)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  workItemId   String         @unique
+  workItem     WorkItem       @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  currentStage StageType      @default(CONSTITUTION)
+  status       PipelineStatus @default(ACTIVE)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  // Slice 2 — snapshotted at creation (startPipeline) from config/workflow.yaml's
+  // stage list at that moment; getNextStageType/getFirstStageType read this, not
+  // the live file, so an edit to the config never changes an in-flight pipeline.
+  // Nullable only because existing rows predate this column; backfilled to
+  // ['CONSTITUTION','SPEC','PLAN','TASKS','DEPLOY'] (see the Slice 2 migration),
+  // then made NOT NULL in a follow-up migration.
+  stageSequence       StageType[]
+  // Which Constitution version this pipeline started under (nullable: existing
+  // rows predate the Constitution model entirely and never had one).
+  constitutionVersion Int?
+
+  // Slice 3 — snapshotted at startPipeline alongside stageSequence: resolved
+  // { [stageType]: agentId } routing, so editing config/workflow.yaml's agent
+  // routing after a pipeline starts never changes that pipeline's behavior
+  // (see design.md decision 3). Nullable: pre-Slice-3 pipelines never had one.
+  agentRouting Json?
 
   stages      Stage[]
   auditEvents AuditEvent[]
@@ -217,53 +645,597 @@ model Stage {
   promptTokens     Int?
   completionTokens Int?
   costUsd          Decimal?    @db.Decimal(10, 4)
+  // Slice 3 — the AgentRun that produced this stage's current content. See
+  // Constitution.agentRunId's comment: aiModel/etc. above remain a synced cache.
+  agentRunId       String?
+  agentRun         AgentRun?   @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
   startedAt        DateTime?
   completedAt      DateTime?
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
-  approvals   Approval[]
-  auditEvents AuditEvent[]
+  approvals        Approval[]
+  auditEvents      AuditEvent[]
+  versions         StageVersion[]
+  clarifyQuestions ClarifyQuestion[]
+  analysisFindings AnalysisFinding[]
+  // Slice 18 — a TASKS stage's structured, AI-drafted task candidates (see TaskDraft below).
+  taskDrafts       TaskDraft[]
 
   @@unique([pipelineId, type])
 }
 
+// Slice 18 — one AI-drafted task candidate from a TASKS stage's structured output (mirrors
+// AnalysisFinding's shape exactly). Replaced, not accumulated, on every TASKS redraft.
+// materializedWorkItemId is set once a human explicitly turns this draft into a real child
+// WorkItem (see task-decomposition/commands.ts's materializeTaskDrafts) — a separate, later
+// decision from the TASKS stage's own approval gate.
+model TaskDraft {
+  id                     String    @id @default(cuid())
+  stageId                String
+  stage                  Stage     @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  title                  String
+  description            String?
+  materializedWorkItemId String?   @unique
+  materializedWorkItem   WorkItem? @relation(fields: [materializedWorkItemId], references: [id], onDelete: SetNull)
+  createdAt              DateTime  @default(now())
+
+  @@index([stageId])
+}
+
+// Slice 2 — append-only draft history. Stage's own content/aiModel/... columns
+// remain "the latest version" (every existing read site keeps working
+// unchanged); this table is populated alongside them on every draft/redraft.
+model StageVersion {
+  id                String              @id @default(cuid())
+  stageId           String
+  stage             Stage               @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  versionNumber     Int
+  content           String?
+  aiModel           String?
+  promptTokens      Int?
+  completionTokens  Int?
+  costUsd           Decimal?            @db.Decimal(10, 4)
+  // Slice 3 — see Stage.agentRunId's comment; same cache-alongside-FK pattern.
+  agentRunId        String?
+  agentRun          AgentRun?           @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  createdAsResultOf StageVersionTrigger
+  createdAt         DateTime            @default(now())
+
+  @@unique([stageId, versionNumber])
+}
+
+// Slice 2 — a CLARIFY stage's draft can return questions instead of content;
+// the stage moves to AWAITING_CLARIFICATION until every question here has an
+// answer. The pause is durable because this is just a persisted row — a
+// process restart while paused loses nothing.
+model ClarifyQuestion {
+  id               String    @id @default(cuid())
+  stageId          String
+  stage            Stage     @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  question         String
+  answer           String?
+  answeredByUserId String?
+  answeredByUser   User?     @relation("ClarifyQuestionAnsweredBy", fields: [answeredByUserId], references: [id], onDelete: SetNull)
+  answeredAt       DateTime?
+  createdAt        DateTime  @default(now())
+}
+
+// Slice 2 — severity-rated consistency findings from an ANALYZE stage's draft.
+// A CRITICAL finding blocks advancing past ANALYZE until the related stage is
+// redrafted and ANALYZE is drafted again (see design.md decision 8).
+model AnalysisFinding {
+  id               String          @id @default(cuid())
+  stageId          String
+  stage            Stage           @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  severity         FindingSeverity
+  message          String
+  relatedStageType StageType
+  createdAt        DateTime        @default(now())
+}
+
+// Slice 2 — durable job runtime. A worker process polls for QUEUED jobs whose
+// scheduledAt has passed and atomically claims one via an UPDATE ... WHERE
+// status = 'QUEUED' ... RETURNING (see design.md decision 1); lockedAt/lockedBy
+// record that claim. idempotencyKey lets a caller re-enqueue the same logical
+// work safely (e.g. a retry of the enqueue request itself) without duplicating it.
+model Job {
+  id             String    @id @default(cuid())
+  type           JobType
+  payload        Json
+  status         JobStatus @default(QUEUED)
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  lastError      String?
+  scheduledAt    DateTime  @default(now())
+  lockedAt       DateTime?
+  lockedBy       String?
+  idempotencyKey String    @unique
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  agentRuns AgentRun[]
+  syncRuns  SyncRun[]
+
+  @@index([status, scheduledAt])
+}
+
+// Slice 3 — the routable agent registry (see design.md decision 3). Seeded
+// from config/workflow.yaml's `agents:` list; exactly one row is isDefault
+// true at a time, enforced in the domain command, not a DB constraint.
+model Agent {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  provider  String
+  model     String
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  runs AgentRun[]
+}
+
+// Slice 3 — one row per drafting attempt-cycle (one Job's full retry
+// lifecycle), not per individual retry attempt (see design.md decision 1).
+// toolCalls is unpopulated in this slice (no executor calls tools today);
+// present only for forward compatibility per design.md's Non-Goals.
+model AgentRun {
+  id               String         @id @default(cuid())
+  agentId          String
+  agent            Agent          @relation(fields: [agentId], references: [id], onDelete: Restrict)
+  jobId            String?
+  job              Job?           @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  status           AgentRunStatus @default(RUNNING)
+  promptTokens     Int?
+  completionTokens Int?
+  costUsd          Decimal?       @db.Decimal(10, 4)
+  retryCount       Int            @default(0)
+  lastError        String?
+  toolCalls        Json?
+  startedAt        DateTime       @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime       @default(now())
+
+  stages                Stage[]
+  stageVersions         StageVersion[]
+  constitutions         Constitution[]
+  consumedByOverride    BudgetOverride?
+  repositoryDiscoveries RepositoryDiscovery[]
+
+  @@index([agentId, status])
+}
+
+// Slice 3 — an audited, single-use grant to draft past an exceeded budget
+// (see design.md decision 5). Exactly one of clientId/projectId is set,
+// enforced in the domain command. Consumed atomically by whichever drafting
+// request claims it first (UPDATE ... WHERE consumed = false RETURNING,
+// same pattern as Job.claimJobs).
+model BudgetOverride {
+  id               String        @id @default(cuid())
+  // Slice 6 — the Organization fallback tier's own-use override; nullable like
+  // clientId/projectId, exactly one of the three set per row (see checkBudget).
+  organizationId   String?
+  organization     Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId         String?
+  client           Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId        String?
+  project          Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  approvedByUserId String
+  approvedByUser   User          @relation("BudgetOverrideApprovedBy", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  approvedAt       DateTime      @default(now())
+  consumed         Boolean       @default(false)
+  consumedAt       DateTime?
+  consumedByRunId  String?       @unique
+  consumedByRun    AgentRun?     @relation(fields: [consumedByRunId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, consumed])
+  @@index([clientId, consumed])
+  @@index([projectId, consumed])
+}
+
+// Slice 6 — append-only version history for a configurable value change at
+// any scope in the hierarchy (design.md decision 2: a dedicated table, not
+// folded into AuditEvent, since AuditEvent has no Organization/Client FK).
+enum ConfigScope {
+  ORGANIZATION
+  CLIENT
+  PROJECT
+}
+
+model ConfigChange {
+  id              String        @id @default(cuid())
+  scope           ConfigScope
+  organizationId  String?
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId        String?
+  client          Client?       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId       String?
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  field           String
+  oldValueUsd     Decimal?      @db.Decimal(10, 4)
+  newValueUsd     Decimal?      @db.Decimal(10, 4)
+  changedByUserId String
+  changedByUser   User          @relation("ConfigChangeChangedBy", fields: [changedByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime      @default(now())
+
+  @@index([scope, organizationId])
+  @@index([scope, clientId])
+  @@index([scope, projectId])
+}
+
+// Slice 4 — a project's connection to one external work-item tracker,
+// replacing the bare Project.integrationType/integrationConfig fields as
+// the source of truth (see design.md decision 1: 1:1 with Project, backfilled
+// from those fields then superseding them).
+model Connector {
+  id           String          @id @default(cuid())
+  projectId    String          @unique
+  project      Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // Slice 13 — client-level attribution alongside the existing required projectId (design.md
+  // decision: mirrors Repository.clientId from Slice 12 — projectId stays the sync engine's key,
+  // clientId is what makes a client's connectors queryable directly, e.g. from the Clients hub).
+  clientId     String
+  client       Client          @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type         IntegrationType @default(MANUAL)
+  mode         ConnectorMode   @default(PULL)
+  authType     String
+  syncMode     SyncMode        @default(MANUAL)
+  capabilities Json            @default("[]")
+  config       Json?
+  status       ConnectorStatus @default(DISCONNECTED)
+  lastSyncAt   DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  syncRuns          SyncRun[]
+  webhookDeliveries WebhookDelivery[]
+  syncConflicts     SyncConflict[]
+  repository        Repository?
+
+  @@index([clientId])
+}
+
+// Slice 4 — one row per sync attempt-cycle (one Job's full retry lifecycle),
+// same granularity rule Slice 3 established for AgentRun (design.md decision 2).
+model SyncRun {
+  id              String        @id @default(cuid())
+  connectorId     String
+  connector       Connector     @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  jobId           String?
+  job             Job?          @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  status          SyncRunStatus @default(RUNNING)
+  itemsCreated    Int           @default(0)
+  itemsUpdated    Int           @default(0)
+  itemsConflicted Int           @default(0)
+  error           String?
+  startedAt       DateTime      @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([connectorId, status])
+}
+
+// Slice 4 — the current source/actor/timestamp behind one work-item field's
+// value. One row per (workItem, field); a later write (sync or manual)
+// overwrites the previous provenance rather than appending, since this
+// answers "who set the value that's there now," not a full history.
+model FieldProvenance {
+  id          String           @id @default(cuid())
+  workItemId  String
+  workItem    WorkItem         @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  field       String
+  source      ProvenanceSource
+  externalId  String?
+  actorUserId String?
+  actorUser   User?            @relation("FieldProvenanceActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  updatedAt   DateTime         @updatedAt
+
+  @@unique([workItemId, field])
+}
+
+// Slice 4 — an open disagreement between a human-edited field's current
+// value and a sync's incoming value (design.md decision 3: manual-wins by
+// default, surfaced instead of applied). Upserted, not append-only
+// (design.md decision 4): resolving closes the row; a later sync while one
+// is still open updates incomingValue in place rather than duplicating it.
+model SyncConflict {
+  id               String              @id @default(cuid())
+  workItemId       String
+  workItem         WorkItem            @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  field            String
+  currentValue     String
+  incomingValue    String
+  connectorId      String
+  connector        Connector           @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  resolvedAt       DateTime?
+  resolvedByUserId String?
+  resolvedByUser   User?               @relation("SyncConflictResolvedBy", fields: [resolvedByUserId], references: [id], onDelete: SetNull)
+  resolution       ConflictResolution?
+  createdAt        DateTime            @default(now())
+
+  @@unique([workItemId, field])
+  @@index([connectorId, resolvedAt])
+}
+
+// Slice 4 — dedup receipt for inbound webhook deliveries (design.md
+// decision 5). A delivery id is unique per connector; the webhook route
+// inserts before doing any work and only proceeds if the insert wasn't a
+// no-op, so a redelivered id never triggers a second sync.
+model WebhookDelivery {
+  id          String    @id @default(cuid())
+  connectorId String
+  connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  deliveryId  String
+  receivedAt  DateTime  @default(now())
+
+  @@unique([connectorId, deliveryId])
+}
+
+// Slice 5 — a project's linked GitHub repository, the source of engineering
+// evidence (design.md decision 1: one per Connector, reusing its auth/config
+// rather than storing its own). Slice 15 (this change) — now supports direct
+// creation via source + url, making connectorId optional.
+model Repository {
+  id          String     @id @default(cuid())
+  // Slice 15 (this change) — made optional: only set for GitHub-linked repositories,
+  // null for directly-created repositories
+  connectorId String?    @unique
+  connector   Connector? @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  // Slice 12 — a Repository is owned by the Client, not exclusively by the connector/project
+  // that first linked it (design.md decision: connectorId stays for the sync/webhook machinery
+  // that already keys off it; clientId is what makes the repository reusable across the
+  // client's other projects via ProjectRepository).
+  clientId    String
+  client      Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // Slice 15 (this change) — made optional for directly-created repositories
+  owner       String?
+  name        String?
+  // Slice 15 (this change) — made optional for directly-created repositories
+  externalId  String?
+  // Slice 15 (this change) — source for direct creation (e.g., "GitHub", "GitLab", custom)
+  source      String?
+  // Slice 15 (this change) — URL for direct creation
+  url         String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  commits      Commit[]
+  pullRequests PullRequest[]
+  testRuns     TestRun[]
+  builds       Build[]
+  deployments  Deployment[]
+  // Slice 12 — every project this repository is linked to (find-or-create by client in
+  // linkRepository means more than one project can share the same Repository row).
+  projectLinks ProjectRepository[]
+  // Slice 14 — every Discovery run (versioned) ever produced for this repository.
+  discoveries  RepositoryDiscovery[]
+  // Slice 15 (this change) — every work item this repository is related to
+  workItemLinks WorkItemRepository[]
+
+  @@index([clientId])
+}
+
+// Slice 14 — one versioned, evidence-cited AI analysis per repository, triggered explicitly by a
+// user (design.md: mirrors Constitution's shape exactly — versioned, never overwritten in place;
+// see design.md's "RepositoryDiscovery is a new top-level model" decision). RepositoryContext
+// (the spec's "current understanding" concept) is a query over the latest SUCCEEDED row here, not
+// a separate table.
+model RepositoryDiscovery {
+  id                String          @id @default(cuid())
+  repositoryId      String
+  repository        Repository      @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  version           Int
+  status            DiscoveryStatus @default(RUNNING)
+  // Zod-validated repositoryDiscoveryFindingsSchema output — never written until validated
+  // (design.md's "Findings schema, validated by Zod before every write" decision).
+  findings          Json?
+  aiModel           String?
+  promptTokens      Int?
+  completionTokens  Int?
+  costUsd           Decimal?        @db.Decimal(10, 4)
+  agentRunId        String?
+  agentRun          AgentRun?       @relation(fields: [agentRunId], references: [id], onDelete: SetNull)
+  lastError         String?
+  triggeredByUserId String
+  triggeredByUser   User            @relation("RepositoryDiscoveryTriggeredBy", fields: [triggeredByUserId], references: [id], onDelete: Restrict)
+  startedAt         DateTime        @default(now())
+  completedAt       DateTime?
+
+  @@unique([repositoryId, version])
+  @@index([repositoryId])
+}
+
+/**
+ * Slice 12 — many-to-many: which of a client's repositories a project has linked as relevant.
+ */
+model ProjectRepository {
+  id           String     @id @default(cuid())
+  projectId    String
+  project      Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([projectId, repositoryId])
+}
+
+model Commit {
+  id           String     @id @default(cuid())
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  sha          String
+  message      String
+  authorName   String?
+  authoredAt   DateTime
+  url          String?
+  createdAt    DateTime   @default(now())
+
+  testRuns TestRun[]
+  builds   Build[]
+
+  @@unique([repositoryId, sha])
+}
+
+model PullRequest {
+  id           String           @id @default(cuid())
+  repositoryId String
+  repository   Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  number       Int
+  title        String
+  state        PullRequestState @default(OPEN)
+  merged       Boolean          @default(false)
+  mergedAt     DateTime?
+  headSha      String?
+  url          String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  testRuns  TestRun[]
+  evidences Evidence[]
+
+  @@unique([repositoryId, number])
+}
+
+// A test run is tied to the commit GitHub's check_run event names, and
+// optionally the pull request that commit belongs to (design.md risk 2: a
+// check_run can arrive before its pull_request event, so pullRequestId is
+// filled in once that later event is seen).
+model TestRun {
+  id            String        @id @default(cuid())
+  repositoryId  String
+  repository    Repository    @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  pullRequestId String?
+  pullRequest   PullRequest?  @relation(fields: [pullRequestId], references: [id], onDelete: SetNull)
+  commitId      String?
+  commit        Commit?       @relation(fields: [commitId], references: [id], onDelete: SetNull)
+  externalId    String
+  name          String
+  status        TestRunStatus @default(PENDING)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime      @default(now())
+
+  @@unique([repositoryId, externalId])
+}
+
+model Build {
+  id           String      @id @default(cuid())
+  repositoryId String
+  repository   Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  commitId     String?
+  commit       Commit?     @relation(fields: [commitId], references: [id], onDelete: SetNull)
+  externalId   String
+  status       BuildStatus @default(PENDING)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+
+  @@unique([repositoryId, externalId])
+}
+
+model Deployment {
+  id           String           @id @default(cuid())
+  repositoryId String
+  repository   Repository       @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  environment  String
+  status       DeploymentStatus @default(PENDING)
+  externalId   String
+  deployedAt   DateTime?
+  createdAt    DateTime         @default(now())
+
+  @@unique([repositoryId, externalId])
+}
+
+// A work item's explicit (never inferred) link to a pull request as its
+// evidence (design.md — proposal.md's "not inferred" requirement).
+model Evidence {
+  id            String      @id @default(cuid())
+  workItemId    String
+  workItem      WorkItem    @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  pullRequestId String
+  pullRequest   PullRequest @relation(fields: [pullRequestId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([workItemId, pullRequestId])
+}
+
+// A write-capable role's approval to complete a work item without
+// qualifying evidence (design.md decision 6: presence of a row is the
+// source of truth, not a boolean flag elsewhere).
+model CompletionException {
+  id               String   @id @default(cuid())
+  workItemId       String
+  workItem         WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  reason           String
+  approvedByUserId String
+  approvedByUser   User     @relation("CompletionExceptionApprover", fields: [approvedByUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime @default(now())
+
+  @@index([workItemId])
+}
+
 model Approval {
-  id           String            @id @default(cuid())
+  id           String           @id @default(cuid())
   stageId      String
-  stage        Stage             @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  stage        Stage            @relation(fields: [stageId], references: [id], onDelete: Cascade)
   decision     ApprovalDecision
   // approverId is the real, session-derived identity; approverName is an immutable display
   // snapshot (kept even if the user is later renamed/removed) — not a half-measure, both are
   // meant to coexist. approverId is nullable only because it postdates this table.
   approverId   String?
-  approver     User?             @relation(fields: [approverId], references: [id], onDelete: SetNull)
+  approver     User?            @relation(fields: [approverId], references: [id], onDelete: SetNull)
   approverName String
   comment      String?
-  decidedAt    DateTime          @default(now())
+  decidedAt    DateTime         @default(now())
 }
 
 // pipelineId/projectId are both optional because an event can originate above
 // pipeline scope (e.g. a project-level integration sync) — but every audit
 // event still records enough to trace back to what it's about.
 model AuditEvent {
-  id         String      @id @default(cuid())
+  id         String     @id @default(cuid())
   projectId  String?
-  project    Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project    Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   pipelineId String?
-  pipeline   Pipeline?   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  pipeline   Pipeline?  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   stageId    String?
-  stage      Stage?      @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  stage      Stage?     @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  // Slice 1: lets Blocker/Decision/Dependency events (which have no pipelineId)
+  // trace back to the work item they're about, and powers the 360° Record's
+  // per-item Timeline tab.
+  workItemId String?
+  workItem   WorkItem?  @relation(fields: [workItemId], references: [id], onDelete: SetNull)
   actor      AuditActor
   // userId is the real, session-derived identity for USER-actor events; actorName is an
   // immutable display snapshot (also used for SYSTEM/AI actor names, which have no User row).
   userId     String?
-  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user       User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
   actorName  String?
   action     String
   detail     Json?
-  createdAt  DateTime    @default(now())
+  createdAt  DateTime   @default(now())
 
   @@index([pipelineId, createdAt])
   @@index([projectId, createdAt])
+  @@index([workItemId, createdAt])
+}
+
+enum ModelSnapshotStatus {
+  SUCCESS
+  FAILED
+}
+
+// Slice 20 — a standalone, dated fact table (not mutated in place), mirroring
+// RepositoryDiscovery's versioned-record shape. See ai-model-knowledge-snapshot's
+// design.md Decision 7 for why extractedModels holds loosely-typed text
+// fragments rather than strictly-parsed numeric fields.
+model ModelSnapshot {
+  id              String              @id @default(cuid())
+  fetchedAt       DateTime            @default(now())
+  status          ModelSnapshotStatus
+  rawContent      String
+  extractedModels Json
+  failureReason   String?
+
+  @@index([status, fetchedAt])
 }

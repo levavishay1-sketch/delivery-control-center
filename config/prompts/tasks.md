@@ -9,13 +9,15 @@ Work item title: {{title}}
 Plan:
 {{previousStageContent}}
 
-Produce a concise task list in Markdown.
+Produce a concise task list in Markdown, then respond with a fenced block
+starting with <!-- TASK_DRAFTS --> immediately followed by a JSON array of
+task objects — never omit this, even when the list is short (use a single
+task if that's all the Plan calls for). Each object has exactly these
+fields: `title` (short, action-oriented) and, optionally, `description`
+(one or two sentences of detail). Do not include any other text after the
+array.
 
 <!-- OUTPUT TEMPLATE (used by the mock AI executor) -->
 # Tasks — {{title}}
 
-- [ ] Confirm current behavior and exact change surface for: {{title}}
-- [ ] Implement the change described in the Plan
-- [ ] Verify the change against the Spec's success criteria
-- [ ] Update or add tests covering the change
-- [ ] Prepare the Deploy record for this work item
+{{tasksSummary}}

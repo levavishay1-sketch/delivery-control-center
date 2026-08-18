@@ -7,3 +7,7 @@ export async function listOrganizations() {
 export async function getOrganizationBySlug(slug: string) {
   return db.organization.findUnique({ where: { slug } });
 }
+
+export async function getOrganizationById(id: string) {
+  return db.organization.findUnique({ where: { id }, include: { clients: true } });
+}

@@ -1,26 +1,317 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Neutral scale — cool-tinted slate (Slice 9), replacing Slice 7's pure gray for a more crafted feel */
+  --color-neutral-0: #ffffff;
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #0f172a;
+  --color-neutral-950: #020617;
+
+  /* Base surfaces */
+  --background: var(--color-neutral-0);
+  --foreground: var(--color-neutral-900);
+  --surface: var(--color-neutral-0);
+  --surface-muted: var(--color-neutral-50);
+  --border-hairline: var(--color-neutral-200);
+
+  /* Accent — reserved for primary actions, active nav/tab state, and the
+     application shell's sidebar surface (design-system spec, amended Slice 10) */
+  --color-accent: #4f46e5;
+  --color-accent-foreground: #ffffff;
+  --color-accent-muted: #eef0fd;
+
+  /* Application shell (Slice 10) — the sidebar surface is a shade of the SAME
+     accent hue via color-mix(), not a new unrelated brand color (design.md
+     decision 1). --surface-page is the light neutral canvas behind the white
+     workspace container; distinct from --surface/--surface-muted, which stay
+     reserved for content surfaces inside the workspace. */
+  --color-sidebar-surface: color-mix(in srgb, var(--color-accent), black 55%);
+  --color-sidebar-surface-hover: color-mix(in srgb, var(--color-accent), black 40%);
+  /* Anchored to literal white, not --color-accent-foreground — that token's
+     semantic meaning is "readable text atop --color-accent" and flips to
+     near-black in dark mode (since dark mode's accent is pale), which would
+     make sidebar text unreadable against the sidebar's always-dark surface. */
+  --color-sidebar-text: color-mix(in srgb, white 78%, var(--color-accent) 22%);
+  --surface-page: var(--color-neutral-100);
+
+  /* Five status-semantic colors */
+  --color-status-healthy: #059669;
+  --color-status-healthy-bg: #ecfdf5;
+  --color-status-active: #2563eb;
+  --color-status-active-bg: #eff6ff;
+  --color-status-ai: #7c3aed;
+  --color-status-ai-bg: #f5f3ff;
+  --color-status-warning: #d97706;
+  --color-status-warning-bg: #fffbeb;
+  --color-status-critical: #dc2626;
+  --color-status-critical-bg: #fef2f2;
+  --color-status-inactive: var(--color-neutral-500);
+  --color-status-inactive-bg: var(--color-neutral-100);
+
+  /* Work-item-type categorical colors (Slice 9) — distinct from the five status hues above
+     (validated with the dataviz skill's palette checker: lightness band, chroma floor, CVD
+     separation, and normal-vision floor all pass in both light and dark). Identity, not
+     status — never implies health/risk. */
+  --color-type-project: #4d7c0f;
+  --color-type-task: #0284c7;
+  --color-type-bug: #e11d48;
+  --color-type-change: #c026d3;
+
+  /* Elevation */
+  --shadow-floating: 0 8px 24px -4px rgb(0 0 0 / 0.15), 0 2px 8px -2px rgb(0 0 0 / 0.08);
+  --backdrop-floating: rgb(15 15 17 / 0.35);
+
+  /* Depth accents (Slice 9) — soft, tone-tinted glow for a flat-elevation surface's icon
+     badge; NOT a floating-elevation shadow (no backdrop dimming, doesn't ring the surface's
+     own edges). Derived from the tone's own color via color-mix, so dark mode's redefined
+     status and accent colors below are picked up automatically — no separate dark
+     declarations needed. */
+  --shadow-glow-accent: 0 0 20px -6px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  --shadow-glow-healthy: 0 0 20px -6px color-mix(in srgb, var(--color-status-healthy) 45%, transparent);
+  --shadow-glow-active: 0 0 20px -6px color-mix(in srgb, var(--color-status-active) 45%, transparent);
+  --shadow-glow-ai: 0 0 20px -6px color-mix(in srgb, var(--color-status-ai) 45%, transparent);
+  --shadow-glow-warning: 0 0 20px -6px color-mix(in srgb, var(--color-status-warning) 45%, transparent);
+  --shadow-glow-critical: 0 0 20px -6px color-mix(in srgb, var(--color-status-critical) 45%, transparent);
+  --shadow-glow-inactive: 0 0 20px -6px color-mix(in srgb, var(--color-status-inactive) 45%, transparent);
+  --shadow-glow-type-project: 0 0 20px -6px color-mix(in srgb, var(--color-type-project) 45%, transparent);
+  --shadow-glow-type-task: 0 0 20px -6px color-mix(in srgb, var(--color-type-task) 45%, transparent);
+  --shadow-glow-type-bug: 0 0 20px -6px color-mix(in srgb, var(--color-type-bug) 45%, transparent);
+  --shadow-glow-type-change: 0 0 20px -6px color-mix(in srgb, var(--color-type-change) 45%, transparent);
+
+  /* Tonal gradients (Slice 9) — every stop is a shade of the SAME hue (design-system spec's
+     "one accent color... MAY be rendered as a tonal gradient" requirement), vertical only so
+     they never imply a reading direction and need no RTL-mirrored variant. */
+  --gradient-accent: linear-gradient(180deg, var(--color-accent), color-mix(in srgb, var(--color-accent), black 18%));
+  --gradient-healthy: linear-gradient(180deg, var(--color-status-healthy), color-mix(in srgb, var(--color-status-healthy), black 18%));
+  --gradient-active: linear-gradient(180deg, var(--color-status-active), color-mix(in srgb, var(--color-status-active), black 18%));
+  --gradient-ai: linear-gradient(180deg, var(--color-status-ai), color-mix(in srgb, var(--color-status-ai), black 18%));
+  --gradient-warning: linear-gradient(180deg, var(--color-status-warning), color-mix(in srgb, var(--color-status-warning), black 18%));
+  --gradient-critical: linear-gradient(180deg, var(--color-status-critical), color-mix(in srgb, var(--color-status-critical), black 18%));
+  --gradient-inactive: linear-gradient(180deg, var(--color-status-inactive), color-mix(in srgb, var(--color-status-inactive), black 18%));
+  --gradient-type-project: linear-gradient(180deg, var(--color-type-project), color-mix(in srgb, var(--color-type-project), black 18%));
+  --gradient-type-task: linear-gradient(180deg, var(--color-type-task), color-mix(in srgb, var(--color-type-task), black 18%));
+  --gradient-type-bug: linear-gradient(180deg, var(--color-type-bug), color-mix(in srgb, var(--color-type-bug), black 18%));
+  --gradient-type-change: linear-gradient(180deg, var(--color-type-change), color-mix(in srgb, var(--color-type-change), black 18%));
+
+  --radius-card: 0.875rem;
+  /* Outer geometry for the shell's workspace container (Slice 10) — larger than
+     --radius-card, which stays the per-card/panel radius inside it. */
+  --radius-shell: 1.5rem;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-border-hairline: var(--border-hairline);
+
+  --color-neutral-0: var(--color-neutral-0);
+  --color-neutral-50: var(--color-neutral-50);
+  --color-neutral-100: var(--color-neutral-100);
+  --color-neutral-200: var(--color-neutral-200);
+  --color-neutral-300: var(--color-neutral-300);
+  --color-neutral-400: var(--color-neutral-400);
+  --color-neutral-500: var(--color-neutral-500);
+  --color-neutral-600: var(--color-neutral-600);
+  --color-neutral-700: var(--color-neutral-700);
+  --color-neutral-800: var(--color-neutral-800);
+  --color-neutral-900: var(--color-neutral-900);
+  --color-neutral-950: var(--color-neutral-950);
+
+  --color-accent: var(--color-accent);
+  --color-accent-foreground: var(--color-accent-foreground);
+  --color-accent-muted: var(--color-accent-muted);
+
+  --color-sidebar-surface: var(--color-sidebar-surface);
+  --color-sidebar-surface-hover: var(--color-sidebar-surface-hover);
+  --color-sidebar-text: var(--color-sidebar-text);
+  --color-surface-page: var(--surface-page);
+
+  --color-status-healthy: var(--color-status-healthy);
+  --color-status-healthy-bg: var(--color-status-healthy-bg);
+  --color-status-active: var(--color-status-active);
+  --color-status-active-bg: var(--color-status-active-bg);
+  --color-status-ai: var(--color-status-ai);
+  --color-status-ai-bg: var(--color-status-ai-bg);
+  --color-status-warning: var(--color-status-warning);
+  --color-status-warning-bg: var(--color-status-warning-bg);
+  --color-status-critical: var(--color-status-critical);
+  --color-status-critical-bg: var(--color-status-critical-bg);
+  --color-status-inactive: var(--color-status-inactive);
+  --color-status-inactive-bg: var(--color-status-inactive-bg);
+
+  --color-type-project: var(--color-type-project);
+  --color-type-task: var(--color-type-task);
+  --color-type-bug: var(--color-type-bug);
+  --color-type-change: var(--color-type-change);
+
+  --shadow-floating: var(--shadow-floating);
+  --shadow-glow-accent: var(--shadow-glow-accent);
+  --shadow-glow-healthy: var(--shadow-glow-healthy);
+  --shadow-glow-active: var(--shadow-glow-active);
+  --shadow-glow-ai: var(--shadow-glow-ai);
+  --shadow-glow-warning: var(--shadow-glow-warning);
+  --shadow-glow-critical: var(--shadow-glow-critical);
+  --shadow-glow-inactive: var(--shadow-glow-inactive);
+  --shadow-glow-type-project: var(--shadow-glow-type-project);
+  --shadow-glow-type-task: var(--shadow-glow-type-task);
+  --shadow-glow-type-bug: var(--shadow-glow-type-bug);
+  --shadow-glow-type-change: var(--shadow-glow-type-change);
+
+  --radius-card: var(--radius-card);
+  --radius-shell: var(--radius-shell);
+
+  /* Type scale — 7 steps. Slice 9 widens the top end (lg/xl) for stronger heading
+     presence and adds 2xl for hero numbers (StatTile); the bottom end (2xs/xs) stays
+     tight, since metadata density is functional, not stinginess. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.1rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.3rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.25rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.625rem;
+  --text-xl--line-height: 2rem;
+  --text-2xl: 2rem;
+  --text-2xl--line-height: 2.25rem;
+
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: var(--color-neutral-950);
+    --foreground: var(--color-neutral-100);
+    --surface: var(--color-neutral-900);
+    --surface-muted: var(--color-neutral-800);
+    --border-hairline: var(--color-neutral-700);
+    /* --color-neutral-100 itself doesn't flip between modes (only which
+       semantic token points at which neutral does), so the page canvas needs
+       an explicit dark override — it would otherwise stay light-mode-light
+       here. */
+    --surface-page: var(--color-neutral-950);
+
+    --color-accent: #818cf8;
+    --color-accent-foreground: #0d0d0f;
+    --color-accent-muted: #26264a;
+
+    --color-status-healthy: #34d399;
+    --color-status-healthy-bg: #052e22;
+    --color-status-active: #60a5fa;
+    --color-status-active-bg: #0b1b33;
+    --color-status-ai: #a78bfa;
+    --color-status-ai-bg: #1f1730;
+    --color-status-warning: #fbbf24;
+    --color-status-warning-bg: #2c2005;
+    --color-status-critical: #f87171;
+    --color-status-critical-bg: #2b0e0e;
+    --color-status-inactive: var(--color-neutral-400);
+    --color-status-inactive-bg: var(--color-neutral-800);
+
+    /* Validated against the dark surface with the dataviz skill's palette checker,
+       same as the light-mode values above. */
+    --color-type-project: #65a30d;
+    --color-type-task: #0284c7;
+    --color-type-bug: #f43f5e;
+    --color-type-change: #d946ef;
+
+    --shadow-floating: 0 8px 24px -4px rgb(0 0 0 / 0.5), 0 2px 8px -2px rgb(0 0 0 / 0.3);
+    --backdrop-floating: rgb(0 0 0 / 0.55);
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
+}
+
+/* Subtle atmosphere behind hero/header sections only (Dashboard, Attention Center) —
+   never behind dense tables/rows, where it would hurt scannability. Two soft radial
+   blobs at mirrored horizontal positions: since both read as ambient, non-directional
+   texture (not content with an implied reading order), the composition looks the same
+   mirrored under RTL with no logical-property handling needed. */
+.hero-mesh {
+  background-image:
+    radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--color-accent) 12%, transparent), transparent 45%),
+    radial-gradient(circle at 85% 10%, color-mix(in srgb, var(--color-status-ai) 10%, transparent), transparent 45%);
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(var(--drawer-slide-offset, 16px));
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-drawer-in {
+  animation: drawer-in 180ms ease-out;
+}
+
+/* The drawer opens from its inline-end edge (right under LTR, left under
+   RTL — see design.md decision 3). Its subtle slide-in offset must move
+   inward from that same edge, so the sign flips under RTL. */
+:dir(rtl) .animate-drawer-in {
+  --drawer-slide-offset: -16px;
+}
+
+/* Motion (Slice 9): entrance + hover-lift for stat tiles and project cards.
+   Direction-agnostic (vertical translateY only) — no RTL variant needed. */
+@keyframes fade-up {
+  from {
+    transform: translateY(8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 400ms ease-out both;
+}
+
+.hover-lift {
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+/* Single centralized gate (design.md decision 8): every new animation/transition
+   from this change, plus the pre-existing drawer entrance, is disabled or
+   shortened here rather than re-checked per component. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-drawer-in,
+  .animate-fade-up {
+    animation: none;
+  }
+
+  .hover-lift {
+    transition: none;
+  }
+
+  .hover-lift:hover {
+    transform: none;
+  }
 }

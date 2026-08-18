@@ -3,10 +3,11 @@ import type { AuditActor, Prisma } from "@/generated/prisma/client";
 type DbClient = Prisma.TransactionClient;
 
 export interface AuditEventInput {
-  /** At least one of projectId/pipelineId should be set so the event can be traced back to something. */
+  /** At least one of projectId/pipelineId/workItemId should be set so the event can be traced back to something. */
   projectId?: string;
   pipelineId?: string;
   stageId?: string;
+  workItemId?: string;
   actor: AuditActor;
   /** Real user identity for USER-actor events; null for SYSTEM/AI, which have no User row. */
   userId?: string;
@@ -27,6 +28,7 @@ export async function recordAuditEvent(db: DbClient, input: AuditEventInput) {
       projectId: input.projectId,
       pipelineId: input.pipelineId,
       stageId: input.stageId,
+      workItemId: input.workItemId,
       actor: input.actor,
       userId: input.userId,
       actorName: input.actorName,

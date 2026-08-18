@@ -1,5 +1,44 @@
 @AGENTS.md
 
+## OpenSpec is mandatory for meaningful work
+
+Meaningful development work — a new capability, a behavior change worth
+planning, a schema/API change, or a new page/surface — MUST go through
+OpenSpec: propose (`/opsx:propose` or the `openspec-propose` skill) → apply
+→ archive (syncing delta specs into `openspec/specs/`). This applies even
+when the task arrives as an ad hoc request rather than a planned roadmap
+slice.
+
+Small, local, obvious changes stay lightweight and don't need a change: a
+label tweak, a button/copy change, a CSS adjustment, a bug fix to existing
+behavior. Forcing those through full planning artifacts would be exactly
+the kind of bureaucratic overhead OpenSpec's own philosophy (fluid, not
+rigid) argues against. When it's unclear which side of the line something
+falls on, open a change anyway — per "Change sizing" below, small changes
+are cheap.
+
+Two things are never optional, regardless of change size:
+- **Never silently contradict an existing spec.** If an edit would make
+  `openspec/specs/` stop matching reality, either update the spec in the
+  same change or open a retroactive one — per "Specs: spec-anchored, not
+  spec-once" below. This can't be checked mechanically; it's a judgment
+  call every edit needs to make.
+- **UI/visual work follows the Design System.** Read
+  `openspec/specs/design-system/spec.md` and the latest slice's `design.md`
+  before writing markup, and reuse `src/components/ui/` primitives rather
+  than inventing new markup — even for a small change.
+
+CI enforces the structural half of this, not the judgment half:
+`.github/workflows/ci.yml` runs `openspec validate --strict` on every push
+(catches malformed specs/changes), and a compliance check
+(`scripts/check-openspec-compliance.sh`) fails the build only when a diff
+*adds a new file* shaped like new capability — a Prisma migration, an API
+route, a domain module, or a top-level page — with no accompanying
+`openspec/` path in the same diff. It deliberately never fires on edits to
+existing files, so small changes are never blocked by CI; the two bullets
+above stay enforced by review discipline, not tooling, because neither is
+mechanically checkable.
+
 ## Git workflow
 
 Routine ops (add, commit, local branch create/switch, pull, push to
@@ -57,3 +96,8 @@ right." Verify touched error paths live too, not only the happy path. Use
 - **npm install-scripts gate**: a new dependency with a postinstall script
   needs `npm install-scripts approve <pkg>` (after reviewing it) or it's
   silently skipped.
+- **Job worker (Slice 2+)**: `DRAFT_STAGE` (and future async job types) run
+  in a separate long-lived process, not inside the Next.js request/response
+  cycle. Local dev needs both `npm run dev` and `npm run worker` running at
+  once — a `Job` row enqueued via the app sits `QUEUED` forever if the
+  worker isn't also running.
