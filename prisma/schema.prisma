@@ -284,7 +284,6 @@ model User {
   approvedCompletionExceptions   CompletionException[] @relation("CompletionExceptionApprover")
   configChangesMade              ConfigChange[]        @relation("ConfigChangeChangedBy")
   triggeredRepositoryDiscoveries RepositoryDiscovery[] @relation("RepositoryDiscoveryTriggeredBy")
-  createdRequirements            Requirement[]         @relation("RequirementCreatedBy")
   defaultExecutorForProjects     Project[]             @relation("ProjectDefaultExecutor")
 }
 
@@ -385,9 +384,8 @@ model Client {
   repositories    Repository[]
   // Slice 13 — a client's connectors, queryable directly (see Connector.clientId below).
   connectors      Connector[]
-  // Slice 15 — a client's Requirements: flexible intake, standalone or optionally
-  // Project-linked (see Requirement.clientId below).
-  requirements    Requirement[]
+  // Slice 15 (this change) — a client's connections to external sources/services
+  connections     Connection[]
 
   @@unique([organizationId, slug])
 }
@@ -422,9 +420,6 @@ model Project {
   // Slice 12 — repositories this project has linked from its client's pool (may be shared
   // with other projects under the same client; see ProjectRepository).
   repositoryLinks ProjectRepository[]
-  // Slice 15 — Requirements linked to this project (a Requirement may also be standalone;
-  // see Requirement.projectId below).
-  requirements    Requirement[]
 
   @@unique([clientId, key])
 }
@@ -505,49 +500,58 @@ model WorkItem {
   evidences            Evidence[]
   completionExceptions CompletionException[]
 
-  // Slice 15 — set when this WorkItem was materialized by a Requirement's "Start SDD" action
-  // (see Requirement.workItemId below); null for every other WorkItem-creation path.
-  requirement               Requirement?
   // Slice 18 — set when this WorkItem was materialized from a TaskDraft (see
   // TaskDraft.materializedWorkItemId above); null for every other WorkItem-creation path.
   materializedFromTaskDraft TaskDraft?
+
+  // Slice 15 (this change) — work item attachments for characterization (file uploads)
+  attachments   WorkItemAttachment[]
+  // Slice 15 (this change) — related repositories for this work item (many-to-many via WorkItemRepository)
+  repositoryLinks WorkItemRepository[]
 
   @@unique([projectId, source, externalId])
   @@index([projectId, status])
   @@index([parentId])
 }
 
-enum RequirementStatus {
-  OPEN
-  SDD_ACTIVE
-  DECLINED
+// Slice 15 (this change) — file attachments for work items, stored directly in Postgres
+model WorkItemAttachment {
+  id         String   @id @default(cuid())
+  workItemId String
+  workItem   WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  filename   String
+  mimeType   String
+  size       Int
+  data       Bytes
+  createdAt  DateTime @default(now())
+
+  @@index([workItemId])
 }
 
-// Slice 15 — a client-owned, flexible intake item: standalone or optionally linked to an
-// existing Project (design.md decision 3 / decision 1 in this change's own design.md), never
-// required to belong to one. "Start SDD" materializes a Project (if none linked) + a root
-// WorkItem from it, reusing createProject/createWorkItem verbatim — see startSddForRequirement.
-model Requirement {
-  id              String            @id @default(cuid())
-  clientId        String
-  client          Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  type            WorkItemType      @default(TASK)
-  title           String
-  description     String?
-  status          RequirementStatus @default(OPEN)
-  // Nullable — standalone until either created with a Project, or "Start SDD" creates one.
-  projectId       String?
-  project         Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  // Set only once SDD Activation succeeds (design.md decision 2 — Pipeline start itself stays
-  // a separate, Constitution-gated action on the resulting WorkItem).
-  workItemId      String?           @unique
-  workItem        WorkItem?         @relation(fields: [workItemId], references: [id], onDelete: SetNull)
-  createdByUserId String
-  createdByUser   User              @relation("RequirementCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+// Slice 15 (this change) — many-to-many: which repositories are related to a work item
+model WorkItemRepository {
+  id           String     @id @default(cuid())
+  workItemId   String
+  workItem     WorkItem   @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  repositoryId String
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
 
-  @@index([clientId, status])
+  @@unique([workItemId, repositoryId])
+  @@index([repositoryId])
+}
+
+// Slice 15 (this change) — client-level list of connections to external sources/services
+model Connection {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  source    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
 }
 
 model Dependency {
@@ -969,22 +973,31 @@ model WebhookDelivery {
 
 // Slice 5 — a project's linked GitHub repository, the source of engineering
 // evidence (design.md decision 1: one per Connector, reusing its auth/config
-// rather than storing its own).
+// rather than storing its own). Slice 15 (this change) — now supports direct
+// creation via source + url, making connectorId optional.
 model Repository {
-  id          String    @id @default(cuid())
-  connectorId String    @unique
-  connector   Connector @relation(fields: [connectorId], references: [id], onDelete: Cascade)
+  id          String     @id @default(cuid())
+  // Slice 15 (this change) — made optional: only set for GitHub-linked repositories,
+  // null for directly-created repositories
+  connectorId String?    @unique
+  connector   Connector? @relation(fields: [connectorId], references: [id], onDelete: Cascade)
   // Slice 12 — a Repository is owned by the Client, not exclusively by the connector/project
   // that first linked it (design.md decision: connectorId stays for the sync/webhook machinery
   // that already keys off it; clientId is what makes the repository reusable across the
   // client's other projects via ProjectRepository).
   clientId    String
-  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  owner       String
-  name        String
-  externalId  String
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  client      Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  // Slice 15 (this change) — made optional for directly-created repositories
+  owner       String?
+  name        String?
+  // Slice 15 (this change) — made optional for directly-created repositories
+  externalId  String?
+  // Slice 15 (this change) — source for direct creation (e.g., "GitHub", "GitLab", custom)
+  source      String?
+  // Slice 15 (this change) — URL for direct creation
+  url         String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
 
   commits      Commit[]
   pullRequests PullRequest[]
@@ -996,6 +1009,8 @@ model Repository {
   projectLinks ProjectRepository[]
   // Slice 14 — every Discovery run (versioned) ever produced for this repository.
   discoveries  RepositoryDiscovery[]
+  // Slice 15 (this change) — every work item this repository is related to
+  workItemLinks WorkItemRepository[]
 
   @@index([clientId])
 }
