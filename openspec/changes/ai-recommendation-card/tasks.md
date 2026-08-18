@@ -63,9 +63,17 @@
       the Slice 16/18/19 status-block format), and note the deferred non-goals explicitly (Blocker
       criticality, Execution Readiness, model selection, developer time/cost estimation, migrating
       other AI-facing surfaces onto the shared card).
-- [ ] 5.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
+- [x] 5.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
       existing suite has no new failures beyond the already-known pre-existing baseline (verify
-      via the temporary-checkout method used for prior slices if any new failure appears).
+      via the temporary-checkout method used for prior slices if any new failure appears). Build,
+      lint, typecheck all clean; 388/388 unit tests passing (15 new). Full E2E suite: 19 passed, 6
+      failed — exactly the known set already confirmed during Slices 16/19's verification
+      (`slice5-engineering-evidence.spec.ts`, `slice6-configuration-center.spec.ts` — pre-existing
+      baseline; `slice12-client-lifecycle.spec.ts`, `slice14-repository-discovery.spec.ts`,
+      `slice4-connector-framework.spec.ts`, `slice8-i18n-rtl.spec.ts` — environmental flakiness,
+      each previously reproduced identically at a pre-commit baseline). No new failures — no
+      temporary-checkout diagnostic needed this time. New
+      `e2e/ai-recommendation-card.spec.ts` passed.
 - [x] 5.3 Live verification: open a WorkItem with no executor in the browser, confirm the
       recommendation card renders with a real (not fabricated) estimate for a project with AI
       drafting history, confirm both override buttons work, confirm the card disappears once an

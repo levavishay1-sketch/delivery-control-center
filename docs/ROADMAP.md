@@ -1017,7 +1017,11 @@ executor updates and the card disappears — passing, stable across
 repeated runs. Live-verified in the browser: the card showed a real,
 non-fabricated estimate ("Based on 88 past run(s)...") drawn from this
 session's own accumulated AI-drafting history, and the override action
-correctly updated the Executor field and removed the card.
+correctly updated the Executor field and removed the card. Full E2E
+suite: 19 passed, 6 failed — exactly the known set already confirmed
+during Slices 16/19's verification (two pre-existing baseline failures,
+four previously-confirmed environmental-flakiness failures), no new
+failures.
 
 Explicitly deferred: Blocker criticality/Execution Readiness as inputs;
 AI model selection (Slice 20's job); estimating developer time/cost (no
