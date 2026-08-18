@@ -1,15 +1,24 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getClientDetail } from "@/domain/client/queries";
+import { listRequirementsForClient } from "@/domain/requirement/queries";
 import { requireAuthContext } from "@/domain/shared/session";
 import { ForbiddenError } from "@/domain/shared/errors";
+import { WRITE_ROLES } from "@/domain/shared/authz";
 import { EditClientForm } from "@/components/EditClientForm";
 import { ClientActivationControl } from "@/components/ClientActivationControl";
+import { RequirementForm } from "@/components/RequirementForm";
 import { Panel, PanelEmpty } from "@/components/ui/Panel";
 import { Row, RowList } from "@/components/ui/Row";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
 export const dynamic = "force-dynamic";
+
+const REQUIREMENT_STATUS_TONE = {
+  OPEN: "active",
+  SDD_ACTIVE: "healthy",
+  DECLINED: "inactive",
+} as const;
 
 export default async function ClientDetailPage({ params }: PageProps<"/clients/[id]">) {
   const { id } = await params;
@@ -22,6 +31,10 @@ export default async function ClientDetailPage({ params }: PageProps<"/clients/[
   if (!detail) notFound();
 
   const { client, projects, repositories, connectors } = detail;
+  const requirements = await listRequirementsForClient(ctx, id);
+
+  const userRole = ctx.memberships.find((m) => m.clientId === id)?.role;
+  const canManage = ctx.isOrgAdmin || (!!userRole && (WRITE_ROLES as string[]).includes(userRole));
 
   return (
     <div className="flex flex-col gap-6">
@@ -63,6 +76,31 @@ export default async function ClientDetailPage({ params }: PageProps<"/clients/[
                 {project.connector && (
                   <span className="text-xs text-neutral-500 dark:text-neutral-400">{project.connector.type}</span>
                 )}
+              </Row>
+            ))}
+          </RowList>
+        )}
+      </Panel>
+
+      <Panel title="Requirements">
+        {canManage && <RequirementForm clientId={id} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />}
+        {requirements.length === 0 ? (
+          <PanelEmpty>No Requirements yet.</PanelEmpty>
+        ) : (
+          <RowList className={canManage ? "mt-3" : undefined}>
+            {requirements.map((requirement) => (
+              <Row key={requirement.id} href={`/requirements/${requirement.id}`} columns="1fr auto">
+                <div>
+                  <p className="font-medium">{requirement.title}</p>
+                  <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                    {requirement.type} · {requirement.project ? requirement.project.name : "Standalone"}
+                  </p>
+                </div>
+                <StatusBadge
+                  tone={REQUIREMENT_STATUS_TONE[requirement.status]}
+                  label={requirement.status}
+                  reason={requirement.workItem ? `Linked to "${requirement.workItem.title}"` : "No Work Item yet"}
+                />
               </Row>
             ))}
           </RowList>

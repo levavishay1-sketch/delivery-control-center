@@ -273,6 +273,7 @@ model User {
   approvedCompletionExceptions   CompletionException[] @relation("CompletionExceptionApprover")
   configChangesMade              ConfigChange[]        @relation("ConfigChangeChangedBy")
   triggeredRepositoryDiscoveries RepositoryDiscovery[] @relation("RepositoryDiscoveryTriggeredBy")
+  createdRequirements            Requirement[]         @relation("RequirementCreatedBy")
 }
 
 model Account {
@@ -372,6 +373,9 @@ model Client {
   repositories    Repository[]
   // Slice 13 — a client's connectors, queryable directly (see Connector.clientId below).
   connectors      Connector[]
+  // Slice 15 — a client's Requirements: flexible intake, standalone or optionally
+  // Project-linked (see Requirement.clientId below).
+  requirements    Requirement[]
 
   @@unique([organizationId, slug])
 }
@@ -399,6 +403,9 @@ model Project {
   // Slice 12 — repositories this project has linked from its client's pool (may be shared
   // with other projects under the same client; see ProjectRepository).
   repositoryLinks ProjectRepository[]
+  // Slice 15 — Requirements linked to this project (a Requirement may also be standalone;
+  // see Requirement.projectId below).
+  requirements    Requirement[]
 
   @@unique([clientId, key])
 }
@@ -474,9 +481,46 @@ model WorkItem {
   evidences            Evidence[]
   completionExceptions CompletionException[]
 
+  // Slice 15 — set when this WorkItem was materialized by a Requirement's "Start SDD" action
+  // (see Requirement.workItemId below); null for every other WorkItem-creation path.
+  requirement Requirement?
+
   @@unique([projectId, source, externalId])
   @@index([projectId, status])
   @@index([parentId])
+}
+
+enum RequirementStatus {
+  OPEN
+  SDD_ACTIVE
+  DECLINED
+}
+
+// Slice 15 — a client-owned, flexible intake item: standalone or optionally linked to an
+// existing Project (design.md decision 3 / decision 1 in this change's own design.md), never
+// required to belong to one. "Start SDD" materializes a Project (if none linked) + a root
+// WorkItem from it, reusing createProject/createWorkItem verbatim — see startSddForRequirement.
+model Requirement {
+  id              String            @id @default(cuid())
+  clientId        String
+  client          Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type            WorkItemType      @default(TASK)
+  title           String
+  description     String?
+  status          RequirementStatus @default(OPEN)
+  // Nullable — standalone until either created with a Project, or "Start SDD" creates one.
+  projectId       String?
+  project         Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  // Set only once SDD Activation succeeds (design.md decision 2 — Pipeline start itself stays
+  // a separate, Constitution-gated action on the resulting WorkItem).
+  workItemId      String?           @unique
+  workItem        WorkItem?         @relation(fields: [workItemId], references: [id], onDelete: SetNull)
+  createdByUserId String
+  createdByUser   User              @relation("RequirementCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@index([clientId, status])
 }
 
 model Dependency {
