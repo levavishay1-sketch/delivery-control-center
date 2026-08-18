@@ -106,6 +106,21 @@ the existing `clients-hub` spec. No slice is scoped from this entry alone —
 the discovery findings and any resulting slice scope are recorded
 separately once produced.
 
+**`docs/roadmap-sources/2026-08-18-client-work-item-model.md`** — a full
+implementation specification received 2026-08-18, superseding the
+discovery-only framing of the entry above with explicit, fully-decided
+product decisions (the user states directly that clarifying questions on
+anything covered in the prompt should not be asked). Retires "REQUIRED" in
+favor of "WORK ITEM" terminology: the existing `Requirement` model/flow is
+to be reconciled into `WorkItem` directly, not kept as a parallel concept.
+Specifies exact schemas for a Work Item creation form (Type+Title
+mandatory; Source/Parent/Characterization/Attachments/Related Repositories
+optional), a Repository creation form (Source+Link required, reusing the
+existing client-owned `Repository` model), and a new, deliberately simple
+client-level `Connection` concept (Source+Name only) distinct from the
+existing Project-scoped `Connector` sync-engine object. Scoped as the next
+slice below once its OpenSpec change is created.
+
 ## Gap register (source: Part 2.2, 45 items)
 
 The full item-by-item comparison between the vision and what's built.
