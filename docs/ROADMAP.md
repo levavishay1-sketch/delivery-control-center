@@ -805,6 +805,37 @@ deferred: the full cross-item Visual Work Graph (Slice 16, separate),
 recursive/nested decomposition, and a generic Child/Bulk Approval pattern
 (§51-52) beyond simple multi-select.
 
+**Slice 16 status:** Scoped, not started. Proposed 2026-08-18 as
+`project-wide-planner`; OpenSpec planning artifacts at
+`openspec/changes/project-wide-planner/`. Per the gap-analysis Part 3 row
+for Slice 16: "§31 (Visual Work Graph) — close conceptual match ...
+**Still roughly accurate, extend field set** — least disrupted of the
+eight [old blueprint slices]." Chosen as the next slice over Slice 17 (AI
+Recommendation card) because Slice 17's own gap-analysis assessment says
+it "should incorporate Blocker criticality (§35) and Execution Readiness
+(§34) once those exist" — neither exists yet (Blocker severity deferred
+per Decision 7; Execution Readiness doesn't exist at all) — while Slice 16
+has no such blocking dependency and extends a component
+(`DependencyGraph.tsx`) that's already fully built: layered-layout,
+pan/zoom, and focus/highlight, today scoped to one WorkItem's neighborhood
+inside the 360° Record. Bounded scope (see the change's design.md for the
+full non-goals list): a new `getProjectWorkGraph` query returning every
+WorkItem in a project plus every `Dependency` edge among them (same
+BFS-with-cap discipline as the existing per-item query), with a computed
+`readyToStart` flag (OPEN/IN_PROGRESS status, every upstream dependency
+already COMPLETED/CLOSED) as the "parallel-safe-task explanation"; a new
+`/projects/[id]/planner` page reusing `DependencyGraph.tsx` verbatim for
+the Graph view, plus a new read-only status-lane Board view (no
+drag-and-drop status editing — that stays the existing status-change
+action's job). Explicitly deferred: critical-path computation (the
+existing `getCriticalPath` stub has been a documented TODO since Slice 2);
+hierarchy/`parentId` edges in the graph (stays Dependency-only, matching
+the gap-analysis's own note that Hierarchy vs. Dependency separation is
+already correct and shouldn't be conflated); the new product definition's
+Owner/Decision-Owner/Approval/Tests/Changes graph overlay (Decision-Owner
+and Change history don't exist yet in this codebase per Decision 5's
+standing deferral, so they can't be overlaid regardless).
+
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
@@ -840,11 +871,14 @@ recursive/nested decomposition, and a generic Child/Bulk Approval pattern
   framing is deferred to a later slice as Impact Discovery (§17), now framed
   as a Requirement-scoped concern rather than a Project/Task-creation-time
   one — see the status block below for why.
-- **Slice 16** — the Planner: a project-wide dependency map + status-lane
-  board (switchable), focus mode, and parallel-safe-task explanation.
-  Extends `DependencyGraph.tsx`'s existing layered-layout/focus engine
-  (today scoped to one item's neighborhood inside the 360° Record) to
-  whole-project scope. Independent of 12–15; can proceed in parallel.
+- **Slice 16** *(proposed 2026-08-18 as `project-wide-planner` — see the
+  dedicated status block below; this line is now a summary only, not the
+  scope of record)* — the Planner: a project-wide dependency map +
+  status-lane board (switchable), focus mode, and parallel-safe-task
+  explanation. Extends `DependencyGraph.tsx`'s existing layered-layout/
+  focus engine (today scoped to one item's neighborhood inside the 360°
+  Record) to whole-project scope. Independent of 12–15; can proceed in
+  parallel.
 - **Slice 17** — the shared "AI Recommendation card" pattern (what/why/
   assumptions/estimated time/estimated cost/what happens under each
   alternative), applied first to the AI-vs-developer executor
