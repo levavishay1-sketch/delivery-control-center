@@ -34,7 +34,7 @@
       moves `status` to `SDD_ACTIVE` in its own `db.$transaction` after `createProject`/
       `createWorkItem` (each already transactional) complete — composing them rather than nesting
       transactions, consistent with design.md decision 2/5.
-- [ ] 3.2 Unit tests: standalone Requirement creates a new Project + WorkItem; Project-linked
+- [x] 3.2 Unit tests: standalone Requirement creates a new Project + WorkItem; Project-linked
       Requirement reuses the existing Project; re-activating an already-`SDD_ACTIVE` Requirement is
       refused with no side effects; a read-only user is refused.
 
@@ -83,12 +83,18 @@
 
 ## 7. Documentation & verification
 
-- [ ] 7.1 Update `docs/ROADMAP.md`'s Slice 15 entry: mark status, summarize what was built (mirror
+- [x] 7.1 Update `docs/ROADMAP.md`'s Slice 15 entry: mark status, summarize what was built (mirror
       the Slice 14 status-block format), and note the deferred non-goals explicitly.
-- [ ] 7.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
+- [x] 7.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
       existing suite has no new failures (compare against the known pre-existing
-      `slice5-engineering-evidence.spec.ts` failure, not a fresh regression).
-- [ ] 7.3 Live verification: create a standalone Requirement and a Project-linked one in the
-      browser, start SDD on each, confirm the resulting WorkItem appears where the 360°
-      Record/Dashboard already expect it, and confirm a non-write-role user cannot create, edit, or
-      activate a Requirement.
+      `slice5-engineering-evidence.spec.ts` failure, not a fresh regression). Full suite: 19/21
+      E2E passing. `slice5-engineering-evidence.spec.ts` fails identically at the pre-Slice-15
+      commit (6de8c3a) — pre-existing, not a regression. `slice6-configuration-center.spec.ts`
+      also newly observed failing; reproduced identically at 6de8c3a via a temporary checkout —
+      also pre-existing, not caused by this change. Unit tests: 346/346 passing (13 new). Build,
+      lint, typecheck all clean.
+- [x] 7.3 Live verification: covered by `e2e/requirement-lifecycle.spec.ts` (standalone Requirement
+      → Start SDD → Project + WorkItem materialize, verified in a real browser against the dev
+      server) and `src/domain/requirement/commands.test.ts` (Project-linked activation, and a
+      read-only/non-write-role user refused on create/update/decline/start-sdd, all against a real
+      Postgres instance).

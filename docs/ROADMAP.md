@@ -694,35 +694,61 @@ small changes" rule):
   record, not a `Constitution` row, since `Constitution` (Slice 2) is
   Project-scoped and this is Repository-scoped with no Project involved.
 
-**Slice 15 status:** Scoped, not started. Re-scoped 2026-08-18; OpenSpec
-planning artifacts proposed the same day at
-`openspec/changes/requirement-lifecycle-foundation/`. The old blueprint's
-one-line scope ("AI recommends relevant repos/sources for a new
-Project/Task") is superseded by `2026-08-17-core-product-definition.md`
-§14-27, per the gap-analysis's own Part 3 row: "**Needs re-scoping** — now
-that Requirement placement is resolved (Part 2, Decision 3: standalone or
-optionally linked to a Project), its trigger point likely moves from
-'creating a Project/Task' to 'Requirement Triage,' with the Project-linked
-case as one path through it." Since §14-27 is itself "the single largest
-net-new area" (gap-analysis Part 1) with nothing above Project/WorkItem
-existing today, this slice builds the `Requirement` entity first rather
-than continuing the old Slice 15's narrower recommendation framing.
-Bounded scope (see the change's design.md for the full non-goals list): a
-`Requirement` model (client-owned, `WorkItemType`-typed, standalone or
-optionally Project-linked, per Decision 3), CRUD, and one explicit "Start
-SDD" action that creates a Project (if needed) + root WorkItem — reusing
-`createProject`/`createWorkItem` verbatim. Deliberately does NOT call
+**Slice 15 status:** Done. Re-scoped 2026-08-18 (see below), implemented
+and archived the same day. The old blueprint's one-line scope ("AI
+recommends relevant repos/sources for a new Project/Task") is superseded
+by `2026-08-17-core-product-definition.md` §14-27, per the gap-analysis's
+own Part 3 row: "**Needs re-scoping** — now that Requirement placement is
+resolved (Part 2, Decision 3: standalone or optionally linked to a
+Project), its trigger point likely moves from 'creating a Project/Task' to
+'Requirement Triage,' with the Project-linked case as one path through
+it." Since §14-27 is itself "the single largest net-new area" (gap-analysis
+Part 1) with nothing above Project/WorkItem existing today, this slice
+built the `Requirement` entity first rather than continuing the old
+Slice 15's narrower recommendation framing.
+
+As built: a new `Requirement` model (client-owned via `clientId`,
+`WorkItemType`-typed, optional `projectId` — standalone by default, per
+Decision 3) plus a `RequirementStatus` enum (`OPEN`/`SDD_ACTIVE`/
+`DECLINED`); the `src/domain/requirement/` domain layer
+(`createRequirement`/`updateRequirement`/`declineRequirement`/
+`startSddForRequirement`, `listRequirementsForClient`/`getRequirementById`),
+write-gated the same `requireClientRole(ctx, clientId, WRITE_ROLES)` way
+every other client-scoped command is; `POST`/`GET /api/requirements`,
+`GET`/`PATCH /api/requirements/[id]`, `POST /api/requirements/[id]/decline`,
+`POST /api/requirements/[id]/start-sdd`; a "Requirements" panel + form on
+the Clients hub's existing client detail page, and a new
+`/requirements/[id]` detail page with Start SDD/Decline actions. One
+explicit "Start SDD" action materializes a Project (if the Requirement is
+standalone, via `createProject`) + a root WorkItem (via `createWorkItem`)
+under it and moves the Requirement to `SDD_ACTIVE` — reusing both commands
+verbatim, no new execution path. It deliberately does NOT call
 `startPipeline` as part of activation: a freshly created Project has no
 approved Constitution yet, and `startPipeline` requires one, so Pipeline
-start stays the existing separate, Constitution-gated action
-(`StartPipelineButton`) already used for every other WorkItem. Explicitly
-deferred to a later slice: Requirement Triage (§16), Impact Discovery
-(§17 — absorbs the old Slice 15's "recommend relevant repos" framing),
-Deep Requirement Analysis (§18-20), AI Questions with evidence/options
-(§21), generalized Pause-and-Resume (§22), external-source Requirement
-intake, the richer multi-choice SDD Activation set (Continue-Without-SDD /
-Postpone / Return-to-Discovery, §25-27), and Requirement revisioning (per
-Decision 5's standing deferral).
+start stays the existing, separate, Constitution-gated action
+(`StartPipelineButton`) already used for every other WorkItem — this was a
+correction made mid-implementation (the original plan called
+`startPipeline` directly) once that constraint was found in
+`src/domain/pipeline/commands.ts`. Covered by 13 new unit tests
+(`src/domain/requirement/commands.test.ts`, against a real Postgres
+instance — standalone/Project-linked activation, re-activation refusal,
+cross-client Project rejection, and non-write-role refusal on every
+mutating command) and a new E2E spec
+(`e2e/requirement-lifecycle.spec.ts`, standalone Requirement → Start SDD →
+Project + WorkItem materialize, verified live against the dev server).
+Full suite: build/lint/typecheck clean, 346/346 unit tests passing, 19/21
+E2E passing — the two failures
+(`slice5-engineering-evidence.spec.ts`, `slice6-configuration-center.spec.ts`)
+both reproduce identically at the pre-Slice-15 commit (`6de8c3a`), verified
+via a temporary checkout to that commit and back; neither is a regression
+from this change. Explicitly deferred to a later slice, per the change's
+design.md: Requirement Triage (§16), Impact Discovery (§17 — absorbs the
+old Slice 15's "recommend relevant repos" framing), Deep Requirement
+Analysis (§18-20), AI Questions with evidence/options (§21), generalized
+Pause-and-Resume (§22), external-source Requirement intake, the richer
+multi-choice SDD Activation set (Continue-Without-SDD / Postpone /
+Return-to-Discovery, §25-27), and Requirement revisioning (per Decision
+5's standing deferral).
 
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
