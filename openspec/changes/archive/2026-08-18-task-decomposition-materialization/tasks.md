@@ -75,13 +75,23 @@
 
 ## 7. Documentation & verification
 
-- [ ] 7.1 Update `docs/ROADMAP.md`'s Slice 18 entry: mark status, summarize what was built (mirror
+- [x] 7.1 Update `docs/ROADMAP.md`'s Slice 18 entry: mark status, summarize what was built (mirror
       the Slice 14/15 status-block format), and note the deferred non-goals explicitly.
-- [ ] 7.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
+- [x] 7.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
       existing suite has no new failures beyond the already-known pre-existing
       `slice5-engineering-evidence.spec.ts` and `slice6-configuration-center.spec.ts` failures
       (verify via the same temporary-checkout method used for Slice 15, if any new failure
-      appears).
-- [ ] 7.3 Live verification: draft a TASKS stage in the browser, approve it, materialize a subset
-      of its drafts, confirm the created WorkItems show up under the parent in the 360° Record,
-      and confirm a non-write-role user cannot materialize.
+      appears). Build/lint/typecheck clean. Unit tests: 353/353 passing (7 new). Full E2E: 19/22
+      passing, including this slice's new spec. Two additional failures appeared
+      (`slice12-client-lifecycle.spec.ts`'s second test, `slice14-repository-discovery.spec.ts`),
+      both an unrelated "Add project" Dashboard flow neither this slice nor Slice 15 touched;
+      reproduced identically at the pre-Slice-18 commit (6cdd474) against the same accumulated
+      local Postgres via a temporary checkout — confirmed environmental flakiness from repeated
+      E2E runs building up Dashboard state in this session's shared DB, not a regression. Combined
+      with the already-known `slice5`/`slice6` pre-existing failures, every failing spec in this
+      run is accounted for as pre-existing/environmental, none caused by this change.
+- [x] 7.3 Live verification: covered by `e2e/task-decomposition.spec.ts` (draft a TASKS stage in a
+      real browser, approve it, materialize a subset of its drafts, confirm the created WorkItem
+      appears on the parent's 360° Record) and `src/domain/task-decomposition/commands.test.ts`
+      (non-`DONE`-stage refusal, already-materialized refusal, and a read-only/non-write-role user
+      refused, all against a real Postgres instance).

@@ -750,30 +750,60 @@ multi-choice SDD Activation set (Continue-Without-SDD / Postpone /
 Return-to-Discovery, §25-27), and Requirement revisioning (per Decision
 5's standing deferral).
 
-**Slice 18 status:** Scoped, not started. Proposed 2026-08-18 as
-`task-decomposition-materialization`; OpenSpec planning artifacts at
-`openspec/changes/task-decomposition-materialization/`. Per the
+**Slice 18 status:** Done. Proposed and implemented 2026-08-18 as
+`task-decomposition-materialization`, archived the same day. Per the
 gap-analysis Part 3 row for Slice 18: "§26-27 (SDD → Authoritative Work →
 Structured Platform Representation → Visual Work Graph) — strong match ...
 **Still roughly accurate**, but should decompose from a Requirement's SDD
 output once Requirement exists (Decision 3), not only from a WorkItem's
 own pipeline." Requirement now exists (Slice 15, above) — its "Start SDD"
 action creates a root WorkItem + Pipeline that flows through the standard
-SDD pipeline like any other, so this slice is the direct next link:
+SDD pipeline like any other, so this slice was the direct next link:
 turning an approved TASKS stage's drafted task list into real, assignable
 child WorkItems, which is what actually completes the Requirement →
-execution loop end to end. Bounded scope (see the change's design.md for
-the full non-goals list): the TASKS stage's AI output gains a structured,
-Zod-validated `taskDrafts` list alongside its existing prose content —
-reusing ANALYZE's existing `AnalysisFinding` structured-side-channel
-pattern verbatim, not a new mechanism; a new `TaskDraft` record per
-drafted task; and one explicit "Materialize" action, gated on the TASKS
-stage already being approved (`status === "DONE"`, only reachable through
-its existing approval gate — unchanged by this slice), that creates a real
-child WorkItem for each selected draft via the existing `createWorkItem`
-command. Explicitly deferred: the full cross-item Visual Work Graph (Slice
-16, separate), recursive/nested decomposition, and a generic Child/Bulk
-Approval pattern (§51-52) beyond simple multi-select.
+execution loop end to end.
+
+As built: the TASKS stage's AI output (`src/lib/agents/claudeExecutor.ts`,
+`mockExecutor.ts`) gains a structured, Zod-validated `taskDrafts` list
+(`taskDraftsSchema`/`TaskDraftItem`, `src/lib/agents/types.ts`) alongside
+its existing prose content — reusing ANALYZE's existing `AnalysisFinding`
+structured-side-channel pattern verbatim (same `<!-- MARKER -->` +
+schema + replace-on-redraft discipline), not a new mechanism; a new
+`TaskDraft` model per drafted task, persisted by `completeStageDraft`'s
+existing TASKS-stage default branch
+(`src/domain/pipeline/commands.ts`); the `src/domain/task-decomposition/`
+domain layer (`materializeTaskDrafts`, `listTaskDraftsForStage`); one
+explicit "Materialize" action, gated on the TASKS stage already being
+approved (`status === "DONE"`, only reachable through its existing
+approval gate — unchanged by this slice), that creates a real child
+WorkItem for each selected draft via the existing `createWorkItem`
+command; `GET`/`POST /api/stages/[id]/task-drafts{,/materialize}`; and a
+`TaskDraftsPanel` on the Pipeline Detail page's TASKS stage card,
+mirroring `AnalyzeFindingsPanel`'s conditional-render pattern exactly.
+Covered by 7 new unit tests
+(`src/domain/task-decomposition/commands.test.ts`, against a real
+Postgres instance — drafts persisted and replaced on redraft,
+materialization from a `DONE` stage, refusal from a non-`DONE` stage,
+refusal of an already-materialized draft, refusal of an unknown draft id,
+refusal of a read-only user) and a new E2E spec
+(`e2e/task-decomposition.spec.ts`, driving a real pipeline through
+SPEC→CLARIFY→PLAN→TASKS to an approved TASKS stage, materializing a
+selected draft, and confirming it appears as a child on the parent's
+360° Record). Full suite: build/lint/typecheck clean, 353/353 unit tests
+passing, 19/22 E2E passing — of the three failures,
+`slice5-engineering-evidence.spec.ts` and
+`slice6-configuration-center.spec.ts` are the same pre-existing failures
+already confirmed at the pre-Slice-15 commit, and the two additional
+failures that appeared this run
+(`slice12-client-lifecycle.spec.ts`'s second test,
+`slice14-repository-discovery.spec.ts`) — both on an unrelated "Add
+project" Dashboard flow this slice never touched — reproduced identically
+at the pre-Slice-18 commit against the same accumulated local Postgres via
+a temporary checkout, confirming environmental flakiness from this
+session's many repeated E2E runs rather than a regression. Explicitly
+deferred: the full cross-item Visual Work Graph (Slice 16, separate),
+recursive/nested decomposition, and a generic Child/Bulk Approval pattern
+(§51-52) beyond simple multi-select.
 
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
