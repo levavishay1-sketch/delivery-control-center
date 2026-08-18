@@ -805,30 +805,52 @@ deferred: the full cross-item Visual Work Graph (Slice 16, separate),
 recursive/nested decomposition, and a generic Child/Bulk Approval pattern
 (§51-52) beyond simple multi-select.
 
-**Slice 16 status:** Scoped, not started. Proposed 2026-08-18 as
-`project-wide-planner`; OpenSpec planning artifacts at
-`openspec/changes/project-wide-planner/`. Per the gap-analysis Part 3 row
-for Slice 16: "§31 (Visual Work Graph) — close conceptual match ...
-**Still roughly accurate, extend field set** — least disrupted of the
-eight [old blueprint slices]." Chosen as the next slice over Slice 17 (AI
-Recommendation card) because Slice 17's own gap-analysis assessment says
-it "should incorporate Blocker criticality (§35) and Execution Readiness
-(§34) once those exist" — neither exists yet (Blocker severity deferred
-per Decision 7; Execution Readiness doesn't exist at all) — while Slice 16
-has no such blocking dependency and extends a component
+**Slice 16 status:** Done. Proposed and implemented 2026-08-18 as
+`project-wide-planner`; archived to
+`openspec/changes/archive/2026-08-18-project-wide-planner/`, delta spec
+synced into `openspec/specs/project-planner/spec.md`. Per the gap-analysis
+Part 3 row for Slice 16: "§31 (Visual Work Graph) — close conceptual
+match ... **Still roughly accurate, extend field set** — least disrupted
+of the eight [old blueprint slices]." Chosen as the next slice over Slice
+17 (AI Recommendation card) because Slice 17's own gap-analysis assessment
+says it "should incorporate Blocker criticality (§35) and Execution
+Readiness (§34) once those exist" — neither exists yet (Blocker severity
+deferred per Decision 7; Execution Readiness doesn't exist at all) — while
+Slice 16 has no such blocking dependency and extends a component
 (`DependencyGraph.tsx`) that's already fully built: layered-layout,
 pan/zoom, and focus/highlight, today scoped to one WorkItem's neighborhood
-inside the 360° Record. Bounded scope (see the change's design.md for the
-full non-goals list): a new `getProjectWorkGraph` query returning every
-WorkItem in a project plus every `Dependency` edge among them (same
-BFS-with-cap discipline as the existing per-item query), with a computed
-`readyToStart` flag (OPEN/IN_PROGRESS status, every upstream dependency
-already COMPLETED/CLOSED) as the "parallel-safe-task explanation"; a new
-`/projects/[id]/planner` page reusing `DependencyGraph.tsx` verbatim for
-the Graph view, plus a new read-only status-lane Board view (no
-drag-and-drop status editing — that stays the existing status-change
-action's job). Explicitly deferred: critical-path computation (the
-existing `getCriticalPath` stub has been a documented TODO since Slice 2);
+inside the 360° Record.
+
+Built: `getProjectWorkGraph(ctx, projectId)` in
+`src/domain/dependency/queries.ts` — every WorkItem in a project plus
+every `Dependency` edge among them (same BFS-with-cap discipline, sharing
+`MAX_GRAPH_NODES`, as the existing per-item query), with a computed
+`readyToStart` flag per node (OPEN/IN_PROGRESS status, every upstream
+dependency already COMPLETED/CLOSED) as the "parallel-safe-task
+explanation" — access-gated the same way (`requireClientRole(ctx,
+project.clientId, ALL_ROLES)`), 9 unit tests covering full node/edge
+return, ready-with-no-deps, blocked-by-unresolved-dependency,
+ready-once-resolved, never-ready-off-OPEN/IN_PROGRESS, read-only viewer
+access, and outsider refusal. A new `/projects/[id]/planner` page renders
+`PlannerView` (client-side Graph/Board toggle): the Graph view reuses
+`DependencyGraph.tsx` via a new optional `readyIds?: Set<string>` prop
+(green ring + legend entry when set; the existing single-item Dependencies
+tab call site omits it and renders unchanged) rather than literal
+zero-modification, since task 2.2 required visually marking
+`readyToStart` nodes; the Board view is a new `PlannerBoard.tsx`
+component, one status lane per populated `WorkStatus` value, read-only
+cards linking to the item's 360° Record with a "● Ready" badge — no
+drag-and-drop status editing, which stays the existing status-change
+action's job. "Planner" links added to the Dashboard's project card and
+Project Settings page. E2E spec
+(`e2e/project-wide-planner.spec.ts`) creates two WorkItems with a
+dependency between them, verifies the Graph view renders both and shows
+the "Ready to start" legend, switches to Board view, confirms status-lane
+grouping and that the unblocked item is marked ready while the blocked one
+is not, and confirms a card click opens the 360° Record — passing. Full
+suite: 360/360 unit tests passing; build, lint, and typecheck clean.
+Explicitly deferred: critical-path computation (the existing
+`getCriticalPath` stub has been a documented TODO since Slice 2);
 hierarchy/`parentId` edges in the graph (stays Dependency-only, matching
 the gap-analysis's own note that Hierarchy vs. Dependency separation is
 already correct and shouldn't be conflated); the new product definition's

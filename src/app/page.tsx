@@ -301,6 +301,9 @@ export default async function HomePage() {
                         <Link href={`/projects/${project.id}/constitution`} className="text-xs text-accent hover:underline">
                           Constitution
                         </Link>
+                        <Link href={`/projects/${project.id}/planner`} className="text-xs text-accent hover:underline">
+                          Planner
+                        </Link>
                         <Link href={`/projects/${project.id}/settings`} className="text-xs text-accent hover:underline">
                           Settings
                         </Link>

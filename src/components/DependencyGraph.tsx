@@ -30,7 +30,20 @@ const ROW_GAP = 64;
  * enough that a hand-rolled layered layout + SVG render is simpler than pulling in
  * Cytoscape/D3 for it.
  */
-export function DependencyGraph({ nodes, edges, focusNodeId, truncated }: { nodes: GraphNode[]; edges: GraphEdge[]; focusNodeId: string; truncated: boolean }) {
+export function DependencyGraph({
+  nodes,
+  edges,
+  focusNodeId,
+  truncated,
+  readyIds,
+}: {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  focusNodeId: string;
+  truncated: boolean;
+  /** Slice 16 — ids ready to start now (Planner's project-wide view only); omitted elsewhere, so the single-item Dependencies tab renders unchanged. */
+  readyIds?: Set<string>;
+}) {
   const [selectedId, setSelectedId] = useState(focusNodeId);
   const [transform, setTransform] = useState({ x: 40, y: 40, scale: 1 });
   const dragState = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
@@ -172,8 +185,16 @@ export function DependencyGraph({ nodes, edges, focusNodeId, truncated }: { node
                   }
                 }}
               >
-                <rect width={NODE_W} height={NODE_H} rx={6} fill={colors.fill} stroke="currentColor" strokeOpacity={0.15} />
-                <title>{`${n.title} — ${n.status}`}</title>
+                <rect
+                  width={NODE_W}
+                  height={NODE_H}
+                  rx={6}
+                  fill={colors.fill}
+                  stroke={readyIds?.has(n.id) ? "#22c55e" : "currentColor"}
+                  strokeWidth={readyIds?.has(n.id) ? 2 : 1}
+                  strokeOpacity={readyIds?.has(n.id) ? 0.9 : 0.15}
+                />
+                <title>{`${n.title} — ${n.status}${readyIds?.has(n.id) ? " — ready to start" : ""}`}</title>
                 <text x={8} y={18} fontSize={11} fontWeight={600} fill={colors.text}>
                   {truncate(n.title, 20)}
                 </text>
@@ -190,6 +211,7 @@ export function DependencyGraph({ nodes, edges, focusNodeId, truncated }: { node
         <Legend color="#10b981" label="Selected" />
         <Legend color="#3b82f6" label="Upstream (depends on)" />
         <Legend color="#a855f7" label="Downstream (depends on this)" />
+        {readyIds && <Legend color="#22c55e" label="Ready to start" />}
       </div>
     </div>
   );

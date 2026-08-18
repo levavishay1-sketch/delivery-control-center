@@ -55,9 +55,14 @@ export default async function ProjectSettingsPage({ params }: PageProps<"/projec
         <h1 className="text-xl font-semibold">
           {project.name} <span className="text-neutral-400">({project.key})</span>
         </h1>
-        <Link href="/" className="mt-1 inline-block text-xs text-accent hover:underline">
-          ← Back to Dashboard
-        </Link>
+        <div className="mt-1 flex items-center gap-3">
+          <Link href="/" className="text-xs text-accent hover:underline">
+            ← Back to Dashboard
+          </Link>
+          <Link href={`/projects/${project.id}/planner`} className="text-xs text-accent hover:underline">
+            Planner
+          </Link>
+        </div>
       </div>
 
       <Panel title="Connector">

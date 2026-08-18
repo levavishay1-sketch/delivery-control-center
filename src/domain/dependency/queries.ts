@@ -1,4 +1,8 @@
 import { db } from "@/lib/db";
+import { getProjectById } from "@/domain/project/queries";
+import { requireClientRole, ALL_ROLES } from "@/domain/shared/authz";
+import { NotFoundError } from "@/domain/shared/errors";
+import type { AuthContext } from "@/domain/shared/context";
 
 /**
  * Gets all dependencies for a work item (both upstream and downstream).
@@ -73,4 +77,57 @@ export async function getWorkItemDependencyGraph(workItemId: string) {
   });
 
   return { nodes, edges, truncated: visited.size >= MAX_GRAPH_NODES };
+}
+
+export interface ProjectWorkGraphNode {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  readyToStart: boolean;
+}
+
+/**
+ * Slice 16 — every WorkItem in a project plus every Dependency edge among them, for the Planner's
+ * Graph and Board views. Same MAX_GRAPH_NODES cap and { nodes, edges, truncated } shape as
+ * getWorkItemDependencyGraph above (design.md decision 2), differing only in how nodes are
+ * selected (project membership, not BFS reachability from one node).
+ */
+export async function getProjectWorkGraph(ctx: AuthContext, projectId: string) {
+  const project = await getProjectById(projectId);
+  if (!project) throw new NotFoundError("Project not found");
+  requireClientRole(ctx, project.clientId, ALL_ROLES);
+
+  const items = await db.workItem.findMany({
+    where: { projectId },
+    select: { id: true, title: true, type: true, status: true },
+    take: MAX_GRAPH_NODES,
+    orderBy: { createdAt: "asc" },
+  });
+  const itemIds = items.map((i) => i.id);
+
+  const deps = await db.dependency.findMany({
+    where: { workItemId: { in: itemIds }, dependsOnWorkItemId: { in: itemIds } },
+  });
+
+  // A WorkItem is ready to start (design.md decision 3) when it's OPEN/IN_PROGRESS and every
+  // WorkItem it depends on is already COMPLETED/CLOSED — computed here, not stored, since it's a
+  // pure function of already-stored facts that can drift independently of any write this slice makes.
+  const statusById = new Map(items.map((i) => [i.id, i.status]));
+  const upstreamOf = new Map<string, string[]>();
+  for (const d of deps) {
+    (upstreamOf.get(d.workItemId) ?? upstreamOf.set(d.workItemId, []).get(d.workItemId)!).push(d.dependsOnWorkItemId);
+  }
+  const RESOLVED_STATUSES = new Set(["COMPLETED", "CLOSED"]);
+  const READY_STATUSES = new Set(["OPEN", "IN_PROGRESS"]);
+
+  const nodes: ProjectWorkGraphNode[] = items.map((item) => {
+    const upstream = upstreamOf.get(item.id) ?? [];
+    const readyToStart = READY_STATUSES.has(item.status) && upstream.every((id) => RESOLVED_STATUSES.has(statusById.get(id) ?? ""));
+    return { id: item.id, title: item.title, type: item.type, status: item.status, readyToStart };
+  });
+
+  const edges = deps.map((d) => ({ id: d.id, workItemId: d.workItemId, dependsOnWorkItemId: d.dependsOnWorkItemId, reason: d.reason }));
+
+  return { nodes, edges, truncated: items.length >= MAX_GRAPH_NODES };
 }
