@@ -75,7 +75,7 @@ export default async function ClientDetailPage({ params }: PageProps<"/clients/[
         ) : (
           <RowList>
             {repositories.map((repo) => (
-              <Row key={repo.id} columns="1fr 1fr">
+              <Row key={repo.id} href={`/repositories/${repo.id}`} columns="1fr 1fr">
                 <p className="font-medium">
                   {repo.owner}/{repo.name}
                 </p>

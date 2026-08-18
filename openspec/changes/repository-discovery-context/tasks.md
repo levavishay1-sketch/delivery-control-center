@@ -150,22 +150,33 @@
 
 ## Task Group 8: UI
 
-- [ ] New `/repositories/[id]/page.tsx`: repository header (owner/name), a Discovery panel showing
+- [x] New `/repositories/[id]/page.tsx`: repository header (owner/name), a Discovery panel showing
       `getRepositoryContext`'s current summary (each field's `summary` + an evidence list) with a
       completed-at label, or an empty state with a "Run Discovery" button when none exists yet; a
       run-history list from `listRepositoryDiscoveries` (status badges reusing `StatusBadge`,
       cost, timestamps). Reuses Slice 7/10's `Panel`/`Row`/`Button`/`StatusBadge` primitives and
-      Slice 11's `InfoTooltip` for the "context can go stale" explanation.
-- [ ] "Run Discovery" button: a small `"use client"` island posting to the new route and
-      `router.refresh()`, following the existing mutation-island pattern used elsewhere (e.g.
-      `RepositoryLinkForm`).
-- [ ] Wire the client detail view's existing repository rows (Slice 12) to link to
+      Slice 11's `InfoTooltip` for the "context can go stale" explanation. Added
+      `getRepositoryDetail` to `repository-discovery/queries.ts` for the page's header data.
+- [x] "Run Discovery" button (`src/components/RunDiscoveryButton.tsx`): a small `"use client"`
+      island posting to the new route and `router.refresh()`, following the existing
+      mutation-island pattern used elsewhere (e.g. `RepositoryLinkForm`).
+- [x] Wired the client detail view's existing repository rows (Slice 12) to link to
       `/repositories/[id]` — no other change to that page.
-- [ ] Loading/empty/error/permission-denied states per this project's Definition of Done.
-- [ ] E2E spec: view a repository with no Discovery yet (empty state, button visible to a
-      write-capable user, hidden/disabled for a read-only user) → trigger a run → see it complete
-      (against the mock executor) → findings and evidence visible, run appears in history → trigger
-      again → a second version appears without losing the first.
+- [x] Loading/empty/error/permission-denied states per this project's Definition of Done
+      (`force-dynamic` + `ForbiddenError` → `notFound()`, matching the Clients hub's own pattern;
+      empty-state copy for no-Discovery-yet; `canManage` gates the trigger button server-side).
+- [x] E2E spec (`e2e/slice14-repository-discovery.spec.ts`, stub GitHub server extended with the
+      Contents API endpoints): view a repository with no Discovery yet (empty state, button
+      visible to a write-capable org-admin user) → trigger a run → poll until it completes against
+      the mock executor (real evidence-cited findings from the stub's README/package.json) →
+      trigger again → v2 appears alongside v1 in history, nothing lost. Passing, plus manual
+      browser verification (login as `admin@example.com` and `viewer@example.com`) of: the
+      SUCCEEDED render with real evidence citations, the FAILED render with `lastError` as the
+      reason, and the read-only viewer correctly seeing the Context panel but not the trigger
+      button. Full E2E suite green except one pre-existing failure in
+      `slice5-engineering-evidence.spec.ts` (reproduced identically against the pre-Slice-14
+      commit via a throwaway `git worktree`, per this project's own established verification
+      convention — not a regression from this change).
 
 ## Task Group 9: Documentation & verification
 

@@ -11,6 +11,13 @@ async function requireReadAccessToRepository(ctx: AuthContext, repositoryId: str
   return repository;
 }
 
+/** A repository's own detail, for the Discovery page's header — reuses the same read-access check as the rest of this module. */
+export async function getRepositoryDetail(ctx: AuthContext, repositoryId: string) {
+  const repository = await requireReadAccessToRepository(ctx, repositoryId);
+  const client = await db.client.findUniqueOrThrow({ where: { id: repository.clientId }, select: { id: true, name: true } });
+  return { repository, client };
+}
+
 export interface RepositoryContext {
   findings: RepositoryDiscoveryFindings;
   version: number;
