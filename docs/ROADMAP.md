@@ -934,7 +934,20 @@ resolves) before navigating away. Live-verified in the browser: the
 Preview step correctly lists an unassigned item under "will move
 automatically" and an explicit item under "has its own explicit
 assignment — untouched unless you choose to reassign," and the panel
-reflects the new default immediately after applying.
+reflects the new default immediately after applying. Full E2E suite: 18
+passed, 6 failed — the two known pre-existing baseline failures plus two
+already-confirmed-environmental-flakiness failures from Slice 16's
+verification, plus two that needed real attention:
+`slice4-connector-framework.spec.ts` had a genuine regression (the new
+Default Executor `<select>` made its generic `page.locator("select")`
+ambiguous — fixed by scoping the pre-existing test to
+`getByLabel("Type", { exact: true })`; a second, separate pre-existing
+QuickViewDrawer hydration flake in that same spec remains, unrelated to
+Slice 19); `slice8-i18n-rtl.spec.ts` was verified via the same
+temporary-checkout method as prior slices to reproduce identically at the
+pre-Slice-19 commit, confirming environmental flakiness rather than a
+regression. `e2e/cascading-task-assignment.spec.ts` itself passed on every
+run.
 
 Explicitly deferred: `ownerId` cascade/assignment (separate concept,
 untouched); Decision Ownership transfer and any entity type beyond

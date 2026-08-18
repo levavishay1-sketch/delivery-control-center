@@ -80,9 +80,31 @@
 - [x] 6.1 Update `docs/ROADMAP.md`'s Slice 19 entry: mark status, summarize what was built (mirror
       the Slice 16/18 status-block format), and note the deferred non-goals explicitly (ownerId,
       Decision Ownership, other entity types, Configuration Center generalization).
-- [ ] 6.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
+- [x] 6.2 Run build, lint, typecheck, unit tests, and this change's E2E spec; confirm the full
       existing suite has no new failures beyond the already-known pre-existing baseline (verify
-      via the temporary-checkout method used for prior slices if any new failure appears).
+      via the temporary-checkout method used for prior slices if any new failure appears). Build,
+      lint, typecheck all clean; 373/373 unit tests passing (14 new). Full E2E suite: 18 passed, 6
+      failed on first run. Of the 6: `slice5-engineering-evidence.spec.ts` and
+      `slice6-configuration-center.spec.ts` are the known pre-existing baseline;
+      `slice12-client-lifecycle.spec.ts` and `slice14-repository-discovery.spec.ts` are the
+      environmental flakiness already confirmed during Slice 16's verification. The remaining two
+      needed real attention:
+      - `slice4-connector-framework.spec.ts` — a genuine regression, not flakiness: the new
+        "Default Executor" `<select>` on Project Settings made the test's generic
+        `page.locator("select")` ambiguous (strict-mode violation). Fixed by scoping the
+        pre-existing test to `getByLabel("Type", { exact: true })` (the connector's own select) —
+        `getByLabel` does substring matching by default, and "Type" is a substring of "Default
+        executor type". Reran after the fix: the selector conflict is gone; a second, unrelated
+        pre-existing QuickViewDrawer hydration-mismatch flake remains (same symptom already seen
+        in this same spec during earlier full-suite runs this session, confirmed pre-existing).
+      - `slice8-i18n-rtl.spec.ts` — verified via the same temporary-checkout method used for prior
+        slices: checked out the pre-Slice-19 commit (`654f623`), regenerated the Prisma client and
+        Next.js route types, reran the spec against the same accumulated local Postgres — failed
+        identically there too (a third distinct symptom across this session's runs of this same
+        spec, consistent with generic environmental flakiness rather than a code regression).
+        Restored the working branch, regenerated Prisma client and route types, `tsc --noEmit`
+        clean.
+      New `e2e/cascading-task-assignment.spec.ts` passed on every run.
 - [x] 6.3 Live verification: open a project with a mix of explicit and unassigned WorkItems in the
       browser, set a default executor, preview and confirm both cascade options, confirm the
       resulting executor assignments and audit trail entries match.
