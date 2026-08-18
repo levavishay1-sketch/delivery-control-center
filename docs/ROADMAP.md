@@ -694,6 +694,36 @@ small changes" rule):
   record, not a `Constitution` row, since `Constitution` (Slice 2) is
   Project-scoped and this is Repository-scoped with no Project involved.
 
+**Slice 15 status:** Scoped, not started. Re-scoped 2026-08-18; OpenSpec
+planning artifacts proposed the same day at
+`openspec/changes/requirement-lifecycle-foundation/`. The old blueprint's
+one-line scope ("AI recommends relevant repos/sources for a new
+Project/Task") is superseded by `2026-08-17-core-product-definition.md`
+§14-27, per the gap-analysis's own Part 3 row: "**Needs re-scoping** — now
+that Requirement placement is resolved (Part 2, Decision 3: standalone or
+optionally linked to a Project), its trigger point likely moves from
+'creating a Project/Task' to 'Requirement Triage,' with the Project-linked
+case as one path through it." Since §14-27 is itself "the single largest
+net-new area" (gap-analysis Part 1) with nothing above Project/WorkItem
+existing today, this slice builds the `Requirement` entity first rather
+than continuing the old Slice 15's narrower recommendation framing.
+Bounded scope (see the change's design.md for the full non-goals list): a
+`Requirement` model (client-owned, `WorkItemType`-typed, standalone or
+optionally Project-linked, per Decision 3), CRUD, and one explicit "Start
+SDD" action that creates a Project (if needed) + root WorkItem — reusing
+`createProject`/`createWorkItem` verbatim. Deliberately does NOT call
+`startPipeline` as part of activation: a freshly created Project has no
+approved Constitution yet, and `startPipeline` requires one, so Pipeline
+start stays the existing separate, Constitution-gated action
+(`StartPipelineButton`) already used for every other WorkItem. Explicitly
+deferred to a later slice: Requirement Triage (§16), Impact Discovery
+(§17 — absorbs the old Slice 15's "recommend relevant repos" framing),
+Deep Requirement Analysis (§18-20), AI Questions with evidence/options
+(§21), generalized Pause-and-Resume (§22), external-source Requirement
+intake, the richer multi-choice SDD Activation set (Continue-Without-SDD /
+Postpone / Return-to-Discovery, §25-27), and Requirement revisioning (per
+Decision 5's standing deferral).
+
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
@@ -719,9 +749,16 @@ small changes" rule):
   Discovery. System Context/Reconciliation (cross-repo relationships) and
   Context Maintenance (re-analysis on source change) are explicitly deferred
   to a later slice — see the status block below for why.
-- **Slice 15** — AI recommends which of a client's already-discovered
-  repositories/sources are relevant to a new Project/Task, with reasoning,
-  never a silent auto-attach.
+- **Slice 15** *(re-scoped 2026-08-18 against `2026-08-17-core-product-definition.md`
+  §14-27 and its gap-analysis Part 3 — see the dedicated status block below;
+  this line is now a summary only, not the scope of record)* — a
+  `Requirement` entity foundation: client-scoped, standalone-or-optionally-
+  Project-linked intake, with a single explicit "Start SDD" action that
+  materializes a Project (if needed) and a root WorkItem from it. The old
+  blueprint's "AI recommends relevant repos/sources for a new Project/Task"
+  framing is deferred to a later slice as Impact Discovery (§17), now framed
+  as a Requirement-scoped concern rather than a Project/Task-creation-time
+  one — see the status block below for why.
 - **Slice 16** — the Planner: a project-wide dependency map + status-lane
   board (switchable), focus mode, and parallel-safe-task explanation.
   Extends `DependencyGraph.tsx`'s existing layered-layout/focus engine
