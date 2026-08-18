@@ -954,6 +954,43 @@ untouched); Decision Ownership transfer and any entity type beyond
 Project/WorkItem (§23's full scope); generalizing Configuration Center's
 `ConfigChange` machinery itself (Slice 21's job).
 
+**Slice 17 status:** Proposed 2026-08-18 as `ai-recommendation-card`;
+OpenSpec planning artifacts at
+`openspec/changes/ai-recommendation-card/`. Previously assessed this
+session as "blocked" on Blocker criticality (§35) and Execution Readiness
+(§34) not existing yet — re-reading the actual sources corrected that:
+the blueprint's own definition of the card (§4/§5.7 — What/Why/
+Assumptions/Estimated time/Estimated cost/What happens under each
+alternative/a single override action) never mentions either concept, and
+§34/§35 in `2026-08-17-core-product-definition.md` are unrelated concepts
+about different entities (§34 = whether a work item is executable at all;
+§35 = `Blocker` row severity). The gap-analysis's note that the card
+"should incorporate [these] once they exist" was a future enrichment, not
+a precondition — the same "build the concrete buildable subset now, defer
+the rest" shape Slice 19 already established (deferring Decision
+Ownership without waiting for it to exist). Chosen over Slices 20/21:
+Slice 20 still carries more net-new surface (external fetch/parse, a new
+model-snapshot entity, an `enqueueJob` signature change) even though its
+scheduling concern turned out smaller than first assessed (the Job
+runtime's existing `Job.scheduledAt <= now()` claim loop already supports
+a self-requeue pattern); Slice 21 remains most speculative (four new
+domain concepts with zero code today). Grounded in real signals already
+in the codebase, not stubs: `WorkItem.risk`/`.priority`/`.type`/
+`.executorType`; `AgentRun.costUsd`/`.promptTokens`/`.completionTokens`/
+`.startedAt`/`.completedAt` (Slice 3); `Decision.aiRecommendation` as the
+existing narrower pattern this generalizes. Bounded scope (see the
+change's design.md for the full decision log): a shared
+`AiRecommendationCard` component; a heuristic (not ML) AI-vs-developer
+`recommendExecutor` function reading existing risk/priority/type plus a
+new historical-cost-averaging query; always shows the AI-execution
+estimate even when a developer is recommended; a single override action
+with no default pre-selected, reusing the existing `updateWorkItem`
+executor-assignment path — no new mutation route. Explicitly deferred:
+Blocker criticality/Execution Readiness as inputs; AI model selection
+(Slice 20's job); estimating developer time/cost (no existing signal for
+it); migrating other AI-facing surfaces (repository relevance,
+decomposition, `Decision.aiRecommendation` itself) onto the shared card.
+
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
@@ -997,8 +1034,10 @@ Project/WorkItem (§23's full scope); generalizing Configuration Center's
   focus engine (today scoped to one item's neighborhood inside the 360°
   Record) to whole-project scope. Independent of 12–15; can proceed in
   parallel.
-- **Slice 17** — the shared "AI Recommendation card" pattern (what/why/
-  assumptions/estimated time/estimated cost/what happens under each
+- **Slice 17** *(proposed 2026-08-18 as `ai-recommendation-card` — see the
+  dedicated status block above; this line is now a summary only, not the
+  scope of record)* — the shared "AI Recommendation card" pattern (what/
+  why/assumptions/estimated time/estimated cost/what happens under each
   alternative), applied first to the AI-vs-developer executor
   recommendation, always including an AI-execution time/cost estimate even
   when AI isn't the recommended choice.
