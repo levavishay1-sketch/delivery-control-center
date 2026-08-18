@@ -59,7 +59,8 @@
 
 - [ ] 5.1 Update `docs/ROADMAP.md`'s Slice 22 status block with the build summary, following the
       established pattern (what was built, deferred, and the full verification result).
-- [ ] 5.2 Run build, lint, typecheck, the full unit test suite, and this change's E2E spec;
+- [x] 5.2 Run build, lint, typecheck, the full unit test suite, and this change's E2E spec;
       confirm no regressions using the temporary-checkout diagnostic method against the pre-slice
       baseline commit if any new-looking E2E failure appears, per this session's established
-      practice.
+      practice. (Full E2E suite: 22 passed / 6 failed, 11.3m — the 6 failures exactly match the
+      known baseline set; no new failures. `client-tasks-section.spec.ts` passed.)

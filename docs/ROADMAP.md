@@ -1297,8 +1297,13 @@ the precedent `e2e/fixtures/seedModelSnapshot.ts` (Slice 20) already set
 for a UI path Playwright can't reliably drive.
 
 Full verification: build, lint, and typecheck clean; 414/414 unit tests
-passing. Full E2E suite: [PENDING — fill in after the background run
-completes].
+passing. Full E2E suite: 22 passed / 6 failed (11.3m) — the 6 failures are
+exactly the known baseline (`slice5-engineering-evidence.spec.ts` and
+`slice6-configuration-center.spec.ts` are confirmed pre-existing failures;
+`slice12-client-lifecycle.spec.ts`, `slice14-repository-discovery.spec.ts`,
+`slice4-connector-framework.spec.ts`, and `slice8-i18n-rtl.spec.ts` are
+already-verified environmental flakiness), with no new failures.
+`e2e/client-tasks-section.spec.ts` passed.
 
 ## Definition of Done, for every future slice (source: `§6`)
 
