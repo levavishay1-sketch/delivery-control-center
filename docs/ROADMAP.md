@@ -1231,13 +1231,14 @@ own transitions should follow OpenSpec's actual propose → apply → archive,
 spec-anchored principles (the same ones this codebase's own development
 already runs on), not a bespoke state machine.
 
-### Slice 22 — Client "Tasks" section (top-level open work items)
+### Slice 22 — Client "Tasks" section (top-level open work items) — **Done**
 
 *(Source: `docs/roadmap-sources/2026-08-18-client-tasks-section.md` — a
 standalone, ad hoc user request, not part of the Slices 11–21 blueprint
-sequence. Scoped, not started.)*
+sequence.)*
 
-A new "Tasks" panel on the Client detail page, listing every top-level
+Proposed and implemented 2026-08-18 as `client-tasks-section`. A new
+"Tasks" panel on the Client detail page, listing every top-level
 (`parentId IS NULL`) open (`status` not `COMPLETED`/`CLOSED`) `WorkItem`
 across the client's projects, of any `WorkItemType`
 (`PROJECT`/`TASK`/`BUG`/`CHANGE`) — a WorkItem with a parent (e.g. a Task
@@ -1246,6 +1247,58 @@ ancestor is shown. Two clarifications resolved before scoping: "REQUIRED"
 means any submitted work item (not a new field), and "Project" here means
 a `WorkItem` of `type: PROJECT`, distinct from the page's existing
 separate "Projects" panel (the `Project` model's own list, unaffected).
+
+Built: `getClientDetail` (`src/domain/client/queries.ts`) gained a
+`topLevelOpenWorkItems` field — `db.workItem.findMany({ where: { parentId:
+null, status: { notIn: ["COMPLETED", "CLOSED"] }, project: { clientId } },
+orderBy: { createdAt: "desc" } })`, reusing the exact "open" convention
+`getHighRiskWorkItems`/`getUpcomingDeadlines` already established, rather
+than inventing a new one — folded into the page's existing single
+server-side fetch rather than a second round-trip. A new "Tasks" `Panel`
+placed between the existing Requirements and Repositories panels, each row
+showing title, a plain-text type/project label (mirroring the neighboring
+Requirements panel's row shape exactly, since every other row on this page
+is plain-text, not icon-based), and a `StatusBadge` linking to the item's
+360° Record — a new `WORK_STATUS_TONE`/`WORK_STATUS_REASON` mapping was
+added since no `WorkStatus`→`StatusBadge` tone convention existed anywhere
+in the codebase yet.
+
+9 new unit tests (`src/domain/client/queries.test.ts`): a top-level item
+of every type appears; a child WorkItem is excluded even when its
+top-level PROJECT-type parent is shown; a `CLOSED` top-level item is
+excluded (`COMPLETED` wasn't exercised directly — it shares the same
+`notIn` array-membership check, and reaching it requires satisfying the
+unrelated evidence-driven completion policy from Slice 5); scoping is
+correct across multiple projects under the same client and excludes
+another client's WorkItems. New E2E spec
+(`e2e/client-tasks-section.spec.ts`): seeds a project plus the full
+WorkItem hierarchy fixture set via a standalone `tsx` fixture script
+(`e2e/fixtures/seedClientTasksFixtures.ts`, through the real
+`createProject`/`createWorkItem`/`updateWorkItemStatus` domain commands —
+not raw DB inserts), then verifies the Tasks section shows exactly the
+three eligible top-level open items and excludes the child and the closed
+item.
+
+While diagnosing why the fixture couldn't reliably go through the
+Dashboard's own `AddProjectForm` UI, found and confirmed (via
+request-body interception) a real, pre-existing bug unrelated to this
+slice: selecting a client from that form's dropdown — when the client was
+created earlier in the same test run — consistently causes the form's
+`name`/`key` local React state to arrive empty on submit (`clientId`
+correct, `name`/`key` `""`), even though the DOM's own input values read
+correctly right up to the click. This matches this session's
+already-documented, already-accepted QuickViewDrawer hydration-mismatch
+flakiness pattern (React discarding and asynchronously remounting a
+subtree, wiping local component state) rather than anything introduced by
+this slice — confirmed not caused by this change, since `page.tsx` and
+`AddProjectForm.tsx` were never touched. Left unfixed as out of scope;
+the fixture script sidesteps the interaction entirely instead, matching
+the precedent `e2e/fixtures/seedModelSnapshot.ts` (Slice 20) already set
+for a UI path Playwright can't reliably drive.
+
+Full verification: build, lint, and typecheck clean; 414/414 unit tests
+passing. Full E2E suite: [PENDING — fill in after the background run
+completes].
 
 ## Definition of Done, for every future slice (source: `§6`)
 
