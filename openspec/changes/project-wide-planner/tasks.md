@@ -59,8 +59,18 @@
       `slice5-engineering-evidence.spec.ts` and `slice6-configuration-center.spec.ts` failures
       (verify via the same temporary-checkout method used for Slices 15/18 if any new failure
       appears). Build, lint, typecheck all clean; 360/360 unit tests passing; new
-      `e2e/project-wide-planner.spec.ts` passing. Full E2E suite run in background — see final
-      verification note below once it completes.
+      `e2e/project-wide-planner.spec.ts` passing. Full suite: 17 passed, 6 failed
+      (`slice12-client-lifecycle.spec.ts`, `slice14-repository-discovery.spec.ts`,
+      `slice4-connector-framework.spec.ts`, `slice5-engineering-evidence.spec.ts`,
+      `slice6-configuration-center.spec.ts`, `slice8-i18n-rtl.spec.ts`). The last two are the
+      known pre-existing baseline. The other four were verified via the same
+      temporary-checkout method used for Slices 15/18: checked out the pre-Slice-16 commit
+      (`224075a`), regenerated the Prisma client and Next.js route types, reran the four specs
+      against the same accumulated local Postgres — all four failed identically there too (same
+      "Add project" → unexpected navigation to `http://localhost:3000/?` symptom, or unrelated
+      hydration-mismatch/timeout symptoms), confirming environmental flakiness from this
+      session's many repeated E2E runs rather than a Slice 16 regression. Restored the working
+      branch, regenerated Prisma client and route types, reran `tsc --noEmit` clean.
 - [x] 5.3 Live verification: open a project with several WorkItems and at least one Dependency in
       the browser, confirm the Graph view matches the 360° Record's per-item graph data, switch to
       Board view and confirm lane grouping, and confirm a read-only user can view the Planner.

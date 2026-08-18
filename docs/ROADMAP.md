@@ -848,7 +848,19 @@ dependency between them, verifies the Graph view renders both and shows
 the "Ready to start" legend, switches to Board view, confirms status-lane
 grouping and that the unblocked item is marked ready while the blocked one
 is not, and confirms a card click opens the 360° Record — passing. Full
-suite: 360/360 unit tests passing; build, lint, and typecheck clean.
+suite: 360/360 unit tests passing; build, lint, and typecheck clean. Full
+E2E suite: 17 passed, 6 failed — the two known pre-existing baseline
+failures (`slice5-engineering-evidence.spec.ts`,
+`slice6-configuration-center.spec.ts`) plus 4 more
+(`slice12-client-lifecycle.spec.ts`, `slice14-repository-discovery.spec.ts`,
+`slice4-connector-framework.spec.ts`, `slice8-i18n-rtl.spec.ts`) verified
+via the same temporary-checkout method used for Slices 15/18 to reproduce
+identically at the pre-Slice-16 commit against the same accumulated local
+Postgres — confirmed environmental flakiness from this session's many
+repeated E2E runs, not a Slice 16 regression. Live-verified in the browser:
+a project with an unresolved dependency correctly shows the blocked item
+without the "ready to start" ring/badge in both Graph and Board views,
+while its unblocked dependency and an independent item both show it.
 Explicitly deferred: critical-path computation (the existing
 `getCriticalPath` stub has been a documented TODO since Slice 2);
 hierarchy/`parentId` edges in the graph (stays Dependency-only, matching
