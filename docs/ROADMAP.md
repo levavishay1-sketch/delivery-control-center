@@ -37,6 +37,51 @@ a compacted conversation summary — that version's content had no
 independent source and could not be trusted as scope. It's fully replaced
 now that the real document has been persisted.
 
+**`docs/roadmap-sources/2026-08-17-core-product-definition.md`** — a second,
+later primary source, received verbatim from the user on 2026-08-17 (86
+numbered sections). The user's own framing: treat it as *"the product
+definition for the Delivery Control Center... one connected product, not a
+disconnected list of features,"* explicitly *not* to be reduced to "a
+simple task-management application." It governs **all future slices**
+alongside (not replacing) the sources above — every capability proposed
+from this point on must be evaluated against it, not just against the
+2026-08-16 blueprint below.
+
+**Relationship to the Slices 11–21 vision blueprint** (next source entry):
+this document was received *after* Slices 12–13 were already implemented
+and archived under that blueprint's terms, and *before* Slice 14 was
+scoped — the user stopped deliberately at that point ("stop here and don't
+continue to next") specifically to have this new definition established
+first. It introduces several concepts with no current equivalent
+(`Requirement` as an entity distinct from `Project`/`WorkItem`, `Connection`
+vs. `Source` as distinct from today's single `Connector`, Repository
+Discovery/Context/System Context, a `Change`/revision model, an Autonomy
+Policy hierarchy, Question/Approval/Review as three separate concepts, an
+Owner/Decision-Owner split, hierarchical completion gating) and reframes —
+in places with materially more detail — sections the old blueprint had
+already sketched for Slices 14–21 (most directly, its §5.3 one-paragraph
+sketch of repository SDD-bootstrap vs. this document's §8–13 on Repository
+Discovery/Context/Maintenance/System Context/Reconciliation). The Slices
+14–21 rows below are left exactly as they were scoped — **not** marked
+superseded or resolved by this file alone; that reconciliation is recorded
+in
+`docs/roadmap-sources/2026-08-17-core-product-definition-gap-analysis.md`,
+which maps every one of this document's 86 sections against the current
+implementation (with file:line evidence) and against those existing
+stubs. That file's Part 2 originally listed nine open terminology/
+structural questions blocking any slice in these areas — **all nine were
+resolved by the user on 2026-08-17** (recorded there as Decisions 1-9:
+"Customer" was a naming mistake and stays `Client`; `Connection`/`Source`
+are new, deliberately open-taxonomy concepts; `Requirement` is a flexible,
+optionally-Project-linked intake item; Question/Approval/Review extend the
+existing three models in place; Change/Revisions is deferred; Autonomy
+starts at `Platform → Client → (flexible)`; Blocker severity is deferred
+but architecturally kept open; parallel-AI Conflicts get a dedicated new
+model, not `SyncConflict`; model selection happens per AI operation, not
+per Requirement). No slice's status changes as a result of this entry or
+that resolution alone — re-scoping Slice 14 (or any other) against these
+decisions is still a separate, later step.
+
 ## Gap register (source: Part 2.2, 45 items)
 
 The full item-by-item comparison between the vision and what's built.
