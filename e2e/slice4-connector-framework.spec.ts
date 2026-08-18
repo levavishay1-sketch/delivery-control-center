@@ -89,7 +89,9 @@ test("connector framework: sync → provenance → conflict → keep-manual → 
     await projectCard.getByRole("link", { name: "Settings" }).click();
     await page.waitForURL(/\/projects\/.+\/settings/);
 
-    await page.locator("select").selectOption("JIRA");
+    // Scoped to exactly "Type" — the Project Settings page also carries a "Default executor
+    // type" select (Slice 19) since getByLabel does substring matching by default.
+    await page.getByLabel("Type", { exact: true }).selectOption("JIRA");
     await page.getByLabel("Base URL").fill(`http://localhost:${stub.port}`);
     await page.getByLabel("Email").fill("e2e@example.com");
     await page.getByLabel("API token").fill("stub-token");
