@@ -254,7 +254,7 @@ re-litigate:
 | 11 | ⓘ info/explanation shared primitive | **Done** | `2026-08-16-product-vision-blueprint.md` §6.5, §4 | `openspec/changes/info-tooltip-primitive/` (implemented, not yet archived) |
 | 12 | Client-owned Repository model + Clients hub | **Done** | `2026-08-16-product-vision-blueprint.md` §5.1, §5.2, §3 | `openspec/changes/archive/2026-08-16-client-repository-model/` |
 | 13 | Client information sources (expanded `IntegrationType`) | **Done** | `2026-08-16-product-vision-blueprint.md` §3, §5.4 | `openspec/changes/archive/2026-08-16-client-information-sources/` |
-| 14 | Repository SDD status check + bootstrap on connect | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.3, §7 | — |
+| 14 | Repository Discovery & Context (bootstrap on connect) — re-scoped 2026-08-18 | Scoped, not started | `2026-08-17-core-product-definition.md` §8-13, `2026-08-17-core-product-definition-gap-analysis.md` Part 3 | — |
 | 15 | Repository/source relevance recommendation | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.4 | — |
 | 16 | Project-wide Planner (dependency map + status board + focus + parallel) | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §5.9, §5.13 | — |
 | 17 | AI Recommendation card + executor recommendation/estimate | Scoped, not started | `2026-08-16-product-vision-blueprint.md` §4, §5.7 | — |
@@ -619,6 +619,58 @@ check confirming the connector-type selector still shows only the original
 four options while the Clients hub's Connectors panel renders correctly
 off the new query.
 
+**Slice 14 status:** Re-scoped 2026-08-18, ready for an OpenSpec proposal.
+The old blueprint's one-paragraph scope (§5.3: connect-time SDD check +
+bootstrap) is superseded by `2026-08-17-core-product-definition.md` §8-13,
+which is far more detailed and introduces System Context (§12-13) as a
+separate concept the old blueprint never named — see the gap-analysis's
+Part 3 row for Slice 14. Re-scoped, bounded scope for this slice
+specifically (deliberately smaller than all of §8-13, per CLAUDE.md's
+"prefer several small changes" rule):
+
+- New `RepositoryDiscovery` record: one AI-produced, versioned, evidence-cited
+  structured analysis per `Repository` — purpose, stack, structure,
+  modules/domains, APIs, data stores, testing approach, conventions,
+  unknowns — each claim traceable to what was actually read in the repo, not
+  inferred without evidence.
+- New `RepositoryContext`: the current/queryable projection of the latest
+  `RepositoryDiscovery` — surfaced on a repository's detail view (Clients
+  hub) as a persistent, navigational summary. Explicitly labelled as a
+  summary that can go stale, never presented as a substitute for reading the
+  live source when a decision depends on it (source spec §10's own
+  instruction).
+- Trigger: an explicit, user-triggered "Run Discovery" action when a
+  `Repository` is linked with no existing `RepositoryDiscovery` — not a
+  silent automatic run on every connect, consistent with the product's
+  existing pattern of AI spend always being an explicit choice (`Pipeline`'s
+  explicit start, Slice 2) rather than implicit.
+- Execution reuses Slice 3's `Agent`/`AgentRun`/`Job` infrastructure (retry,
+  cost tracking, budget enforcement) and the AI-output → Zod schema →
+  validation → domain-command discipline every other AI-writing path in this
+  codebase already follows — not a new, unaudited execution path. This is
+  the concrete reading of the governing principle below ("all AI execution
+  goes through the same SDD pipeline... Slice 14's design must extend the
+  existing pipeline rather than invent a parallel one"): Discovery is
+  repository-scoped, not work-item-scoped, so it cannot literally attach to
+  a `WorkItem`'s `Pipeline`/`Stage` state machine — what it must and does
+  reuse is that machinery's *execution discipline* (Agent routing, `Job`
+  durability, schema-validated output, audited writes), not the `Pipeline`
+  row itself. Recorded here explicitly per CLAUDE.md's "never silently
+  invent a product decision" rule, for the OpenSpec proposal to carry
+  forward.
+- Explicitly out of scope for this slice (left for a later one, per the
+  gap-analysis): System Context/Reconciliation (§12-13, cross-repository
+  relationships — needs at least two Discovery-covered repositories to mean
+  anything, and its own reconciliation mechanism); Context Maintenance
+  (§11, detecting a source change and re-analyzing) — this slice produces
+  one point-in-time Discovery per explicit trigger, not a change-watching
+  system; the original "baseline Constitution for the existing codebase"
+  framing from the old blueprint — Discovery produces its own structured
+  record, not a `Constitution` row, since `Constitution` (Slice 2) is
+  Project-scoped and this is Repository-scoped with no Project involved.
+
+### Slices 11–21 — Product Vision & Flow Blueprint
+
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
   every AI-facing slice after it should be built to use it from the start.
 - **Slice 12** — the foundational structural change: `Repository` becomes
@@ -631,11 +683,17 @@ off the new query.
   `MANUAL | JIRA | AZURE_DEVOPS | GITHUB` enum, project-scoped) into a
   client-owned, expanded (still closed) enum covering the real range of a
   client's information sources.
-- **Slice 14** — the moment a repository is first connected, check whether
-  SDD already exists for it and, if not, run an actual bootstrap pass
-  (not just a summary) producing a baseline Constitution for the existing
-  codebase — independent of any Project or Task, governed by the
-  OpenSpec-alignment principle below.
+- **Slice 14** *(re-scoped 2026-08-18 against `2026-08-17-core-product-definition.md`
+  §8-13 and its gap-analysis Part 3 — see the dedicated status block below;
+  this line is now a summary only, not the scope of record)* — Repository
+  Discovery (a persistent, structured understanding of a repository: purpose,
+  stack, structure, modules/domains, APIs, data stores, testing, conventions,
+  unknowns, evidence) and Repository Context (the queryable, navigational
+  artifact Discovery produces — explicitly not a substitute for live source
+  verification), triggered when a repository is newly linked with no existing
+  Discovery. System Context/Reconciliation (cross-repo relationships) and
+  Context Maintenance (re-analysis on source change) are explicitly deferred
+  to a later slice — see the status block below for why.
 - **Slice 15** — AI recommends which of a client's already-discovered
   repositories/sources are relevant to a new Project/Task, with reasoning,
   never a silent auto-attach.
