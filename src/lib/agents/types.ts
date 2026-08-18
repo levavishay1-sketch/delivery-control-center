@@ -29,6 +29,27 @@ export function summarizeAnalysisFindings(findings: AnalysisFindingDraft[]): str
   return findings.map((f) => `- **${f.severity}** (${f.relatedStageType}): ${f.message}`).join("\n");
 }
 
+/**
+ * Validates a TASKS draft's structured task-candidate output before it's ever treated as
+ * authoritative — same "AI output -> schema -> domain command" discipline as
+ * analysisFindingsSchema above (see task-decomposition-materialization/design.md). Always
+ * required, never omitted, mirroring ANALYZE's own findings requirement.
+ */
+export const taskDraftsSchema = z.array(
+  z.object({
+    title: z.string().min(1),
+    description: z.string().optional(),
+  })
+);
+
+export type TaskDraftItem = z.infer<typeof taskDraftsSchema>[number];
+
+/** Human-readable summary shared by both executors so TASKS's stored `content` reads the same regardless of which one drafted it. */
+export function summarizeTaskDrafts(drafts: TaskDraftItem[]): string {
+  if (drafts.length === 0) return "No tasks drafted.";
+  return drafts.map((d) => `- [ ] ${d.title}${d.description ? ` — ${d.description}` : ""}`).join("\n");
+}
+
 export interface StageExecutionContext {
   workItemTitle: string;
   workItemDescription: string;
@@ -65,6 +86,13 @@ export interface StageExecutionResult {
    * stage's prior AnalysisFinding rows with these on every draft: only the latest run counts.
    */
   analysisFindings?: { severity: FindingSeverity; message: string; relatedStageType: StageType }[];
+  /**
+   * Present only for a TASKS draft — always set (possibly empty), never omitted, since TASKS's
+   * whole job is to produce task candidates. Zod-validated structured output, same discipline as
+   * analysisFindings above. The worker replaces this stage's prior TaskDraft rows with these on
+   * every draft: only the latest run's drafts count.
+   */
+  taskDrafts?: { title: string; description?: string }[];
 }
 
 /** Constitution is project-scoped, not work-item-scoped — see design.md Decision 4a. */

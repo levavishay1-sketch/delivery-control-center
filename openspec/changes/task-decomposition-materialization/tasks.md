@@ -1,76 +1,77 @@
 ## 1. Data model & migration
 
-- [ ] 1.1 Add `TaskDraft` model to `prisma/schema.prisma`: `id`, `stageId` (FK → `Stage`,
+- [x] 1.1 Add `TaskDraft` model to `prisma/schema.prisma`: `id`, `stageId` (FK → `Stage`,
       cascade), `title`, `description` (nullable), `materializedWorkItemId` (nullable FK →
       `WorkItem`, `onDelete: SetNull`), `createdAt`.
-- [ ] 1.2 Add the reverse relations (`Stage.taskDrafts`, `WorkItem.materializedFromTaskDraft`)
+- [x] 1.2 Add the reverse relations (`Stage.taskDrafts`, `WorkItem.materializedFromTaskDraft`)
       needed for the FKs above.
-- [ ] 1.3 Generate and run the migration; regenerate the Prisma client.
+- [x] 1.3 Generate and run the migration; regenerate the Prisma client.
 
 ## 2. AI output schema & executor
 
-- [ ] 2.1 Add `taskDraftsSchema`/`TaskDraftItem` to `src/lib/agents/types.ts` (title required,
+- [x] 2.1 Add `taskDraftsSchema`/`TaskDraftItem` to `src/lib/agents/types.ts` (title required,
       description optional), mirroring `analysisFindingsSchema`/`AnalysisFindingDraft` exactly.
       Add `taskDrafts?: TaskDraftItem[]` to `StageExecutionResult`.
-- [ ] 2.2 `claudeExecutor.ts`: add a `TASKS_DRAFTS_MARKER` (`<!-- TASK_DRAFTS -->`) and
+- [x] 2.2 `claudeExecutor.ts`: add a `TASK_DRAFTS_MARKER` (`<!-- TASK_DRAFTS -->`) and
       `parseTaskDrafts`, mirroring `parseAnalysisFindings`; branch `executeStage` on
       `stageType === "TASKS"` to call it and return `taskDrafts` alongside `content`.
-- [ ] 2.3 `mockExecutor.ts`: mirror the same branch, deriving plausible mock task drafts the same
+- [x] 2.3 `mockExecutor.ts`: mirror the same branch, deriving plausible mock task drafts the same
       way `extractMockAnalysisFindings` does from `context.workItemDescription` (or a fixed
       template-driven fallback if no marker-style hint is present in the description).
-- [ ] 2.4 `config/prompts/tasks.md`: extend the instructions with the marker + schema requirement,
+- [x] 2.4 `config/prompts/tasks.md`: extend the instructions with the marker + schema requirement,
       mirroring `config/prompts/analyze.md`'s exact instruction shape.
 
 ## 3. Domain layer — persistence & materialization
 
-- [ ] 3.1 `src/domain/pipeline/commands.ts`: extend `completeStageDraft`'s existing TASKS-stage
+- [x] 3.1 `src/domain/pipeline/commands.ts`: extend `completeStageDraft`'s existing TASKS-stage
       default branch (the `requiresApproval` fallthrough, not the `clarifyQuestions`/
       `analysisFindings` branches) to, when `result.taskDrafts` is present, delete any prior
       `TaskDraft` rows for the stage and create the new ones — same replace-not-accumulate
       discipline as `AnalysisFinding`.
-- [ ] 3.2 Create `src/domain/task-decomposition/commands.ts`: `materializeTaskDrafts(ctx, stageId,
+- [x] 3.2 Create `src/domain/task-decomposition/commands.ts`: `materializeTaskDrafts(ctx, stageId,
       taskDraftIds)` — loads the stage + its pipeline + WorkItem + project, requires
       `requireClientRole(ctx, clientId, WRITE_ROLES)`, refuses unless `stage.type === "TASKS" &&
       stage.status === "DONE"`, refuses any requested id already materialized, then for each
       remaining id calls `createWorkItem` (`type: "TASK"`, `parentId` = pipeline's WorkItem id,
       title/description from the draft) and sets `TaskDraft.materializedWorkItemId`, recording one
       audit event summarizing the batch.
-- [ ] 3.3 Create `src/domain/task-decomposition/queries.ts`: `listTaskDraftsForStage` (read-access
+- [x] 3.3 Create `src/domain/task-decomposition/queries.ts`: `listTaskDraftsForStage` (read-access
       gated the same `ALL_ROLES` way `getRepositoryDetail` is).
-- [ ] 3.4 Unit tests: structured drafts persisted on a successful TASKS draft and replaced on
+- [x] 3.4 Unit tests: structured drafts persisted on a successful TASKS draft and replaced on
       redraft; materializing selected drafts from a `DONE` TASKS stage creates the expected child
       WorkItems and marks them materialized; materializing from a non-`DONE` stage is refused;
-      re-materializing an already-materialized draft is refused; a read-only user is refused.
+      re-materializing an already-materialized draft is refused; a read-only user is refused. 7
+      tests, all passing.
 
 ## 4. API routes
 
-- [ ] 4.1 `GET /api/stages/[id]/task-drafts` (list) — `src/app/api/stages/[id]/task-drafts/route.ts`.
-- [ ] 4.2 `POST /api/stages/[id]/task-drafts/materialize` (materialize selected ids) —
+- [x] 4.1 `GET /api/stages/[id]/task-drafts` (list) — `src/app/api/stages/[id]/task-drafts/route.ts`.
+- [x] 4.2 `POST /api/stages/[id]/task-drafts/materialize` (materialize selected ids) —
       `src/app/api/stages/[id]/task-drafts/materialize/route.ts`.
-- [ ] 4.3 Both follow the existing error-handling pattern (domain errors → their HTTP status, Zod
+- [x] 4.3 Both follow the existing error-handling pattern (domain errors → their HTTP status, Zod
       validation errors → 400), matching `src/app/api/requirements/route.ts` as the most recent
       precedent.
 
 ## 5. UI
 
-- [ ] 5.1 `src/components/TaskDraftsPanel.tsx` ("use client"), mirroring
+- [x] 5.1 `src/components/TaskDraftsPanel.tsx` ("use client"), mirroring
       `AnalyzeFindingsPanel.tsx`'s presentation conventions: lists task drafts with a checkbox per
       un-materialized draft and a "Materialize Selected" button; an already-materialized draft
       renders a link to its created WorkItem instead of a checkbox.
-- [ ] 5.2 Wire it into `src/app/pipelines/[id]/page.tsx`, rendered when `stageConfig.type ===
+- [x] 5.2 Wire it into `src/app/pipelines/[id]/page.tsx`, rendered when `stageConfig.type ===
       "TASKS" && stage.status === "DONE"`, mirroring the existing `AnalyzeFindingsPanel`
       conditional exactly; visible to any reader, the materialize action itself gated by
       `canManage` (already computed on that page).
-- [ ] 5.3 Empty state ("No task drafts for this run") when a `DONE` TASKS stage has none (e.g. an
+- [x] 5.3 Empty state ("No task drafts for this run") when a `DONE` TASKS stage has none (e.g. an
       older pre-this-slice pipeline).
 
 ## 6. Tests
 
-- [ ] 6.1 Unit tests for `commands.ts`/`queries.ts` (covered by Task 3.4 above — listed as its own
+- [x] 6.1 Unit tests for `commands.ts`/`queries.ts` (covered by Task 3.4 above — listed as its own
       group for tracking, per this project's convention of a dedicated Tests group).
-- [ ] 6.2 E2E: drive a WorkItem's pipeline through to an approved TASKS stage, verify task drafts
+- [x] 6.2 E2E: drive a WorkItem's pipeline through to an approved TASKS stage, verify task drafts
       render, materialize a subset, confirm the resulting child WorkItems appear on the parent's
-      360° Record / hierarchy — `e2e/task-decomposition.spec.ts`.
+      360° Record / hierarchy — `e2e/task-decomposition.spec.ts`. Passing.
 
 ## 7. Documentation & verification
 

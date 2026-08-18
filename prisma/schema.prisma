@@ -483,7 +483,10 @@ model WorkItem {
 
   // Slice 15 — set when this WorkItem was materialized by a Requirement's "Start SDD" action
   // (see Requirement.workItemId below); null for every other WorkItem-creation path.
-  requirement Requirement?
+  requirement               Requirement?
+  // Slice 18 — set when this WorkItem was materialized from a TaskDraft (see
+  // TaskDraft.materializedWorkItemId above); null for every other WorkItem-creation path.
+  materializedFromTaskDraft TaskDraft?
 
   @@unique([projectId, source, externalId])
   @@index([projectId, status])
@@ -628,8 +631,28 @@ model Stage {
   versions         StageVersion[]
   clarifyQuestions ClarifyQuestion[]
   analysisFindings AnalysisFinding[]
+  // Slice 18 — a TASKS stage's structured, AI-drafted task candidates (see TaskDraft below).
+  taskDrafts       TaskDraft[]
 
   @@unique([pipelineId, type])
+}
+
+// Slice 18 — one AI-drafted task candidate from a TASKS stage's structured output (mirrors
+// AnalysisFinding's shape exactly). Replaced, not accumulated, on every TASKS redraft.
+// materializedWorkItemId is set once a human explicitly turns this draft into a real child
+// WorkItem (see task-decomposition/commands.ts's materializeTaskDrafts) — a separate, later
+// decision from the TASKS stage's own approval gate.
+model TaskDraft {
+  id                     String    @id @default(cuid())
+  stageId                String
+  stage                  Stage     @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  title                  String
+  description            String?
+  materializedWorkItemId String?   @unique
+  materializedWorkItem   WorkItem? @relation(fields: [materializedWorkItemId], references: [id], onDelete: SetNull)
+  createdAt              DateTime  @default(now())
+
+  @@index([stageId])
 }
 
 // Slice 2 — append-only draft history. Stage's own content/aiModel/... columns

@@ -24,6 +24,7 @@ export async function getPipelineDetail(ctx: AuthContext, id: string) {
           approvals: { orderBy: { decidedAt: "desc" } },
           clarifyQuestions: { orderBy: { createdAt: "asc" }, include: { answeredByUser: true } },
           analysisFindings: { orderBy: { createdAt: "asc" } },
+          taskDrafts: { orderBy: { createdAt: "asc" }, include: { materializedWorkItem: { select: { id: true, title: true } } } },
           versions: { orderBy: { versionNumber: "desc" } },
           agentRun: { include: { agent: true } },
         },

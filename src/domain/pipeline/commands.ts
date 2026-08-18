@@ -230,6 +230,8 @@ export interface StageDraftResult {
   clarifyQuestions?: string[];
   /** Present only for an ANALYZE draft — always set (possibly empty) — see Task Group 7. */
   analysisFindings?: { severity: FindingSeverity; message: string; relatedStageType: StageType }[];
+  /** Present only for a TASKS draft — always set (possibly empty) — see Slice 18. */
+  taskDrafts?: { title: string; description?: string }[];
 }
 
 /**
@@ -395,6 +397,18 @@ export async function completeStageDraft(stageId: string, result: StageDraftResu
         agentRunId: runId,
       },
     });
+
+    // Slice 18 — only the latest TASKS run's drafts count (same replace-not-accumulate
+    // discipline as AnalysisFinding above), so a redraft after rejection doesn't leave stale
+    // drafts a human could still try to materialize.
+    if (result.taskDrafts) {
+      await tx.taskDraft.deleteMany({ where: { stageId } });
+      if (result.taskDrafts.length > 0) {
+        await tx.taskDraft.createMany({
+          data: result.taskDrafts.map((d) => ({ stageId, title: d.title, description: d.description })),
+        });
+      }
+    }
 
     // Only clear BLOCKED when the stage that just completed is the pipeline's actual current
     // stage — a flagged stage's redraft (Task Group 7.3) completes here too, but it isn't what

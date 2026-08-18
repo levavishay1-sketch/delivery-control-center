@@ -1,6 +1,6 @@
 import type { StageType } from "@/generated/prisma/client";
 import { extractOutputTemplate, getStageConfig, loadPromptTemplate } from "@/lib/config";
-import { summarizeAnalysisFindings } from "./types";
+import { summarizeAnalysisFindings, summarizeTaskDrafts } from "./types";
 import type {
   AgentExecutor,
   AnalysisFindingDraft,
@@ -10,6 +10,7 @@ import type {
   RepositoryDiscoveryFindings,
   StageExecutionContext,
   StageExecutionResult,
+  TaskDraftItem,
 } from "./types";
 
 const PROMPT_COST_PER_TOKEN = 0.000003;
@@ -79,6 +80,34 @@ function extractMockClarifyQuestions(description: string): string[] | null {
     .map((q) => q.trim())
     .filter(Boolean);
   return questions.length > 0 ? questions : null;
+}
+
+/**
+ * Deterministic mock-only trigger for TASKS's structured drafts, mirroring
+ * extractMockAnalysisFindings above: a work item description containing
+ * `[NEEDS_TASK_DRAFTS: title one | title two]` makes the mock TASKS draft
+ * return those titles, so tests can exercise specific materialization
+ * scenarios without a real model deciding. Falls back to a fixed,
+ * title-parameterized checklist (mirroring this stage's original static
+ * OUTPUT TEMPLATE) when no marker is present, so the ordinary path still
+ * produces plausible drafts.
+ */
+function extractMockTaskDrafts(description: string, workItemTitle: string): TaskDraftItem[] {
+  const match = description.match(/\[NEEDS_TASK_DRAFTS:\s*([\s\S]+?)\]/);
+  if (match) {
+    return match[1]
+      .split("|")
+      .map((title) => title.trim())
+      .filter(Boolean)
+      .map((title) => ({ title }));
+  }
+  return [
+    { title: `Confirm current behavior and exact change surface for: ${workItemTitle}` },
+    { title: "Implement the change described in the Plan" },
+    { title: "Verify the change against the Spec's success criteria" },
+    { title: "Update or add tests covering the change" },
+    { title: "Prepare the Deploy record for this work item" },
+  ];
 }
 
 function fillConstitutionTemplate(template: string, context: ConstitutionExecutionContext): string {
@@ -197,6 +226,23 @@ export const mockExecutor: AgentExecutor = {
         10000;
 
       return { content, aiModel: "mock-agent-v1", promptTokens, completionTokens, costUsd, analysisFindings: findings };
+    }
+
+    if (stageType === "TASKS") {
+      const drafts = extractMockTaskDrafts(context.workItemDescription, context.workItemTitle);
+      const stageConfig = getStageConfig(stageType);
+      const rawTemplate = loadPromptTemplate(stageConfig.promptTemplate);
+      const instructions = rawTemplate.slice(0, rawTemplate.indexOf("<!-- OUTPUT TEMPLATE"));
+      const outputTemplate = extractOutputTemplate(rawTemplate);
+
+      const content = fillTemplate(outputTemplate, context).replaceAll("{{tasksSummary}}", summarizeTaskDrafts(drafts));
+      const promptTokens = estimateTokens(fillTemplate(instructions, context));
+      const completionTokens = estimateTokens(content);
+      const costUsd =
+        Math.round((promptTokens * PROMPT_COST_PER_TOKEN + completionTokens * COMPLETION_COST_PER_TOKEN) * 10000) /
+        10000;
+
+      return { content, aiModel: "mock-agent-v1", promptTokens, completionTokens, costUsd, taskDrafts: drafts };
     }
 
     const stageConfig = getStageConfig(stageType);

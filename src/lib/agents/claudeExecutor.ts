@@ -6,6 +6,8 @@ import {
   clarifyQuestionsSchema,
   repositoryDiscoveryFindingsSchema,
   summarizeAnalysisFindings,
+  summarizeTaskDrafts,
+  taskDraftsSchema,
 } from "./types";
 import type {
   AgentExecutor,
@@ -16,11 +18,13 @@ import type {
   RepositoryDiscoveryFindings,
   StageExecutionContext,
   StageExecutionResult,
+  TaskDraftItem,
 } from "./types";
 
 const CLARIFY_QUESTIONS_MARKER = "<!-- CLARIFY_QUESTIONS -->";
 const ANALYZE_FINDINGS_MARKER = "<!-- ANALYZE_FINDINGS -->";
 const DISCOVERY_FINDINGS_MARKER = "<!-- DISCOVERY_FINDINGS -->";
+const TASK_DRAFTS_MARKER = "<!-- TASK_DRAFTS -->";
 
 /**
  * Parses the structured-questions block a CLARIFY draft can return instead of
@@ -116,6 +120,38 @@ function parseDiscoveryFindings(text: string): RepositoryDiscoveryFindings {
   const result = repositoryDiscoveryFindingsSchema.safeParse(parsed);
   if (!result.success) {
     throw new Error(`Repository Discovery response's findings failed validation: ${result.error.message}`);
+  }
+  return result.data;
+}
+
+/**
+ * Parses TASKS's structured task drafts — always required (unlike Clarify's marker), since
+ * TASKS's whole job is to produce task candidates, even when that's an empty array. Zod-validated
+ * before ever being treated as authoritative, same discipline as parseAnalysisFindings above.
+ */
+function parseTaskDrafts(text: string): TaskDraftItem[] {
+  const markerIdx = text.indexOf(TASK_DRAFTS_MARKER);
+  if (markerIdx === -1) {
+    throw new Error("TASKS response did not include the required task-drafts marker.");
+  }
+
+  const rest = text
+    .slice(markerIdx + TASK_DRAFTS_MARKER.length)
+    .trim()
+    .replace(/^```(?:json)?/i, "")
+    .replace(/```$/, "")
+    .trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(rest);
+  } catch {
+    throw new Error("TASKS response included the task-drafts marker but the JSON that followed could not be parsed.");
+  }
+
+  const result = taskDraftsSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(`TASKS response's task drafts failed validation: ${result.error.message}`);
   }
   return result.data;
 }
@@ -233,6 +269,13 @@ export const claudeExecutor: AgentExecutor = {
       const findings = parseAnalysisFindings(text);
       const content = `# Analyze — ${context.workItemTitle}\n\n${summarizeAnalysisFindings(findings)}`;
       return { content, aiModel: MODEL, promptTokens, completionTokens, costUsd, analysisFindings: findings };
+    }
+
+    if (stageType === "TASKS") {
+      const { text, promptTokens, completionTokens, costUsd } = await getClaudeResponse(prompt, stageType);
+      const drafts = parseTaskDrafts(text);
+      const content = `# Tasks — ${context.workItemTitle}\n\n${summarizeTaskDrafts(drafts)}`;
+      return { content, aiModel: MODEL, promptTokens, completionTokens, costUsd, taskDrafts: drafts };
     }
 
     return callClaude(prompt, stageType);

@@ -11,6 +11,7 @@ import { DraftButton } from "@/components/DraftButton";
 import { ApprovalGate } from "@/components/ApprovalGate";
 import { ClarifyPanel } from "@/components/ClarifyPanel";
 import { AnalyzeFindingsPanel } from "@/components/AnalyzeFindingsPanel";
+import { TaskDraftsPanel } from "@/components/TaskDraftsPanel";
 import { StageVersionHistory } from "@/components/StageVersionHistory";
 import { Panel } from "@/components/ui/Panel";
 
@@ -176,6 +177,19 @@ export default async function PipelineDetailPage({ params }: PageProps<"/pipelin
                     message: f.message,
                     relatedStageType: f.relatedStageType,
                   }))}
+                />
+              )}
+
+              {stageConfig.type === "TASKS" && stage && stage.status === "DONE" && (
+                <TaskDraftsPanel
+                  stageId={stage.id}
+                  drafts={stage.taskDrafts.map((d) => ({
+                    id: d.id,
+                    title: d.title,
+                    description: d.description,
+                    materializedWorkItem: d.materializedWorkItem,
+                  }))}
+                  canManage={canManage}
                 />
               )}
 
