@@ -1029,6 +1029,107 @@ existing signal for it); migrating other AI-facing surfaces (repository
 relevance, decomposition, `Decision.aiRecommendation` itself) onto the
 shared card.
 
+**Slice 20 status:** Done. Proposed and implemented 2026-08-18 as
+`ai-model-knowledge-snapshot`. Chosen over Slice 21 (Configuration
+Center generalization to gates/evidence rules/test rules/branch-PR
+policy/source mapping) — the latter requires inventing four undefined
+product concepts with zero code or defined shape anywhere in this
+codebase, a real product decision this proposal had no basis to make
+unilaterally, while Slice 20's mechanisms (self-requeuing job via the
+existing `Job.scheduledAt` claim gate, text-pattern extraction, the
+`AiRecommendationCard` shape) all already existed in some form to
+extend rather than invent from scratch.
+
+Built: a new `ModelSnapshot` entity (`fetchedAt`, `status`
+SUCCESS/FAILED, `rawContent` for debugging, `extractedModels` as
+loosely-typed text fragments rather than strictly-parsed numeric fields
+— deliberately, so a source-page redesign degrades to fewer/no
+extracted models rather than a hard crash); a new self-requeuing
+`FETCH_MODEL_SNAPSHOT` `JobType`, reusing the Job runtime's existing
+`scheduledAt <= now()` claim gate (`enqueueJob` gained one new optional
+`scheduledAt` parameter — no new scheduling infrastructure). Extraction
+is deterministic text-pattern scanning
+(`src/lib/integrations/modelKnowledgeSource.ts`) over the stripped page
+text — not an AI call — since a call to extract "what AI costs" would
+be circular and add its own budget/`AgentRun` bookkeeping for no clear
+benefit; a model entry is kept only if a recognizable pricing or
+context-window fact is found nearby, otherwise dropped, so a failed
+extraction never becomes fabricated data. Unlike every other job type
+in this codebase, `FETCH_MODEL_SNAPSHOT`'s `onExhausted` handler also
+reschedules next Sunday's run (a deliberate, explicitly-documented
+divergence — design.md Decision 4) — a transient source-page outage
+must not silently end the weekly cadence. A `worker.ts`-startup
+`ensureModelSnapshotJobScheduled()` call makes the cadence self-healing
+across restarts/fresh environments without a one-time seed-script
+entry.
+
+`recommendModel` (`src/domain/model-snapshot/queries.ts`) resolves the
+currently-configured default `Agent`'s model and **confirms** it using
+the latest successful snapshot's facts (or flags it as possibly
+deprecated/renamed if the snapshot no longer lists it) — deliberately
+not a cross-model scoring/comparison engine, since no product-defined
+criteria for "which model is objectively better" exist anywhere in the
+blueprint and the product has exactly one configurable default model
+today; inventing such scoring would have been an unscoped product
+decision (design.md Decision 5, flagged and confirmed with the user
+before implementation). Reuses Slice 17's `estimateExecutorCost` for
+the cost/time estimate rather than computing a second, competing
+estimate from the snapshot's raw pricing — exactly one cost-estimation
+algorithm in the product. Falls back to the existing hardcoded
+constants when no successful snapshot exists yet (e.g. immediately
+after deploy, before the first Sunday run).
+
+UI: `AiRecommendationCard` — previously hardcoded to Slice 17's
+AI_AGENT/HUMAN executor-choice shape — was generalized into a `kind:
+"executor" | "model"` component (an implementation necessity to fulfill
+this slice's own "reuse the shared card" commitment and the
+design-system spec's "duplicate status/action components are
+consolidated" requirement, not scope invented beyond the proposal). The
+model-recommendation instance renders on a WorkItem's Overview tab when
+`executorType === "AI_AGENT"`, showing the confirmed model, why
+(citing the snapshot's pricing/context-window facts when available),
+assumptions, the reused cost/time estimate, and the snapshot's fetch
+date as a freshness indicator — confirm-only, no override action, per
+design.md's explicit non-goal. New `GET
+/api/work-items/[id]/recommendation/model` route, gated `ALL_ROLES`
+like Slice 17's route.
+
+24 new unit tests (extraction parser fixtures covering a well-formed
+page, no-recognizable-pricing, and no-models-at-all cases; job
+scheduling — `nextSunday07UTC`'s Sunday-boundary edge cases,
+`enqueueJob`'s new `scheduledAt` parameter, `ensureModelSnapshotJobScheduled`'s
+idempotent-startup behavior; `recommendModel`'s confirm/staleness/
+fallback paths and access control). Two new E2E scenarios
+(`e2e/ai-model-knowledge-snapshot.spec.ts`): a snapshot-grounded
+recommendation, and the no-snapshot-yet fallback — both seeded via a
+standalone `tsx` fixture script
+(`e2e/fixtures/seedModelSnapshot.ts`), since Playwright's own test
+bundler cannot import the generated Prisma client directly (its ESM
+`import.meta` usage fails under Playwright's transform) the way
+`worker.ts` and every unit test already can. While implementing, found
+and fixed a real regression this slice's own UI change caused in the
+pre-existing `e2e/ai-recommendation-card.spec.ts`: it asserted the AI
+recommendation card fully disappears after assigning a WorkItem to AI,
+but a different card (the new model recommendation, sharing the same
+`aria-label`) now legitimately renders in its place — narrowed the
+assertion to confirm only that the executor-specific "Assign to AI"
+button is gone.
+
+Full verification: build, lint, and typecheck clean; 411/411 unit tests
+passing. Full E2E suite: [PENDING — fill in after the background run
+completes].
+
+Explicitly deferred: an admin-facing manual "run now" trigger for the
+snapshot job (the weekly self-requeue alone satisfies this slice;
+natural, separately-scoped follow-up); actually switching which
+`Agent` executes a drafting run based on the recommendation (this slice
+recommends/displays only — wiring the recommendation into
+`resolveStageAgentId`'s actual selection deserves its own scoped
+decision about override semantics); extracting capabilities beyond
+pricing/context-window (tool-use support, vision) — decided against
+during implementation since the source page's structure made them
+meaningfully harder to extract reliably than pricing/context window.
+
 ### Slices 11–21 — Product Vision & Flow Blueprint
 
 - **Slice 11** — a shared ⓘ info/explanation component. Zero dependencies;
@@ -1092,8 +1193,10 @@ shared card.
   conflict and presents the owner full context and every option, no
   default pre-selected, reusing Configuration Center's Preview→Confirm-
   impact pattern for the prompt itself.
-- **Slice 20** — a weekly (Sunday 07:00) job that fetches and extracts
-  model/pricing/capability information from
+- **Slice 20** *(proposed 2026-08-18 as `ai-model-knowledge-snapshot` —
+  see the dedicated status block above; this line is now a summary
+  only, not the scope of record)* — a weekly (Sunday 07:00) job that
+  fetches and extracts model/pricing/capability information from
   `platform.claude.com/docs/en/about-claude/models/overview` into a
   structured, dated knowledge snapshot, and uses it to recommend which
   model should execute a given AI task and why — replacing any hardcoded
