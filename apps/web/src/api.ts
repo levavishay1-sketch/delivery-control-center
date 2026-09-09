@@ -127,7 +127,7 @@ export const getAdoProjects = (body: { orgUrl: string; pat: string }) =>
 export const deleteConnection = (clientId: string, id: string) => del<{ deleted: boolean }>(`/clients/${clientId}/connections/${id}`);
 export const checkConnection = (clientId: string, id: string) => post<{ ok: boolean; detail: string }>(`/clients/${clientId}/connections/${id}/check`, {});
 export const getConnections = () => get<{ connections: { id: string; kind: string; displayName: string; config: Record<string, string>; clientName: string; clientId: string; lastCheckOk: string | null }[] }>("/connections");
-export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);
+export const getDetail = (id: string, verifyAdo = false) => get<WorkItemDetail>(`/workitems/${id}${verifyAdo ? "?verifyAdo=1" : ""}`);
 export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);

@@ -13,7 +13,7 @@ export { listClients, clientDetail, linkRepoToClient, addAdoConnection, checkAdo
 export { setupClient, type SetupResult } from "./admin.ts";
 export { syncRequirementToAdo, trySyncNewRequirement, syncAllToAdo, deleteAdoForRequirement, adoWorkItemUrl } from "./ado-sync.ts";
 export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
-export { pullFromAdo, attachmentsFor, addAttachment, type PullResult } from "./ado-pull.ts";
+export { pullFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {
   updateClient, deleteClient, archiveClient,
   updateRequirement, deleteRequirement,

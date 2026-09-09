@@ -70,6 +70,7 @@ import {
   pullFromAdo,
   attachmentsFor,
   addAttachment,
+  adoWorkItemExists,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -330,12 +331,22 @@ app.get("/clients/:clientId/inbox", async (req) => {
 });
 
 /** Full WorkItem detail for the UI: header + gaps + blockers + timeline. */
-app.get("/workitems/:id", async (req) => {
+app.get("/workitems/:id", async (req, reply) => {
   const { id } = req.params as { id: string };
+  const verifyAdo = (req.query as { verifyAdo?: string }).verifyAdo === "1";
   const wi = await locateWorkItem({ id });
   const t = await tasksFor(wi.clientId, id);
   return withTenant(wi.clientId, async (tx) => {
     const [full] = await tx.select().from(workitem).where(sql`${workitem.id} = ${id}`).limit(1);
+
+    // on an explicit check: if the linked TFS work item is gone, mirror the delete
+    if (verifyAdo && full?.linkedAdoId) {
+      const stillThere = await adoWorkItemExists(wi.clientId, full.linkedAdoId);
+      if (stillThere === false) {
+        await deleteRequirement(wi.clientId, id);
+        return reply.code(410).send({ error: "deleted in TFS" });
+      }
+    }
     let adoUrl: string | null = null;
     if (full?.linkedAdoId) {
       // prefer the URL ADO itself returned (format varies by version); fall back to the modern shape

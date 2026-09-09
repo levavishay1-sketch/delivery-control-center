@@ -167,6 +167,19 @@ export async function pullFromAdo(clientId: string, by: { userId: string }): Pro
   return res;
 }
 
+/** Does the linked TFS work item still exist? Used to mirror a delete-in-TFS. */
+export async function adoWorkItemExists(clientId: string, adoId: number): Promise<boolean | null> {
+  const conn = await activeAdoConnection(clientId);
+  if (!conn) return null;
+  const orgUrl = (conn.config.orgUrl ?? "").replace(/\/+$/, "");
+  const project = conn.config.project ?? "";
+  if (!project) return null;
+  const r = await adoGet(`${orgUrl}/${encodeURIComponent(project)}`, `wit/workitems/${adoId}`, conn.secretRef);
+  if (r.ok) return true;
+  if (r.status === 404) return false;
+  return null; // couldn't tell (network / auth) — don't delete on a maybe
+}
+
 /* ── attachments: DCC → TFS ─────────────────────────────────────────── */
 
 export async function attachmentsFor(clientId: string, workitemId: string) {

@@ -46,15 +46,32 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [syncing, setSyncing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  const reload = useCallback(async () => {
-    try {
-      const [detail, b] = await Promise.all([getDetail(id), getBrief(id)]);
-      setD(detail); setBrief(b); setErr(null);
-    } catch (e) { setErr(String(e)); }
-  }, [id]);
-  useEffect(() => { reload(); }, [reload]);
+  // go back to wherever the user came from; fall back to the requirements list
+  const back = useCallback(() => {
+    const cur = location.hash;
+    history.back();
+    setTimeout(() => { if (location.hash === cur) nav("#/requirements"); }, 160);
+  }, [nav]);
 
-  if (err) return <div className="empty">{err}</div>;
+  const reload = useCallback(async (verify = false) => {
+    try {
+      const [detail, b] = await Promise.all([getDetail(id, verify), getBrief(id)]);
+      setD(detail); setBrief(b); setErr(null);
+    } catch (e) {
+      const msg = String(e);
+      if (msg.includes(" 410")) { alert("הדרישה נמחקה ב-TFS — מוסרת גם כאן."); back(); return; }
+      setErr(msg);
+    }
+  }, [id, back]);
+  // first load verifies against TFS (picks up a delete-in-TFS); refreshes don't
+  useEffect(() => { reload(true); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (err) return (
+    <div className="empty" style={{ textAlign: "center" }}>
+      <p>{err.includes("404") ? "הדרישה לא נמצאה (אולי נמחקה)." : err}</p>
+      <button className="btn btn-secondary btn-sm" style={{ marginTop: 12 }} onClick={back}>← חזרה</button>
+    </div>
+  );
   if (!d) return <div className="spin">Loading…</div>;
   const wi = d.workitem;
   const openBlocker = d.blockers.find((b) => b.state === "open");
@@ -73,7 +90,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     try {
       const r = await deleteRequirement(wi.id);
       if (r.ado && !r.ado.ok) alert(`הדרישה נמחקה, אבל מחיקת ה-work item ב-ADO נכשלה: ${r.ado.detail}`);
-      nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`);
+      back();
     } catch (e) { alert(String(e)); }
   };
   const onSyncAdo = async () => {
