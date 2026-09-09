@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { withTenant } from "@dcc/db";
-import { blocker, contextBrief, gap, task, workitem } from "@dcc/db/schema";
+import { blocker, contextBrief, gap, review, task, workitem } from "@dcc/db/schema";
 import { eventLog } from "@dcc/db/schema";
 import { renderBrief, type BriefModel } from "./render.ts";
 import { summariseTimeline } from "../summarise.ts";
@@ -47,6 +47,13 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
       .where(sql`${task.workitemId} = ${workitemId}`)
       .orderBy(task.seq);
 
+    const [lastReview] = await tx
+      .select()
+      .from(review)
+      .where(sql`${review.workitemId} = ${workitemId}`)
+      .orderBy(sql`${review.createdAt} desc`)
+      .limit(1);
+
     const recent = await tx
       .select({
         occurredAt: eventLog.occurredAt,
@@ -75,6 +82,12 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
       openBlockers: openBlockers.map((b) => ({ questionType: b.questionType, question: b.question })),
       answeredBlockers: answeredBlockers.map((b) => ({ question: b.question, answer: b.answer ?? "" })),
       tasks: taskRows.map((t) => ({ seq: t.seq, intent: t.intent, state: t.state })),
+      lastReview: lastReview
+        ? {
+            verdict: lastReview.verdict,
+            findings: (lastReview.findings ?? []).map((f) => ({ file: f.file, severity: f.severity, note: f.note })),
+          }
+        : null,
       recentTimeline: recent.reverse(),
     };
   });

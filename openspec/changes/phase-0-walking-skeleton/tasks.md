@@ -106,7 +106,13 @@ smaller). Order matters — each group unblocks the next.
       `POST /workitems/:id/depends-on`, a **React Flow** (`@xyflow/react`)
       tab: layered layout, blocking nodes red, spun-off edges amber,
       dashed = not yet ADO-synced
-- [ ] 7.8b Reviewer subagent (Writer proposes, Reviewer checks the
-      overlap region before human approval)
+- [x] 7.8b Reviewer + contention map — `workitem_file_touch` (active-edit
+      map) + `review` tables (migration 0004), `recordTouches` /
+      `contentionFor` / `releaseTouches` / `recordReview`,
+      `.claude/agents/reviewer.md` (read-only, "pass ≠ approval"),
+      `skills/repo-contention` + `skills/review-overlap`, `dcc.mjs`
+      contention/touches/review, `review.completed` event, "Review —
+      changes requested" section in the Brief. guards.sql switched to a
+      blanket DML grant so new tables don't hit permission-denied.
 - [ ] 7.9 client/workitem policy override layers (global ships now)
 - [ ] 7.10 ADO sync — write the predecessor links, mirror state

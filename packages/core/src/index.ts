@@ -7,4 +7,5 @@ export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
 export { route, recordRouting, loadPolicy, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
 export { linkWorkItems, flowFor, type FlowNode, type FlowEdge } from "./flow.ts";
+export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";
 export { setupClient, type SetupResult } from "./admin.ts";

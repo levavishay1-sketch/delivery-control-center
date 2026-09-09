@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { closeDb, withTenant } from "@dcc/db";
-import { app, db, client, project, users } from "./server.ts";
+import { app, db, client, project, repo, users } from "./server.ts";
 import { workitem } from "@dcc/db/schema";
 
 /**
@@ -76,6 +76,21 @@ check("route escalates high-ambiguity gap detection to opus", rt.statusCode === 
 // flow
 const flow = await app.inject({ method: "GET", url: `/projects/${p!.id}/flow` });
 check("flow returns the project's node", flow.statusCode === 200 && flow.json().nodes.length === 1, flow.json());
+
+// contention: two WorkItems touching the same file
+await db.insert(repo).values({ name: `CRM-${randomUUID().slice(0, 8)}`, clientId: c!.id }).returning();
+const [crm] = await db.select().from(repo).where(sql`${repo.clientId} = ${c!.id}`).limit(1);
+const [wi2] = await withTenant(c!.id, (tx) =>
+  tx.insert(workitem).values({ clientId: c!.id, projectId: p!.id, ownerId: dev!.id, key: "WI-9002", title: "Other item" }).returning());
+await app.inject({ method: "POST", url: `/workitems/${wi!.id}/touches`, headers: H, payload: { repo: crm!.name, paths: ["src/x.ts"], kind: "branch" } });
+const tch = await app.inject({ method: "POST", url: `/workitems/${wi2!.id}/touches`, headers: H, payload: { repo: crm!.name, paths: ["src/x.ts"], kind: "branch" } });
+check("touch surfaces the overlap", tch.statusCode === 201 && tch.json().overlaps.length === 1, tch.json());
+
+// reviewer
+const rv = await app.inject({ method: "POST", url: `/workitems/${wi!.id}/review`, headers: H, payload: { verdict: "changes_requested", findings: [{ file: "src/x.ts", severity: "block", note: "conflict" }] } });
+check("review records with a blocking finding", rv.statusCode === 201 && rv.json().verdict === "changes_requested", rv.json());
+const brief2 = await app.inject({ method: "GET", url: `/workitems/${wi!.id}/brief` });
+check("brief surfaces the changes-requested review", brief2.body.includes("Review — changes requested"), brief2.body.slice(0, 60));
 
 console.log(`\n${fail === 0 ? `\x1b[32m✓ all ${pass} passed` : `\x1b[31m✗ ${fail} failed`}\x1b[0m\n`);
 await app.close();

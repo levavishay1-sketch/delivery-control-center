@@ -133,6 +133,35 @@ show(
 const tOut = (await get(`/workitems/${workitemId}/tasks`)).json() as { tasks: { id: string; intent: string }[] };
 show("start task 1", await post(`/tasks/${tOut.tasks[0]!.id}/progress`, { to: "in_progress", clientId }));
 
+// 8a2 ── contention: WI-3001 declares its files; a sibling item already
+//        touches the shared PricingRules file
+const sib = (await post("/workitems", {
+  projectId, ownerId, key: "WI-3002", title: "FX rounding fixes in PricingRules", level: "task",
+})).json() as { id: string };
+await post(`/workitems/${sib.id}/touches`, { repo: "ALTSHULER_TRADE", branch: "feature/WI-3002-fx-rounding", kind: "branch", paths: ["src/pricing/PricingRules.ts"] });
+show(
+  "WI-3001 declares touched files (overlap surfaces)",
+  await post(`/workitems/${workitemId}/touches`, {
+    repo: "ALTSHULER_TRADE", branch: "feature/WI-3001-position-limits", kind: "branch",
+    paths: ["src/pricing/PricingRules.ts", "src/risk/ClassAggregator.ts"],
+  }),
+);
+show("contention on ALTSHULER_TRADE", await get("/repos/ALTSHULER_TRADE/contention?clientId=" + clientId));
+
+// 8a3 ── the reviewer agent runs on the PR, focused on the overlap
+show(
+  "reviewer verdict (focused on the overlap)",
+  await post(`/workitems/${workitemId}/review`, {
+    prRef: "PR-412", verdict: "changes_requested",
+    overlapFocus: ["src/pricing/PricingRules.ts"],
+    findings: [
+      { file: "src/pricing/PricingRules.ts", line: 61, severity: "block",
+        note: "reads roundingMode before WI-3002's FX conversion moved it earlier — this sees the stale value" },
+      { file: "src/risk/ClassAggregator.ts", severity: "warn", note: "no test covers an empty instrument class" },
+    ],
+  }),
+);
+
 // 8b ── a real predecessor: WI-3001 needs the risk-engine v4 upgrade first
 const pre = (await post("/workitems", {
   projectId, ownerId, key: "WI-3000", title: "Upgrade client to risk engine v4", level: "story",

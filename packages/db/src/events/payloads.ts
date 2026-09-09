@@ -98,6 +98,13 @@ const modelRouted = z.object({
   rationale: z.string(),
 });
 
+const reviewCompleted = z.object({
+  verdict: z.enum(["pass", "changes_requested"]),
+  findingCount: z.number().int().nonnegative(),
+  blockingCount: z.number().int().nonnegative(),
+  overlapFocus: z.array(z.string()).default([]),
+});
+
 const adoSynced = z.object({
   direction: z.enum(["to_ado", "from_ado"]),
   adoId: z.number().int().positive(),
@@ -125,6 +132,7 @@ export const payloadSchemas: Registry = {
   "gap.verified": { 1: gapVerified },
   "tasks.proposed": { 1: tasksProposed },
   "task.progressed": { 1: taskProgressed },
+  "review.completed": { 1: reviewCompleted },
   "blocker.raised": { 1: blockerRaised },
   "blocker.answered": { 1: blockerAnswered },
   "status.changed": { 1: statusChanged },

@@ -26,7 +26,7 @@ const C = {
   mono: "var(--mono)",
 };
 
-const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "model.routed"]);
+const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "model.routed", "review.completed"]);
 const isAi = (e: EventRow) => e.actor.kind !== "user" || AI_TYPES.has(e.type);
 const SRC: Record<string, string> = { email: "✉", slack: "◇", phone: "☎", meeting: "☎", claude_session: "◆", git: "⎇", ado: "▤", manual: "✎", system: "⚙" };
 const fmt = (t: string) => new Date(t).toISOString().slice(0, 16).replace("T", " ");
@@ -36,6 +36,7 @@ const gist = (e: EventRow) => {
     (p.summary as string) || (p.body as string) || (p.answer as string) || (p.description as string) ||
     (p.question as string) ||
     (p.model ? `${p.capability} → ${p.model}  ·  ${p.rationale ?? ""}` : "") ||
+    (p.verdict ? `${p.verdict}${p.blockingCount ? ` — ${p.blockingCount} חוסמים` : ""} · ${p.findingCount ?? 0} findings` : "") ||
     (p.taskCount ? `${p.taskCount} משימות, ${p.dependencyCount} תלויות` : "") ||
     (p.to ? `${p.from ?? "?"} → ${p.to}` : "") ||
     (p.outcome ? `→ ${p.outcome}` : "") ||

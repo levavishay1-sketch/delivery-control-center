@@ -7,9 +7,13 @@ import {
   answerBlocker,
   blockersFor,
   briefFor,
+  contentionFor,
   flowFor,
   linkWorkItems,
   progressTask,
+  recordReview,
+  recordTouches,
+  releaseTouches,
   proposeGap,
   proposeTasks,
   raiseBlocker,
@@ -194,6 +198,57 @@ app.post("/gaps/:id/verify", async (req) => {
     })
     .parse(req.body);
   return verifyGap({ gapId: id, by: { userId: dev.id }, ...b });
+});
+
+/* ── contention map + reviewer ───────────────────────────────────── */
+
+app.post("/workitems/:id/touches", async (req, reply) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({
+      repo: z.string(),
+      branch: z.string().optional(),
+      paths: z.array(z.string()).min(1),
+      kind: z.enum(["declared", "branch"]).optional(),
+    })
+    .parse(req.body);
+  const wi = await locateWorkItem({ id });
+  const out = await recordTouches({ clientId: wi.clientId, workitemId: id, repoName: b.repo, branch: b.branch, paths: b.paths, kind: b.kind });
+  return reply.code(201).send({ repoId: out.repoId, overlaps: out.overlaps });
+});
+
+app.post("/workitems/:id/touches/release", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  await releaseTouches(wi.clientId, id);
+  return { released: true };
+});
+
+app.get("/repos/:repo/contention", async (req, reply) => {
+  const { repo: repoName } = req.params as { repo: string };
+  const clientId = (req.query as { clientId?: string }).clientId;
+  if (!clientId) return reply.code(400).send({ error: "clientId query param required" });
+  return { contention: await contentionFor(clientId, decodeURIComponent(repoName)) };
+});
+
+app.post("/workitems/:id/review", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({
+      prRef: z.string().optional(),
+      verdict: z.enum(["pass", "changes_requested"]),
+      findings: z
+        .array(z.object({ file: z.string(), line: z.number().int().optional(), severity: z.enum(["info", "warn", "block"]), note: z.string() }))
+        .default([]),
+      overlapFocus: z.array(z.string()).optional(),
+    })
+    .parse(req.body);
+  const wi = await locateWorkItem({ id });
+  const row = await recordReview({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...b });
+  return reply.code(201).send(row);
 });
 
 /* ── flow / dependencies ─────────────────────────────────────────── */

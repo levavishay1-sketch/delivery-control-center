@@ -47,12 +47,13 @@ $$;
 alter role dcc_app nosuperuser nobypassrls nocreatedb nocreaterole;
 
 grant usage on schema public to dcc_app;
-grant select, insert on all tables in schema public to dcc_app;
-grant update, delete on table
-  client, project, repo, client_repo, project_repo, repo_dependency,
-  workitem, workitem_repo, gap, task, task_dependency, blocker,
-  context_brief, service_connection, users
-  to dcc_app;
--- event_log: INSERT only for the app (triggers would block the rest anyway)
+-- Blanket DML grant. event_log's own triggers block UPDATE/DELETE on it
+-- regardless, so a table-by-table list only invites "permission denied"
+-- when a migration adds a table. RLS still governs which ROWS dcc_app
+-- can see or write.
+grant select, insert, update, delete on all tables in schema public to dcc_app;
+grant usage, select on all sequences in schema public to dcc_app;
 alter default privileges in schema public
-  grant select, insert on tables to dcc_app;
+  grant select, insert, update, delete on tables to dcc_app;
+alter default privileges in schema public
+  grant usage, select on sequences to dcc_app;

@@ -211,6 +211,76 @@ export const taskDependency = pgTable(
 ).enableRLS();
 
 /**
+ * The active-edit map (architecture §7, layer 2). Which files each
+ * active WorkItem is touching, per repo — fed from declared affected
+ * areas and from live branches. Overlap here is a soft warning, never a
+ * gate: worktree isolation means work never physically collides; the
+ * decision is at merge time.
+ */
+export const workitemFileTouch = pgTable(
+  "workitem_file_touch",
+  {
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id")
+      .notNull()
+      .references(() => workitem.id, { onDelete: "cascade" }),
+    repoId: uuid("repo_id")
+      .notNull()
+      .references(() => repo.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    branch: text("branch"),
+    /** "declared" (affected-areas) | "branch" (actually changed) */
+    kind: text("kind").notNull().default("declared"),
+    lastTouchedAt: timestamp("last_touched_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Cleared when the WorkItem's branch merges / the item closes. */
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workitemId, t.repoId, t.path] }),
+    index("wft_repo_path_idx").on(t.repoId, t.path).where(sql`released_at is null`),
+    tenantPolicy("workitem_file_touch_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
+ * A structured code review (architecture §9). The Reviewer is a
+ * separate hat from the Writer — it checks the overlap region and the
+ * mechanics, and is a layer BEFORE human approval, not instead of it.
+ */
+export const review = pgTable(
+  "review",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => client.id, { onDelete: "restrict" }),
+    workitemId: uuid("workitem_id")
+      .notNull()
+      .references(() => workitem.id, { onDelete: "cascade" }),
+    prRef: text("pr_ref"),
+    /** "pass" | "changes_requested" */
+    verdict: text("verdict").notNull(),
+    /** [{ file, line?, severity, note }] — mechanical findings for the human to weigh */
+    findings: jsonb("findings")
+      .$type<{ file: string; line?: number; severity: "info" | "warn" | "block"; note: string }[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    /** The overlap region the reviewer was told to focus on, if any. */
+    overlapFocus: jsonb("overlap_focus").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    byUserId: uuid("by_user_id")
+      .notNull()
+      .references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("review_workitem_idx").on(t.workitemId),
+    tenantPolicy("review_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
  * WorkItem → WorkItem dependency. Drives the project Flow view, and must
  * also be written to ADO as a native predecessor/successor link so the
  * picture is consistent for anyone looking straight at ADO

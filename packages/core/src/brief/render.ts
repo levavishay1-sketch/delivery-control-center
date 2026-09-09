@@ -11,6 +11,7 @@ export type BriefModel = {
   openBlockers: { questionType: string; question: string }[];
   answeredBlockers: { question: string; answer: string }[];
   tasks: { seq: number; intent: string; state: string }[];
+  lastReview: { verdict: string; findings: { file: string; severity: string; note: string }[] } | null;
   recentTimeline: {
     occurredAt: Date;
     source: string;
@@ -67,6 +68,14 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
     }
   }
 
+  if (m.lastReview && m.lastReview.verdict === "changes_requested") {
+    out.push("");
+    out.push("## Review — changes requested");
+    for (const f of m.lastReview.findings) {
+      out.push(`- ${f.severity === "block" ? "**BLOCK**" : f.severity} · \`${f.file}\` — ${f.note}`);
+    }
+  }
+
   if (m.tasks.length) {
     const mark: Record<string, string> = {
       done: "[x]", in_progress: "[~]", blocked: "[!]", pending: "[ ]", dropped: "[-]",
@@ -91,6 +100,7 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
         (p.description as string) ||
         (p.question as string) ||
         (p.model ? `${p.capability} → ${p.model} (${p.rationale ?? ""})` : "") ||
+        (p.verdict ? `${p.verdict}${p.blockingCount ? ` — ${p.blockingCount} blocking` : ""} (${p.findingCount ?? 0} findings)` : "") ||
         (p.taskCount ? `${p.taskCount} tasks, ${p.dependencyCount} deps` : "") ||
         (p.to ? `${p.from ?? "?"} → ${p.to}` : "") ||
         (p.outcome ? `→ ${p.outcome}` : "") ||
