@@ -4,8 +4,9 @@ import os from "node:os";
 import path from "node:path";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, withTenant } from "@dcc/db";
-import { gap, repo, task, taskDependency, workitem } from "@dcc/db/schema";
+import { repo, task, taskDependency, workitem } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
+import { proposeGap } from "./gaps.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -14,15 +15,23 @@ import { regenerateBrief } from "./brief/generate.ts";
  * Claude can actually read the code, then parses the JSON it returns.
  */
 
-const CLAUDE_BIN = process.env.DCC_CLAUDE_BIN || "claude";
+// On Windows a global npm install exposes claude.cmd; Node ≥20 refuses to
+// spawn a .cmd without shell:true (EINVAL), so we run it through the shell and
+// keep every arg space-free (comma-separated --allowed-tools) to avoid quoting.
+const CLAUDE_BIN = process.env.DCC_CLAUDE_BIN || (process.platform === "win32" ? "claude.cmd" : "claude");
+const CLAUDE_VIA_SHELL = process.platform === "win32";
 const REPO_CACHE = path.join(os.tmpdir(), "dcc-repos");
 
 /** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back. */
-async function runClaudeJson<T>(cwd: string, prompt: string, opts: { timeoutMs?: number; allowWrites?: boolean } = {}): Promise<T> {
+async function runClaudeJson<T>(cwd: string, prompt: string, opts: { timeoutMs?: number; maxTurns?: number } = {}): Promise<T> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain
-  const args = ["-p", "--output-format", "json", "--permission-mode", opts.allowWrites ? "acceptEdits" : "plan"];
+  const args = [
+    "-p", "--output-format", "json", "--permission-mode", "plan",
+    "--allowed-tools", "Read,Grep,Glob",
+    "--max-turns", String(opts.maxTurns ?? 40),
+  ];
   const raw = await new Promise<string>((resolve, reject) => {
-    const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: process.platform === "win32" });
+    const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     let out = "";
     let err = "";
     const killer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`claude timed out after ${(opts.timeoutMs ?? 240000) / 1000}s`)); }, opts.timeoutMs ?? 240000);
@@ -144,30 +153,26 @@ export async function assessRequirement(input: { clientId: string; workitemId: s
 
   const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000 });
 
-  await withTenant(input.clientId, async (tx) => {
-    await appendEvent({
-      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
-      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:assess" },
-      payload: { body: `תרגום ל-EN:\n**${res.englishTitle}**\n${res.englishSummary}\n\nהערכה: ${res.baked ? "אפוי — מוכן לפירוק" : "לא אפוי — צריך אינטראקציה"}\n${res.rationale}` },
-    });
-    for (const g of res.gaps ?? []) {
-      await tx.insert(gap).values({
-        clientId: input.clientId, workitemId: input.workitemId,
-        description: g.description, blocking: !!g.blocking,
-        confidence: String(Math.min(1, Math.max(0, g.confidence ?? 0.7))),
-        state: "proposed",
-      });
-    }
-    await appendEvent({
-      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "gap.proposed",
-      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:assess" },
-      payload: { count: (res.gaps ?? []).length, blocking: (res.gaps ?? []).filter((g) => g.blocking).length, capability: "gap_detection" },
-    });
-    await tx.update(workitem).set({ phase: "shaping", updatedAt: new Date() }).where(eq(workitem.id, input.workitemId));
+  await appendEvent({
+    clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
+    actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:assess" },
+    payload: { body: `תרגום ל-EN:\n**${res.englishTitle}**\n${res.englishSummary}\n\nהערכה: ${res.baked ? "אפוי — מוכן לפירוק" : "לא אפוי — צריך אינטראקציה"}\n${res.rationale}` },
   });
+  const gaps = (res.gaps ?? []).filter((g) => g && g.description);
+  for (const g of gaps) {
+    await proposeGap({
+      clientId: input.clientId, workitemId: input.workitemId, by: input.by,
+      description: g.description, blocking: !!g.blocking,
+      confidence: Math.min(1, Math.max(0, Number(g.confidence) || 0.7)),
+      mode: "delegated",
+    });
+  }
+  await withTenant(input.clientId, (tx) =>
+    tx.update(workitem).set({ phase: "shaping", updatedAt: new Date() }).where(eq(workitem.id, input.workitemId)),
+  );
   await regenerateBrief(input.clientId, input.workitemId);
 
-  return { ...res, gaps: res.gaps ?? [], repoUsed: r?.name ?? null };
+  return { ...res, gaps, repoUsed: r?.name ?? null };
 }
 
 /* ── 2. breakdown: propose tasks + dependencies ────────────────────── */
@@ -221,11 +226,15 @@ export async function breakdownRequirement(input: { clientId: string; workitemId
         }
       }
     }
-    await appendEvent({
-      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "tasks.proposed",
-      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:breakdown" },
-      payload: { taskCount: rows.length, dependencyCount: proposed.reduce((n, p) => n + (p.dependsOnSeq?.length ?? 0), 0), capability: "decomposition" },
-    });
+    if (rows.length > 0) {
+      const appetites = rows.map((r) => r.appetite);
+      const appetite = (appetites.includes("large") ? "large" : appetites.includes("standard") ? "standard" : "small") as "small" | "standard" | "large";
+      await appendEvent({
+        clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "tasks.proposed",
+        actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "skill:task-breakdown" },
+        payload: { taskCount: rows.length, dependencyCount: proposed.reduce((n, p) => n + (p.dependsOnSeq?.length ?? 0), 0), appetite },
+      });
+    }
     return { tasks: rows };
   });
   await regenerateBrief(input.clientId, input.workitemId);
