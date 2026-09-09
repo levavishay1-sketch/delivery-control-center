@@ -1,5 +1,5 @@
-import { and, eq, inArray } from "drizzle-orm";
-import { appendEvent, db, withTenant } from "@dcc/db";
+import { and, eq, like } from "drizzle-orm";
+import { appendEvent, withTenant } from "@dcc/db";
 import { workitem } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 
@@ -124,14 +124,12 @@ export async function importAdoCsv(input: { clientId: string; csv: string; by: {
     desc: cDesc >= 0 ? (r[cDesc] ?? "").trim() : "",
   }));
 
-  const validIds = parsed.filter((p) => p.adoId > 0 && p.title).map((p) => p.adoId);
-  const existing = validIds.length
-    ? new Set(
-        (await withTenant(input.clientId, (tx) =>
-          tx.select({ a: workitem.linkedAdoId }).from(workitem).where(and(eq(workitem.clientId, input.clientId), inArray(workitem.linkedAdoId, validIds))),
-        )).map((r) => r.a),
-      )
-    : new Set<number | null>();
+  // de-dup by the "ADO-<id>" key we assign on import
+  const existing = new Set(
+    (await withTenant(input.clientId, (tx) =>
+      tx.select({ k: workitem.key }).from(workitem).where(and(eq(workitem.clientId, input.clientId), like(workitem.key, "ADO-%"))),
+    )).map((r) => r.k),
+  );
 
   const out: ImportResult = { total: parsed.length, created: 0, skipped: 0, items: [] };
 
@@ -141,7 +139,8 @@ export async function importAdoCsv(input: { clientId: string; csv: string; by: {
       out.items.push({ adoId: p.adoId, title: p.title, status: "skipped-bad" });
       continue;
     }
-    if (existing.has(p.adoId)) {
+    const key = `ADO-${p.adoId}`;
+    if (existing.has(key)) {
       out.skipped++;
       out.items.push({ adoId: p.adoId, title: p.title, status: "skipped-exists" });
       continue;
@@ -149,6 +148,10 @@ export async function importAdoCsv(input: { clientId: string; csv: string; by: {
     const type = TYPE_MAP[p.rawType.toLowerCase()] ?? "task";
     const phase = STATE_MAP[p.rawState.toLowerCase()] ?? "intake";
 
+    // NOTE: linkedAdoId is left NULL. The item already exists in the
+    // user's own ADO project (that's where the CSV came from); the key
+    // "ADO-<id>" records that origin. Pushing it into the *connected*
+    // project is an explicit follow-up (sync), which then sets linkedAdoId.
     const [wi] = await withTenant(input.clientId, (tx) =>
       tx
         .insert(workitem)
@@ -158,8 +161,7 @@ export async function importAdoCsv(input: { clientId: string; csv: string; by: {
           title: p.title,
           type,
           phase,
-          key: `ADO-${p.adoId}`,
-          linkedAdoId: p.adoId,
+          key,
           adoAreaPath: p.area || null,
         })
         .returning(),

@@ -162,6 +162,8 @@ export const deleteTask = (id: string, clientId: string) => del<{ deleted: boole
 export const correctNote = (workitemId: string, corrects: string, body: string) => post<{ eventId: string }>("/events", { workitemId, kind: "note", note: { body, source: "manual", corrects } });
 export type ImportResult = { total: number; created: number; skipped: number; items: { adoId: number; title: string; status: "created" | "skipped-exists" | "skipped-bad" }[] };
 export const importAdoCsv = (clientId: string, csv: string) => post<ImportResult>(`/clients/${clientId}/import/ado-csv`, { csv });
+export type SyncAllResult = { total: number; created: number; failed: number; items: { title: string; ok: boolean; adoId?: number; url?: string; error?: string }[] };
+export const syncAllToAdo = (clientId: string) => post<SyncAllResult>(`/clients/${clientId}/sync-all-to-ado`, {});
 
 export const verifyGap = (gapId: string, body: { outcome: "verified" | "dismissed" | "spun_off"; clientId: string; spunOffTitle?: string }) =>
   post(`/gaps/${gapId}/verify`, body);

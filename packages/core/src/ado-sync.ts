@@ -58,7 +58,11 @@ export async function syncRequirementToAdo(input: { clientId: string; workitemId
   if (!wi) throw new Error("requirement not found");
 
   const adoType = TYPE_MAP[wi.type] ?? "Task";
-  const areaPath = wi.adoAreaPath || c?.adoProjectRef || project;
+  // only send an AreaPath that actually lives under the connected project —
+  // a path from a CSV import (e.g. "Altshul IT\GEMEL\CRM") isn't a valid
+  // node here and ADO rejects the whole create (TF401347). Fall back to root.
+  const wantedArea = wi.adoAreaPath || c?.adoProjectRef || "";
+  const areaPath = wantedArea && wantedArea.toLowerCase().startsWith(project.toLowerCase()) ? wantedArea : project;
 
   // parent's ADO id, if the parent is itself synced
   let parentAdoId: number | null = null;
@@ -85,10 +89,13 @@ export async function syncRequirementToAdo(input: { clientId: string; workitemId
   }
 
   // create
+  const desc = wi.key?.startsWith("ADO-")
+    ? `נוצר מ-DCC · יובא במקור מ-${wi.key}${wantedArea && wantedArea !== areaPath ? ` (area מקורי: ${wantedArea})` : ""}`
+    : `נוצר מ-DCC · requirement ${wi.id}`;
   const patch: Array<Record<string, unknown>> = [
     { op: "add", path: "/fields/System.Title", value: wi.title },
     { op: "add", path: "/fields/System.AreaPath", value: areaPath },
-    { op: "add", path: "/fields/System.Description", value: `נוצר מ-DCC · requirement ${wi.id}` },
+    { op: "add", path: "/fields/System.Description", value: desc },
   ];
   if (parentAdoId) {
     patch.push({
@@ -133,6 +140,30 @@ export async function deleteAdoForRequirement(clientId: string, linkedAdoId: num
   } catch (e) {
     return { ok: false, detail: String((e as Error).message) };
   }
+}
+
+/**
+ * Push every not-yet-linked requirement of a client into the connected
+ * ADO project (create). Used after a CSV import. Returns per-item outcome.
+ */
+export async function syncAllToAdo(clientId: string, by: { userId: string }) {
+  const rows = await withTenant(clientId, (tx) =>
+    tx.select({ id: workitem.id, title: workitem.title }).from(workitem)
+      .where(and(eq(workitem.clientId, clientId), isNull(workitem.linkedAdoId)))
+      .orderBy(workitem.createdAt),
+  );
+  const out = { total: rows.length, created: 0, failed: 0, items: [] as { title: string; ok: boolean; adoId?: number; url?: string; error?: string }[] };
+  for (const r of rows) {
+    try {
+      const res = await syncRequirementToAdo({ clientId, workitemId: r.id, by });
+      out.created++;
+      out.items.push({ title: r.title, ok: true, adoId: res.adoId, url: res.url });
+    } catch (e) {
+      out.failed++;
+      out.items.push({ title: r.title, ok: false, error: String((e as Error).message) });
+    }
+  }
+  return out;
 }
 
 /** Best-effort sync used right after creating a requirement. Never throws. */

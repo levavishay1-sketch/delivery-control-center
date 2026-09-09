@@ -63,6 +63,7 @@ import {
   updateConnection,
   syncRequirementToAdo,
   trySyncNewRequirement,
+  syncAllToAdo,
   deleteAdoForRequirement,
   adoWorkItemUrl,
   importAdoCsv,
@@ -155,6 +156,13 @@ app.post("/clients/:id/import/ado-csv", async (req) => {
   const { id } = req.params as { id: string };
   const b = z.object({ csv: z.string().min(10) }).parse(req.body);
   return importAdoCsv({ clientId: id, csv: b.csv, by: { userId: dev.id } });
+});
+
+// push every not-yet-linked requirement into the connected ADO project
+app.post("/clients/:id/sync-all-to-ado", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  return syncAllToAdo(id, { userId: dev.id });
 });
 
 // live-discover the ADO projects a PAT can see, for the connect form's picker
