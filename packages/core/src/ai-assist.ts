@@ -121,8 +121,8 @@ async function firstRepo(clientId: string, workitemId: string) {
 /* ── 1. assess: translate + is it baked? ───────────────────────────── */
 
 export type AssessResult = {
-  englishTitle: string;
-  englishSummary: string;
+  title: string;
+  summary: string;
   baked: boolean;
   rationale: string;
   gaps: { description: string; blocking: boolean; confidence: number }[];
@@ -143,12 +143,14 @@ export async function assessRequirement(input: { clientId: string; workitemId: s
     reqText,
     "",
     "Do this:",
-    "1. Translate the requirement to clear English (a short title + a 2-5 sentence summary).",
+    "1. Restate the requirement clearly (a short title + a 2-5 sentence summary). You may name code symbols / file paths in English, but everything else must be Hebrew.",
     "2. Decide if it is specified well enough to start implementing ('baked'), or if there are gaps / ambiguities / missing decisions that a person must resolve first.",
     "3. List the gaps (empty if baked). Mark each as blocking (must be answered before any code) or not.",
     "",
+    "IMPORTANT: write title, summary, rationale and every gap description IN HEBREW. Reason in English internally if it helps, but the JSON string values must be Hebrew (code identifiers and paths may stay in English).",
+    "",
     'Respond with ONLY this JSON, no prose, no markdown fence:',
-    '{"englishTitle": string, "englishSummary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
+    '{"title": string, "summary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
   ].join("\n");
 
   const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000 });
@@ -156,7 +158,7 @@ export async function assessRequirement(input: { clientId: string; workitemId: s
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
     actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:assess" },
-    payload: { body: `תרגום ל-EN:\n**${res.englishTitle}**\n${res.englishSummary}\n\nהערכה: ${res.baked ? "אפוי — מוכן לפירוק" : "לא אפוי — צריך אינטראקציה"}\n${res.rationale}` },
+    payload: { body: `סיכום Claude:\n**${res.title}**\n${res.summary}\n\nהערכה: ${res.baked ? "אפוי — מוכן לפירוק" : "לא אפוי — צריך אינטראקציה"}\n${res.rationale}` },
   });
   const gaps = (res.gaps ?? []).filter((g) => g && g.description);
   for (const g of gaps) {
@@ -195,6 +197,8 @@ export async function breakdownRequirement(input: { clientId: string; workitemId
     reqText,
     "",
     "Rules: 3-12 tasks. Each task is one focused, reviewable unit. Give an appetite (small | standard | large). List the files each task will most likely touch. List dependencies by the seq numbers of tasks that must finish first.",
+    "",
+    "IMPORTANT: write each task's \"intent\" IN HEBREW (code identifiers and file paths may stay in English). appetite stays one of small|standard|large.",
     "",
     'Respond with ONLY this JSON array, no prose:',
     '[{"seq": number, "intent": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',

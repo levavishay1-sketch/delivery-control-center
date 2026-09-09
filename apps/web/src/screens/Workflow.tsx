@@ -123,8 +123,8 @@ export function WorkflowModal({ workitemId, clientId, phase, onClose, onChanged 
 
       {step === "assessed" && assess && (
         <>
-          <h2 style={{ fontSize: 17, fontWeight: 650, marginBottom: 4 }}>{assess.englishTitle}</h2>
-          <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, direction: "ltr", textAlign: "left" }}>{assess.englishSummary}</p>
+          <h2 style={{ fontSize: 17, fontWeight: 650, marginBottom: 4 }}>{assess.title}</h2>
+          <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>{assess.summary}</p>
           <div style={{ marginBottom: 12 }}>
             {assess.baked
               ? <Pill tone="healthy">הדרישה אפויה — מוכנה לפירוק</Pill>

@@ -150,7 +150,7 @@ export type StartBuildResult = {
 export const startBuilding = (id: string) => post<StartBuildResult>(`/workitems/${id}/start`, {});
 export const getUsers = () => get<{ users: { id: string; email: string; displayName: string }[] }>("/users");
 export const assignRequirement = (id: string, body: { ownerId?: string; email?: string }) => post<{ assigned: boolean; ownerId: string }>(`/workitems/${id}/assign`, body);
-export type AssessResult = { englishTitle: string; englishSummary: string; baked: boolean; rationale: string; gaps: { description: string; blocking: boolean; confidence: number }[]; repoUsed: string | null };
+export type AssessResult = { title: string; summary: string; baked: boolean; rationale: string; gaps: { description: string; blocking: boolean; confidence: number }[]; repoUsed: string | null };
 export const assessRequirement = (id: string) => post<AssessResult>(`/workitems/${id}/assess`, {});
 export type BreakdownResult = { tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[] };
 export const breakdownRequirement = (id: string) => post<BreakdownResult>(`/workitems/${id}/breakdown`, {});
