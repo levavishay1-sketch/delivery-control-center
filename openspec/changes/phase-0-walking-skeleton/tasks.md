@@ -95,5 +95,10 @@ smaller). Order matters — each group unblocks the next.
       (`proposeTasks` with a dependency graph, `progressTask`, `tasksFor`),
       `dcc.mjs tasks`, API endpoints, tasks in the Brief and the UI
 - [x] 7.6 Blocker response UI · gap verify UI · task progress UI
-- [ ] 7.7 model routing (`model.routed` events + policy)
+- [x] 7.7 model routing — `config/model-policy.json` (global layer,
+      escalate/downgrade rules), `route()` deterministic classifier,
+      `recordRouting()` → `model.routed` events, `POST /workitems/:id/route`,
+      `dcc.mjs route`, wired into the brief's LLM seam. `prove:routing`
+      10/10. Rendered in the Brief and timeline with model + rationale.
 - [ ] 7.8 Reviewer subagent · Flow/dependency visualisation (React Flow)
+- [ ] 7.9 client/workitem policy override layers (global ships now)

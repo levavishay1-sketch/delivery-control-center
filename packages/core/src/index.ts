@@ -5,4 +5,5 @@ export { proposeTasks, progressTask, tasksFor, type TaskInput } from "./tasks.ts
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
+export { route, recordRouting, loadPolicy, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
 export { setupClient, type SetupResult } from "./admin.ts";

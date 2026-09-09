@@ -1,0 +1,22 @@
+{
+  "$comment": "Model routing policy (architecture §6). Config-as-code: this is the GLOBAL layer. client/ and workitem-level overrides deep-merge on top, most specific wins. Every AI call declares its capability; route() picks a tier + budget from here and records a model.routed event when a model is actually invoked. The router itself is rules, not a model — no regress. escalateOn/downgradeOn are lists: ANY entry matching triggers (keys within one entry are AND).",
+  "version": 1,
+  "tiers": {
+    "haiku": { "model": "claude-haiku-4-5-20251001", "maxUsdPerCall": 0.05 },
+    "sonnet": { "model": "claude-sonnet-5", "maxUsdPerCall": 0.75 },
+    "opus": { "model": "claude-opus-5", "maxUsdPerCall": 4.0 }
+  },
+  "capabilities": {
+    "brief":        { "default": "haiku",  "escalateOn": [{ "recentEvents": 40 }] },
+    "matching":     { "default": "haiku" },
+    "narrative":    { "default": "haiku" },
+    "gap_detection":{ "default": "sonnet", "escalateOn": [{ "ambiguity": "high" }] },
+    "decomposition":{ "default": "sonnet", "escalateOn": [{ "breadth": 4 }, { "openGaps": 3 }, { "novelty": "high" }] },
+    "review":       { "default": "sonnet" },
+    "execution":    { "default": "sonnet", "escalateOn": [{ "breadth": 5 }, { "ambiguity": "high" }, { "novelty": "high" }], "downgradeOn": [{ "mechanical": true }] }
+  },
+  "guardrails": {
+    "killAfterStuckIterations": 3,
+    "budgetWarnAtFraction": 0.8
+  }
+}

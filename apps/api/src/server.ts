@@ -11,6 +11,9 @@ import {
   proposeGap,
   proposeTasks,
   raiseBlocker,
+  recordRouting,
+  route,
+  type Capability,
   recordGitActivity,
   recordNote,
   recordSession,
@@ -189,6 +192,36 @@ app.post("/gaps/:id/verify", async (req) => {
     })
     .parse(req.body);
   return verifyGap({ gapId: id, by: { userId: dev.id }, ...b });
+});
+
+/* ── model routing ───────────────────────────────────────────────── */
+
+app.post("/workitems/:id/route", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({
+      capability: z.enum(["brief", "matching", "narrative", "gap_detection", "decomposition", "review", "execution"]),
+      signals: z
+        .object({
+          ambiguity: z.enum(["low", "medium", "high"]).optional(),
+          breadth: z.number().int().optional(),
+          reversible: z.boolean().optional(),
+          openGaps: z.number().int().optional(),
+          novelty: z.enum(["low", "medium", "high"]).optional(),
+          recentEvents: z.number().int().optional(),
+          mechanical: z.boolean().optional(),
+        })
+        .default({}),
+      record: z.boolean().default(true),
+    })
+    .parse(req.body);
+  const wi = await locateWorkItem({ id });
+  const decision = route(b.capability as Capability, b.signals);
+  if (b.record) {
+    await recordRouting({ clientId: wi.clientId, workitemId: wi.id, by: { userId: dev.id }, decision });
+  }
+  return reply.code(200).send(decision);
 });
 
 /* ── tasks ────────────────────────────────────────────────────────── */

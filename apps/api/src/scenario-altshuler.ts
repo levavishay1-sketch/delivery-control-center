@@ -58,7 +58,12 @@ show(
   }),
 );
 
-// 4 ── developer + Claude open the code; the gap-report skill fires twice
+// 4 ── developer + Claude open the code. The gap-report skill routes
+//      the model first (high ambiguity → escalate), then fires twice.
+show(
+  "route: gap_detection (high ambiguity)",
+  await post(`/workitems/${workitemId}/route`, { capability: "gap_detection", signals: { ambiguity: "high" } }),
+);
 show(
   "gap #1 — blocking",
   await post(`/workitems/${workitemId}/gaps`, {
@@ -108,7 +113,12 @@ show("answer blocker", await post(`/blockers/${b.blockers[0]!.id}/answer`, {
 }));
 
 // 8 ── with the blocking gap verified and the access decision on record,
-//      the task-breakdown skill runs OpenSpec and registers the plan
+//      the task-breakdown skill routes (cross-repo → escalate), runs
+//      OpenSpec, and registers the plan
+show(
+  "route: decomposition (cross-repo)",
+  await post(`/workitems/${workitemId}/route`, { capability: "decomposition", signals: { breadth: 5, openGaps: 0 } }),
+);
 show(
   "tasks proposed (via task-breakdown / OpenSpec)",
   await post(`/workitems/${workitemId}/tasks`, {

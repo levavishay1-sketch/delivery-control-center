@@ -33,7 +33,11 @@ const gist = (e: EventRow) => {
   const p = e.payload;
   return (
     (p.summary as string) || (p.body as string) || (p.answer as string) || (p.description as string) ||
-    (p.question as string) || (p.outcome ? `→ ${p.outcome}` : "") ||
+    (p.question as string) ||
+    (p.model ? `${p.capability} → ${p.model}  ·  ${p.rationale ?? ""}` : "") ||
+    (p.taskCount ? `${p.taskCount} משימות, ${p.dependencyCount} תלויות` : "") ||
+    (p.to ? `${p.from ?? "?"} → ${p.to}` : "") ||
+    (p.outcome ? `→ ${p.outcome}` : "") ||
     [p.kind, p.branch && `on ${p.branch}`].filter(Boolean).join(" ") || e.type
   );
 };

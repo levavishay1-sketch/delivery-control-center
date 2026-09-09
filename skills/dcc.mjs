@@ -6,6 +6,7 @@
 //   node dcc.mjs gap     --workitem <id> --description "..." --blocking --confidence 0.8
 //   node dcc.mjs blocker --workitem <id> --type missing_access --question "..."
 //   node dcc.mjs tasks   --workitem <id> --file tasks.json [--change <openspec-change-id>]
+//   node dcc.mjs route   --workitem <id> --capability gap_detection [--ambiguity high --breadth 5 ...]
 //   node dcc.mjs brief   --workitem <id>
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
@@ -76,6 +77,12 @@ try {
         question: a.question,
       }),
     );
+  } else if (cmd === "route") {
+    const signals = {};
+    for (const k of ["ambiguity", "novelty"]) if (a[k]) signals[k] = a[k];
+    for (const k of ["breadth", "openGaps", "recentEvents"]) if (a[k]) signals[k] = Number(a[k]);
+    for (const k of ["reversible", "mechanical"]) if (a[k]) signals[k] = true;
+    console.log(await call("POST", `/workitems/${a.workitem}/route`, { capability: a.capability, signals }));
   } else if (cmd === "tasks") {
     const parsed = JSON.parse(readFileSync(a.file, "utf8"));
     const tasks = Array.isArray(parsed) ? parsed : parsed.tasks;
@@ -86,7 +93,7 @@ try {
       }),
     );
   } else {
-    console.error("usage: dcc <resolve|brief|gap|blocker|tasks> [--flags]");
+    console.error("usage: dcc <resolve|brief|gap|blocker|tasks|route> [--flags]");
     process.exit(2);
   }
 } catch (e) {

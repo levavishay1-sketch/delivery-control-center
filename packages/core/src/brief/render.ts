@@ -90,6 +90,9 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
         (p.answer as string) ||
         (p.description as string) ||
         (p.question as string) ||
+        (p.model ? `${p.capability} → ${p.model} (${p.rationale ?? ""})` : "") ||
+        (p.taskCount ? `${p.taskCount} tasks, ${p.dependencyCount} deps` : "") ||
+        (p.to ? `${p.from ?? "?"} → ${p.to}` : "") ||
         (p.outcome ? `→ ${p.outcome}` : "") ||
         `${p.kind ?? ""} ${p.branch ? `on ${p.branch}` : ""}`.trim() ||
         e.type;
