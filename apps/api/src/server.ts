@@ -348,13 +348,15 @@ app.get("/workitems/:id", async (req, reply) => {
 
   // reconcile this one item against TFS (fields + attachments; TFS wins)
   // BEFORE opening the read tx — pullOneFromAdo runs its own tx + network.
+  let adoMissing = false;
   if (verifyAdo) {
     const dev = await actingUser(req);
     const r = await pullOneFromAdo(wi.clientId, id, { userId: dev.id }); // "skip" when not linked
-    if (r === "gone") {
-      await deleteRequirement(wi.clientId, id);
-      return reply.code(410).send({ error: "deleted in TFS" });
-    }
+    // TFS says the linked item is gone. Do NOT auto-delete — that would
+    // silently drop the local gaps/notes/brief on a routine page open,
+    // and a false "gone" has cost us real data before. Flag it and let
+    // the user decide (Record.tsx shows a banner → explicit delete).
+    if (r === "gone") adoMissing = true;
   }
 
   const t = await tasksFor(wi.clientId, id);
@@ -376,6 +378,7 @@ app.get("/workitems/:id", async (req, reply) => {
     return {
       workitem: { ...wi, ...full },
       adoUrl,
+      adoMissing,
       attachments: await attachmentsFor(wi.clientId, id),
       repos: await reposForRequirement(wi.clientId, id),
       gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),

@@ -144,6 +144,21 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </div>
       </div>
 
+      {d.adoMissing && (
+        <div className="callout crit" style={{ marginBottom: 14 }}>
+          <div className="body">
+            <p className="r">ה-work item המקושר (#{wi.linkedAdoId}) לא נמצא ב-TFS כרגע.</p>
+            <p style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
+              ייתכן שנמחק, ייתכן שזו תקלה זמנית. הדרישה כאן נשמרה כמות שהיא — כלום לא נמחק אוטומטית.
+            </p>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button className="btn btn-secondary btn-sm" onClick={() => reload(true)}>בדוק שוב</button>
+              <button className="btn btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחק גם כאן</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
           <button key={t} className="tab" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>

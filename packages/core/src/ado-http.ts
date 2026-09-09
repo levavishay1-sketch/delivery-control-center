@@ -32,12 +32,17 @@ export function adoAuthHeader(pat: string): Record<string, string> {
 
 type GetResult =
   | { ok: true; apiVersion: string; body: unknown }
-  | { ok: false; status: number; detail: string };
+  // `resourceMissing` is true ONLY when ADO itself answered with a
+  // structured "does not exist" error (JSON `message`, e.g. TF401232) —
+  // NOT when a version-probe 404'd because the api-version is unknown to
+  // this server. The caller must never mirror a delete off a bare 404.
+  | { ok: false; status: number; detail: string; resourceMissing?: boolean };
 
 /** GET an ADO REST path, walking api-versions until one isn't a 404. */
 export async function adoGet(base: string, path: string, pat: string): Promise<GetResult> {
   const clean = base.replace(/\/+$/, "");
   let last: { status: number; statusText: string } | { network: string } | null = null;
+  let resourceMissing = false;
   for (const v of versionsFor(clean)) {
     try {
       const res = await fetch(`${clean}/_apis/${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, {
@@ -45,6 +50,18 @@ export async function adoGet(base: string, path: string, pat: string): Promise<G
       });
       if (res.ok) { rememberVersion(clean, v); return { ok: true, apiVersion: v, body: await res.json().catch(() => null) }; }
       if (res.status === 401) return { ok: false, status: 401, detail: "401 — ה-PAT נדחה. בדוק שהוא בתוקף ושיש לו Work Items + Code (Read)." };
+      // A genuine "not found" from ADO carries a JSON body with a message
+      // like "TF401232: Work item N does not exist". A version-probe miss
+      // is an HTML/plain "Page not found" with no such shape.
+      if (res.status === 404) {
+        const ct = res.headers.get("content-type") ?? "";
+        if (ct.includes("json")) {
+          const b = (await res.json().catch(() => null)) as { message?: string; typeKey?: string } | null;
+          if (b && typeof b.message === "string" && /does not exist|TF401232|was not found|deleted/i.test(b.message)) {
+            return { ok: false, status: 404, detail: b.message.slice(0, 200), resourceMissing: true };
+          }
+        }
+      }
       last = { status: res.status, statusText: res.statusText };
     } catch (e) {
       last = { network: String((e as Error).message) };
@@ -52,7 +69,7 @@ export async function adoGet(base: string, path: string, pat: string): Promise<G
     }
   }
   if (last && "network" in last) return { ok: false, status: 0, detail: `שגיאת רשת: ${last.network} — האם ${clean} נגיש מהשרת?` };
-  return { ok: false, status: last?.status ?? 0, detail: last ? `${last.status} ${last.statusText}` : "no response" };
+  return { ok: false, status: last?.status ?? 0, detail: last ? `${last.status} ${last.statusText}` : "no response", resourceMissing };
 }
 
 type SendResult =

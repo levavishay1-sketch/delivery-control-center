@@ -51,7 +51,7 @@ export type WorkItem = {
 export type LinkedRepo = { id: string; name: string; adoRepoRef: string | null; linkKind: "declared" | "auto"; addedAt: string };
 export type Attachment = { id: string; name: string; adoUrl: string | null; sizeBytes: number | null; source: "dcc" | "ado"; createdAt: string };
 export type WorkItemDetail = {
-  workitem: WorkItem; adoUrl: string | null; attachments: Attachment[]; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
+  workitem: WorkItem; adoUrl: string | null; adoMissing?: boolean; attachments: Attachment[]; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
   taskDependencies: { taskId: string; dependsOnTaskId: string; reason: string | null }[];
   events: EventRow[];
 };

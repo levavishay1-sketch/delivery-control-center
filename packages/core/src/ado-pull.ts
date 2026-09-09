@@ -150,7 +150,10 @@ export async function pullOneFromAdo(clientId: string, workitemId: string, by: {
   if (!row?.adoId) return "skip";
 
   const r = await adoGet(projBase, `wit/workitems/${row.adoId}?$expand=relations`, conn.secretRef);
-  if (!r.ok) return r.status === 404 ? "gone" : "skip";
+  // Only "gone" when ADO explicitly said the item does not exist — never
+  // off a bare 404, which on old on-prem servers just means the probed
+  // api-version is unknown. A transient/ambiguous failure is "skip".
+  if (!r.ok) return r.resourceMissing ? "gone" : "skip";
   const w = r.body as AdoWi;
   const res = { created: 0, updated: 0, attachmentsAdded: 0 };
   await reconcileOne(clientId, w, row as DccRow, orgUrl, project, by, res);
@@ -186,9 +189,15 @@ export async function pullFromAdo(clientId: string, by: { userId: string }): Pro
 
   const res: PullResult = { created: 0, updated: 0, deleted: 0, attachmentsAdded: 0, detail: "" };
 
-  // gone from TFS → delete in DCC
-  for (const r of dccRows) {
-    if (!adoById.has(r.adoId!)) {
+  // gone from TFS → delete in DCC. Guard rails: an empty WIQL result is
+  // almost always a query hiccup, not "the project was emptied", so never
+  // delete off it. For anything missing from a non-empty result, confirm
+  // with a direct GET that ADO really says it's gone before mirroring.
+  if (ids.length > 0) {
+    for (const r of dccRows) {
+      if (adoById.has(r.adoId!)) continue;
+      const chk = await adoGet(projBase, `wit/workitems/${r.adoId}`, conn.secretRef);
+      if (chk.ok || !chk.resourceMissing) continue; // still there, or can't tell — keep it
       await withTenant(clientId, (tx) => tx.delete(workitem).where(eq(workitem.id, r.id)));
       res.deleted++;
     }
@@ -212,8 +221,8 @@ export async function adoWorkItemExists(clientId: string, adoId: number): Promis
   if (!project) return null;
   const r = await adoGet(`${orgUrl}/${encodeURIComponent(project)}`, `wit/workitems/${adoId}`, conn.secretRef);
   if (r.ok) return true;
-  if (r.status === 404) return false;
-  return null; // couldn't tell (network / auth) — don't delete on a maybe
+  if (r.resourceMissing) return false;
+  return null; // couldn't tell (network / auth / bad api-version) — don't delete on a maybe
 }
 
 /* ── attachments: DCC → TFS ─────────────────────────────────────────── */
