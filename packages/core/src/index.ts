@@ -11,3 +11,11 @@ export { recordTouches, releaseTouches, contentionFor, recordReview } from "./co
 export { dashboard, auditTrail, listAllWorkItems, listInitiatives, listBudgets, listAlerts, type AuditFilter } from "./dashboard.ts";
 export { listClients, clientDetail, linkRepoToClient, addAdoConnection, checkAdoConnection, deleteConnection, listAdoProjects, listRepos, listConnections } from "./clients.ts";
 export { setupClient, type SetupResult } from "./admin.ts";
+export {
+  updateClient, deleteClient, archiveClient,
+  updateRequirement, deleteRequirement,
+  linkRepoToRequirement, unlinkRepoFromRequirement, reposForRequirement,
+  updateRepo, deleteRepo, unlinkClientRepo,
+  updateGap, deleteGap, updateBlocker, deleteBlocker, updateTask, deleteTask, deleteDependency,
+  updateConnection,
+} from "./crud.ts";

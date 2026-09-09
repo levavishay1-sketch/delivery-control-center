@@ -97,6 +97,12 @@ export async function recordNote(input: {
   body: string;
   source?: "manual" | "email" | "slack" | "phone" | "meeting";
   occurredAt?: Date;
+  /**
+   * The id of an earlier note this one corrects. The timeline is
+   * append-only (decision 01), so an "edit" or "delete" of a note is
+   * really a NEW row that supersedes the old one — history stays intact.
+   */
+  corrects?: string;
 }) {
   const ev = await appendEvent({
     clientId: input.clientId,
@@ -105,7 +111,8 @@ export async function recordNote(input: {
     source: input.source ?? "manual",
     type: "note.added",
     actor: { kind: "user", userId: input.dev.userId, identityType: "interactive" },
-    payload: { body: input.body },
+    supersedes: input.corrects,
+    payload: input.corrects ? { body: input.body, corrects: input.corrects } : { body: input.body },
   });
   if (input.workitemId) await regenerateBrief(input.clientId, input.workitemId);
   return ev;

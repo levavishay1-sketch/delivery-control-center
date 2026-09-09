@@ -113,6 +113,22 @@ const adoSynced = z.object({
 
 const noteAdded = z.object({
   body: z.string(),
+  /** set when this note corrects an earlier one (the row also sets `supersedes`) */
+  corrects: z.string().uuid().optional(),
+});
+
+const requirementUpdated = z.object({
+  summary: z.string(),
+  fields: z.array(z.string()).default([]),
+});
+
+const repoLinked = z.object({
+  repoName: z.string(),
+  linkKind: z.enum(["declared", "auto"]).default("declared"),
+});
+
+const repoUnlinked = z.object({
+  repoName: z.string(),
 });
 
 const matchConfirmed = z.object({
@@ -139,6 +155,9 @@ export const payloadSchemas: Registry = {
   "model.routed": { 1: modelRouted },
   "ado.synced": { 1: adoSynced },
   "note.added": { 1: noteAdded },
+  "requirement.updated": { 1: requirementUpdated },
+  "repo.linked": { 1: repoLinked },
+  "repo.unlinked": { 1: repoUnlinked },
 };
 
 export const CURRENT_VERSION = 1;

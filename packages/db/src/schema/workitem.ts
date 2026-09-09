@@ -99,7 +99,11 @@ export const workitem = pgTable(
   ],
 ).enableRLS();
 
-/** Which repos a WorkItem touches — from declared affected areas + live branches. */
+/**
+ * Which repos a requirement touches. Two sources:
+ *   link_kind = 'declared' — a person picked it (the manual path)
+ *   link_kind = 'auto'     — inferred from live branches / affected areas
+ */
 export const workitemRepo = pgTable(
   "workitem_repo",
   {
@@ -112,6 +116,9 @@ export const workitemRepo = pgTable(
     repoId: uuid("repo_id")
       .notNull()
       .references(() => repo.id, { onDelete: "cascade" }),
+    linkKind: text("link_kind").notNull().default("declared"),
+    addedBy: uuid("added_by"),
+    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     primaryKey({ columns: [t.workitemId, t.repoId] }),

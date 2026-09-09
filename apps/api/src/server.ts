@@ -42,6 +42,25 @@ import {
   setupClient,
   tasksFor,
   verifyGap,
+  updateClient,
+  deleteClient,
+  archiveClient,
+  updateRequirement,
+  deleteRequirement,
+  linkRepoToRequirement,
+  unlinkRepoFromRequirement,
+  reposForRequirement,
+  updateRepo,
+  deleteRepo,
+  unlinkClientRepo,
+  updateGap,
+  deleteGap,
+  updateBlocker,
+  deleteBlocker,
+  updateTask,
+  deleteTask,
+  deleteDependency,
+  updateConnection,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -70,12 +89,49 @@ app.get("/clients/:id", async (req) => clientDetail((req.params as { id: string 
 app.get("/repos", async () => ({ repos: await listRepos() }));
 app.get("/connections", async () => ({ connections: await listConnections() }));
 
+app.patch("/clients/:id", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({
+    name: z.string().min(1).optional(),
+    connectorType: z.enum(["manual", "ado", "github", "jira", "dcc"]).optional(),
+    adoProjectRef: z.string().nullable().optional(),
+  }).parse(req.body);
+  return updateClient({ clientId: id, ...b });
+});
+
+app.delete("/clients/:id", async (req, reply) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const q = req.query as { mode?: string };
+  if (q.mode === "archive") return archiveClient(id, true);
+  return reply.send(await deleteClient(id));
+});
+
+app.patch("/repos/:id", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ name: z.string().min(1).optional(), adoRepoRef: z.string().nullable().optional(), defaultBranch: z.string().optional() }).parse(req.body);
+  return updateRepo({ repoId: id, ...b });
+});
+
+app.delete("/repos/:id", async (req) => {
+  await actingUser(req);
+  return deleteRepo((req.params as { id: string }).id);
+});
+
 app.post("/clients/:id/repos", async (req, reply) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   const b = z.object({ repoId: z.string().uuid().optional(), name: z.string().optional(), gitUrl: z.string().optional(), adoRepoRef: z.string().optional() }).parse(req.body);
   const r = await linkRepoToClient({ clientId: id, ...b, by: { userId: dev.id } });
   return reply.code(201).send(r);
+});
+
+app.delete("/clients/:cid/repos/:repoId", async (req) => {
+  await actingUser(req);
+  const { cid, repoId } = req.params as { cid: string; repoId: string };
+  return unlinkClientRepo(cid, repoId);
 });
 
 // live-discover the ADO projects a PAT can see, for the connect form's picker
@@ -91,6 +147,13 @@ app.post("/clients/:id/connections/ado", async (req, reply) => {
   const b = z.object({ orgUrl: z.string().url(), project: z.string().optional(), pat: z.string().min(10) }).parse(req.body);
   const out = await addAdoConnection({ clientId: id, ...b, by: { userId: dev.id } });
   return reply.code(201).send({ id: out.id, check: out.check });
+});
+
+app.patch("/clients/:cid/connections/:id", async (req) => {
+  await actingUser(req);
+  const { cid, id } = req.params as { cid: string; id: string };
+  const b = z.object({ orgUrl: z.string().optional(), project: z.string().optional(), pat: z.string().optional() }).parse(req.body);
+  return updateConnection({ clientId: cid, connectionId: id, ...b });
 });
 
 app.post("/clients/:cid/connections/:id/check", async (req) => {
@@ -161,7 +224,7 @@ const captureBody = z.object({
       shas: z.array(z.string()).optional(),
     })
     .optional(),
-  note: z.object({ body: z.string(), source: z.enum(["manual", "email", "slack", "phone", "meeting"]).optional() }).optional(),
+  note: z.object({ body: z.string(), source: z.enum(["manual", "email", "slack", "phone", "meeting"]).optional(), corrects: z.string().uuid().optional() }).optional(),
 });
 
 app.post("/events", async (req, reply) => {
@@ -191,7 +254,7 @@ app.post("/events", async (req, reply) => {
     ev = await recordGitActivity({ ...common, git: b.git });
   } else {
     if (!b.note) return reply.code(400).send({ error: "note body required" });
-    ev = await recordNote({ ...common, body: b.note.body, source: b.note.source });
+    ev = await recordNote({ ...common, body: b.note.body, source: b.note.source, corrects: b.note.corrects });
   }
   return reply.code(201).send({ eventId: ev?.id, workitemId: wi?.id ?? null, assigned: !!wi });
 });
@@ -233,6 +296,7 @@ app.get("/workitems/:id", async (req) => {
     const [full] = await tx.select().from(workitem).where(sql`${workitem.id} = ${id}`).limit(1);
     return {
       workitem: { ...wi, ...full },
+      repos: await reposForRequirement(wi.clientId, id),
       gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
       blockers: await tx.select().from(blocker).where(sql`${blocker.workitemId} = ${id}`).orderBy(sql`${blocker.createdAt} desc`),
       tasks: t.tasks,
@@ -240,6 +304,61 @@ app.get("/workitems/:id", async (req) => {
       events: await timeline(wi.clientId, id),
     };
   });
+});
+
+/* ── requirement edit + repo links ─────────────────────────────────── */
+
+app.patch("/workitems/:id", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({
+    title: z.string().min(1).optional(),
+    type: WITYPE.optional(),
+    priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+    risk: z.enum(["low", "medium", "high"]).optional(),
+    executor: z.enum(["human", "ai", "mixed"]).optional(),
+    phase: z.enum(["intake", "shaping", "building", "review", "done", "archived"]).optional(),
+    budgetUsd: z.union([z.number(), z.string(), z.null()]).optional(),
+    dueDate: z.string().nullable().optional(),
+    parentId: z.string().uuid().nullable().optional(),
+    adoAreaPath: z.string().nullable().optional(),
+    key: z.string().nullable().optional(),
+  }).parse(req.body);
+  const wi = await locateWorkItem({ id });
+  return updateRequirement({ clientId: wi.clientId, id, by: { userId: dev.id }, patch: b });
+});
+
+app.post("/workitems/:id/repos", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({
+    repoId: z.string().uuid().optional(),
+    name: z.string().optional(), gitUrl: z.string().optional(),
+    linkKind: z.enum(["declared", "auto"]).optional(),
+  }).parse(req.body);
+  const wi = await locateWorkItem({ id });
+  let repoId = b.repoId;
+  if (!repoId && b.name) {
+    const r = await linkRepoToClient({ clientId: wi.clientId, name: b.name, gitUrl: b.gitUrl, by: { userId: dev.id } });
+    repoId = r.id;
+  }
+  if (!repoId) return reply.code(400).send({ error: "repoId or name required" });
+  const out = await linkRepoToRequirement({ clientId: wi.clientId, workitemId: id, repoId, by: { userId: dev.id }, linkKind: b.linkKind });
+  return reply.code(201).send(out);
+});
+
+app.delete("/workitems/:id/repos/:repoId", async (req) => {
+  const dev = await actingUser(req);
+  const { id, repoId } = req.params as { id: string; repoId: string };
+  const wi = await locateWorkItem({ id });
+  return unlinkRepoFromRequirement({ clientId: wi.clientId, workitemId: id, repoId, by: { userId: dev.id } });
+});
+
+app.delete("/workitems/:id/depends-on/:depId", async (req) => {
+  await actingUser(req);
+  const { id, depId } = req.params as { id: string; depId: string };
+  const wi = await locateWorkItem({ id });
+  return deleteDependency(wi.clientId, id, depId);
 });
 
 app.get("/clients/:clientId/blockers", async (req) => {
@@ -273,12 +392,49 @@ app.post("/gaps/:id/verify", async (req) => {
     .object({
       outcome: z.enum(["verified", "dismissed", "spun_off"]),
       spunOffTitle: z.string().optional(),
-      projectId: z.string().uuid().optional(),
       ownerId: z.string().uuid().optional(),
       clientId: z.string().uuid(),
     })
     .parse(req.body);
   return verifyGap({ gapId: id, by: { userId: dev.id }, ...b });
+});
+
+/* ── edit / delete: gaps, blockers, tasks ─────────────────────────── */
+
+app.patch("/gaps/:id", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ clientId: z.string().uuid(), description: z.string().optional(), blocking: z.boolean().optional() }).parse(req.body);
+  return updateGap({ id, ...b });
+});
+app.delete("/gaps/:id", async (req) => {
+  await actingUser(req);
+  const b = z.object({ clientId: z.string().uuid() }).parse(req.body ?? {});
+  return deleteGap(b.clientId, (req.params as { id: string }).id);
+});
+
+app.patch("/blockers/:id", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ clientId: z.string().uuid(), question: z.string().optional(), questionType: z.string().optional() }).parse(req.body);
+  return updateBlocker({ id, ...b });
+});
+app.delete("/blockers/:id", async (req) => {
+  await actingUser(req);
+  const b = z.object({ clientId: z.string().uuid() }).parse(req.body ?? {});
+  return deleteBlocker(b.clientId, (req.params as { id: string }).id);
+});
+
+app.patch("/tasks/:id", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional() }).parse(req.body);
+  return updateTask({ id, ...b });
+});
+app.delete("/tasks/:id", async (req) => {
+  await actingUser(req);
+  const b = z.object({ clientId: z.string().uuid() }).parse(req.body ?? {});
+  return deleteTask(b.clientId, (req.params as { id: string }).id);
 });
 
 /* ── contention map + reviewer ───────────────────────────────────── */
@@ -526,9 +682,9 @@ app.delete("/workitems/:id", async (req, reply) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
-  // event_log rows for this item lose their workitem_id (on delete: set null),
-  // landing in the unassigned bucket — history is never destroyed.
-  await withTenant(wi.clientId, (tx) => tx.delete(workitem).where(sql`${workitem.id} = ${id}`));
+  // sub-requirements must be moved/deleted first; event_log rows detach
+  // (workitem_id → NULL) so history is never destroyed.
+  await deleteRequirement(wi.clientId, id);
   return reply.code(204).send();
 });
 
