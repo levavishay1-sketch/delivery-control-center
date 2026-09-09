@@ -35,7 +35,7 @@ export function WorkflowModal({ workitemId, clientId, phase, onClose, onChanged 
   workitemId: string; clientId: string; phase: string; onClose: () => void; onChanged: () => void;
 }) {
   const alreadyBuilding = phase === "building";
-  const [step, setStep] = useState<Step>(alreadyBuilding ? "build" : "choose");
+  const [step, setStep] = useState<Step>("choose");
   const [err, setErr] = useState<string | null>(null);
   const [users, setUsers] = useState<{ id: string; email: string; displayName: string }[]>([]);
   const [assignTo, setAssignTo] = useState("");
@@ -86,6 +86,11 @@ export function WorkflowModal({ workitemId, clientId, phase, onClose, onChanged 
               <span style={{ fontWeight: 650, fontSize: 14 }}>✦ המשך עם AI</span>
               <span style={{ fontSize: 12, opacity: 0.85, fontWeight: 400 }}>Claude יתרגם לאנגלית, יבדוק מול ה-repo אם הדרישה אפויה, ואם כן — יפרק למשימות</span>
             </button>
+            {alreadyBuilding && (
+              <button className="btn btn-ghost" style={{ fontSize: 12.5, color: "var(--ink-500)" }} onClick={() => setStep("build")}>
+                📋 הדרישה כבר ב-building — הצג הוראות התחלה
+              </button>
+            )}
           </div>
           <Err />
         </>

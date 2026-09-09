@@ -133,11 +133,10 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {(wi.phase === "intake" || wi.phase === "shaping") && (
-            <button className="btn btn-primary btn-sm" onClick={() => setFlowOpen(true)}>▶ התחל עבודה</button>
-          )}
-          {wi.phase === "building" && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setFlowOpen(true)}>הוראות התחלה</button>
+          {wi.phase !== "done" && wi.phase !== "archived" && (
+            <button className="btn btn-primary btn-sm" onClick={() => setFlowOpen(true)}>
+              {wi.phase === "building" ? "המשך עבודה" : "▶ התחל עבודה"}
+            </button>
           )}
           <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ אירוע</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setEditOpen(true)}>עריכה</button>
