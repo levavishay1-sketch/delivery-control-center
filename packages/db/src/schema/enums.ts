@@ -34,6 +34,12 @@ export const workitemKind = pgEnum("workitem_kind", [
 ]);
 
 export const priority = pgEnum("priority", ["low", "medium", "high", "critical"]);
+
+/** How a project's work items sync. "dcc" = managed only inside DCC. */
+export const connectorType = pgEnum("connector_type", ["manual", "ado", "github", "jira", "dcc"]);
+
+/** Coarse project status shown as a pill on the dashboard. */
+export const projectStatus = pgEnum("project_status", ["planning", "active", "blocked", "done"]);
 export const riskLevel = pgEnum("risk_level", ["low", "medium", "high"]);
 
 /** Who is doing the work — human, an AI agent, or both. */

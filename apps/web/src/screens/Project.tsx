@@ -1,44 +1,55 @@
 import { useEffect, useState } from "react";
-import { getDashboard, type Dashboard } from "../api.ts";
-import { PageHead, StatusPill, TypeChip } from "../ui.tsx";
+import { getProjectList, getWorkList, type WorkListRow } from "../api.ts";
+import { PageHead, TypeChip, initials } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
 
-/** Project screen: its work items + the dependency Flow. */
-export function Project({ id, nav }: { id: string; nav: (h: string) => void }) {
-  const [d, setD] = useState<Dashboard | null>(null);
-  const [tab, setTab] = useState<"items" | "flow">("items");
-  useEffect(() => { getDashboard().then(setD).catch(() => {}); }, []);
+const PRIO: Record<string, string> = { critical: "קריטית", high: "גבוהה", medium: "בינונית", low: "נמוכה" };
+const CONN: Record<string, string> = { manual: "ידני", ado: "Azure DevOps", github: "GitHub", jira: "Jira", dcc: "DCC" };
 
-  const proj = d?.quickAccess.find((p) => p.id === id);
-  const panel = d?.panels.find((p) => proj && p.clientName === proj.clientName);
+export function Project({ id, nav }: { id: string; nav: (h: string) => void }) {
+  const [meta, setMeta] = useState<{ name: string; clientName: string; connectorType: string; items: number } | null>(null);
+  const [rows, setRows] = useState<WorkListRow[]>([]);
+  const [tab, setTab] = useState<"items" | "flow">("items");
+
+  useEffect(() => {
+    getProjectList().then((r) => {
+      const p = r.projects.find((x) => x.id === id);
+      if (p) setMeta({ name: p.name, clientName: p.clientName, connectorType: p.connectorType, items: p.items });
+    }).catch(() => {});
+    getWorkList().then((r) => setRows(r.items)).catch(() => {});
+  }, [id]);
+
+  const items = rows.filter((w) => meta && w.projectName === meta.name);
 
   return (
     <>
       <PageHead
-        crumb={<a onClick={() => nav("#/")}>← Dashboard</a>}
-        title={proj?.name ?? "Project"}
-        sub={proj ? `${proj.clientName} · ${proj.items} work items` : undefined}
-        actions={<button className="btn btn-primary">+ New Work Item</button>}
+        crumb={<a onClick={() => nav("#/projects")}>← פרויקטים</a>}
+        title={meta?.name ?? "פרויקט"}
+        sub={meta ? `${meta.clientName} · אינטגרציה: ${CONN[meta.connectorType] ?? meta.connectorType} · ${meta.items} עבודות` : undefined}
+        actions={<button className="btn btn-primary">+ עבודה חדשה</button>}
       />
       <div className="tabs">
-        <button className="tab" aria-selected={tab === "items"} onClick={() => setTab("items")}>Work items</button>
-        <button className="tab" aria-selected={tab === "flow"} onClick={() => setTab("flow")}>Flow &amp; dependencies</button>
+        <button className="tab" aria-selected={tab === "items"} onClick={() => setTab("items")}>עבודות</button>
+        <button className="tab" aria-selected={tab === "flow"} onClick={() => setTab("flow")}>Flow ותלויות</button>
       </div>
 
       {tab === "items" && (
-        <div className="rowlist">
-          {(panel?.items ?? []).map((it) => (
-            <div className="row" key={it.id}>
-              <span className="title">{it.title}</span>
-              <TypeChip kind={it.kind} />
-              <span className="spacer" />
-              <span className="stage">{it.priority} priority</span>
-              <StatusPill status={it.status} />
-              <a className="link" onClick={() => nav(`#/wi/${it.id}`)}>Open</a>
-            </div>
-          ))}
-          {!panel && <div className="spin">Loading…</div>}
-          {panel && panel.items.length === 0 && <div className="empty">No work items.</div>}
+        <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+          <table className="wtable">
+            <thead><tr><th>עבודה</th><th>אחראי</th><th>עדיפות</th><th>שלב</th></tr></thead>
+            <tbody>
+              {items.map((w) => (
+                <tr key={w.id}>
+                  <td><span className="w-title" onClick={() => nav(`#/wi/${w.id}`)}>{w.title}</span> <TypeChip kind={w.kind} />{w.openBlockers > 0 && <span className="prio critical" style={{ marginInlineStart: 6 }}>חסום</span>}</td>
+                  <td><span className="w-owner"><span className="a">{initials(w.ownerName)}</span>{w.ownerName}</span></td>
+                  <td><span className={`prio ${w.priority}`}>{PRIO[w.priority]}</span></td>
+                  <td>{w.phase}</td>
+                </tr>
+              ))}
+              {meta && items.length === 0 && <tr><td colSpan={4}><div className="empty">אין עבודות.</div></td></tr>}
+            </tbody>
+          </table>
         </div>
       )}
 

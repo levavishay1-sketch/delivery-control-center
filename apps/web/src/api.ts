@@ -35,14 +35,24 @@ export type WorkItemDetail = {
 };
 
 export type Dashboard = {
-  stats: { decisions: number; blockers: number; risks: number; deadlines: number };
-  quickAccess: { id: string; name: string; clientName: string; clientId: string; items: number; lastUpdate: string | null }[];
-  panels: {
-    clientId: string; clientName: string; aiCostUsd: number; budgetUsd: number; budgetPct: number;
+  stats: {
+    activeProjects: number; projectsDelta: number;
+    openItems: number; itemsDelta: number;
+    blockedItems: number;
+    aiCostUsd: number; aiBudgetUsd: number; aiBudgetPct: number;
+  };
+  projects: {
+    id: string; name: string; status: "planning" | "active" | "blocked" | "done";
+    connectorType: "manual" | "ado" | "github" | "jira" | "dcc";
+    clientName: string; budgetUsd: number | null; aiCostUsd: number; items: number;
     members: { id: string; name: string }[];
-    items: { id: string; key: string | null; title: string; kind: WorkItem["kind"]; phase: string; priority: string; status: "blocked" | "in_pipeline" | "ai_drafting" | "done" }[];
   }[];
-  notifications: { id: string; kind: string; severity: string; title: string; body: string | null; createdAt: string; workitemId: string | null }[];
+  recentWorkItems: {
+    id: string; key: string | null; title: string; kind: WorkItem["kind"]; priority: string;
+    projectName: string; ownerName: string; updatedAt: string;
+    aiSpentUsd: number; aiBudgetUsd: number | null; trend: "up" | "down" | "flat";
+  }[];
+  alerts: { id: string; kind: string; severity: string; title: string; body: string | null; createdAt: string; workitemId: string | null }[];
 };
 
 export type AuditPage = {
@@ -64,6 +74,16 @@ export type FlowData = {
 export const getDashboard = () => get<Dashboard>("/dashboard");
 export const getAudit = (q: Record<string, string>) =>
   get<AuditPage>(`/audit?${new URLSearchParams(q).toString()}`);
+
+export type WorkListRow = {
+  id: string; key: string | null; title: string; kind: WorkItem["kind"]; phase: string;
+  priority: string; risk: string; updatedAt: string; projectName: string; clientName: string;
+  ownerName: string; openBlockers: number;
+};
+export const getWorkList = () => get<{ items: WorkListRow[] }>("/list/workitems");
+export const getProjectList = () => get<{ projects: { id: string; name: string; status: string; connectorType: string; budgetUsd: string | null; clientName: string; items: number; updatedAt: string | null }[] }>("/list/projects");
+export const getBudgets = () => get<{ budgets: { clientId: string; clientName: string; monthlyUsd: number; spentUsd: number; pct: number }[] }>("/list/budgets");
+export const getAlerts = () => get<{ alerts: { id: string; kind: string; severity: string; title: string; body: string | null; createdAt: string; workitemId: string | null }[] }>("/list/alerts");
 export const listWorkItems = () => get<{ id: string; key: string | null; title: string; phase: string }[]>("/dev/workitems");
 export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);
 export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   foreignKey,
   index,
+  numeric,
   pgPolicy,
   pgTable,
   primaryKey,
@@ -10,6 +11,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { connectorType, projectStatus } from "./enums.ts";
 
 /**
  * Tenancy model (architecture decision 04).
@@ -60,6 +62,10 @@ export const project = pgTable(
     name: text("name").notNull(),
     /** ADO project reference (e.g. "Medipharm.Portal"). */
     adoProjectRef: text("ado_project_ref"),
+    connectorType: connectorType("connector_type").notNull().default("manual"),
+    status: projectStatus("status").notNull().default("planning"),
+    /** Project delivery budget (not the AI-spend budget — that is per client). */
+    budgetUsd: numeric("budget_usd", { precision: 12, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     archivedAt: timestamp("archived_at", { withTimezone: true }),
   },

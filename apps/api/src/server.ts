@@ -10,6 +10,10 @@ import {
   briefFor,
   contentionFor,
   dashboard,
+  listAlerts,
+  listAllProjects,
+  listAllWorkItems,
+  listBudgets,
   flowFor,
   linkWorkItems,
   progressTask,
@@ -52,10 +56,14 @@ app.get("/dashboard", async (req) => {
   return dashboard(dev.id);
 });
 
+app.get("/list/workitems", async () => ({ items: await listAllWorkItems() }));
+app.get("/list/projects", async () => ({ projects: await listAllProjects() }));
+app.get("/list/budgets", async () => ({ budgets: await listBudgets() }));
+app.get("/list/alerts", async (req) => ({ alerts: await listAlerts((await actingUser(req)).id) }));
+
 app.get("/audit", async (req) => {
   const q = req.query as Record<string, string>;
   return auditTrail({
-    projectId: q.projectId,
     actorKind: q.actorKind as "user" | "delegated" | "system" | undefined,
     type: q.type,
     from: q.from ? new Date(q.from) : undefined,

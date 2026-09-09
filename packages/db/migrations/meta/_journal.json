@@ -43,6 +43,13 @@
       "when": 1788950297116,
       "tag": "0005_dashboard_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788952356987,
+      "tag": "0006_project_fields",
+      "breakpoints": true
     }
   ]
 }
