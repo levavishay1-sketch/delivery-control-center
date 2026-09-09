@@ -46,6 +46,28 @@ type SendResult =
  * `contentType` is usually "application/json-patch+json" for work items.
  * Walks api-versions like adoGet.
  */
+/** DELETE an ADO REST path (soft-delete for work items → recycle bin). */
+export async function adoDelete(base: string, apiPath: string, pat: string): Promise<{ ok: boolean; status: number; detail?: string }> {
+  const clean = base.replace(/\/+$/, "");
+  let sawOnly404 = true;
+  let last = 0;
+  for (const v of ADO_API_VERSIONS) {
+    try {
+      const sep = apiPath.includes("?") ? "&" : "?";
+      const res = await fetch(`${clean}/_apis/${apiPath}${sep}api-version=${v}`, { method: "DELETE", headers: adoAuthHeader(pat) });
+      if (res.ok) return { ok: true, status: res.status };
+      if (res.status === 401) return { ok: false, status: 401, detail: "PAT rejected" };
+      if (res.status !== 404) sawOnly404 = false;
+      last = res.status;
+    } catch (e) {
+      return { ok: false, status: 0, detail: String((e as Error).message) };
+    }
+  }
+  // every version 404'd → the work item (or the whole api) isn't there; for a
+  // delete that's the desired end state.
+  return sawOnly404 ? { ok: true, status: 404 } : { ok: false, status: last };
+}
+
 export async function adoSend(input: {
   base: string;
   apiPath: string; // e.g. "wit/workitems/$Task" or "wit/workitems/42"

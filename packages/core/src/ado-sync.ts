@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, withTenant } from "@dcc/db";
 import { client, serviceConnection, workitem } from "@dcc/db/schema";
-import { adoSend } from "./ado-http.ts";
+import { adoDelete, adoSend } from "./ado-http.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 
 /**
@@ -114,6 +114,25 @@ export async function syncRequirementToAdo(input: { clientId: string; workitemId
   });
   await regenerateBrief(input.clientId, input.workitemId);
   return { adoId, url, created: true };
+}
+
+/**
+ * Soft-delete the linked ADO work item (→ recycle bin). Best-effort:
+ * returns a status string, never throws — a DCC delete shouldn't be
+ * blocked by ADO being unreachable.
+ */
+export async function deleteAdoForRequirement(clientId: string, linkedAdoId: number): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const conn = await activeAdoConnection(clientId);
+    if (!conn) return { ok: false, detail: "no ADO connection" };
+    const orgUrl = (conn.config.orgUrl ?? "").replace(/\/+$/, "");
+    const project = conn.config.project ?? "";
+    const base = project ? `${orgUrl}/${encodeURIComponent(project)}` : orgUrl;
+    const r = await adoDelete(base, `wit/workitems/${linkedAdoId}`, conn.secretRef);
+    return r.ok ? { ok: true, detail: `ADO #${linkedAdoId} deleted` } : { ok: false, detail: `ADO delete failed (${r.status})` };
+  } catch (e) {
+    return { ok: false, detail: String((e as Error).message) };
+  }
 }
 
 /** Best-effort sync used right after creating a requirement. Never throws. */

@@ -1,6 +1,8 @@
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK_TOKEN = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
-const H = { "content-type": "application/json", "x-dcc-hook-token": HOOK_TOKEN, "x-dcc-dev-email": DEV_EMAIL };
+/** auth headers only — no content-type (added per-request when there's a body) */
+const AUTH = { "x-dcc-hook-token": HOOK_TOKEN, "x-dcc-dev-email": DEV_EMAIL };
+const H = { "content-type": "application/json", ...AUTH };
 
 async function j<T>(r: Response): Promise<T> {
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
@@ -12,7 +14,9 @@ const post = <T,>(p: string, body: unknown) =>
 const patch = <T,>(p: string, body: unknown) =>
   fetch(`/api${p}`, { method: "PATCH", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const del = <T,>(p: string, body?: unknown) =>
-  fetch(`/api${p}`, { method: "DELETE", headers: H, ...(body ? { body: JSON.stringify(body) } : {}) }).then((r) => j<T>(r));
+  fetch(`/api${p}`, body
+    ? { method: "DELETE", headers: H, body: JSON.stringify(body) }
+    : { method: "DELETE", headers: AUTH }).then((r) => j<T>(r));
 export const getText = (p: string) => fetch(`/api${p}`, { headers: H }).then((r) => r.text());
 
 // ---------- types ----------
@@ -137,7 +141,7 @@ export const updateRequirement = (id: string, body: Partial<{
   title: string; type: ReqType; priority: string; risk: string; executor: string; phase: string;
   budgetUsd: string | number | null; dueDate: string | null; parentId: string | null; adoAreaPath: string | null; key: string | null;
 }>) => patch<WorkItem>(`/workitems/${id}`, body);
-export const deleteRequirement = (id: string) => del<Record<string, never>>(`/workitems/${id}`);
+export const deleteRequirement = (id: string) => del<{ deleted: boolean; ado?: { ok: boolean; detail: string } }>(`/workitems/${id}`);
 
 // entity edit/delete
 export const updateClient = (id: string, body: Partial<{ name: string; connectorType: string; adoProjectRef: string | null }>) => patch<{ updated: boolean }>(`/clients/${id}`, body);

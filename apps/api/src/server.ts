@@ -63,6 +63,7 @@ import {
   updateConnection,
   syncRequirementToAdo,
   trySyncNewRequirement,
+  deleteAdoForRequirement,
   adoWorkItemUrl,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
@@ -70,10 +71,20 @@ import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" } });
 
+// tolerate an empty body on requests that still send `content-type: application/json`
+// (browsers do this on DELETE) — hand the route an empty object instead of 400ing.
+app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+  const s = (body as string).trim();
+  if (!s) return done(null, {});
+  try { done(null, JSON.parse(s)); } catch (e) { done(e as Error, undefined); }
+});
+
 app.setErrorHandler((err, _req, reply) => {
   if (err instanceof AuthError) return reply.code(401).send({ error: err.message });
   if (err instanceof NotFound) return reply.code(404).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
+  const e = err as { statusCode?: number; message?: string };
+  if (typeof e.statusCode === "number" && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
   app.log.error(err);
   return reply.code(500).send({ error: "internal" });
 });
@@ -711,11 +722,16 @@ app.post("/workitems/:id/ado-sync", async (req) => {
 app.delete("/workitems/:id", async (req, reply) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
+  const q = req.query as { keepAdo?: string };
   const wi = await locateWorkItem({ id });
+  // grab the ADO link before the row is gone
+  const [full] = await withTenant(wi.clientId, (tx) => tx.select({ a: workitem.linkedAdoId }).from(workitem).where(sql`${workitem.id} = ${id}`).limit(1));
   // sub-requirements must be moved/deleted first; event_log rows detach
   // (workitem_id → NULL) so history is never destroyed.
   await deleteRequirement(wi.clientId, id);
-  return reply.code(204).send();
+  let ado;
+  if (full?.a && q.keepAdo !== "1") ado = await deleteAdoForRequirement(wi.clientId, full.a);
+  return reply.code(200).send({ deleted: true, ado });
 });
 
 app.post("/workitems/:id/ado-link", async (req) => {

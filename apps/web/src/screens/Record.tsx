@@ -67,9 +67,13 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const onTask = async (t: Task, to: Task["state"]) => { await progressTask(t.id, { to, clientId: wi.clientId }); reload(); };
   const onAnswer = async (b: Blocker, answer: string) => { await answerBlocker(b.id, { answer, clientId: wi.clientId }); reload(); };
   const onDelete = async () => {
-    if (!confirm(`למחוק את הדרישה "${wi.title}"? האירועים ב-timeline יישמרו (הם append-only) אבל יינותקו ממנה.`)) return;
-    try { await deleteRequirement(wi.id); nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`); }
-    catch (e) { alert(String(e)); }
+    const adoNote = wi.linkedAdoId ? `\n\nזה גם ימחק את work item #${wi.linkedAdoId} ב-Azure DevOps (לסל המחזור).` : "";
+    if (!confirm(`למחוק את הדרישה "${wi.title}"? האירועים ב-timeline יישמרו (append-only) אבל יינותקו ממנה.${adoNote}`)) return;
+    try {
+      const r = await deleteRequirement(wi.id);
+      if (r.ado && !r.ado.ok) alert(`הדרישה נמחקה, אבל מחיקת ה-work item ב-ADO נכשלה: ${r.ado.detail}`);
+      nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`);
+    } catch (e) { alert(String(e)); }
   };
   const onSyncAdo = async () => {
     setSyncing(true);
