@@ -12,3 +12,10 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 npm-debug.log*
+
+# stray tsc output at package roots
+packages/*/*.js
+packages/*/*.d.ts
+packages/*/*.d.ts.map
+packages/*/*.js.map
+!packages/*/drizzle.config.ts
