@@ -12,10 +12,14 @@
   "scripts": {
     "generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
-    "guards": "node --experimental-strip-types src/apply-guards.ts",
-    "studio": "drizzle-kit studio"
+    "guards": "node src/apply-guards.ts",
+    "studio": "drizzle-kit studio",
+    "dev:reset": "node -e \"require('node:fs').rmSync('.pgdata',{recursive:true,force:true})\"",
+    "dev:setup": "node src/dev/setup.ts",
+    "dev:prove": "node src/dev/prove.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "drizzle-orm": "^0.44.2",
     "pg": "^8.13.1",
     "zod": "^3.24.1"

@@ -17,9 +17,14 @@ smaller). Order matters — each group unblocks the next.
 - [x] 1.7 `withTenant()` / `withoutTenant()` connection helpers
 - [x] 1.8 Event validation — envelope + per-type payload registry (Zod)
 - [x] 1.9 `appendEvent()` single write path; `timeline()` / `unassigned()` reads
-- [ ] 1.10 `npm install`, generate + run first migration against a real DB
-- [ ] 1.11 `apply-guards` verified; RLS proven by a cross-tenant read test
-- [ ] 1.12 Append-only proven by an UPDATE/DELETE-rejected test
+- [x] 1.10 `npm install`, generate migration `0000_init.sql`, apply to a DB
+- [x] 1.11 Embedded dev DB (PGlite — no install needed); `dev:setup`
+      applies migration + `guards.sql`
+- [x] 1.12 `dev:prove` — 9 checks green: RLS blocks cross-tenant read &
+      write, append-only rejects UPDATE/DELETE, payload validation rejects
+      unknown type & malformed payload, supersedes correction works
+- [ ] 1.13 Same proof against a real Postgres (Neon) once a URL is available
+- [ ] 1.14 Move to `drizzle-kit migrate` + `npm run guards` for real DBs
 
 ## 2. Core  ·  `@dcc/core`
 

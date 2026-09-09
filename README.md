@@ -35,23 +35,37 @@ openspec/                   the in-repo spec lifecycle — this repo
 ## Prerequisites
 
 - Node ≥ 22
-- A PostgreSQL database. Either:
-  - `docker compose up -d db` (once Docker is installed), or
-  - a free [Neon](https://neon.tech) / [Supabase](https://supabase.com)
-    database — put its pooled URL in `DATABASE_URL`.
+- **No database install needed for local dev.** `@dcc/db` falls back to
+  **PGlite** — real Postgres 18 compiled to WASM, persisted to
+  `packages/db/.pgdata`, no server, no admin rights.
+- For the pilot / production, set `DATABASE_URL` to a real
+  `postgres://` URL (Neon, Supabase, or a managed Postgres) and the
+  same schema runs unchanged.
 
-## Getting started
+## Getting started (local, embedded DB)
 
 ```bash
-cp .env.example .env          # then set DATABASE_URL
 npm install
-npm run db:generate           # drizzle-kit: SQL from the schema
-npm run db:migrate            # apply it
+cd packages/db
+npm run dev:reset      # wipe .pgdata
+npm run dev:setup      # apply migration 0000_init.sql + guards.sql
+npm run dev:prove      # 9 checks: RLS wall + append-only + validation
+```
+
+`dev:prove` is the living proof of foundational decisions 01 and 03 —
+run it after any schema change.
+
+## Getting started (real Postgres — pilot)
+
+```bash
+cp .env.example .env          # set DATABASE_URL to your postgres:// URL
+npm install
+npm run db:migrate            # drizzle-kit applies migrations
 npm run db:guards             # append-only triggers + the dcc_app role
 ```
 
-After `db:guards`, point `DATABASE_URL` at the `dcc_app` role (not the
-superuser) for all application use — RLS is ignored for superusers.
+After `db:guards`, point `DATABASE_URL` at the `dcc_app` role (never a
+superuser — Postgres ignores RLS for superusers).
 
 ## Foundational decisions (do not change without review)
 

@@ -2,13 +2,15 @@ import { sql } from "drizzle-orm";
 import { eventLog } from "../schema/events.ts";
 import { withTenant } from "../client.ts";
 import { CURRENT_VERSION, payloadSchemaFor } from "./payloads.ts";
-import { eventEnvelope, type EventEnvelope } from "./envelope.ts";
+import { eventEnvelope, type EventEnvelope, type EventLink } from "./envelope.ts";
 
 export * from "./envelope.ts";
 export * from "./payloads.ts";
 
-export type AppendInput = Omit<EventEnvelope, "occurredAt"> & {
+export type AppendInput = Omit<EventEnvelope, "occurredAt" | "supersedes" | "links"> & {
   occurredAt?: Date | string;
+  supersedes?: string | null;
+  links?: EventLink[];
   payload: unknown;
   schemaVersion?: number;
 };
