@@ -21,4 +21,4 @@ packages/*/*.js.map
 !packages/*/drizzle.config.ts
 
 # embedded dev database (PGlite)
-packages/*/.pgdata/
+packages/*/.pgdata*

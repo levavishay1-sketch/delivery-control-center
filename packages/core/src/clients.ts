@@ -1,6 +1,7 @@
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import { db, withTenant, withoutTenant } from "@dcc/db";
 import { client, clientBudget, clientRepo, project, repo, serviceConnection, users, workitem } from "@dcc/db/schema";
+import { normaliseAdoUrl } from "./ado-url.ts";
 
 /** Every repo in the system, for pickers. Includes which client (if any) it belongs to. */
 export async function listRepos() {
@@ -107,12 +108,14 @@ export async function linkRepoToClient(input: { clientId: string; repoId?: strin
 }
 
 /**
- * Add an Azure DevOps connection for a client. For ADO you need:
- *   - orgUrl  : https://dev.azure.com/<your-org>
- *   - project : the project name inside that org
- *   - pat     : a Personal Access Token with scopes
- *               Work Items (Read, write & manage) + Code (Read)
- *               created at  <orgUrl>/_usersSettings/tokens
+ * Add an Azure DevOps connection for a client. Works for cloud
+ * (dev.azure.com) and on-prem Azure DevOps Server. You need:
+ *   - orgUrl  : cloud   https://dev.azure.com/<org>
+ *               on-prem http://<server>/<collection>   (e.g. .../DefaultCollection)
+ *   - project : the project name inside that org/collection
+ *   - pat     : a Personal Access Token, scopes
+ *               Work Items (Read, write & manage) + Code (Read),
+ *               created at  <server-or-org>/_usersSettings/tokens
  */
 export async function addAdoConnection(input: {
   clientId: string;
@@ -121,16 +124,17 @@ export async function addAdoConnection(input: {
   pat: string;
   by: { userId: string };
 }) {
+  const { orgUrl, project } = normaliseAdoUrl(input.orgUrl, input.project);
   const [row] = await withTenant(input.clientId, (tx) =>
     tx
       .insert(serviceConnection)
       .values({
         clientId: input.clientId,
         kind: "ado",
-        displayName: `Azure DevOps — ${input.project}`,
+        displayName: `Azure DevOps — ${project}`,
         secretRef: input.pat, // pilot: stored directly; prod: Key Vault path
         scope: ["vso.work_write", "vso.code"],
-        config: { orgUrl: input.orgUrl.replace(/\/+$/, ""), project: input.project },
+        config: { orgUrl, project },
         createdBy: input.by.userId,
       })
       .returning(),
@@ -139,24 +143,44 @@ export async function addAdoConnection(input: {
   return { ...row!, check };
 }
 
-/** Live connectivity check against the ADO REST API. */
+/** Live connectivity check against the ADO REST API (cloud or on-prem). */
 export async function checkAdoConnection(clientId: string, connectionId: string) {
   const [conn] = await withTenant(clientId, (tx) =>
     tx.select().from(serviceConnection).where(eq(serviceConnection.id, connectionId)).limit(1),
   );
   if (!conn) throw new Error("connection not found");
   const cfg = conn.config as Record<string, string>;
-  const orgUrl = cfg.orgUrl ?? "";
+  const orgUrl = (cfg.orgUrl ?? "").replace(/\/+$/, "");
   const proj = cfg.project ?? "";
-  const url = `${orgUrl}/_apis/projects/${encodeURIComponent(proj)}?api-version=7.1`;
+  const auth = `Basic ${Buffer.from(`:${conn.secretRef}`).toString("base64")}`;
+  const headers = { authorization: auth, accept: "application/json" };
+
+  // On-prem Server ships older API surfaces (2019→5.0, 2020→6.0, 2022→7.x).
+  const versions = ["7.1", "7.0", "6.0"];
   let ok = false;
   let detail = "";
-  try {
-    const res = await fetch(url, { headers: { authorization: `Basic ${Buffer.from(`:${conn.secretRef}`).toString("base64")}` } });
-    ok = res.ok;
-    detail = res.ok ? `project "${proj}" reachable` : `${res.status} ${res.statusText}`;
-  } catch (e) {
-    detail = `network: ${String((e as Error).message)}`;
+  for (const v of versions) {
+    const url = `${orgUrl}/_apis/projects/${encodeURIComponent(proj)}?api-version=${v}`;
+    try {
+      const res = await fetch(url, { headers });
+      if (res.ok) {
+        ok = true;
+        detail = `project "${proj}" reachable (api ${v})`;
+        break;
+      }
+      if (res.status === 401) {
+        detail = "401 — PAT rejected. Check the token is valid, not expired, and has Work Items + Code (Read).";
+        break; // more versions won't help an auth failure
+      }
+      if (res.status === 404) {
+        detail = `404 — not found at ${orgUrl} / project "${proj}". Check the Organization URL is just the org/collection (no project in it) and the project name is exact.`;
+        continue; // a wrong api-version can also 404 on old servers — try the next
+      }
+      detail = `${res.status} ${res.statusText}`;
+    } catch (e) {
+      detail = `network: ${String((e as Error).message)} — is ${orgUrl} reachable from the server?`;
+      break;
+    }
   }
   await withTenant(clientId, (tx) =>
     tx.update(serviceConnection).set({ lastCheckedAt: new Date(), lastCheckOk: ok ? detail : `FAILED — ${detail}` }).where(eq(serviceConnection.id, connectionId)),

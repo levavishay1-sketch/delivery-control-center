@@ -249,13 +249,16 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; o
       <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--surface-muted)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, lineHeight: 1.6 }}>
         <b>מה צריך:</b>
         <ol style={{ margin: "6px 0 0", paddingInlineStart: 18 }}>
-          <li><b>Organization URL</b> — <code>https://dev.azure.com/&lt;org&gt;</code> (ה-org שיצרת)</li>
-          <li><b>Project</b> — שם הפרויקט בתוך ה-org</li>
-          <li><b>Personal Access Token</b> — <code>&lt;orgUrl&gt;/_usersSettings/tokens</code> · New Token · scopes: <b>Work Items (Read, write &amp; manage)</b> + <b>Code (Read)</b></li>
+          <li><b>Organization URL</b> — ה-org / collection <u>בלבד</u>, בלי שם הפרויקט:<br />
+            ענן: <code>https://dev.azure.com/&lt;org&gt;</code><br />
+            On-prem (שרת מקומי): <code>http://&lt;server&gt;/&lt;collection&gt;</code> — למשל <code>http://aman-dit-avishil/DefaultCollection</code></li>
+          <li><b>Project</b> — שם הפרויקט בנפרד (למשל <code>Altshuler Trade</code>)</li>
+          <li><b>Personal Access Token</b> — ב-<code>&lt;server&gt;/_usersSettings/tokens</code> · New Token · scopes: <b>Work Items (Read, write &amp; manage)</b> + <b>Code (Read)</b></li>
         </ol>
+        <span style={{ color: "var(--ink-400)" }}>אם תדביק את כתובת הדפדפן המלאה (כולל הפרויקט) — המערכת תפצל אותה לבד.</span>
       </div>
-      <div className="field" style={{ marginBottom: 12 }}><label>Organization URL</label><input value={f.orgUrl} onChange={(e) => setF({ ...f, orgUrl: e.target.value })} placeholder="https://dev.azure.com/my-org" style={{ width: "100%" }} dir="ltr" /></div>
-      <div className="field" style={{ marginBottom: 12 }}><label>Project</label><input value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} placeholder="Trading Platform" style={{ width: "100%" }} dir="ltr" /></div>
+      <div className="field" style={{ marginBottom: 12 }}><label>Organization URL (org / collection בלבד)</label><input value={f.orgUrl} onChange={(e) => setF({ ...f, orgUrl: e.target.value })} placeholder="http://aman-dit-avishil/DefaultCollection" style={{ width: "100%" }} dir="ltr" /></div>
+      <div className="field" style={{ marginBottom: 12 }}><label>Project</label><input value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} placeholder="Altshuler Trade" style={{ width: "100%" }} dir="ltr" /></div>
       <div className="field"><label>Personal Access Token</label><input type="password" value={f.pat} onChange={(e) => setF({ ...f, pat: e.target.value })} placeholder="••••••••••••••••" style={{ width: "100%" }} dir="ltr" /></div>
       <Err e={err} />
       {result && <p style={{ fontSize: 12.5, margin: "10px 0 0", color: result.startsWith("✓") ? "var(--status-healthy)" : "var(--status-critical)" }}>{result}</p>}
