@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, unlinkClientRepo, REQ_TYPE_HE, type ClientDetail as CD, type Requirement } from "../api.ts";
+import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, getClientAdoTasks, unlinkClientRepo, REQ_TYPE_HE, type AdoTasks, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
 
@@ -30,7 +30,11 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
   const [err, setErr] = useState<string | null>(null);
   const [modal, setModal] = useState<"req" | "repo" | "ado" | "editClient" | "import" | null>(null);
   const [editRepo, setEditRepo] = useState<{ id: string; name: string; adoRepoRef: string | null } | null>(null);
-  const reload = () => getClient(id).then(setD).catch((e) => setErr(String(e)));
+  const [ado, setAdo] = useState<AdoTasks | null>(null);
+  const reload = () => {
+    getClient(id).then(setD).catch((e) => setErr(String(e)));
+    getClientAdoTasks(id).then(setAdo).catch(() => {});
+  };
   useEffect(() => { reload(); }, [id]);
 
   if (err) return <div className="empty">{err}</div>;
@@ -94,6 +98,54 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
               );
             })}
             {rows.length === 0 && <tr><td colSpan={5}><div className="empty">אין דרישות. לחץ "+ הוסף דרישה".</div></td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      {/* ---- Azure DevOps: the client's task hierarchy ---- */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <p className="section-lbl">Azure DevOps</p>
+        {ado && (
+          <span style={{ fontSize: 11.5, color: "var(--ink-400)" }}>
+            {ado.inTfs} ב-TFS{ado.pending ? ` · ${ado.pending} טרם הוקמו` : ""}
+          </span>
+        )}
+      </div>
+      <p style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: -6, marginBottom: 10 }}>
+        המשימות שיצאו מהדרישות, לפי ההיררכיה. הדרישות עצמן נשארות ב-DCC — רק אלה מגיעות ל-TFS.
+      </p>
+      <div className="panel" style={{ padding: 0, overflow: "hidden", marginBottom: 26 }}>
+        <table className="wtable">
+          <thead><tr><th>משימה</th><th>סוג</th><th>TFS</th><th>מצב</th><th>מתוך דרישה</th></tr></thead>
+          <tbody>
+            {(ado?.rows ?? []).map((t, i) => {
+              const prev = ado!.rows[i - 1];
+              const newReq = !prev || prev.requirementId !== t.requirementId;
+              return (
+                <tr key={t.id} style={newReq && i > 0 ? { borderTop: "2px solid var(--border-hairline)" } : undefined}>
+                  <td style={{ paddingInlineStart: 14 + t.level * 22 }}>
+                    {t.level > 0 && <span style={{ color: "var(--ink-300)" }}>↳ </span>}
+                    <span title={t.intent}>{t.intent.length > 90 ? `${t.intent.slice(0, 90)}…` : t.intent}</span>
+                  </td>
+                  <td><Pill tone={t.adoType && t.adoType !== "Task" ? "ai" : "inactive"}>{t.adoType ?? "Task"}</Pill></td>
+                  <td>
+                    {t.linkedAdoId
+                      ? <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer">#{t.linkedAdoId} ↗</a>
+                      : <span style={{ color: "var(--ink-400)", fontSize: 11.5 }}>{t.approved ? "מאושר, טרם הוקם" : "ממתין לאישור"}</span>}
+                  </td>
+                  <td style={{ fontSize: 11.5 }}>{t.state.replace(/_/g, " ")}</td>
+                  <td>
+                    <span className="w-title" onClick={() => nav(`#/wi/${t.requirementId}`)} title={t.requirementTitle}>
+                      {t.requirementKey ?? (t.requirementTitle.length > 34 ? `${t.requirementTitle.slice(0, 34)}…` : t.requirementTitle)}
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
+            {ado && ado.rows.length === 0 && (
+              <tr><td colSpan={5}><div className="empty">אין משימות. פרק דרישה למשימות בטאב "מהלך עבודה" שלה.</div></td></tr>
+            )}
+            {!ado && <tr><td colSpan={5}><div className="empty">טוען…</div></td></tr>}
           </tbody>
         </table>
       </div>

@@ -166,6 +166,14 @@ export type TaskFlowNode = {
 };
 export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: { from: string; to: string; kind: "parent" | "depends" }[] };
 export const getTaskFlow = (id: string) => get<TaskFlow>(`/workitems/${id}/task-flow`);
+export type AdoTaskRow = {
+  id: string; requirementId: string; requirementKey: string | null; requirementTitle: string;
+  seq: number; intent: string; appetite: string; state: string;
+  adoType: string | null; linkedAdoId: number | null; adoUrl: string | null; adoSyncedAt: string | null;
+  approved: boolean; parentTaskId: string | null; level: number;
+};
+export type AdoTasks = { rows: AdoTaskRow[]; inTfs: number; pending: number };
+export const getClientAdoTasks = (clientId: string) => get<AdoTasks>(`/clients/${clientId}/ado-tasks`);
 export type MaterializeResult = { created: number; skipped: number; links: number; items: { taskId: string; seq: number; adoId: number; adoType: string; url: string }[]; detail: string };
 export const materializeTasks = (id: string) => post<MaterializeResult>(`/workitems/${id}/materialize`, {});
 /** Agile ladder — the breakdown depth picks the rungs, leaves are always Task. */

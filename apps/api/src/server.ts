@@ -68,6 +68,7 @@ import {
   startFlowRun,
   getFlowRunView,
   taskFlowFor,
+  clientTaskTree,
   materializeTasksToAdo,
   approveTask,
   rejectTask,
@@ -439,6 +440,14 @@ app.get("/workitems/:id/flow-run", async (req) => {
   const { id } = req.params as { id: string };
   await locateWorkItem({ id }); // tenant check
   return (await getFlowRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
+});
+
+// the client's whole TFS side: every task across every requirement,
+// ordered by requirement then depth-first through the hierarchy
+app.get("/clients/:id/ado-tasks", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  return clientTaskTree(id);
 });
 
 // the proposed/approved task tree + dependency edges (drawn in the flow tab)

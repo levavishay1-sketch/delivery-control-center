@@ -193,6 +193,91 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
   });
 }
 
+/* ── the client's whole TFS side ───────────────────────────────────── */
+
+export type AdoTaskRow = {
+  id: string;
+  requirementId: string;
+  requirementKey: string | null;
+  requirementTitle: string;
+  seq: number;
+  intent: string;
+  appetite: string;
+  state: string;
+  adoType: string | null;
+  linkedAdoId: number | null;
+  adoUrl: string | null;
+  adoSyncedAt: string | null;
+  approved: boolean;
+  parentTaskId: string | null;
+  level: number;
+};
+
+/**
+ * Every task of a client, across all its requirements — the mirror of
+ * what the client has (or will have) in TFS. Ordered by requirement, then
+ * depth-first through the task hierarchy.
+ */
+export async function clientTaskTree(clientId: string): Promise<{ rows: AdoTaskRow[]; inTfs: number; pending: number }> {
+  return withTenant(clientId, async (tx) => {
+    const raw = await tx
+      .select({
+        id: task.id, requirementId: task.workitemId, seq: task.seq, intent: task.intent,
+        appetite: task.appetite, state: task.state, adoType: task.adoType,
+        linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, adoSyncedAt: task.adoSyncedAt,
+        approvedAt: task.approvedAt, parentTaskId: task.parentTaskId,
+        requirementKey: workitem.key, requirementTitle: workitem.title,
+      })
+      .from(task)
+      .innerJoin(workitem, sql`${workitem.id} = ${task.workitemId}`)
+      .where(sql`${task.clientId} = ${clientId} and ${task.state} <> 'dropped'`)
+      .orderBy(sql`${workitem.createdAt}, ${task.seq}`);
+
+    const byId = new Map(raw.map((r) => [r.id, r]));
+    const level = (id: string, seen = new Set<string>()): number => {
+      const t = byId.get(id);
+      if (!t?.parentTaskId || seen.has(id) || !byId.has(t.parentTaskId)) return 0;
+      seen.add(id);
+      return level(t.parentTaskId, seen) + 1;
+    };
+
+    const all: AdoTaskRow[] = raw.map((r) => ({
+      id: r.id, requirementId: r.requirementId,
+      requirementKey: r.requirementKey, requirementTitle: r.requirementTitle,
+      seq: r.seq, intent: r.intent, appetite: r.appetite, state: r.state,
+      adoType: r.adoType, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
+      adoSyncedAt: r.adoSyncedAt ? new Date(r.adoSyncedAt).toISOString() : null,
+      approved: r.approvedAt != null, parentTaskId: r.parentTaskId, level: level(r.id),
+    }));
+
+    // depth-first within each requirement so the hierarchy reads top-down
+    const kids = new Map<string, AdoTaskRow[]>();
+    for (const t of all) {
+      const k = t.parentTaskId && byId.has(t.parentTaskId) ? t.parentTaskId : `root:${t.requirementId}`;
+      (kids.get(k) ?? kids.set(k, []).get(k)!).push(t);
+    }
+    const rows: AdoTaskRow[] = [];
+    const walk = (key: string) => {
+      for (const t of (kids.get(key) ?? []).sort((a, b) => a.seq - b.seq)) {
+        rows.push(t);
+        walk(t.id);
+      }
+    };
+    const seenReqs = new Set<string>();
+    for (const t of all) {
+      if (seenReqs.has(t.requirementId)) continue;
+      seenReqs.add(t.requirementId);
+      walk(`root:${t.requirementId}`);
+    }
+
+    return {
+      rows,
+      inTfs: rows.filter((r) => r.linkedAdoId).length,
+      pending: rows.filter((r) => !r.linkedAdoId).length,
+    };
+  });
+}
+
 function wims2nodes(
   witems: { id: string; key: string | null; title: string; phase: string; type: string; parentId: string | null; linkedAdoId: number | null }[],
   gapMap: Map<string, number>,
