@@ -68,9 +68,9 @@ import {
   adoWorkItemUrl,
   importAdoCsv,
   pullFromAdo,
+  pullOneFromAdo,
   attachmentsFor,
   addAttachment,
-  adoWorkItemExists,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -334,15 +334,17 @@ app.get("/clients/:clientId/inbox", async (req) => {
 app.get("/workitems/:id", async (req, reply) => {
   const { id } = req.params as { id: string };
   const verifyAdo = (req.query as { verifyAdo?: string }).verifyAdo === "1";
+  const dev = verifyAdo ? await actingUser(req) : { id: "" };
   const wi = await locateWorkItem({ id });
   const t = await tasksFor(wi.clientId, id);
   return withTenant(wi.clientId, async (tx) => {
     const [full] = await tx.select().from(workitem).where(sql`${workitem.id} = ${id}`).limit(1);
 
-    // on an explicit check: if the linked TFS work item is gone, mirror the delete
+    // on an explicit check: reconcile this one item against TFS (fields +
+    // attachments; TFS wins). If it was deleted there, mirror that here.
     if (verifyAdo && full?.linkedAdoId) {
-      const stillThere = await adoWorkItemExists(wi.clientId, full.linkedAdoId);
-      if (stillThere === false) {
+      const r = await pullOneFromAdo(wi.clientId, id, { userId: dev.id });
+      if (r === "gone") {
         await deleteRequirement(wi.clientId, id);
         return reply.code(410).send({ error: "deleted in TFS" });
       }

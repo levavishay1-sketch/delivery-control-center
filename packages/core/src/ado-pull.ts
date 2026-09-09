@@ -55,6 +55,109 @@ async function getWorkItems(base: string, ids: number[], pat: string): Promise<A
   return out;
 }
 
+type DccRow = { id: string; adoId: number | null; title: string; type: string; phase: string };
+
+/** Reconcile ONE ADO work item into DCC: fields (TFS wins) + attachments. */
+async function reconcileOne(
+  clientId: string, w: AdoWi, existing: DccRow | undefined,
+  orgUrl: string, project: string, by: { userId: string }, res: { created: number; updated: number; attachmentsAdded: number },
+): Promise<string> {
+  const f = w.fields;
+  const title = String(f["System.Title"] ?? "").trim() || `#${w.id}`;
+  const type = mapAdoType(String(f["System.WorkItemType"] ?? ""));
+  const phase = mapAdoState(String(f["System.State"] ?? ""));
+  const area = String(f["System.AreaPath"] ?? "") || null;
+  const url = w._links?.html?.href ?? `${orgUrl}/${encodeURIComponent(project)}/_workitems/edit/${w.id}`;
+
+  let wiId: string;
+  if (existing) {
+    wiId = existing.id;
+    if (existing.title !== title || existing.type !== type || existing.phase !== phase) {
+      await withTenant(clientId, (tx) =>
+        tx.update(workitem).set({ title, type, phase, adoAreaPath: area, updatedAt: new Date() }).where(eq(workitem.id, existing.id)),
+      );
+      await appendEvent({
+        clientId, workitemId: existing.id, source: "ado", type: "ado.synced",
+        actor: { kind: "user", userId: by.userId, identityType: "interactive" },
+        links: [{ rel: "ado_workitem", ref: String(w.id) }],
+        payload: { direction: "from_ado", adoId: w.id, operation: "reconcile", url },
+      });
+      res.updated++;
+    }
+  } else {
+    const [ins] = await withTenant(clientId, (tx) =>
+      tx.insert(workitem).values({
+        clientId, ownerId: by.userId, title, type, phase,
+        key: `ADO-${w.id}`, linkedAdoId: w.id, adoAreaPath: area,
+      }).returning(),
+    );
+    wiId = ins!.id;
+    const desc = htmlToText(String(f["System.Description"] ?? ""));
+    await appendEvent({
+      clientId, workitemId: wiId, source: "ado", type: "ado.synced",
+      actor: { kind: "user", userId: by.userId, identityType: "interactive" },
+      links: [{ rel: "ado_workitem", ref: String(w.id) }],
+      payload: { direction: "from_ado", adoId: w.id, operation: "create_workitem", url },
+    });
+    if (desc) await appendEvent({
+      clientId, workitemId: wiId, source: "ado", type: "note.added",
+      actor: { kind: "user", userId: by.userId, identityType: "interactive" },
+      payload: { body: `תיאור מ-ADO:\n${desc}` },
+    });
+    res.created++;
+  }
+
+  // attachments — TFS is the mirror; new ones show up here with a link back
+  const atts = (w.relations ?? []).filter((r) => r.rel === "AttachedFile");
+  const known = new Set(
+    (await withTenant(clientId, (tx) =>
+      tx.select({ a: attachment.adoAttachmentId }).from(attachment).where(eq(attachment.workitemId, wiId)),
+    )).map((r) => r.a),
+  );
+  for (const a of atts) {
+    const attId = a.url.split("/").pop()?.split("?")[0] ?? a.url;
+    if (known.has(attId)) continue;
+    await withTenant(clientId, (tx) =>
+      tx.insert(attachment).values({
+        clientId, workitemId: wiId, name: String(a.attributes?.name ?? attId),
+        adoAttachmentId: attId, adoUrl: a.url,
+        sizeBytes: typeof a.attributes?.resourceSize === "number" ? a.attributes.resourceSize : null,
+        source: "ado", addedBy: by.userId,
+      }),
+    );
+    res.attachmentsAdded++;
+  }
+  return wiId;
+}
+
+/**
+ * Reconcile a single linked requirement against its TFS work item —
+ * fields + attachments. Returns "gone" if the TFS item was deleted (the
+ * caller mirrors that by deleting the DCC row).
+ */
+export async function pullOneFromAdo(clientId: string, workitemId: string, by: { userId: string }): Promise<"ok" | "gone" | "skip"> {
+  const conn = await activeAdoConnection(clientId);
+  if (!conn) return "skip";
+  const orgUrl = (conn.config.orgUrl ?? "").replace(/\/+$/, "");
+  const project = conn.config.project ?? "";
+  if (!project) return "skip";
+  const projBase = `${orgUrl}/${encodeURIComponent(project)}`;
+
+  const [row] = await withTenant(clientId, (tx) =>
+    tx.select({ id: workitem.id, adoId: workitem.linkedAdoId, title: workitem.title, type: workitem.type, phase: workitem.phase })
+      .from(workitem).where(eq(workitem.id, workitemId)).limit(1),
+  );
+  if (!row?.adoId) return "skip";
+
+  const r = await adoGet(projBase, `wit/workitems/${row.adoId}?$expand=relations`, conn.secretRef);
+  if (!r.ok) return r.status === 404 ? "gone" : "skip";
+  const w = r.body as AdoWi;
+  const res = { created: 0, updated: 0, attachmentsAdded: 0 };
+  await reconcileOne(clientId, w, row as DccRow, orgUrl, project, by, res);
+  if (res.updated || res.attachmentsAdded) await regenerateBrief(clientId, row.id);
+  return "ok";
+}
+
 export type PullResult = {
   created: number;
   updated: number;
@@ -92,75 +195,8 @@ export async function pullFromAdo(clientId: string, by: { userId: string }): Pro
   }
 
   for (const w of items) {
-    const f = w.fields;
-    const title = String(f["System.Title"] ?? "").trim() || `#${w.id}`;
-    const type = mapAdoType(String(f["System.WorkItemType"] ?? ""));
-    const phase = mapAdoState(String(f["System.State"] ?? ""));
-    const area = String(f["System.AreaPath"] ?? "") || null;
-    const url = w._links?.html?.href ?? `${orgUrl}/${encodeURIComponent(project)}/_workitems/edit/${w.id}`;
-    const existing = dccByAdo.get(w.id);
-
-    let wiId: string;
-    if (existing) {
-      wiId = existing.id;
-      if (existing.title !== title || existing.type !== type || existing.phase !== phase) {
-        await withTenant(clientId, (tx) =>
-          tx.update(workitem).set({ title, type, phase, adoAreaPath: area, updatedAt: new Date() }).where(eq(workitem.id, existing.id)),
-        );
-        await appendEvent({
-          clientId, workitemId: existing.id, source: "ado", type: "ado.synced",
-          actor: { kind: "user", userId: by.userId, identityType: "interactive" },
-          links: [{ rel: "ado_workitem", ref: String(w.id) }],
-          payload: { direction: "from_ado", adoId: w.id, operation: "reconcile", url },
-        });
-        res.updated++;
-      }
-    } else {
-      const [ins] = await withTenant(clientId, (tx) =>
-        tx.insert(workitem).values({
-          clientId, ownerId: by.userId, title, type, phase,
-          key: `ADO-${w.id}`, linkedAdoId: w.id, adoAreaPath: area,
-        }).returning(),
-      );
-      wiId = ins!.id;
-      const desc = htmlToText(String(f["System.Description"] ?? ""));
-      await appendEvent({
-        clientId, workitemId: wiId, source: "ado", type: "ado.synced",
-        actor: { kind: "user", userId: by.userId, identityType: "interactive" },
-        links: [{ rel: "ado_workitem", ref: String(w.id) }],
-        payload: { direction: "from_ado", adoId: w.id, operation: "create_workitem", url },
-      });
-      if (desc) await appendEvent({
-        clientId, workitemId: wiId, source: "ado", type: "note.added",
-        actor: { kind: "user", userId: by.userId, identityType: "interactive" },
-        payload: { body: `תיאור מ-ADO:\n${desc}` },
-      });
-      res.created++;
-    }
-
-    // attachments on this work item
-    const atts = (w.relations ?? []).filter((r) => r.rel === "AttachedFile");
-    if (atts.length) {
-      const known = new Set(
-        (await withTenant(clientId, (tx) =>
-          tx.select({ a: attachment.adoAttachmentId }).from(attachment).where(eq(attachment.workitemId, wiId)),
-        )).map((r) => r.a),
-      );
-      for (const a of atts) {
-        const attId = a.url.split("/").pop()?.split("?")[0] ?? a.url;
-        if (known.has(attId)) continue;
-        await withTenant(clientId, (tx) =>
-          tx.insert(attachment).values({
-            clientId, workitemId: wiId, name: String(a.attributes?.name ?? attId),
-            adoAttachmentId: attId, adoUrl: a.url,
-            sizeBytes: typeof a.attributes?.resourceSize === "number" ? a.attributes.resourceSize : null,
-            source: "ado", addedBy: by.userId,
-          }),
-        );
-        res.attachmentsAdded++;
-      }
-    }
-    if (existing || res.created) await regenerateBrief(clientId, wiId);
+    const wiId = await reconcileOne(clientId, w, dccByAdo.get(w.id) as DccRow | undefined, orgUrl, project, by, res);
+    await regenerateBrief(clientId, wiId);
   }
 
   res.detail = `נוצרו ${res.created} · עודכנו ${res.updated} · נמחקו ${res.deleted} · ${res.attachmentsAdded} צרופות`;
