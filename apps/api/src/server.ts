@@ -61,14 +61,7 @@ import {
   deleteTask,
   deleteDependency,
   updateConnection,
-  syncRequirementToAdo,
-  trySyncNewRequirement,
-  syncAllToAdo,
-  deleteAdoForRequirement,
-  adoWorkItemUrl,
   importAdoCsv,
-  pullFromAdo,
-  pullOneFromAdo,
   attachmentsFor,
   addAttachment,
   startBuilding,
@@ -174,20 +167,9 @@ app.post("/clients/:id/import/ado-csv", async (req) => {
   return importAdoCsv({ clientId: id, csv: b.csv, by: { userId: dev.id } });
 });
 
-// push every not-yet-linked requirement into the connected ADO project
-app.post("/clients/:id/sync-all-to-ado", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  return syncAllToAdo(id, { userId: dev.id });
-});
-
-// pull the connected ADO project INTO DCC (TFS is the mirror):
-// new → created, changed → updated, gone → deleted, + attachments
-app.post("/clients/:id/sync-from-ado", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  return pullFromAdo(id, { userId: dev.id });
-});
+// NOTE: requirements are DCC-only and never pushed to TFS. The old
+// requirement↔TFS sync (push-all / pull-as-mirror) is gone; the TFS side
+// is now the TASK tree — see POST /workitems/:id/materialize.
 
 // live-discover the ADO projects a PAT can see, for the connect form's picker
 app.post("/connections/ado/projects", async (req) => {
@@ -345,42 +327,15 @@ app.get("/clients/:clientId/inbox", async (req) => {
 /** Full WorkItem detail for the UI: header + gaps + blockers + timeline. */
 app.get("/workitems/:id", async (req, reply) => {
   const { id } = req.params as { id: string };
-  const verifyAdo = (req.query as { verifyAdo?: string }).verifyAdo === "1";
   const wi = await locateWorkItem({ id });
 
-  // reconcile this one item against TFS (fields + attachments; TFS wins)
-  // BEFORE opening the read tx — pullOneFromAdo runs its own tx + network.
-  let adoMissing = false;
-  if (verifyAdo) {
-    const dev = await actingUser(req);
-    const r = await pullOneFromAdo(wi.clientId, id, { userId: dev.id }); // "skip" when not linked
-    // TFS says the linked item is gone. Do NOT auto-delete — that would
-    // silently drop the local gaps/notes/brief on a routine page open,
-    // and a false "gone" has cost us real data before. Flag it and let
-    // the user decide (Record.tsx shows a banner → explicit delete).
-    if (r === "gone") adoMissing = true;
-  }
-
+  // A requirement is a DCC-only pre-stage — nothing to reconcile against
+  // TFS here. Its TASKS are the TFS work items (see /task-flow).
   const t = await tasksFor(wi.clientId, id);
   return withTenant(wi.clientId, async (tx) => {
     const [full] = await tx.select().from(workitem).where(sql`${workitem.id} = ${id}`).limit(1);
-    let adoUrl: string | null = null;
-    if (full?.linkedAdoId) {
-      // prefer the URL ADO itself returned (format varies by version); fall back to the modern shape
-      const [ev] = await tx.select({ p: sql<Record<string, unknown>>`payload` }).from(sql`event_log`)
-        .where(sql`workitem_id = ${id} and type = 'ado.synced' and payload ? 'url'`)
-        .orderBy(sql`occurred_at desc`).limit(1);
-      adoUrl = (ev?.p?.url as string | undefined) ?? null;
-      if (!adoUrl) {
-        const [conn] = await tx.select({ config: sql<Record<string, string>>`config` }).from(sql`service_connection`).where(sql`client_id = ${wi.clientId} and kind = 'ado' and revoked_at is null`).limit(1);
-        const cfg = conn?.config as Record<string, string> | undefined;
-        if (cfg?.orgUrl && cfg?.project) adoUrl = adoWorkItemUrl(cfg.orgUrl, cfg.project, full.linkedAdoId);
-      }
-    }
     return {
       workitem: { ...wi, ...full },
-      adoUrl,
-      adoMissing,
       attachments: await attachmentsFor(wi.clientId, id),
       repos: await reposForRequirement(wi.clientId, id),
       gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
@@ -411,11 +366,8 @@ app.patch("/workitems/:id", async (req) => {
     key: z.string().nullable().optional(),
   }).parse(req.body);
   const wi = await locateWorkItem({ id });
-  const updated = await updateRequirement({ clientId: wi.clientId, id, by: { userId: dev.id }, patch: b });
-  // mirror the change into ADO when linked (best effort)
-  let ado;
-  if (updated.linkedAdoId) ado = await trySyncNewRequirement(wi.clientId, id, { userId: dev.id });
-  return { ...updated, ado };
+  // requirements are DCC-only — nothing to mirror into TFS
+  return updateRequirement({ clientId: wi.clientId, id, by: { userId: dev.id }, patch: b });
 });
 
 app.post("/workitems/:id/repos", async (req, reply) => {
@@ -852,31 +804,19 @@ app.post("/workitems", async (req, reply) => {
       })
       .returning(),
   );
-  // best-effort push to Azure DevOps when the client syncs there
-  const ado = await trySyncNewRequirement(clientId, wi!.id, { userId: dev.id });
-  return reply.code(201).send({ ...wi, ado });
-});
-
-app.post("/workitems/:id/ado-sync", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const wi = await locateWorkItem({ id });
-  return syncRequirementToAdo({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
+  // a requirement stays in DCC — nothing is pushed to TFS at intake
+  return reply.code(201).send(wi);
 });
 
 app.delete("/workitems/:id", async (req, reply) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
-  const q = req.query as { keepAdo?: string };
   const wi = await locateWorkItem({ id });
-  // grab the ADO link before the row is gone
-  const [full] = await withTenant(wi.clientId, (tx) => tx.select({ a: workitem.linkedAdoId }).from(workitem).where(sql`${workitem.id} = ${id}`).limit(1));
   // sub-requirements must be moved/deleted first; event_log rows detach
-  // (workitem_id → NULL) so history is never destroyed.
+  // (workitem_id → NULL) so history is never destroyed. Tasks already
+  // materialised in TFS are NOT deleted — they are the team's work items.
   await deleteRequirement(wi.clientId, id);
-  let ado;
-  if (full?.a && q.keepAdo !== "1") ado = await deleteAdoForRequirement(wi.clientId, full.a);
-  return reply.code(200).send({ deleted: true, ado });
+  return reply.code(200).send({ deleted: true });
 });
 
 app.post("/workitems/:id/ado-link", async (req) => {

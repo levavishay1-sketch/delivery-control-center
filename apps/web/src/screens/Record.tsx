@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement, deleteTask,
-  getBrief, getDetail, progressTask, syncToAdo, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  getBrief, getDetail, progressTask, unlinkRepoFromReq, uploadAttachment, verifyGap,
   type Blocker, type EventRow, type Gap, type Task, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
@@ -50,7 +50,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [answering, setAnswering] = useState<{ id: string; text: string } | null>(null);
   const [gapHelp, setGapHelp] = useState(false);
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
-  const [syncing, setSyncing] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   // go back to wherever the user came from; fall back to the requirements list
@@ -60,18 +59,13 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     setTimeout(() => { if (location.hash === cur) nav("#/requirements"); }, 160);
   }, [nav]);
 
-  const reload = useCallback(async (verify = false) => {
+  const reload = useCallback(async () => {
     try {
-      const [detail, b] = await Promise.all([getDetail(id, verify), getBrief(id)]);
+      const [detail, b] = await Promise.all([getDetail(id), getBrief(id)]);
       setD(detail); setBrief(b); setErr(null);
-    } catch (e) {
-      const msg = String(e);
-      if (msg.includes(" 410")) { alert("הדרישה נמחקה ב-TFS — מוסרת גם כאן."); back(); return; }
-      setErr(msg);
-    }
-  }, [id, back]);
-  // first load verifies against TFS (picks up a delete-in-TFS); refreshes don't
-  useEffect(() => { reload(true); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    } catch (e) { setErr(String(e)); }
+  }, [id]);
+  useEffect(() => { reload(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (err) return (
     <div className="empty" style={{ textAlign: "center" }}>
@@ -100,19 +94,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const onTask = async (t: Task, to: Task["state"]) => { await progressTask(t.id, { to, clientId: wi.clientId }); reload(); };
   const onAnswer = async (b: Blocker, answer: string) => { await answerBlocker(b.id, { answer, clientId: wi.clientId }); reload(); };
   const onDelete = async () => {
-    const adoNote = wi.linkedAdoId ? `\n\nזה גם ימחק את work item #${wi.linkedAdoId} ב-Azure DevOps (לסל המחזור).` : "";
-    if (!confirm(`למחוק את הדרישה "${wi.title}"? האירועים ב-timeline יישמרו (append-only) אבל יינותקו ממנה.${adoNote}`)) return;
-    try {
-      const r = await deleteRequirement(wi.id);
-      if (r.ado && !r.ado.ok) alert(`הדרישה נמחקה, אבל מחיקת ה-work item ב-ADO נכשלה: ${r.ado.detail}`);
-      back();
-    } catch (e) { alert(String(e)); }
-  };
-  const onSyncAdo = async () => {
-    setSyncing(true);
-    try { const r = await syncToAdo(wi.id); window.open(r.url, "_blank"); reload(); }
-    catch (e) { alert(`סנכרון ל-Azure DevOps נכשל:\n${e}`); }
-    setSyncing(false);
+    const tfsNote = d.tasks.some((t) => t.linkedAdoId)
+      ? `\n\nמשימות שכבר הוקמו ב-TFS יישארו שם — הן פריטי העבודה של הצוות.`
+      : "";
+    if (!confirm(`למחוק את הדרישה "${wi.title}"? האירועים ב-timeline יישמרו (append-only) אבל יינותקו ממנה.${tfsNote}`)) return;
+    try { await deleteRequirement(wi.id); back(); }
+    catch (e) { alert(String(e)); }
   };
   const onUpload = async (file: File | undefined) => {
     if (!file) return;
@@ -156,21 +143,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </div>
       </div>
 
-      {d.adoMissing && (
-        <div className="callout crit" style={{ marginBottom: 14 }}>
-          <div className="body">
-            <p className="r">ה-work item המקושר (#{wi.linkedAdoId}) לא נמצא ב-TFS כרגע.</p>
-            <p style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 4 }}>
-              ייתכן שנמחק, ייתכן שזו תקלה זמנית. הדרישה כאן נשמרה כמות שהיא — כלום לא נמחק אוטומטית.
-            </p>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => reload(true)}>בדוק שוב</button>
-              <button className="btn btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחק גם כאן</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
           <button key={t} className="tab" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
@@ -198,10 +170,13 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             <div><dt>Risk</dt><dd className={wi.risk === "high" ? "overdue" : ""}>{wi.risk}</dd></div>
             <div><dt>Executor</dt><dd>{wi.executor}</dd></div>
             <div><dt>AI budget</dt><dd>{wi.budgetUsd ? `$${wi.budgetUsd}` : "client default"}</dd></div>
-            <div><dt>Azure DevOps</dt><dd>
-              {wi.linkedAdoId
-                ? (d.adoUrl ? <a href={d.adoUrl} target="_blank" rel="noreferrer">#{wi.linkedAdoId} ↗</a> : `#${wi.linkedAdoId}`)
-                : <button className="btn btn-secondary btn-sm" disabled={syncing} onClick={onSyncAdo}>{syncing ? "יוצר…" : "צור ב-Azure DevOps"}</button>}
+            <div><dt>TFS</dt><dd>
+              {(() => {
+                const synced = d.tasks.filter((t) => t.linkedAdoId).length;
+                return synced > 0
+                  ? <span>{synced} משימות הוקמו</span>
+                  : <span style={{ color: "var(--ink-400)", fontSize: 12 }}>הדרישה עצמה לא ב-TFS — רק המשימות שיוקמו ממנה</span>;
+              })()}
             </dd></div>
           </dl>
           <div className="progress-block">

@@ -247,20 +247,24 @@ export async function addAttachment(input: {
   );
   if (!wi) throw new Error("requirement not found");
 
+  // A requirement is DCC-only, so there is usually no work item to hang
+  // the file on. The bytes still go to the TFS attachment store (that
+  // endpoint stands alone) so the link works; when the requirement
+  // happens to carry a legacy ADO link we also attach the relation.
   let adoUrl: string | null = null;
   let adoAttId: string | null = null;
-  if (conn && wi.ado) {
+  if (!conn) throw new Error("צריך חיבור Azure DevOps פעיל כדי לאחסן צרופות");
+  {
     const orgUrl = (conn.config.orgUrl ?? "").replace(/\/+$/, "");
     const project = conn.config.project ?? "";
-    const projBase = `${orgUrl}/${encodeURIComponent(project)}`;
+    const projBase = project ? `${orgUrl}/${encodeURIComponent(project)}` : orgUrl;
     const up = await adoUpload({ base: projBase, fileName: input.name, bytes: input.bytes, pat: conn.secretRef });
-    if (!up.ok) throw new Error(`העלאת הקובץ ל-ADO נכשלה: ${up.detail}`);
+    if (!up.ok) throw new Error(`העלאת הקובץ נכשלה: ${up.detail}`);
     adoUrl = up.url; adoAttId = up.id;
-    const patch = [{ op: "add", path: "/relations/-", value: { rel: "AttachedFile", url: up.url, attributes: { name: input.name, comment: "הועלה דרך DCC" } } }];
-    const rel = await adoSend({ base: projBase, apiPath: `wit/workitems/${wi.ado}`, method: "PATCH", body: patch, pat: conn.secretRef });
-    if (!rel.ok) throw new Error(`קישור הקובץ ל-work item נכשל: ${rel.detail}`);
-  } else if (!conn || !wi.ado) {
-    throw new Error("צריך חיבור ADO פעיל ודרישה מקושרת כדי לצרף קובץ (הקובץ נשמר ב-TFS)");
+    if (wi.ado) {
+      const patch = [{ op: "add", path: "/relations/-", value: { rel: "AttachedFile", url: up.url, attributes: { name: input.name, comment: "הועלה דרך DCC" } } }];
+      await adoSend({ base: projBase, apiPath: `wit/workitems/${wi.ado}`, method: "PATCH", body: patch, pat: conn.secretRef }).catch(() => {});
+    }
   }
 
   const [row] = await withTenant(input.clientId, (tx) =>
@@ -272,7 +276,7 @@ export async function addAttachment(input: {
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "manual", type: "note.added",
     actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
-    payload: { body: `📎 צורף קובץ: ${input.name}${adoUrl ? " (הועלה ל-TFS)" : ""}` },
+    payload: { body: `📎 צורף קובץ: ${input.name}` },
   });
   await regenerateBrief(input.clientId, input.workitemId);
   return { id: row!.id, name: row!.name, adoUrl: row!.adoUrl };

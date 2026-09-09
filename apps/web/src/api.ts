@@ -40,6 +40,7 @@ export type Task = {
   id: string; seq: number; intent: string; appetite: string;
   state: "pending" | "in_progress" | "blocked" | "done" | "dropped";
   origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[];
+  parentTaskId: string | null; adoType: string | null; linkedAdoId: number | null; adoUrl: string | null;
 };
 
 export type WorkItem = {
@@ -52,7 +53,7 @@ export type WorkItem = {
 export type LinkedRepo = { id: string; name: string; adoRepoRef: string | null; linkKind: "declared" | "auto"; addedAt: string };
 export type Attachment = { id: string; name: string; adoUrl: string | null; sizeBytes: number | null; source: "dcc" | "ado"; createdAt: string };
 export type WorkItemDetail = {
-  workitem: WorkItem; adoUrl: string | null; adoMissing?: boolean; attachments: Attachment[]; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
+  workitem: WorkItem; attachments: Attachment[]; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
   taskDependencies: { taskId: string; dependsOnTaskId: string; reason: string | null }[];
   events: EventRow[];
 };
@@ -132,7 +133,7 @@ export const getAdoProjects = (body: { orgUrl: string; pat: string }) =>
 export const deleteConnection = (clientId: string, id: string) => del<{ deleted: boolean }>(`/clients/${clientId}/connections/${id}`);
 export const checkConnection = (clientId: string, id: string) => post<{ ok: boolean; detail: string }>(`/clients/${clientId}/connections/${id}/check`, {});
 export const getConnections = () => get<{ connections: { id: string; kind: string; displayName: string; config: Record<string, string>; clientName: string; clientId: string; lastCheckOk: string | null }[] }>("/connections");
-export const getDetail = (id: string, verifyAdo = false) => get<WorkItemDetail>(`/workitems/${id}${verifyAdo ? "?verifyAdo=1" : ""}`);
+export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);
 export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
@@ -141,8 +142,7 @@ export type AdoSyncResult = { synced: boolean; created?: boolean; adoId?: number
 export const createRequirement = (body: {
   clientId?: string; parentId?: string; title: string; type?: ReqType;
   priority?: string; risk?: string; executor?: string;
-}) => post<WorkItem & { ado?: AdoSyncResult }>("/workitems", body);
-export const syncToAdo = (id: string) => post<{ adoId: number; url: string; created: boolean }>(`/workitems/${id}/ado-sync`, {});
+}) => post<WorkItem>("/workitems", body);
 export type StartBuildResult = {
   key: string; branch: string;
   repos: { name: string; adoRepoRef: string | null; defaultBranch: string }[];
@@ -206,10 +206,6 @@ export const deleteTask = (id: string, clientId: string) => del<{ deleted: boole
 export const correctNote = (workitemId: string, corrects: string, body: string) => post<{ eventId: string }>("/events", { workitemId, kind: "note", note: { body, source: "manual", corrects } });
 export type ImportResult = { total: number; created: number; skipped: number; items: { adoId: number; title: string; status: "created" | "skipped-exists" | "skipped-bad" }[] };
 export const importAdoCsv = (clientId: string, csv: string) => post<ImportResult>(`/clients/${clientId}/import/ado-csv`, { csv });
-export type SyncAllResult = { total: number; created: number; failed: number; items: { title: string; ok: boolean; adoId?: number; url?: string; error?: string }[] };
-export const syncAllToAdo = (clientId: string) => post<SyncAllResult>(`/clients/${clientId}/sync-all-to-ado`, {});
-export type PullResult = { created: number; updated: number; deleted: number; attachmentsAdded: number; detail: string };
-export const syncFromAdo = (clientId: string) => post<PullResult>(`/clients/${clientId}/sync-from-ado`, {});
 export const uploadAttachment = (workitemId: string, name: string, contentBase64: string) =>
   post<{ id: string; name: string; adoUrl: string | null }>(`/workitems/${workitemId}/attachments`, { name, contentBase64 });
 
