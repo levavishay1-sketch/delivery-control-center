@@ -10,7 +10,7 @@ export type BriefModel = {
   gaps: { description: string; blocking: boolean; verified: boolean; confidence: number }[];
   openBlockers: { questionType: string; question: string }[];
   answeredBlockers: { question: string; answer: string }[];
-  taskCounts: Record<string, number>;
+  tasks: { seq: number; intent: string; state: string }[];
   recentTimeline: {
     occurredAt: Date;
     source: string;
@@ -67,15 +67,14 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
     }
   }
 
-  const tc = m.taskCounts;
-  const total = Object.values(tc).reduce((a, b) => a + b, 0);
-  if (total) {
+  if (m.tasks.length) {
+    const mark: Record<string, string> = {
+      done: "[x]", in_progress: "[~]", blocked: "[!]", pending: "[ ]", dropped: "[-]",
+    };
+    const done = m.tasks.filter((t) => t.state === "done").length;
     out.push("");
-    out.push("## Tasks");
-    out.push(
-      `${tc.done ?? 0} done · ${tc.in_progress ?? 0} in progress · ${tc.blocked ?? 0} blocked · ` +
-        `${tc.pending ?? 0} pending · ${tc.dropped ?? 0} dropped  (of ${total})`,
-    );
+    out.push(`## Tasks — ${done}/${m.tasks.length} done`);
+    for (const t of m.tasks) out.push(`- ${mark[t.state] ?? "[ ]"} ${t.intent}`);
   }
 
   out.push("");

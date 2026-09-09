@@ -107,7 +107,23 @@ show("answer blocker", await post(`/blockers/${b.blockers[0]!.id}/answer`, {
   answer: "Risk engine v4 supports notional caps via /limits/notional. Read token in Key Vault under altshuler/risk-engine-ro. It does NOT support per-class grouping — you'll aggregate in our layer.",
 }));
 
-// 8 ── what the NEXT Claude session starts from
+// 8 ── with the blocking gap verified and the access decision on record,
+//      the task-breakdown skill runs OpenSpec and registers the plan
+show(
+  "tasks proposed (via task-breakdown / OpenSpec)",
+  await post(`/workitems/${workitemId}/tasks`, {
+    openspecChangeId: "add-position-limits",
+    tasks: [
+      { intent: "Aggregation layer: group instruments into classes and sum notional exposure", acceptance: [{ given: "positions across 3 instruments in class FX", when: "class exposure is computed", then: "it equals the sum of the three notional values in base currency" }], appetite: "standard", dependsOn: [] },
+      { intent: "Wire the limits API (/limits/notional) read path", acceptance: [{ given: "a valid risk-engine token", when: "the limit for a class is fetched", then: "the notional cap is returned" }], appetite: "small", dependsOn: [] },
+      { intent: "Enforce: block the order outright when class exposure would exceed the cap (per the verified gap)", acceptance: [{ given: "an order that would push class exposure over the cap", when: "the order is submitted", then: "it is rejected with a compliance reason code" }], appetite: "standard", dependsOn: [0, 1], dependencyReason: "needs aggregation + the cap value; behaviour fixed by gap #1" },
+    ],
+  }),
+);
+const tOut = (await get(`/workitems/${workitemId}/tasks`)).json() as { tasks: { id: string; intent: string }[] };
+show("start task 1", await post(`/tasks/${tOut.tasks[0]!.id}/progress`, { to: "in_progress", clientId }));
+
+// 9 ── what the NEXT Claude session starts from
 console.log("\n" + "═".repeat(72));
 console.log("Context Brief the next SessionStart injects:");
 console.log("═".repeat(72));

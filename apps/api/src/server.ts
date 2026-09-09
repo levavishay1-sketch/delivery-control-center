@@ -7,13 +7,16 @@ import {
   answerBlocker,
   blockersFor,
   briefFor,
+  progressTask,
   proposeGap,
+  proposeTasks,
   raiseBlocker,
   recordGitActivity,
   recordNote,
   recordSession,
   resolveWorkItem,
   setupClient,
+  tasksFor,
   verifyGap,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
@@ -138,10 +141,13 @@ app.get("/clients/:clientId/inbox", async (req) => {
 app.get("/workitems/:id", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
+  const t = await tasksFor(wi.clientId, id);
   return withTenant(wi.clientId, async (tx) => ({
     workitem: wi,
     gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
     blockers: await tx.select().from(blocker).where(sql`${blocker.workitemId} = ${id}`).orderBy(sql`${blocker.createdAt} desc`),
+    tasks: t.tasks,
+    taskDependencies: t.dependencies,
     events: await timeline(wi.clientId, id),
   }));
 });
@@ -183,6 +189,44 @@ app.post("/gaps/:id/verify", async (req) => {
     })
     .parse(req.body);
   return verifyGap({ gapId: id, by: { userId: dev.id }, ...b });
+});
+
+/* ── tasks ────────────────────────────────────────────────────────── */
+
+const taskInput = z.object({
+  intent: z.string(),
+  acceptance: z.array(z.object({ given: z.string(), when: z.string(), then: z.string() })).default([]),
+  appetite: z.enum(["small", "standard", "large"]).optional(),
+  dependsOn: z.array(z.number().int()).optional(),
+  dependencyReason: z.string().optional(),
+});
+
+app.get("/workitems/:id/tasks", async (req) => {
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return tasksFor(wi.clientId, id);
+});
+
+app.post("/workitems/:id/tasks", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ tasks: z.array(taskInput).min(1), openspecChangeId: z.string().optional() }).parse(req.body);
+  const wi = await locateWorkItem({ id });
+  const out = await proposeTasks({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...b });
+  return reply.code(201).send(out);
+});
+
+app.post("/tasks/:id/progress", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({
+      to: z.enum(["pending", "in_progress", "blocked", "done", "dropped"]),
+      mode: z.enum(["delegated", "interactive"]).default("interactive"),
+      clientId: z.string().uuid(),
+    })
+    .parse(req.body);
+  return progressTask({ taskId: id, by: { userId: dev.id }, to: b.to, mode: b.mode, clientId: b.clientId });
 });
 
 /* ── blockers ─────────────────────────────────────────────────────── */

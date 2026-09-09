@@ -28,10 +28,20 @@ export type Blocker = {
   answer: string | null;
   state: "open" | "answered" | "abandoned";
 };
+export type Task = {
+  id: string;
+  seq: number;
+  intent: string;
+  appetite: "small" | "standard" | "large";
+  state: "pending" | "in_progress" | "blocked" | "done" | "dropped";
+};
+export type TaskDep = { taskId: string; dependsOnTaskId: string; reason: string | null };
 export type WorkItemDetail = {
   workitem: WorkItemLite & { clientId: string; projectId: string };
   gaps: Gap[];
   blockers: Blocker[];
+  tasks: Task[];
+  taskDependencies: TaskDep[];
   events: EventRow[];
 };
 
@@ -58,3 +68,5 @@ export const verifyGap = (gapId: string, body: { outcome: "verified" | "dismisse
   post<{ gapId: string; outcome: string; spunOffTo: string | null }>(`/gaps/${gapId}/verify`, body);
 export const answerBlocker = (blockerId: string, body: { answer: string; clientId: string }) =>
   post<{ blockerId: string; state: string }>(`/blockers/${blockerId}/answer`, body);
+export const progressTask = (taskId: string, body: { to: Task["state"]; clientId: string }) =>
+  post<{ taskId: string; from: string; to: string }>(`/tasks/${taskId}/progress`, { ...body, mode: "interactive" });

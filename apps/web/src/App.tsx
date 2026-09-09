@@ -6,10 +6,12 @@ import {
   getDetail,
   getInbox,
   listWorkItems,
+  progressTask,
   verifyGap,
   type Blocker,
   type EventRow,
   type Gap,
+  type Task,
   type WorkItemDetail,
   type WorkItemLite,
 } from "./api.ts";
@@ -160,6 +162,33 @@ function BlockerCard({ b, onAnswer }: { b: Blocker; onAnswer: (answer: string) =
   );
 }
 
+const TASK_MARK: Record<Task["state"], { m: string; c: string }> = {
+  done: { m: "✓", c: "var(--ok)" },
+  in_progress: { m: "◐", c: "var(--ai)" },
+  blocked: { m: "⚑", c: "var(--crit)" },
+  pending: { m: "○", c: "var(--ink3)" },
+  dropped: { m: "×", c: "var(--ink3)" },
+};
+
+function TaskRow({ t, onProgress }: { t: Task; onProgress: (to: Task["state"]) => void }) {
+  const mk = TASK_MARK[t.state];
+  return (
+    <div style={{ display: "flex", gap: 7, alignItems: "baseline", padding: "4px 0", fontSize: 12 }}>
+      <span style={{ fontFamily: C.mono, fontSize: 11, color: mk.c, flex: "none" }}>{mk.m}</span>
+      <span style={{ color: t.state === "done" || t.state === "dropped" ? C.ink3 : C.ink2, textDecoration: t.state === "done" ? "line-through" : "none", flex: 1 }}>
+        <span style={{ fontFamily: C.mono, fontSize: 10, color: C.ink3 }}>{t.seq}. </span>{t.intent}
+      </span>
+      {t.state !== "done" && t.state !== "dropped" && (
+        <button onClick={() => onProgress(t.state === "in_progress" ? "done" : "in_progress")} style={{
+          font: "inherit", fontSize: 10, border: `1px solid ${C.rule2}`, background: C.surface, borderRadius: 3, cursor: "pointer", padding: "1px 5px", color: C.ink3, flex: "none",
+        }}>
+          {t.state === "in_progress" ? "→ done" : "→ start"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 type View = "workitem" | "inbox" | "blockers";
 
 export function App() {
@@ -212,6 +241,14 @@ export function App() {
     if (outcome === "spun_off") body.spunOffTitle = g.description.slice(0, 80);
     try {
       await verifyGap(g.id, body);
+      await reloadDetail(wi.id);
+    } catch (e) { setErr(String(e)); }
+  };
+
+  const onTaskProgress = async (t: Task, to: Task["state"]) => {
+    if (!wi) return;
+    try {
+      await progressTask(t.id, { to, clientId: wi.clientId });
       await reloadDetail(wi.id);
     } catch (e) { setErr(String(e)); }
   };
@@ -322,6 +359,13 @@ export function App() {
               </div>
               {detail.blockers.map((b) => <BlockerCard key={b.id} b={b} onAnswer={(a) => onAnswer(b, a)} />)}
               {detail.blockers.length === 0 && <div style={{ fontSize: 12, color: C.ink3 }}>אין.</div>}
+            </div>
+            <div style={{ padding: "13px 15px", borderBottom: `1px solid ${C.rule}` }}>
+              <div style={{ fontFamily: C.mono, fontSize: 9.5, letterSpacing: ".1em", textTransform: "uppercase", color: C.ink3, marginBottom: 8 }}>
+                Tasks ({detail.tasks.filter((t) => t.state === "done").length}/{detail.tasks.length})
+              </div>
+              {detail.tasks.map((t) => <TaskRow key={t.id} t={t} onProgress={(to) => onTaskProgress(t, to)} />)}
+              {detail.tasks.length === 0 && <div style={{ fontSize: 12, color: C.ink3 }}>אין פירוק עדיין.</div>}
             </div>
           </>
         )}

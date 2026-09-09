@@ -72,6 +72,13 @@ const blockerRaised = z.object({
   taskId: z.string().uuid().optional(),
 });
 
+const taskProgressed = z.object({
+  taskId: z.string().uuid(),
+  from: z.string(),
+  to: z.string(),
+  intent: z.string().optional(),
+});
+
 const blockerAnswered = z.object({
   blockerId: z.string().uuid(),
   answer: z.string(),
@@ -117,6 +124,7 @@ export const payloadSchemas: Registry = {
   "gap.proposed": { 1: gapProposed },
   "gap.verified": { 1: gapVerified },
   "tasks.proposed": { 1: tasksProposed },
+  "task.progressed": { 1: taskProgressed },
   "blocker.raised": { 1: blockerRaised },
   "blocker.answered": { 1: blockerAnswered },
   "status.changed": { 1: statusChanged },

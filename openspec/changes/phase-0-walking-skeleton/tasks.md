@@ -91,5 +91,9 @@ smaller). Order matters — each group unblocks the next.
       `skills/dcc.mjs` CLI they call
 - [x] 7.4 `withTenant` made re-entrant (AsyncLocalStorage) — nested
       tenant calls reuse the open transaction
-- [ ] 7.5 `task-breakdown` skill wrapping OpenSpec
-- [ ] 7.6 Blocker response UI · gap verify UI
+- [x] 7.5 `task-breakdown` skill wrapping OpenSpec + `@dcc/core` tasks.ts
+      (`proposeTasks` with a dependency graph, `progressTask`, `tasksFor`),
+      `dcc.mjs tasks`, API endpoints, tasks in the Brief and the UI
+- [x] 7.6 Blocker response UI · gap verify UI · task progress UI
+- [ ] 7.7 model routing (`model.routed` events + policy)
+- [ ] 7.8 Reviewer subagent · Flow/dependency visualisation (React Flow)

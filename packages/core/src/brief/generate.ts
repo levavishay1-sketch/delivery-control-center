@@ -41,11 +41,11 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
       .orderBy(sql`${blocker.answeredAt} desc`)
       .limit(5);
 
-    const tasks = await tx
-      .select({ state: task.state, n: sql<number>`count(*)::int` })
+    const taskRows = await tx
+      .select({ seq: task.seq, intent: task.intent, state: task.state })
       .from(task)
       .where(sql`${task.workitemId} = ${workitemId}`)
-      .groupBy(task.state);
+      .orderBy(task.seq);
 
     const recent = await tx
       .select({
@@ -74,7 +74,7 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
       })),
       openBlockers: openBlockers.map((b) => ({ questionType: b.questionType, question: b.question })),
       answeredBlockers: answeredBlockers.map((b) => ({ question: b.question, answer: b.answer ?? "" })),
-      taskCounts: Object.fromEntries(tasks.map((t) => [t.state, t.n])),
+      tasks: taskRows.map((t) => ({ seq: t.seq, intent: t.intent, state: t.state })),
       recentTimeline: recent.reverse(),
     };
   });

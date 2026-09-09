@@ -5,6 +5,7 @@
 //   node dcc.mjs resolve --branch feature/WI-1284-x
 //   node dcc.mjs gap     --workitem <id> --description "..." --blocking --confidence 0.8
 //   node dcc.mjs blocker --workitem <id> --type missing_access --question "..."
+//   node dcc.mjs tasks   --workitem <id> --file tasks.json [--change <openspec-change-id>]
 //   node dcc.mjs brief   --workitem <id>
 import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, parse } from "node:path";
@@ -75,8 +76,17 @@ try {
         question: a.question,
       }),
     );
+  } else if (cmd === "tasks") {
+    const parsed = JSON.parse(readFileSync(a.file, "utf8"));
+    const tasks = Array.isArray(parsed) ? parsed : parsed.tasks;
+    console.log(
+      await call("POST", `/workitems/${a.workitem}/tasks`, {
+        tasks,
+        openspecChangeId: a.change || parsed.openspecChangeId,
+      }),
+    );
   } else {
-    console.error("usage: dcc <resolve|brief|gap|blocker> [--flags]");
+    console.error("usage: dcc <resolve|brief|gap|blocker|tasks> [--flags]");
     process.exit(2);
   }
 } catch (e) {
