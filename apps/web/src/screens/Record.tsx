@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  answerBlocker, getBrief, getDetail, progressTask, verifyGap,
+  answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement, deleteTask,
+  getBrief, getDetail, progressTask, unlinkRepoFromReq, verifyGap,
   type Blocker, type EventRow, type Gap, type Task, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
-import { AddNote } from "../forms.tsx";
+import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -37,6 +38,9 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [tab, setTab] = useState<Tab>("Overview");
   const [err, setErr] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [repoOpen, setRepoOpen] = useState(false);
+  const [correcting, setCorrecting] = useState<EventRow | null>(null);
   const [newGap, setNewGap] = useState({ description: "", blocking: false });
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
 
@@ -61,10 +65,21 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   };
   const onTask = async (t: Task, to: Task["state"]) => { await progressTask(t.id, { to, clientId: wi.clientId }); reload(); };
   const onAnswer = async (b: Blocker, answer: string) => { await answerBlocker(b.id, { answer, clientId: wi.clientId }); reload(); };
+  const onDelete = async () => {
+    if (!confirm(`למחוק את הדרישה "${wi.title}"? האירועים ב-timeline יישמרו (הם append-only) אבל יינותקו ממנה.`)) return;
+    try { await deleteRequirement(wi.id); nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`); }
+    catch (e) { alert(String(e)); }
+  };
+
+  // events superseded by a later correction
+  const supersededIds = new Set(d.events.map((e) => e.supersedes).filter(Boolean) as string[]);
 
   return (
     <>
       {noteOpen && <AddNote workitemId={wi.id} onClose={() => setNoteOpen(false)} onDone={() => { setNoteOpen(false); reload(); }} />}
+      {editOpen && <EditRequirement wi={wi} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); reload(); }} />}
+      {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
+      {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
@@ -73,7 +88,11 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {wi.key && <span style={{ fontFamily: "var(--mono)", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ הוסף אירוע ל-timeline</button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ אירוע</button>
+          <button className="btn btn-secondary btn-sm" onClick={() => setEditOpen(true)}>עריכה</button>
+          <button className="btn btn-secondary btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחיקה</button>
+        </div>
       </div>
 
       <div className="tabs" role="tablist">
@@ -107,34 +126,67 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             <div className="top"><span className="l">Progress — {doneTasks}/{d.tasks.length} tasks</span><span>{progress}%</span></div>
             <div className="progress-track"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
           </div>
+
+          <div className="section">
+            <div className="section-head">
+              <p className="section-lbl" style={{ margin: 0 }}>Repositories שהדרישה נוגעת בהם</p>
+              <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר repository</button>
+            </div>
+            <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+              <table className="wtable">
+                <tbody>
+                  {d.repos.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.name}</td>
+                      <td><Pill tone={r.linkKind === "auto" ? "ai" : "inactive"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill></td>
+                      <td style={{ direction: "ltr", fontSize: 11, color: "var(--ink-400)" }}>{r.adoRepoRef ?? "—"}</td>
+                      <td style={{ textAlign: "end" }}>
+                        <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
+                      </td>
+                    </tr>
+                  ))}
+                  {d.repos.length === 0 && <tr><td colSpan={4}><div className="empty">אין repositories מקושרים.</div></td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           <div className="section">
             <p className="section-lbl">Context Brief — what the next Claude session loads</p>
             <div className="panel"><pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "ui-monospace, monospace", fontSize: 11.5, lineHeight: 1.6, color: "var(--ink-700)" }}>{brief || "—"}</pre></div>
-          </div>
-          <div className="action-row">
-            <button className="btn btn-secondary">Edit</button>
-            <button className="btn btn-secondary">Create Decision</button>
-            <button className="btn btn-primary">Start SDD Pipeline</button>
           </div>
         </>
       )}
 
       {tab === "Timeline" && (
-        <div className="rowlist">
-          {d.events.map((e) => (
-            <div className="row" key={e.id} style={{ alignItems: "flex-start", background: isAi(e) ? "var(--status-ai-bg)" : undefined }}>
-              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-400)", minWidth: 96 }}>{fmt(e.occurredAt)}</span>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                  {isAi(e) ? <Pill tone="ai">AI proposal</Pill> : <Pill tone="active">{e.actor.kind === "user" ? "Person" : "System"}</Pill>}
-                  <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-500)" }}>{e.type}</span>
+        <>
+          <p className="hint" style={{ fontSize: 11.5, color: "var(--ink-400)", marginBottom: 10 }}>
+            ה-timeline הוא append-only. "תיקון" של הערה יוצר אירוע חדש שמחליף את הישן — שום דבר לא נמחק.
+          </p>
+          <div className="rowlist">
+            {d.events.map((e) => {
+              const superseded = supersededIds.has(e.id);
+              return (
+                <div className="row" key={e.id} style={{ alignItems: "flex-start", background: isAi(e) ? "var(--status-ai-bg)" : undefined, opacity: superseded ? 0.55 : 1 }}>
+                  <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-400)", minWidth: 96 }}>{fmt(e.occurredAt)}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                      {isAi(e) ? <Pill tone="ai">AI proposal</Pill> : <Pill tone="active">{e.actor.kind === "user" ? "Person" : "System"}</Pill>}
+                      <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-500)" }}>{e.type}</span>
+                      {superseded && <Pill tone="inactive">תוקן</Pill>}
+                      {e.supersedes && <Pill tone="healthy">תיקון</Pill>}
+                    </div>
+                    <div style={{ fontSize: 12.5, color: "var(--ink-700)", marginTop: 3, textDecoration: superseded ? "line-through" : "none" }}>{String(gist(e)).slice(0, 220)}</div>
+                  </div>
+                  {e.type === "note.added" && !superseded && e.actor.kind === "user" && (
+                    <a style={{ fontSize: 11, cursor: "pointer" }} onClick={() => setCorrecting(e)}>תקן</a>
+                  )}
                 </div>
-                <div style={{ fontSize: 12.5, color: "var(--ink-700)", marginTop: 3 }}>{String(gist(e)).slice(0, 220)}</div>
-              </div>
-            </div>
-          ))}
-          {d.events.length === 0 && <div className="empty">No events yet.</div>}
-        </div>
+              );
+            })}
+            {d.events.length === 0 && <div className="empty">No events yet.</div>}
+          </div>
+        </>
       )}
 
       {tab === "Dependencies" && (
@@ -155,6 +207,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
               {t.state !== "done" && t.state !== "dropped" && (
                 <a className="link" onClick={() => onTask(t, t.state === "in_progress" ? "done" : "in_progress")}>{t.state === "in_progress" ? "mark done" : "start"}</a>
               )}
+              <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => { if (confirm("למחוק את המשימה?")) { await deleteTask(t.id, wi.clientId); reload(); } }}>מחק</a>
             </div>
           ))}
           {d.tasks.length === 0 && <div className="empty">No breakdown yet.</div>}
@@ -186,13 +239,16 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                     <span className="stage">confidence {Number(g.confidence).toFixed(2)}</span>
                   </div>
                 </div>
-                {g.state === "proposed" && (
-                  <div style={{ display: "flex", gap: 6 }}>
-                    <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "verified")}>Verify</button>
-                    <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "dismissed")}>Dismiss</button>
-                    {!g.blocking && <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "spun_off")}>Spin off</button>}
-                  </div>
-                )}
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {g.state === "proposed" && (
+                    <>
+                      <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "verified")}>Verify</button>
+                      <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "dismissed")}>Dismiss</button>
+                      {!g.blocking && <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "spun_off")}>Spin off</button>}
+                    </>
+                  )}
+                  <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => { if (confirm("למחוק את ה-Gap?")) { await deleteGap(g.id, wi.clientId); reload(); } }}>מחק</a>
+                </div>
               </div>
             ))}
             {d.gaps.length === 0 && <div className="empty">None.</div>}
@@ -211,7 +267,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             <button className="btn btn-primary btn-sm" onClick={async () => { if (!newBlk.question.trim()) return; await post(`/workitems/${wi.id}/blockers`, { questionType: newBlk.questionType, question: newBlk.question.trim() }); setNewBlk({ questionType: "unclear_requirement", question: "" }); reload(); }}>הוסף Blocker</button>
           </div>
           <div className="rowlist">
-            {d.blockers.map((b) => <BlockerRow key={b.id} b={b} onAnswer={(a) => onAnswer(b, a)} />)}
+            {d.blockers.map((b) => <BlockerRow key={b.id} b={b} onAnswer={(a) => onAnswer(b, a)} onDelete={async () => { if (confirm("למחוק את ה-Blocker?")) { await deleteBlocker(b.id, wi.clientId); reload(); } }} />)}
             {d.blockers.length === 0 && <div className="empty">אין.</div>}
           </div>
         </>
@@ -220,14 +276,34 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   );
 }
 
-function BlockerRow({ b, onAnswer }: { b: Blocker; onAnswer: (a: string) => void }) {
+function CorrectNote({ ev, workitemId, onClose, onDone }: { ev: EventRow; workitemId: string; onClose: () => void; onDone: () => void }) {
+  const [text, setText] = useState(String(ev.payload.body ?? ""));
+  const [busy, setBusy] = useState(false);
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 16px", zIndex: 100 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(520px, 100%)", padding: "22px 24px" }}>
+        <h2 style={{ fontSize: 17, fontWeight: 650, marginBottom: 12 }}>תיקון הערה</h2>
+        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 10 }}>ההערה המקורית תישאר ב-timeline מסומנת "תוקן". זו רשומה חדשה שמחליפה אותה.</p>
+        <textarea value={text} onChange={(e) => setText(e.target.value)} style={{ width: "100%", minHeight: 110 }} />
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          <button className="btn btn-primary" disabled={busy} onClick={async () => { setBusy(true); try { await correctNote(workitemId, ev.id, text.trim()); onDone(); } catch (e) { alert(String(e)); setBusy(false); } }}>{busy ? "שומר…" : "שמור תיקון"}</button>
+          <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BlockerRow({ b, onAnswer, onDelete }: { b: Blocker; onAnswer: (a: string) => void; onDelete: () => void }) {
   const [text, setText] = useState("");
   return (
     <div className="row" style={{ alignItems: "flex-start" }}>
       <div style={{ flex: 1 }}>
-        <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+        <div style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
           <Pill tone={b.state === "open" ? "critical" : "healthy"}>{b.state}</Pill>
           <span className="stage">{b.questionType}</span>
+          <span className="spacer" style={{ flex: 1 }} />
+          <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={onDelete}>מחק</a>
         </div>
         <div className="title" style={{ fontWeight: 400 }}>{b.question}</div>
         {b.answer && <div style={{ color: "var(--status-healthy)", fontSize: 12.5, marginTop: 5 }}>← {b.answer}</div>}

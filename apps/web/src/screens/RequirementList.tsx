@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getInitiatives, REQ_TYPE_HE, type Initiative } from "../api.ts";
+import { deleteRequirement, getInitiatives, REQ_TYPE_HE, type Initiative } from "../api.ts";
 import { PageHead } from "../ui.tsx";
 import { NewRequirement } from "../forms.tsx";
 
@@ -28,7 +28,7 @@ export function RequirementList({ nav }: { nav: (h: string) => void }) {
       {err && <div className="empty">{err}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>דרישה</th><th>לקוח</th><th>סוג</th><th>שלב</th><th>תקציב</th><th>תת-דרישות</th></tr></thead>
+          <thead><tr><th>דרישה</th><th>לקוח</th><th>סוג</th><th>שלב</th><th>תקציב</th><th>תת-דרישות</th><th></th></tr></thead>
           <tbody>
             {(rows ?? []).map((p) => {
               const ph = PH[p.phase] ?? { label: p.phase, tone: "inactive" };
@@ -42,10 +42,16 @@ export function RequirementList({ nav }: { nav: (h: string) => void }) {
                   <td><span className={`pill ${ph.tone}`}><span className="dot" />{ph.label}</span></td>
                   <td>{money(p.budgetUsd)}</td>
                   <td>{p.items ?? 0}</td>
+                  <td style={{ textAlign: "end" }}>
+                    <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => {
+                      if (!confirm(`למחוק את "${p.name}"?`)) return;
+                      try { await deleteRequirement(p.id); reload(); } catch (e) { alert(String(e)); }
+                    }}>מחק</a>
+                  </td>
                 </tr>
               );
             })}
-            {rows && rows.length === 0 && <tr><td colSpan={6}><div className="empty">אין דרישות. לחץ "+ דרישה חדשה".</div></td></tr>}
+            {rows && rows.length === 0 && <tr><td colSpan={7}><div className="empty">אין דרישות. לחץ "+ דרישה חדשה".</div></td></tr>}
           </tbody>
         </table>
       </div>

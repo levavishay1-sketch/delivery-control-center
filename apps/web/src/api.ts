@@ -9,7 +9,10 @@ async function j<T>(r: Response): Promise<T> {
 const get = <T,>(p: string) => fetch(`/api${p}`, { headers: H }).then((r) => j<T>(r));
 const post = <T,>(p: string, body: unknown) =>
   fetch(`/api${p}`, { method: "POST", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
-const del = <T,>(p: string) => fetch(`/api${p}`, { method: "DELETE", headers: H }).then((r) => j<T>(r));
+const patch = <T,>(p: string, body: unknown) =>
+  fetch(`/api${p}`, { method: "PATCH", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
+const del = <T,>(p: string, body?: unknown) =>
+  fetch(`/api${p}`, { method: "DELETE", headers: H, ...(body ? { body: JSON.stringify(body) } : {}) }).then((r) => j<T>(r));
 export const getText = (p: string) => fetch(`/api${p}`, { headers: H }).then((r) => r.text());
 
 // ---------- types ----------
@@ -37,8 +40,9 @@ export type WorkItem = {
   executor: "human" | "ai" | "mixed"; budgetUsd: string | null; dueDate: string | null;
   progressPct: number; linkedAdoId: number | null; adoAreaPath: string | null; startedWithOpenBlocker: boolean;
 };
+export type LinkedRepo = { id: string; name: string; adoRepoRef: string | null; linkKind: "declared" | "auto"; addedAt: string };
 export type WorkItemDetail = {
-  workitem: WorkItem; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
+  workitem: WorkItem; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
   taskDependencies: { taskId: string; dependsOnTaskId: string; reason: string | null }[];
   events: EventRow[];
 };
@@ -127,7 +131,29 @@ export const createRequirement = (body: {
   clientId?: string; parentId?: string; title: string; type?: ReqType;
   priority?: string; risk?: string; executor?: string;
 }) => post<WorkItem>("/workitems", body);
+export const updateRequirement = (id: string, body: Partial<{
+  title: string; type: ReqType; priority: string; risk: string; executor: string; phase: string;
+  budgetUsd: string | number | null; dueDate: string | null; parentId: string | null; adoAreaPath: string | null; key: string | null;
+}>) => patch<WorkItem>(`/workitems/${id}`, body);
 export const deleteRequirement = (id: string) => del<Record<string, never>>(`/workitems/${id}`);
+
+// entity edit/delete
+export const updateClient = (id: string, body: Partial<{ name: string; connectorType: string; adoProjectRef: string | null }>) => patch<{ updated: boolean }>(`/clients/${id}`, body);
+export const deleteClient = (id: string, archive = false) => del<{ deleted?: boolean; archived?: boolean }>(`/clients/${id}${archive ? "?mode=archive" : ""}`);
+export const updateRepo = (id: string, body: Partial<{ name: string; adoRepoRef: string | null; defaultBranch: string }>) => patch<{ updated: boolean }>(`/repos/${id}`, body);
+export const deleteRepo = (id: string) => del<{ deleted: boolean }>(`/repos/${id}`);
+export const unlinkClientRepo = (clientId: string, repoId: string) => del<{ unlinked: boolean }>(`/clients/${clientId}/repos/${repoId}`);
+export const updateConnection = (clientId: string, id: string, body: Partial<{ orgUrl: string; project: string; pat: string }>) => patch<{ updated: boolean }>(`/clients/${clientId}/connections/${id}`, body);
+export const linkRepoToReq = (wiId: string, body: { repoId?: string; name?: string; gitUrl?: string; linkKind?: "declared" | "auto" }) => post<{ linked: boolean }>(`/workitems/${wiId}/repos`, body);
+export const unlinkRepoFromReq = (wiId: string, repoId: string) => del<{ unlinked: boolean }>(`/workitems/${wiId}/repos/${repoId}`);
+export const deleteDependency = (wiId: string, depId: string) => del<{ deleted: boolean }>(`/workitems/${wiId}/depends-on/${depId}`);
+export const updateGap = (id: string, body: { clientId: string; description?: string; blocking?: boolean }) => patch<{ updated: boolean }>(`/gaps/${id}`, body);
+export const deleteGap = (id: string, clientId: string) => del<{ deleted: boolean }>(`/gaps/${id}`, { clientId });
+export const updateBlocker = (id: string, body: { clientId: string; question?: string; questionType?: string }) => patch<{ updated: boolean }>(`/blockers/${id}`, body);
+export const deleteBlocker = (id: string, clientId: string) => del<{ deleted: boolean }>(`/blockers/${id}`, { clientId });
+export const updateTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => patch<{ updated: boolean }>(`/tasks/${id}`, body);
+export const deleteTask = (id: string, clientId: string) => del<{ deleted: boolean }>(`/tasks/${id}`, { clientId });
+export const correctNote = (workitemId: string, corrects: string, body: string) => post<{ eventId: string }>("/events", { workitemId, kind: "note", note: { body, source: "manual", corrects } });
 
 export const verifyGap = (gapId: string, body: { outcome: "verified" | "dismissed" | "spun_off"; clientId: string; spunOffTitle?: string }) =>
   post(`/gaps/${gapId}/verify`, body);

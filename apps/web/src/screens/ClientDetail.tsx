@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { checkConnection, deleteConnection, getClient, REQ_TYPE_HE, type ClientDetail as CD, type Requirement } from "../api.ts";
+import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, unlinkClientRepo, REQ_TYPE_HE, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
-import { ConnectAdo, LinkRepo, NewRequirement } from "../forms.tsx";
+import { ConnectAdo, EditClient, EditRepo, LinkRepo, NewRequirement } from "../forms.tsx";
 
 const PH: Record<string, { label: string; tone: string }> = {
   intake: { label: "קליטה", tone: "inactive" }, shaping: { label: "עיצוב", tone: "healthy" },
@@ -28,7 +28,8 @@ function ordered(reqs: Requirement[]): { r: Requirement; depth: number }[] {
 export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [d, setD] = useState<CD | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [modal, setModal] = useState<"req" | "repo" | "ado" | null>(null);
+  const [modal, setModal] = useState<"req" | "repo" | "ado" | "editClient" | null>(null);
+  const [editRepo, setEditRepo] = useState<{ id: string; name: string; adoRepoRef: string | null } | null>(null);
   const reload = () => getClient(id).then(setD).catch((e) => setErr(String(e)));
   useEffect(() => { reload(); }, [id]);
 
@@ -38,18 +39,34 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
   const rows = ordered(d.requirements);
   const activeConns = d.connections.filter((c) => c.kind === "ado" && !c.revokedAt);
 
+  const onDeleteClient = async () => {
+    if (!confirm(`למחוק את הלקוח "${d.client.name}"?`)) return;
+    try { await deleteClient(id); nav("#/clients"); }
+    catch (e) {
+      if (confirm(`${e}\n\nלארכב את הלקוח במקום?`)) { await deleteClient(id, true); nav("#/clients"); }
+    }
+  };
+
   return (
     <>
       <PageHead
         crumb={<a onClick={() => nav("#/clients")}>← לקוחות</a>}
         title={d.client.name}
         sub={`${d.requirements.length} דרישות · ${d.repos.length} repositories · ${activeConns.length} חיבורים${d.client.adoProjectRef ? ` · ADO: ${d.client.adoProjectRef}` : ""}`}
-        actions={<button className="btn btn-primary" onClick={() => setModal("req")}>+ הוסף דרישה</button>}
+        actions={
+          <>
+            <button className="btn btn-secondary" onClick={() => setModal("editClient")}>עריכה</button>
+            <button className="btn btn-secondary" style={{ color: "var(--status-critical)" }} onClick={onDeleteClient}>מחיקה</button>
+            <button className="btn btn-primary" onClick={() => setModal("req")}>+ הוסף דרישה</button>
+          </>
+        }
       />
 
       {modal === "req" && <NewRequirement fixedClientId={id} onClose={() => setModal(null)} onDone={(wi) => { setModal(null); if (wi) nav(`#/wi/${wi}`); else reload(); }} />}
       {modal === "repo" && <LinkRepo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "ado" && <ConnectAdo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {modal === "editClient" && <EditClient client={d.client} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {editRepo && <EditRepo repo={editRepo} onClose={() => setEditRepo(null)} onDone={() => { setEditRepo(null); reload(); }} />}
 
       {/* ---- requirements ---- */}
       <p className="section-lbl">דרישות</p>
@@ -85,9 +102,15 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("repo")}>+ חיבור repository</button>
           </div>
           {d.repos.map((r) => (
-            <div className="stat-line" key={r.id}>
-              <span className="l">{r.name}</span>
-              <span style={{ fontSize: 11, color: "var(--ink-400)", direction: "ltr" }}>{r.adoRepoRef ?? "—"}</span>
+            <div className="stat-line" key={r.id} style={{ alignItems: "flex-start" }}>
+              <span className="l">{r.name}
+                <span style={{ display: "block", fontSize: 11, color: "var(--ink-400)", direction: "ltr" }}>{r.adoRepoRef ?? "—"}</span>
+              </span>
+              <span style={{ display: "flex", gap: 10 }}>
+                <a style={{ fontSize: 11, cursor: "pointer" }} onClick={() => setEditRepo(r)}>ערוך</a>
+                <a style={{ fontSize: 11, cursor: "pointer" }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהלקוח? (ה-repository עצמו יישאר)`)) { await unlinkClientRepo(id, r.id); reload(); } }}>נתק</a>
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => { if (confirm(`למחוק לגמרי את ${r.name}? יימחק מכל הלקוחות והדרישות.`)) { await deleteRepo(r.id); reload(); } }}>מחק</a>
+              </span>
             </div>
           ))}
           {d.repos.length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>לא מחובר repository.</p>}

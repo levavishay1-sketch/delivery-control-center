@@ -131,9 +131,9 @@ export async function deleteRequirement(clientId: string, id: string) {
 export async function linkRepoToRequirement(input: {
   clientId: string; workitemId: string; repoId: string; by: By; linkKind?: "declared" | "auto";
 }) {
+  const [r] = await db.select().from(repo).where(eq(repo.id, input.repoId)).limit(1); // repo has no RLS
+  if (!r) throw new Error("repo not found");
   return withTenant(input.clientId, async (tx) => {
-    const [r] = await withoutTenant((t) => t.select().from(repo).where(eq(repo.id, input.repoId)).limit(1));
-    if (!r) throw new Error("repo not found");
     await tx
       .insert(workitemRepo)
       .values({ clientId: input.clientId, workitemId: input.workitemId, repoId: input.repoId, linkKind: input.linkKind ?? "declared", addedBy: input.by.userId })
@@ -151,8 +151,8 @@ export async function linkRepoToRequirement(input: {
 }
 
 export async function unlinkRepoFromRequirement(input: { clientId: string; workitemId: string; repoId: string; by: By }) {
+  const [r] = await db.select().from(repo).where(eq(repo.id, input.repoId)).limit(1);
   return withTenant(input.clientId, async (tx) => {
-    const [r] = await withoutTenant((t) => t.select().from(repo).where(eq(repo.id, input.repoId)).limit(1));
     await tx.delete(workitemRepo).where(and(eq(workitemRepo.workitemId, input.workitemId), eq(workitemRepo.repoId, input.repoId)));
     await appendEvent({
       clientId: input.clientId, workitemId: input.workitemId, source: "manual", type: "repo.unlinked",

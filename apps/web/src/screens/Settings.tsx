@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { deleteConnection, getConnections, getRepos } from "../api.ts";
+import { deleteConnection, deleteRepo, getConnections, getRepos } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
-import { ConnectAdo, LinkRepo } from "../forms.tsx";
+import { ConnectAdo, EditRepo, LinkRepo } from "../forms.tsx";
 
 export function Settings({ nav }: { nav: (h: string) => void }) {
   const [conns, setConns] = useState<Awaited<ReturnType<typeof getConnections>>["connections"] | null>(null);
   const [repos, setRepos] = useState<Awaited<ReturnType<typeof getRepos>>["repos"] | null>(null);
   const [modal, setModal] = useState<"ado" | "repo" | null>(null);
+  const [editRepo, setEditRepo] = useState<{ id: string; name: string; adoRepoRef: string | null } | null>(null);
   const reload = () => {
     getConnections().then((r) => setConns(r.connections)).catch(() => {});
     getRepos().then((r) => setRepos(r.repos)).catch(() => {});
@@ -18,6 +19,7 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
       <PageHead title="הגדרות" sub="חיבורים, repositories ו-model policy — לכל המערכת." />
       {modal === "ado" && <ConnectAdo onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "repo" && <LinkRepo onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {editRepo && <EditRepo repo={editRepo} onClose={() => setEditRepo(null)} onDone={() => { setEditRepo(null); reload(); }} />}
 
       <div className="settings-grid">
         <div className="panel">
@@ -46,9 +48,14 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("repo")}>+ חיבור</button>
           </div>
           {(repos ?? []).map((r) => (
-            <div className="stat-line" key={r.id}>
-              <span className="l">{r.name}{r.clientName ? <span style={{ color: "var(--ink-400)" }}> · {r.clientName}</span> : <span style={{ color: "var(--ink-400)" }}> · רוחבי</span>}</span>
-              <span style={{ fontSize: 11, color: "var(--ink-400)" }}>{r.linkedClients} לקוחות</span>
+            <div className="stat-line" key={r.id} style={{ alignItems: "flex-start" }}>
+              <span className="l">{r.name}{r.clientName ? <span style={{ color: "var(--ink-400)" }}> · {r.clientName}</span> : <span style={{ color: "var(--ink-400)" }}> · רוחבי</span>}
+                <span style={{ display: "block", fontSize: 11, color: "var(--ink-400)" }}>{r.linkedClients} לקוחות</span>
+              </span>
+              <span style={{ display: "flex", gap: 10 }}>
+                <a style={{ fontSize: 11, cursor: "pointer" }} onClick={() => setEditRepo({ id: r.id, name: r.name, adoRepoRef: r.adoRepoRef })}>ערוך</a>
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={() => { if (confirm(`למחוק את ${r.name}? יימחק מכל הלקוחות והדרישות.`)) deleteRepo(r.id).then(reload); }}>מחק</a>
+              </span>
             </div>
           ))}
           {repos && repos.length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>אין repositories.</p>}

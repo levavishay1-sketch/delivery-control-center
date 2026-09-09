@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getAdoProjects, getClients, getConnections, getRepos } from "./api.ts";
+import { getAdoProjects, getClients, getConnections, getRepos, linkRepoToReq, updateClient, updateRepo, updateRequirement, type ReqType, type WorkItem } from "./api.ts";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -326,6 +326,204 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; o
       {result && <p style={{ fontSize: 12.5, margin: "10px 0 0", color: result.startsWith("✓") ? "var(--status-healthy)" : "var(--status-critical)" }}>{result}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "בודק חיבור…" : "חבר ובדוק"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
+const TYPES: { v: ReqType; he: string }[] = [
+  { v: "epic", he: "אפיק (Epic)" }, { v: "feature", he: "פיצ'ר (Feature)" },
+  { v: "story", he: "סיפור (Story)" }, { v: "bug", he: "באג (Bug)" },
+  { v: "task", he: "משימה (Task)" }, { v: "spike", he: "בירור (Spike)" },
+];
+const PHASES = [
+  ["intake", "קליטה"], ["shaping", "עיצוב"], ["building", "בבנייה"],
+  ["review", "בבדיקה"], ["done", "הושלם"], ["archived", "אורכב"],
+] as const;
+
+export function EditClient({ client, onClose, onDone }: {
+  client: { id: string; name: string; connectorType: string; adoProjectRef: string | null }; onClose: () => void; onDone: () => void;
+}) {
+  const [f, setF] = useState({ name: client.name, connectorType: client.connectorType, adoProjectRef: client.adoProjectRef ?? "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    if (!f.name.trim()) return setErr("שם הוא שדה חובה");
+    setBusy(true); setErr(null);
+    try {
+      await updateClient(client.id, { name: f.name.trim(), connectorType: f.connectorType, adoProjectRef: f.adoProjectRef.trim() || null });
+      onDone();
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  return (
+    <Modal title="עריכת לקוח" onClose={onClose}>
+      <div className="field" style={{ marginBottom: 12 }}><label>שם</label>
+        <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} style={{ width: "100%" }} />
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}><label>סוג סנכרון</label>
+        <select value={f.connectorType} onChange={(e) => setF({ ...f, connectorType: e.target.value })}>
+          <option value="manual">ידני</option><option value="ado">Azure DevOps</option><option value="github">GitHub</option><option value="jira">Jira</option><option value="dcc">DCC בלבד</option>
+        </select>
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}><label>ADO Project (לסנכרון)</label>
+        <input value={f.adoProjectRef} onChange={(e) => setF({ ...f, adoProjectRef: e.target.value })} placeholder="Altshuler Trade" style={{ width: "100%" }} dir="ltr" />
+      </div>
+      <Err e={err} />
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "שומר…" : "שמור"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
+export function EditRepo({ repo, onClose, onDone }: {
+  repo: { id: string; name: string; adoRepoRef: string | null }; onClose: () => void; onDone: () => void;
+}) {
+  const [f, setF] = useState({ name: repo.name, adoRepoRef: repo.adoRepoRef ?? "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    if (!f.name.trim()) return setErr("שם הוא שדה חובה");
+    setBusy(true); setErr(null);
+    try { await updateRepo(repo.id, { name: f.name.trim(), adoRepoRef: f.adoRepoRef.trim() || null }); onDone(); }
+    catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  return (
+    <Modal title="עריכת repository" onClose={onClose}>
+      <div className="field" style={{ marginBottom: 12 }}><label>שם</label>
+        <input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} style={{ width: "100%" }} />
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}><label>כתובת Git / ADO</label>
+        <input value={f.adoRepoRef} onChange={(e) => setF({ ...f, adoRepoRef: e.target.value })} placeholder="https://github.com/…" style={{ width: "100%" }} dir="ltr" />
+      </div>
+      <Err e={err} />
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "שומר…" : "שמור"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Edit an existing requirement's fields. */
+export function EditRequirement({ wi, onClose, onDone }: { wi: WorkItem; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({
+    title: wi.title, type: wi.type as string, priority: wi.priority as string, risk: wi.risk as string,
+    executor: wi.executor as string, phase: wi.phase, budgetUsd: wi.budgetUsd ?? "",
+    dueDate: wi.dueDate ? wi.dueDate.slice(0, 10) : "", adoAreaPath: wi.adoAreaPath ?? "", key: wi.key ?? "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    if (!f.title.trim()) return setErr("כותרת היא שדה חובה");
+    setBusy(true); setErr(null);
+    try {
+      await updateRequirement(wi.id, {
+        title: f.title.trim(), type: f.type as ReqType, priority: f.priority, risk: f.risk, executor: f.executor,
+        phase: f.phase, budgetUsd: f.budgetUsd === "" ? null : f.budgetUsd,
+        dueDate: f.dueDate || null, adoAreaPath: f.adoAreaPath.trim() || null, key: f.key.trim() || null,
+      });
+      onDone();
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  return (
+    <Modal title="עריכת דרישה" onClose={onClose}>
+      <div className="field" style={{ marginBottom: 12 }}><label>כותרת</label>
+        <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} style={{ width: "100%" }} />
+      </div>
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <div className="field"><label>סוג</label>
+          <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>{TYPES.map((t) => <option key={t.v} value={t.v}>{t.he}</option>)}</select>
+        </div>
+        <div className="field"><label>שלב</label>
+          <select value={f.phase} onChange={(e) => setF({ ...f, phase: e.target.value })}>{PHASES.map(([v, he]) => <option key={v} value={v}>{he}</option>)}</select>
+        </div>
+      </div>
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <div className="field"><label>עדיפות</label>
+          <select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}>
+            <option value="low">נמוכה</option><option value="medium">בינונית</option><option value="high">גבוהה</option><option value="critical">קריטית</option>
+          </select>
+        </div>
+        <div className="field"><label>סיכון</label>
+          <select value={f.risk} onChange={(e) => setF({ ...f, risk: e.target.value })}>
+            <option value="low">נמוך</option><option value="medium">בינוני</option><option value="high">גבוה</option>
+          </select>
+        </div>
+      </div>
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <div className="field"><label>מבצע</label>
+          <select value={f.executor} onChange={(e) => setF({ ...f, executor: e.target.value })}>
+            <option value="human">אדם</option><option value="ai">AI</option><option value="mixed">משולב</option>
+          </select>
+        </div>
+        <div className="field"><label>תקציב AI ($)</label>
+          <input type="number" value={f.budgetUsd} onChange={(e) => setF({ ...f, budgetUsd: e.target.value })} placeholder="—" style={{ width: "100%" }} dir="ltr" />
+        </div>
+      </div>
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <div className="field"><label>תאריך יעד</label>
+          <input type="date" value={f.dueDate} onChange={(e) => setF({ ...f, dueDate: e.target.value })} style={{ width: "100%" }} dir="ltr" />
+        </div>
+        <div className="field"><label>מפתח (WI-…)</label>
+          <input value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} placeholder="WI-3001" style={{ width: "100%" }} dir="ltr" />
+        </div>
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}><label>ADO area path</label>
+        <input value={f.adoAreaPath} onChange={(e) => setF({ ...f, adoAreaPath: e.target.value })} placeholder="Altshuler Trade\Trading Platform" style={{ width: "100%" }} dir="ltr" />
+      </div>
+      <Err e={err} />
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "שומר…" : "שמור"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Link a repository to a requirement — pick an existing one or create a new one. */
+export function LinkRepoToReq({ workitemId, onClose, onDone }: { workitemId: string; onClose: () => void; onDone: () => void }) {
+  const [repos, setRepos] = useState<{ id: string; name: string; clientName: string | null }[]>([]);
+  const [f, setF] = useState({ choice: "", name: "", gitUrl: "", linkKind: "declared" as "declared" | "auto" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { getRepos().then((r) => setRepos(r.repos)).catch(() => {}); }, []);
+  const submit = async () => {
+    const body = f.choice === "__new"
+      ? { name: f.name.trim(), gitUrl: f.gitUrl.trim() || undefined, linkKind: f.linkKind }
+      : { repoId: f.choice, linkKind: f.linkKind };
+    if (f.choice === "" ) return setErr("בחר repository");
+    if (f.choice === "__new" && !f.name.trim()) return setErr("שם ה-repository הוא שדה חובה");
+    setBusy(true); setErr(null);
+    try { await linkRepoToReq(workitemId, body); onDone(); }
+    catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  return (
+    <Modal title="קישור repository לדרישה" onClose={onClose}>
+      <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 14 }}>קישור ידני. הצינור (branches / אזורים מושפעים) יוסיף קישורים אוטומטית בסימון "auto".</p>
+      <div className="field" style={{ marginBottom: 12 }}><label>repository</label>
+        <select value={f.choice} onChange={(e) => setF({ ...f, choice: e.target.value })}>
+          <option value="">— בחר —</option>
+          {repos.map((r) => <option key={r.id} value={r.id}>{r.name}{r.clientName ? ` (${r.clientName})` : " (רוחבי)"}</option>)}
+          <option value="__new">+ repository חדש…</option>
+        </select>
+      </div>
+      {f.choice === "__new" && (
+        <>
+          <div className="field" style={{ marginBottom: 12 }}><label>שם</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="ALTSHULER_TRADE" style={{ width: "100%" }} /></div>
+          <div className="field" style={{ marginBottom: 12 }}><label>כתובת Git (אופציונלי)</label><input value={f.gitUrl} onChange={(e) => setF({ ...f, gitUrl: e.target.value })} placeholder="https://github.com/…" style={{ width: "100%" }} dir="ltr" /></div>
+        </>
+      )}
+      <div className="field" style={{ marginBottom: 12 }}><label>מקור הקישור</label>
+        <select value={f.linkKind} onChange={(e) => setF({ ...f, linkKind: e.target.value as "declared" | "auto" })}>
+          <option value="declared">ידני (declared)</option><option value="auto">חלק מהתהליך (auto)</option>
+        </select>
+      </div>
+      <Err e={err} />
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "מקשר…" : "קשר"}</button>
         <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
       </div>
     </Modal>
