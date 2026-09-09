@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getWorkList, type WorkListRow } from "../api.ts";
 import { PageHead, TypeChip, initials } from "../ui.tsx";
+import { NewWorkItem } from "../forms.tsx";
 
 const PRIO: Record<string, string> = { critical: "קריטית", high: "גבוהה", medium: "בינונית", low: "נמוכה" };
 const PHASE: Record<string, string> = { intake: "קליטה", shaping: "גיבוש", building: "בפיתוח", review: "בבדיקה", done: "הושלם", archived: "ארכיון" };
@@ -13,8 +14,10 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
   const [rows, setRows] = useState<WorkListRow[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [f, setF] = useState({ q: "", priority: "", phase: "", blocked: new URLSearchParams(query).get("filter") === "blocked" });
+  const [modal, setModal] = useState(false);
+  const reload = () => getWorkList().then((r) => setRows(r.items)).catch((e) => setErr(String(e)));
 
-  useEffect(() => { getWorkList().then((r) => setRows(r.items)).catch((e) => setErr(String(e))); }, []);
+  useEffect(() => { reload(); }, []);
 
   const filtered = useMemo(() => (rows ?? []).filter((r) =>
     (!f.q || r.title.includes(f.q) || (r.key ?? "").includes(f.q)) &&
@@ -25,7 +28,8 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
 
   return (
     <>
-      <PageHead title="עבודות" sub={rows ? `${rows.length} עבודות בכל הפרויקטים` : undefined} actions={<button className="btn btn-primary">+ עבודה חדשה</button>} />
+      <PageHead title="עבודות" sub={rows ? `${rows.length} עבודות בכל הפרויקטים` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ עבודה חדשה</button>} />
+      {modal && <NewWorkItem onClose={() => setModal(false)} onDone={(id) => { setModal(false); if (id) nav(`#/wi/${id}`); else reload(); }} />}
       <div className="filter-bar">
         <div className="field"><label>חיפוש</label><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="כותרת או מפתח…" /></div>
         <div className="field"><label>עדיפות</label>

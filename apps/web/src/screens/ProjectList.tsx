@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getProjectList } from "../api.ts";
 import { PageHead } from "../ui.tsx";
+import { NewProject } from "../forms.tsx";
 
 const CONN: Record<string, string> = { manual: "ידני", ado: "Azure DevOps", github: "GitHub", jira: "Jira", dcc: "DCC" };
 const ST: Record<string, { label: string; tone: string }> = {
@@ -12,11 +13,14 @@ const money = (n: string | null) => (n == null ? "—" : `$${Number(n).toLocaleS
 export function ProjectList({ nav }: { nav: (h: string) => void }) {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof getProjectList>>["projects"] | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { getProjectList().then((r) => setRows(r.projects)).catch((e) => setErr(String(e))); }, []);
+  const [modal, setModal] = useState(false);
+  const reload = () => getProjectList().then((r) => setRows(r.projects)).catch((e) => setErr(String(e)));
+  useEffect(() => { reload(); }, []);
 
   return (
     <>
-      <PageHead title="פרויקטים" sub={rows ? `${rows.length} פרויקטים` : undefined} actions={<button className="btn btn-primary">+ הוספת פרויקט</button>} />
+      <PageHead title="פרויקטים" sub={rows ? `${rows.length} פרויקטים` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ הוספת פרויקט</button>} />
+      {modal && <NewProject onClose={() => setModal(false)} onDone={(id) => { setModal(false); if (id) nav(`#/project/${id}`); else reload(); }} />}
       {err && <div className="empty">{err}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">

@@ -419,11 +419,11 @@ app.post("/admin/setup-client", async (req, reply) => {
 /* ── admin ────────────────────────────────────────────────────────── */
 
 app.post("/workitems", async (req, reply) => {
-  await actingUser(req);
+  const dev = await actingUser(req);
   const b = z
     .object({
       projectId: z.string().uuid(),
-      ownerId: z.string().uuid(),
+      ownerId: z.string().uuid().optional(),
       key: z.string().optional(),
       title: z.string(),
       level: z.enum(["epic", "feature", "story", "task"]).optional(),
@@ -443,7 +443,7 @@ app.post("/workitems", async (req, reply) => {
       .values({
         clientId: p.clientId,
         projectId: b.projectId,
-        ownerId: b.ownerId,
+        ownerId: b.ownerId ?? dev.id,
         key: b.key ?? null,
         title: b.title,
         level: b.level ?? "story",
@@ -458,6 +458,16 @@ app.post("/workitems", async (req, reply) => {
       .returning(),
   );
   return reply.code(201).send(wi);
+});
+
+app.delete("/workitems/:id", async (req, reply) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  // event_log rows for this item lose their workitem_id (on delete: set null),
+  // landing in the unassigned bucket — history is never destroyed.
+  await withTenant(wi.clientId, (tx) => tx.delete(workitem).where(sql`${workitem.id} = ${id}`));
+  return reply.code(204).send();
 });
 
 app.post("/workitems/:id/ado-link", async (req) => {

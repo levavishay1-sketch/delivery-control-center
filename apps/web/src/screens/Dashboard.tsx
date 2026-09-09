@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getDashboard, type Dashboard as D } from "../api.ts";
 import { ICONS, Icon, initials } from "../ui.tsx";
+import { NewProject, NewWorkItem } from "../forms.tsx";
 
 const CONNECTOR_LABEL: Record<string, string> = { manual: "ידני", ado: "Azure DevOps", github: "GitHub", jira: "Jira", dcc: "DCC" };
 const STATUS: Record<string, { label: string; tone: string }> = {
@@ -22,7 +23,9 @@ const ago = (iso: string | null) => {
 export function Dashboard({ nav }: { nav: (h: string) => void }) {
   const [d, setD] = useState<D | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { getDashboard().then(setD).catch((e) => setErr(String(e))); }, []);
+  const [modal, setModal] = useState<"project" | "work" | null>(null);
+  const reload = () => getDashboard().then(setD).catch((e) => setErr(String(e)));
+  useEffect(() => { reload(); }, []);
 
   return (
     <>
@@ -36,9 +39,12 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{ICONS.search}</svg>
             חיפוש…
           </div>
-          <button className="btn btn-primary"><Icon d={ICONS.plus} size={14} /> הוספת פרויקט</button>
+          <button className="btn btn-primary" onClick={() => setModal("project")}><Icon d={ICONS.plus} size={14} /> הוספת פרויקט</button>
         </div>
       </div>
+
+      {modal === "project" && <NewProject onClose={() => setModal(null)} onDone={(id) => { setModal(null); if (id) nav(`#/project/${id}`); else reload(); }} />}
+      {modal === "work" && <NewWorkItem onClose={() => setModal(null)} onDone={(id) => { setModal(null); if (id) nav(`#/wi/${id}`); else reload(); }} />}
 
       {err && <div className="empty">{err}</div>}
       {!d && !err && <div className="spin">טוען…</div>}
@@ -123,17 +129,10 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
           <div className="rail">
             <div className="panel">
               <h4>פעולות מהירות</h4>
-              {[
-                ["הוספת פרויקט חדש", ICONS.plus, "#/projects"],
-                ["הוספת עבודה", ICONS.list, "#/work"],
-                ["צפייה בהתראות", ICONS.bell, "#/alerts"],
-                ["דוח תקציב", ICONS.slash, "#/budgets"],
-              ].map(([label, ic, to]) => (
-                <div className="qa-row" key={label as string} onClick={() => nav(to as string)}>
-                  <span className="qa-ic"><Icon d={ic as React.ReactNode} size={13} /></span>
-                  {label as string}
-                </div>
-              ))}
+              <div className="qa-row" onClick={() => setModal("project")}><span className="qa-ic"><Icon d={ICONS.plus} size={13} /></span>הוספת פרויקט חדש</div>
+              <div className="qa-row" onClick={() => setModal("work")}><span className="qa-ic"><Icon d={ICONS.list} size={13} /></span>הוספת עבודה</div>
+              <div className="qa-row" onClick={() => nav("#/alerts")}><span className="qa-ic"><Icon d={ICONS.bell} size={13} /></span>צפייה בהתראות</div>
+              <div className="qa-row" onClick={() => nav("#/budgets")}><span className="qa-ic"><Icon d={ICONS.slash} size={13} /></span>דוח תקציב</div>
             </div>
 
             <div className="panel">

@@ -5,6 +5,15 @@ import {
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
+import { AddNote } from "../forms.tsx";
+
+const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
+const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
+const post = async (path: string, body: unknown) => {
+  const r = await fetch(`/api${path}`, { method: "POST", headers: { "content-type": "application/json", "x-dcc-hook-token": HOOK, "x-dcc-dev-email": DEV_EMAIL }, body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+  return r.json();
+};
 
 const TABS = ["Overview", "Timeline", "Dependencies", "Tasks", "Gaps & Blockers"] as const;
 type Tab = (typeof TABS)[number];
@@ -27,6 +36,9 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [brief, setBrief] = useState("");
   const [tab, setTab] = useState<Tab>("Overview");
   const [err, setErr] = useState<string | null>(null);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [newGap, setNewGap] = useState({ description: "", blocking: false });
+  const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
 
   const reload = useCallback(async () => {
     try {
@@ -52,12 +64,16 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
   return (
     <>
-      <p className="crumb"><a onClick={() => nav(`#/project/${wi.projectId}`)}>← Project</a></p>
-      <div className="rec-head">
-        <h1>{wi.title}</h1>
-        <TypeChip kind={wi.kind} />
-        {wi.key && <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
-        {wi.startedWithOpenBlocker && <Pill tone="warning">started with open blocker</Pill>}
+      {noteOpen && <AddNote workitemId={wi.id} onClose={() => setNoteOpen(false)} onDone={() => { setNoteOpen(false); reload(); }} />}
+      <p className="crumb"><a onClick={() => nav(`#/project/${wi.projectId}`)}>← לפרויקט</a></p>
+      <div className="rec-head" style={{ justifyContent: "space-between" }}>
+        <div className="rec-head" style={{ margin: 0 }}>
+          <h1>{wi.title}</h1>
+          <TypeChip kind={wi.kind} />
+          {wi.key && <span style={{ fontFamily: "var(--mono)", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
+          {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
+        </div>
+        <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ הוסף אירוע ל-timeline</button>
       </div>
 
       <div className="tabs" role="tablist">
@@ -148,6 +164,15 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       {tab === "Gaps & Blockers" && (
         <>
           <p className="section-lbl">Gaps</p>
+          <div className="filter-bar" style={{ marginBottom: 14 }}>
+            <div className="field" style={{ flex: 1 }}><label>פער / אי-בהירות שזוהתה</label>
+              <input value={newGap.description} onChange={(e) => setNewGap({ ...newGap, description: e.target.value })} placeholder="למשל: לא מוגדר מה קורה כשלקוח עובר דרגה באמצע חודש" style={{ minWidth: 320 }} />
+            </div>
+            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+              <input type="checkbox" style={{ minWidth: 0 }} checked={newGap.blocking} onChange={(e) => setNewGap({ ...newGap, blocking: e.target.checked })} /> חוסם
+            </label>
+            <button className="btn btn-primary btn-sm" onClick={async () => { if (!newGap.description.trim()) return; await post(`/workitems/${wi.id}/gaps`, { description: newGap.description.trim(), blocking: newGap.blocking, confidence: 1, mode: "interactive" }); setNewGap({ description: "", blocking: false }); reload(); }}>הוסף Gap</button>
+          </div>
           <div className="rowlist" style={{ marginBottom: 22 }}>
             {d.gaps.map((g) => (
               <div className="row" key={g.id} style={{ alignItems: "flex-start" }}>
@@ -174,9 +199,20 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           </div>
 
           <p className="section-lbl">Blockers</p>
+          <div className="filter-bar" style={{ marginBottom: 14 }}>
+            <div className="field"><label>סוג</label>
+              <select value={newBlk.questionType} onChange={(e) => setNewBlk({ ...newBlk, questionType: e.target.value })}>
+                <option value="unclear_requirement">דרישה לא ברורה</option><option value="missing_access">חסרה גישה</option><option value="budget_exceeded">חריגת תקציב</option>
+              </select>
+            </div>
+            <div className="field" style={{ flex: 1 }}><label>השאלה</label>
+              <input value={newBlk.question} onChange={(e) => setNewBlk({ ...newBlk, question: e.target.value })} placeholder="מה חוסם ומה צריך כדי להמשיך" style={{ minWidth: 320 }} />
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={async () => { if (!newBlk.question.trim()) return; await post(`/workitems/${wi.id}/blockers`, { questionType: newBlk.questionType, question: newBlk.question.trim() }); setNewBlk({ questionType: "unclear_requirement", question: "" }); reload(); }}>הוסף Blocker</button>
+          </div>
           <div className="rowlist">
             {d.blockers.map((b) => <BlockerRow key={b.id} b={b} onAnswer={(a) => onAnswer(b, a)} />)}
-            {d.blockers.length === 0 && <div className="empty">None.</div>}
+            {d.blockers.length === 0 && <div className="empty">אין.</div>}
           </div>
         </>
       )}
