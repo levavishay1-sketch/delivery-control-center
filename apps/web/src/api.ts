@@ -152,11 +152,16 @@ export const startBuilding = (id: string) => post<StartBuildResult>(`/workitems/
 export const getUsers = () => get<{ users: { id: string; email: string; displayName: string }[] }>("/users");
 export const assignRequirement = (id: string, body: { ownerId?: string; email?: string }) => post<{ assigned: boolean; ownerId: string }>(`/workitems/${id}/assign`, body);
 export type AssessResult = { title: string; summary: string; baked: boolean; rationale: string; gaps: { description: string; blocking: boolean; confidence: number }[]; repoUsed: string | null };
-export const assessRequirement = (id: string) => post<AssessResult>(`/workitems/${id}/assess`, {});
 export type BreakdownResult = { tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[] };
-export const breakdownRequirement = (id: string) => post<BreakdownResult>(`/workitems/${id}/breakdown`, {});
-export type FlowProgress = { step: "assessing" | "breaking" | "idle"; lines: string[]; done: boolean; startedAt?: number };
-export const getFlowProgress = (id: string) => get<FlowProgress>(`/workitems/${id}/flow-progress`);
+export const startAssess = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, {});
+export const startBreakdown = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/breakdown`, {});
+export type FlowRun = {
+  id: string | null; kind: "assess" | "breakdown" | null;
+  state: "running" | "done" | "error" | "idle";
+  lines: string[]; result: AssessResult | BreakdownResult | null; error: string | null;
+  startedAt?: string | null; finishedAt?: string | null;
+};
+export const getFlowRun = (id: string) => get<FlowRun>(`/workitems/${id}/flow-run`);
 export const approveTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => post<{ approved: boolean }>(`/tasks/${id}/approve`, body);
 export const rejectTask = (id: string, clientId: string) => post<{ rejected: boolean }>(`/tasks/${id}/reject`, { clientId });
 export const updateRequirement = (id: string, body: Partial<{

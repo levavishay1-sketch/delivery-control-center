@@ -72,9 +72,8 @@ import {
   attachmentsFor,
   addAttachment,
   startBuilding,
-  assessRequirement,
-  breakdownRequirement,
-  getFlowProgress,
+  startFlowRun,
+  getFlowRunView,
   approveTask,
   rejectTask,
 } from "@dcc/core";
@@ -465,25 +464,27 @@ app.post("/workitems/:id/assign", async (req) => {
   return { assigned: true, ownerId };
 });
 
-// AI-assisted: translate + assess (spawns the local `claude` CLI — can take 1-3 min)
+// AI-assisted: assess / breakdown. Kicks off the local `claude` CLI in
+// the BACKGROUND and returns at once — the user can leave the screen.
 app.post("/workitems/:id/assess", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
-  return assessRequirement({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
+  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "assess", by: { userId: dev.id } });
 });
 
 app.post("/workitems/:id/breakdown", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
-  return breakdownRequirement({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
+  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "breakdown", by: { userId: dev.id } });
 });
 
-// live log of what `claude` is doing right now (polled by the flow modal)
-app.get("/workitems/:id/flow-progress", async (req) => {
+// the latest flow run for a requirement — full transcript, live or finished
+app.get("/workitems/:id/flow-run", async (req) => {
   const { id } = req.params as { id: string };
-  return getFlowProgress(id) ?? { step: "idle", lines: [], done: true };
+  await locateWorkItem({ id }); // tenant check
+  return (await getFlowRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
 });
 
 app.post("/tasks/:id/approve", async (req) => {

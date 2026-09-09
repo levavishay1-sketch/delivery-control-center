@@ -480,3 +480,29 @@ export const attachment = pgTable(
     tenantPolicy("attachment_tenant_isolation"),
   ],
 ).enableRLS();
+
+/**
+ * One background call to the local `claude` CLI (assess / breakdown).
+ * `log` is the running activity transcript; it survives the user
+ * leaving the screen and is kept as history. NO RLS on purpose — it is
+ * written as single auto-committed statements (never inside a withTenant
+ * transaction, which PGlite's single connection can't nest), and the
+ * API tenant-checks the workitem before reading it.
+ */
+export const flowRun = pgTable(
+  "flow_run",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
+    kind: text("kind").notNull(), // assess | breakdown
+    state: text("state").notNull().default("running"), // running | done | error
+    log: jsonb("log").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    result: jsonb("result"),
+    error: text("error"),
+    startedBy: uuid("started_by"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("flow_run_workitem_idx").on(t.workitemId, t.startedAt)],
+);

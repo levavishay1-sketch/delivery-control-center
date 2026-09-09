@@ -2,9 +2,9 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { and, eq, isNull, sql } from "drizzle-orm";
-import { appendEvent, withTenant } from "@dcc/db";
-import { repo, task, taskDependency, workitem } from "@dcc/db/schema";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { appendEvent, db, withTenant } from "@dcc/db";
+import { flowRun, repo, task, taskDependency, workitem } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
 
@@ -22,20 +22,91 @@ const CLAUDE_BIN = process.env.DCC_CLAUDE_BIN || (process.platform === "win32" ?
 const CLAUDE_VIA_SHELL = process.platform === "win32";
 const REPO_CACHE = path.join(os.tmpdir(), "dcc-repos");
 
-/* ── live progress: what `claude` is doing right now, per requirement ── */
+/* ── flow runs: durable background jobs for the local `claude` CLI ──
+ *
+ * A run is kicked off detached — the HTTP request returns immediately and
+ * the work keeps going. The activity transcript lives in an in-memory
+ * buffer while the run is active (so a poll during the 3-5 min spawn
+ * never touches the DB) and is written to `flow_run` once at the end, so
+ * the user can leave the screen and come back to everything Claude did.
+ */
 
-type FlowProgress = { step: "assessing" | "breaking" | "idle"; lines: string[]; startedAt: number; done: boolean };
-const progress = new Map<string, FlowProgress>();
+type FlowKind = "assess" | "breakdown";
 
-export function getFlowProgress(workitemId: string): FlowProgress | null {
-  return progress.get(workitemId) ?? null;
+const buffers = new Map<string, { lines: string[]; kind: FlowKind; workitemId: string }>();
+
+function pushLine(runId: string | undefined, line: string) {
+  if (!runId) return;
+  const b = buffers.get(runId);
+  if (!b) return;
+  b.lines.push(line);
+  if (b.lines.length > 4000) b.lines.splice(0, b.lines.length - 4000);
 }
-function pushProgress(workitemId: string, line: string) {
-  const p = progress.get(workitemId);
-  if (p) { p.lines.push(line); if (p.lines.length > 300) p.lines.shift(); }
+
+export type FlowRunView = {
+  id: string;
+  kind: string;
+  state: "running" | "done" | "error";
+  lines: string[];
+  result: unknown;
+  error: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+};
+
+/** The latest run for a requirement — from the live buffer if one is
+ *  active (no DB hit during the spawn), otherwise the persisted row. */
+export async function getFlowRunView(workitemId: string): Promise<FlowRunView | null> {
+  for (const [id, b] of buffers) {
+    if (b.workitemId === workitemId) {
+      return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
+    }
+  }
+  const [row] = await db.select().from(flowRun).where(eq(flowRun.workitemId, workitemId)).orderBy(desc(flowRun.startedAt)).limit(1);
+  if (!row) return null;
+  return {
+    id: row.id, kind: row.kind, state: row.state as FlowRunView["state"],
+    lines: (row.log ?? []) as string[], result: row.result ?? null, error: row.error,
+    startedAt: row.startedAt ? new Date(row.startedAt).toISOString() : null,
+    finishedAt: row.finishedAt ? new Date(row.finishedAt).toISOString() : null,
+  };
 }
 
-/** Turn one stream-json line into a short human sentence (Hebrew-ish), or null to skip. */
+/** Kick off assess/breakdown in the background. Returns at once. */
+export async function startFlowRun(input: { clientId: string; workitemId: string; kind: FlowKind; by: Dev }): Promise<{ runId: string; alreadyRunning: boolean }> {
+  for (const [id, b] of buffers) if (b.workitemId === input.workitemId) return { runId: id, alreadyRunning: true };
+
+  const [row] = await db.insert(flowRun).values({
+    clientId: input.clientId, workitemId: input.workitemId, kind: input.kind,
+    state: "running", startedBy: input.by.userId, log: [],
+  }).returning();
+  const runId = row!.id;
+  buffers.set(runId, { lines: [], kind: input.kind, workitemId: input.workitemId });
+
+  void (async () => {
+    try {
+      const result = input.kind === "assess"
+        ? await runAssess({ ...input, runId })
+        : await runBreakdown({ ...input, runId });
+      await db.update(flowRun).set({
+        state: "done", result: result as unknown as Record<string, unknown>,
+        log: buffers.get(runId)?.lines ?? [], finishedAt: new Date(),
+      }).where(eq(flowRun.id, runId));
+    } catch (e) {
+      pushLine(runId, `✕ שגיאה: ${(e as Error).message}`);
+      await db.update(flowRun).set({
+        state: "error", error: (e as Error).message,
+        log: buffers.get(runId)?.lines ?? [], finishedAt: new Date(),
+      }).where(eq(flowRun.id, runId)).catch(() => {});
+    } finally {
+      setTimeout(() => buffers.delete(runId), 20_000);
+    }
+  })();
+
+  return { runId, alreadyRunning: false };
+}
+
+/** Turn one stream-json line into a readable transcript line, or null to skip. */
 function describeEvent(line: string): string | null {
   let e: Record<string, unknown>;
   try { e = JSON.parse(line); } catch { return null; }
@@ -44,11 +115,16 @@ function describeEvent(line: string): string | null {
     const bits: string[] = [];
     for (const c of content as Record<string, unknown>[]) {
       if (c.type === "text" && typeof c.text === "string" && c.text.trim()) {
-        bits.push(`💭 ${c.text.trim().replace(/\s+/g, " ").slice(0, 200)}`);
+        const t = c.text.trim();
+        // the final answer is the raw JSON payload — don't dump it into the log
+        if (/^[[{]/.test(t) && /["}\]]$/.test(t)) continue;
+        bits.push(`💭 ${t.replace(/\s+/g, " ").slice(0, 600)}`);
       } else if (c.type === "tool_use") {
         const inp = (c.input ?? {}) as Record<string, unknown>;
-        const arg = inp.file_path ?? inp.path ?? inp.pattern ?? inp.query ?? inp.command ?? "";
-        bits.push(`🔧 ${String(c.name)} ${String(arg).replace(/^.*[/\\]/, "").slice(0, 80)}`.trim());
+        const raw = String(inp.file_path ?? inp.path ?? inp.pattern ?? inp.query ?? inp.command ?? "");
+        // strip the repo-cache prefix so paths read as repo-relative
+        const arg = raw.replace(/^.*[/\\]dcc-repos[/\\][0-9a-f-]+[/\\]/i, "").replace(/\\/g, "/");
+        bits.push(`🔧 ${String(c.name)} ${arg.slice(0, 160)}`.trim());
       }
     }
     return bits.join("\n") || null;
@@ -56,7 +132,7 @@ function describeEvent(line: string): string | null {
   if (e.type === "result") {
     const cost = typeof e.total_cost_usd === "number" ? ` · $${(e.total_cost_usd as number).toFixed(3)}` : "";
     const turns = typeof e.num_turns === "number" ? `${e.num_turns} צעדים` : "";
-    return `✓ סיים${turns ? ` (${turns}${cost})` : ""}`;
+    return `✓ Claude סיים${turns ? ` (${turns}${cost})` : ""}`;
   }
   return null;
 }
@@ -65,7 +141,7 @@ function describeEvent(line: string): string | null {
 async function runClaudeJson<T>(
   cwd: string,
   prompt: string,
-  opts: { timeoutMs?: number; maxTurns?: number; progressKey?: string } = {},
+  opts: { timeoutMs?: number; maxTurns?: number; runId?: string } = {},
 ): Promise<T> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain
   const args = [
@@ -81,13 +157,13 @@ async function runClaudeJson<T>(
     const killer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`claude timed out after ${(opts.timeoutMs ?? 240000) / 1000}s`)); }, opts.timeoutMs ?? 240000);
     child.stdout.on("data", (d) => {
       out += d;
-      if (!opts.progressKey) return;
+      if (!opts.runId) return;
       buf += d;
       const parts = buf.split("\n");
       buf = parts.pop() ?? "";
       for (const ln of parts) {
         const desc = describeEvent(ln.trim());
-        if (desc) for (const s of desc.split("\n")) pushProgress(opts.progressKey, s);
+        if (desc) for (const s of desc.split("\n")) pushLine(opts.runId, s);
       }
     });
     child.stderr.on("data", (d) => (err += d));
@@ -185,22 +261,12 @@ export type AssessResult = {
   repoUsed: string | null;
 };
 
-export async function assessRequirement(input: { clientId: string; workitemId: string; by: Dev }): Promise<AssessResult> {
-  progress.set(input.workitemId, { step: "assessing", lines: ["מכין עותק עבודה של ה-repo…"], startedAt: Date.now(), done: false });
-  try {
-    return await runAssess(input);
-  } finally {
-    const p = progress.get(input.workitemId);
-    if (p) p.done = true;
-    setTimeout(() => progress.delete(input.workitemId), 60_000);
-  }
-}
-
-async function runAssess(input: { clientId: string; workitemId: string; by: Dev }): Promise<AssessResult> {
+async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<AssessResult> {
+  pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
   const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
   const cwd = r ? await ensureCheckout(r) : null;
-  pushProgress(input.workitemId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo — מעריך מהטקסט בלבד");
+  pushLine(input.runId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo — מעריך מהטקסט בלבד");
 
   const reqText = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
   const prompt = [
@@ -221,8 +287,8 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev 
     '{"title": string, "summary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
   ].join("\n");
 
-  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000, progressKey: input.workitemId });
-  pushProgress(input.workitemId, "כותב סיכום ופערים…");
+  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000, runId: input.runId });
+  pushLine(input.runId, "כותב סיכום ופערים…");
 
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
@@ -252,22 +318,12 @@ export type BreakdownResult = {
   tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[];
 };
 
-export async function breakdownRequirement(input: { clientId: string; workitemId: string; by: Dev }): Promise<BreakdownResult> {
-  progress.set(input.workitemId, { step: "breaking", lines: ["מכין עותק עבודה של ה-repo…"], startedAt: Date.now(), done: false });
-  try {
-    return await runBreakdown(input);
-  } finally {
-    const p = progress.get(input.workitemId);
-    if (p) p.done = true;
-    setTimeout(() => progress.delete(input.workitemId), 60_000);
-  }
-}
-
-async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev }): Promise<BreakdownResult> {
+async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<BreakdownResult> {
+  pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
   const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
   const cwd = r ? await ensureCheckout(r) : null;
-  pushProgress(input.workitemId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo");
+  pushLine(input.runId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo");
 
   const reqText = [`Title: ${wi.title}`, ...notes.map((n) => n.body)].join("\n\n");
   const prompt = [
@@ -286,9 +342,9 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
   ].join("\n");
 
   const proposed = await runClaudeJson<{ seq: number; intent: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]>(
-    cwd ?? process.cwd(), prompt, { timeoutMs: 300000, progressKey: input.workitemId },
+    cwd ?? process.cwd(), prompt, { timeoutMs: 300000, runId: input.runId },
   );
-  pushProgress(input.workitemId, "יוצר משימות ותלויות…");
+  pushLine(input.runId, "יוצר משימות ותלויות…");
 
   const out = await withTenant(input.clientId, async (tx) => {
     const seqToId = new Map<number, string>();

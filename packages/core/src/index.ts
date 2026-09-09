@@ -15,9 +15,8 @@ export { syncRequirementToAdo, trySyncNewRequirement, syncAllToAdo, deleteAdoFor
 export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
-  assessRequirement, breakdownRequirement, approveTask, rejectTask, pendingApprovalCount,
-  getFlowProgress,
-  type AssessResult, type BreakdownResult,
+  startFlowRun, getFlowRunView, approveTask, rejectTask, pendingApprovalCount,
+  type AssessResult, type BreakdownResult, type FlowRunView,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {
