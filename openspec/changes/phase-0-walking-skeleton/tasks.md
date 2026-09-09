@@ -40,19 +40,22 @@ smaller). Order matters — each group unblocks the next.
 
 ## 3. Claude Code hooks  ·  `hooks/`
 
-- [ ] 3.1 `session-start` — resolve WorkItem from cwd/branch, fetch Brief,
-      print to stdout
-- [ ] 3.2 `session-end` — read `transcript_path`, summarise, POST to API
-- [ ] 3.3 `post-tool-use` (git) — detect commit/push/PR, POST to API
-- [ ] 3.4 `settings.json` snippet + install doc; note the two caveats
-      (SessionEnd can't block; config snapshot at startup)
+- [x] 3.1 `session-start.mjs` — resolve WorkItem from branch, fetch Brief,
+      print to stdout; no-op when nothing resolves
+- [x] 3.2 `session-end.mjs` — read `transcript_path`, naive summary, POST
+- [x] 3.3 `post-tool-use.mjs` — detect git commit/push/branch/PR, POST
+- [x] 3.4 `hooks/README.md` — `.dcc.json` + env + `settings.json` snippet,
+      both caveats noted
+- [ ] 3.5 Dry-run against a real Claude Code session on a scratch repo
 
 ## 4. API  ·  `apps/api`
 
-- [ ] 4.1 Fastify app, `POST /events` (from hooks), tenant middleware
-- [ ] 4.2 `GET /workitems/:id/timeline`, `GET /inbox`
-- [ ] 4.3 Admin: `POST /workitems`, `POST /workitems/:id/ado-link`,
-      `POST /projects/:id/repos`
+- [x] 4.1 Fastify app, `POST /events` (hook capture), header identity shim
+- [x] 4.2 `GET /workitems/:id/timeline` · `/brief` · `/clients/:id/inbox`
+      · `GET /resolve`
+- [x] 4.3 Admin: `POST /workitems`, `/workitems/:id/ado-link`,
+      `/projects/:id/repos`
+- [x] 4.4 `smoke.ts` — 8 checks green via fastify.inject
 
 ## 5. Web  ·  `apps/web`
 
