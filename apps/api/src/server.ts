@@ -4,16 +4,21 @@ import { sql } from "drizzle-orm";
 import { db, dbKind, withTenant, timeline, unassigned } from "@dcc/db";
 import { client, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
 import {
+  addAdoConnection,
   answerBlocker,
   auditTrail,
   blockersFor,
   briefFor,
+  checkAdoConnection,
+  clientDetail,
   contentionFor,
   dashboard,
+  linkRepoToClient,
   listAlerts,
   listAllProjects,
   listAllWorkItems,
   listBudgets,
+  listClients,
   flowFor,
   linkWorkItems,
   progressTask,
@@ -54,6 +59,31 @@ app.get("/health", async () => ({ ok: true }));
 app.get("/dashboard", async (req) => {
   const dev = await actingUser(req);
   return dashboard(dev.id);
+});
+
+app.get("/clients", async () => ({ clients: await listClients() }));
+app.get("/clients/:id", async (req) => clientDetail((req.params as { id: string }).id));
+
+app.post("/clients/:id/repos", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ name: z.string(), gitUrl: z.string().optional(), adoRepoRef: z.string().optional() }).parse(req.body);
+  const r = await linkRepoToClient({ clientId: id, name: b.name, gitUrl: b.gitUrl, adoRepoRef: b.adoRepoRef, by: { userId: dev.id } });
+  return reply.code(201).send(r);
+});
+
+app.post("/clients/:id/connections/ado", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ orgUrl: z.string().url(), project: z.string().min(1), pat: z.string().min(10) }).parse(req.body);
+  const out = await addAdoConnection({ clientId: id, ...b, by: { userId: dev.id } });
+  return reply.code(201).send({ id: out.id, check: out.check });
+});
+
+app.post("/clients/:cid/connections/:id/check", async (req) => {
+  await actingUser(req);
+  const { cid, id } = req.params as { cid: string; id: string };
+  return checkAdoConnection(cid, id);
 });
 
 app.get("/list/workitems", async () => ({ items: await listAllWorkItems() }));

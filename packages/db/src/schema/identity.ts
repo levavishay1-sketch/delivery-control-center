@@ -40,10 +40,18 @@ export const serviceConnection = pgTable(
     /** e.g. "crm", "erp", "mcp:playwright" */
     kind: text("kind").notNull(),
     displayName: text("display_name").notNull(),
-    /** Vault path, namespaced by client_id. Resolved at use time; never stored plaintext. */
+    /**
+     * The secret. In production this is a Key Vault path resolved at use
+     * time; in the local pilot the PAT / token is stored here directly.
+     */
     secretRef: text("secret_ref").notNull(),
     /** Minimal scope this connection is allowed to request. */
     scope: jsonb("scope").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** Non-secret connection detail: { orgUrl, project } for ADO, etc. */
+    config: jsonb("config").$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
+    /** Result of the last connectivity check. */
+    lastCheckedAt: timestamp("last_checked_at", { withTimezone: true }),
+    lastCheckOk: text("last_check_ok"),
     createdBy: uuid("created_by")
       .notNull()
       .references(() => users.id),

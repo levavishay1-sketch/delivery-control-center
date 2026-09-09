@@ -84,6 +84,17 @@ export const getWorkList = () => get<{ items: WorkListRow[] }>("/list/workitems"
 export const getProjectList = () => get<{ projects: { id: string; name: string; status: string; connectorType: string; budgetUsd: string | null; clientName: string; items: number; updatedAt: string | null }[] }>("/list/projects");
 export const getBudgets = () => get<{ budgets: { clientId: string; clientName: string; monthlyUsd: number; spentUsd: number; pct: number }[] }>("/list/budgets");
 export const getAlerts = () => get<{ alerts: { id: string; kind: string; severity: string; title: string; body: string | null; createdAt: string; workitemId: string | null }[] }>("/list/alerts");
+
+export type ClientRow = { id: string; name: string; projects: number; workitems: number; spent: number; budget: number };
+export const getClients = () => get<{ clients: ClientRow[] }>("/clients");
+
+export type ClientDetail = {
+  client: { id: string; name: string };
+  projects: { id: string; name: string; status: string; connectorType: string; budgetUsd: string | null; items: number; updatedAt: string | null }[];
+  repos: { id: string; name: string; adoRepoRef: string | null; addedAt: string }[];
+  connections: { id: string; kind: string; displayName: string; config: Record<string, string>; lastCheckedAt: string | null; lastCheckOk: string | null; revokedAt: string | null }[];
+};
+export const getClient = (id: string) => get<ClientDetail>(`/clients/${id}`);
 export const listWorkItems = () => get<{ id: string; key: string | null; title: string; phase: string }[]>("/dev/workitems");
 export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);
 export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);

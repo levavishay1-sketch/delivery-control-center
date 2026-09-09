@@ -123,6 +123,133 @@ export function NewWorkItem({ onClose, onDone, defaultProjectId }: { onClose: ()
   );
 }
 
+export function LinkRepo({ clientId, onClose, onDone }: { clientId: string; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ name: "", gitUrl: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    if (!f.name.trim()) return setErr("שם ה-repository הוא שדה חובה");
+    setBusy(true); setErr(null);
+    try { await api(`/clients/${clientId}/repos`, { name: f.name.trim(), gitUrl: f.gitUrl.trim() || undefined }); onDone(); }
+    catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  return (
+    <Modal title="חיבור repository" onClose={onClose}>
+      <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 14 }}>הקישור הוא ידני ומפורש — המערכת לא מנחשת. ה-repository ישויך ללקוח הזה.</p>
+      <div className="field" style={{ marginBottom: 12 }}><label>שם ה-repository</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="ALTSHULER_TRADE" style={{ width: "100%" }} /></div>
+      <div className="field"><label>כתובת Git (אופציונלי)</label><input value={f.gitUrl} onChange={(e) => setF({ ...f, gitUrl: e.target.value })} placeholder="https://github.com/…/ALTSHULER_TRADE.git" style={{ width: "100%" }} /></div>
+      <Err e={err} />
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "מחבר…" : "חבר"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
+export function ConnectAdo({ clientId, onClose, onDone }: { clientId: string; onClose: () => void; onDone: () => void }) {
+  const [f, setF] = useState({ orgUrl: "", project: "", pat: "" });
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<string | null>(null);
+  const submit = async () => {
+    if (!f.orgUrl || !f.project || !f.pat) return setErr("כל השדות חובה");
+    setBusy(true); setErr(null); setResult(null);
+    try {
+      const r = await api(`/clients/${clientId}/connections/ado`, f);
+      setResult(r.check.ok ? `✓ החיבור תקין — ${r.check.detail}` : `✗ ${r.check.detail}`);
+      if (r.check.ok) setTimeout(onDone, 900);
+      else setBusy(false);
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  return (
+    <Modal title="חיבור Azure DevOps" onClose={onClose}>
+      <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--surface-muted)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, lineHeight: 1.6 }}>
+        <b>מה צריך:</b>
+        <ol style={{ margin: "6px 0 0", paddingInlineStart: 18 }}>
+          <li><b>Organization URL</b> — <code>https://dev.azure.com/&lt;org&gt;</code> (ה-org שיצרת)</li>
+          <li><b>Project</b> — שם הפרויקט בתוך ה-org</li>
+          <li><b>Personal Access Token</b> — נוצר ב-<code>&lt;orgUrl&gt;/_usersSettings/tokens</code> · New Token · scopes: <b>Work Items (Read, write &amp; manage)</b> + <b>Code (Read)</b></li>
+        </ol>
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}><label>Organization URL</label><input value={f.orgUrl} onChange={(e) => setF({ ...f, orgUrl: e.target.value })} placeholder="https://dev.azure.com/my-org" style={{ width: "100%" }} dir="ltr" /></div>
+      <div className="field" style={{ marginBottom: 12 }}><label>Project</label><input value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} placeholder="Trading Platform" style={{ width: "100%" }} dir="ltr" /></div>
+      <div className="field"><label>Personal Access Token</label><input type="password" value={f.pat} onChange={(e) => setF({ ...f, pat: e.target.value })} placeholder="••••••••••••••••" style={{ width: "100%" }} dir="ltr" /></div>
+      <Err e={err} />
+      {result && <p style={{ fontSize: 12.5, margin: "10px 0 0", color: result.startsWith("✓") ? "var(--status-healthy)" : "var(--status-critical)" }}>{result}</p>}
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "בודק חיבור…" : "חבר ובדוק"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
+export function AddRequirement({ clientId, projects, onClose, onDone }: {
+  clientId: string; projects: { id: string; name: string }[]; onClose: () => void; onDone: (wiId?: string) => void;
+}) {
+  const [f, setF] = useState({ projectId: projects[0]?.id ?? "", title: "", kind: "task", priority: "medium", body: "" });
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  void clientId;
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setFileName(file.name);
+    if (/^(text\/|application\/json)/.test(file.type) || /\.(txt|md|csv|json|log)$/i.test(file.name)) {
+      const text = await file.text();
+      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n\n" : ""}— מצורף (${file.name}) —\n${text.slice(0, 8000)}` }));
+    } else {
+      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n" : ""}[צורף קובץ: ${file.name}]` }));
+    }
+  };
+
+  const submit = async () => {
+    if (!f.projectId || !f.title.trim()) return setErr("פרויקט וכותרת הם שדות חובה");
+    setBusy(true); setErr(null);
+    try {
+      const wi = await api("/workitems", { projectId: f.projectId, title: f.title.trim(), kind: f.kind, priority: f.priority });
+      if (f.body.trim()) await api("/events", { workitemId: wi.id, kind: "note", note: { body: f.body.trim(), source: "manual" } });
+      onDone(wi.id);
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+
+  return (
+    <Modal title="הוספת דרישה" onClose={onClose}>
+      <div className="field" style={{ marginBottom: 12 }}><label>פרויקט</label>
+        <select value={f.projectId} onChange={(e) => setF({ ...f, projectId: e.target.value })}>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+        </select>
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}><label>כותרת הדרישה</label>
+        <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="תיאור קצר" style={{ width: "100%" }} />
+      </div>
+      <div className="form-grid" style={{ marginBottom: 12 }}>
+        <div className="field"><label>סוג</label>
+          <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}><option value="task">משימה</option><option value="bug">באג</option><option value="change">שינוי</option></select>
+        </div>
+        <div className="field"><label>עדיפות</label>
+          <select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}><option value="low">נמוכה</option><option value="medium">בינונית</option><option value="high">גבוהה</option><option value="critical">קריטית</option></select>
+        </div>
+      </div>
+      <div className="field" style={{ marginBottom: 8 }}>
+        <label>הדרישה הגולמית — כפי שהתקבלה</label>
+        <textarea value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} placeholder="הדבק את הדרישה כמו שהיא, גם אם לא אפויה. זה יהיה האירוע הראשון ב-timeline." style={{ width: "100%", minHeight: 120 }} />
+      </div>
+      <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+        {fileName ? `📎 ${fileName}` : "📎 צירוף קובץ"}
+        <input type="file" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+      </label>
+      <Err e={err} />
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור דרישה"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
 export function AddNote({ workitemId, onClose, onDone }: { workitemId: string; onClose: () => void; onDone: () => void }) {
   const [f, setF] = useState({ body: "", source: "manual" });
   const [busy, setBusy] = useState(false);

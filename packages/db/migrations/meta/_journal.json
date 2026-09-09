@@ -50,6 +50,13 @@
       "when": 1788952356987,
       "tag": "0006_project_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788954125942,
+      "tag": "0007_connection_config",
+      "breakpoints": true
     }
   ]
 }

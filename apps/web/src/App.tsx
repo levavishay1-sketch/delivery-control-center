@@ -8,6 +8,8 @@ import { Record } from "./screens/Record.tsx";
 import { Project } from "./screens/Project.tsx";
 import { WorkList } from "./screens/WorkList.tsx";
 import { ProjectList } from "./screens/ProjectList.tsx";
+import { ClientList } from "./screens/ClientList.tsx";
+import { ClientDetail } from "./screens/ClientDetail.tsx";
 import { Alerts } from "./screens/Alerts.tsx";
 import { Budgets } from "./screens/Budgets.tsx";
 import { Stub } from "./screens/Stub.tsx";
@@ -26,13 +28,14 @@ function useHash() {
 
 const NAV: { to: string; label: string; icon: React.ReactNode; badge?: boolean }[] = [
   { to: "#/", label: "לוח בקרה", icon: ICONS.dashboard },
+  { to: "#/clients", label: "לקוחות", icon: ICONS.branch },
   { to: "#/projects", label: "פרויקטים", icon: ICONS.folder },
   { to: "#/work", label: "עבודות", icon: ICONS.list },
   { to: "#/alerts", label: "התראות", icon: ICONS.bell, badge: true },
   { to: "#/budgets", label: "תקציבים", icon: ICONS.slash },
   { to: "#/settings", label: "הגדרות", icon: ICONS.gear },
-  { to: "#/users", label: "משתמשים", icon: ICONS.branch },
-  { to: "#/audit", label: "יומן פעילויות", icon: ICONS.inbox },
+  { to: "#/users", label: "משתמשים", icon: ICONS.inbox },
+  { to: "#/audit", label: "יומן פעילויות", icon: ICONS.list },
 ];
 
 export function App() {
@@ -45,7 +48,9 @@ export function App() {
   const path = hash.replace(/^#/, "").split("?")[0]!;
   let screen: React.ReactNode;
   if (path.startsWith("/wi/")) screen = <Record id={path.slice(4)} nav={nav} />;
+  else if (path.startsWith("/client/")) screen = <ClientDetail id={path.slice(8)} nav={nav} />;
   else if (path.startsWith("/project/")) screen = <Project id={path.slice(9)} nav={nav} />;
+  else if (path === "/clients") screen = <ClientList nav={nav} />;
   else if (path === "/projects") screen = <ProjectList nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
@@ -55,8 +60,12 @@ export function App() {
   else if (path === "/users") screen = <Stub title="משתמשים" note="ניהול משתמשים והרשאות (Entra ID). בבנייה." />;
   else screen = <Dashboard nav={nav} />;
 
-  const active = (to: string) =>
-    to === "#/" ? path === "/" || path.startsWith("/project") || path.startsWith("/wi") : hash.startsWith(to) || (to === "#/audit" && path === "/audit");
+  const active = (to: string) => {
+    if (to === "#/") return path === "/";
+    if (to === "#/clients") return path === "/clients" || path.startsWith("/client/");
+    if (to === "#/projects") return path === "/projects" || path.startsWith("/project/") || path.startsWith("/wi/");
+    return hash.split("?")[0] === to;
+  };
 
   return (
     <div className="shell">
