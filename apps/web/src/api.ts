@@ -33,7 +33,8 @@ export type EventRow = {
   source: string; type: string; actor: { kind: string; triggeredBy?: string };
   payload: Record<string, unknown>; supersedes: string | null; links: { rel: string; ref: string }[];
 };
-export type Gap = { id: string; description: string; blocking: boolean; confidence: string; state: "proposed" | "verified" | "dismissed" | "spun_off"; spunOffTo: string | null };
+export type GapState = "proposed" | "verified" | "resolved" | "dismissed" | "spun_off";
+export type Gap = { id: string; description: string; blocking: boolean; confidence: string; state: GapState; spunOffTo: string | null };
 export type Blocker = { id: string; workitemId: string; questionType: string; question: string; answer: string | null; state: "open" | "answered" | "abandoned" };
 export type Task = {
   id: string; seq: number; intent: string; appetite: string;
@@ -154,6 +155,8 @@ export type AssessResult = { title: string; summary: string; baked: boolean; rat
 export const assessRequirement = (id: string) => post<AssessResult>(`/workitems/${id}/assess`, {});
 export type BreakdownResult = { tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[] };
 export const breakdownRequirement = (id: string) => post<BreakdownResult>(`/workitems/${id}/breakdown`, {});
+export type FlowProgress = { step: "assessing" | "breaking" | "idle"; lines: string[]; done: boolean; startedAt?: number };
+export const getFlowProgress = (id: string) => get<FlowProgress>(`/workitems/${id}/flow-progress`);
 export const approveTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => post<{ approved: boolean }>(`/tasks/${id}/approve`, body);
 export const rejectTask = (id: string, clientId: string) => post<{ rejected: boolean }>(`/tasks/${id}/reject`, { clientId });
 export const updateRequirement = (id: string, body: Partial<{
@@ -188,7 +191,7 @@ export const syncFromAdo = (clientId: string) => post<PullResult>(`/clients/${cl
 export const uploadAttachment = (workitemId: string, name: string, contentBase64: string) =>
   post<{ id: string; name: string; adoUrl: string | null }>(`/workitems/${workitemId}/attachments`, { name, contentBase64 });
 
-export const verifyGap = (gapId: string, body: { outcome: "verified" | "dismissed" | "spun_off"; clientId: string; spunOffTitle?: string }) =>
+export const verifyGap = (gapId: string, body: { outcome: GapState; clientId: string; spunOffTitle?: string; answer?: string }) =>
   post(`/gaps/${gapId}/verify`, body);
 export const answerBlocker = (blockerId: string, body: { answer: string; clientId: string }) =>
   post(`/blockers/${blockerId}/answer`, body);

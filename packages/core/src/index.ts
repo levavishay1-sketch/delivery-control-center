@@ -16,6 +16,7 @@ export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   assessRequirement, breakdownRequirement, approveTask, rejectTask, pendingApprovalCount,
+  getFlowProgress,
   type AssessResult, type BreakdownResult,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";

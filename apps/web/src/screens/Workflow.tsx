@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
-  approveTask, assessRequirement, assignRequirement, breakdownRequirement, getUsers,
+  approveTask, assessRequirement, assignRequirement, breakdownRequirement, getFlowProgress, getUsers,
   rejectTask, startBuilding,
   type AssessResult, type BreakdownResult, type StartBuildResult,
 } from "../api.ts";
@@ -31,8 +31,31 @@ const Spinner = ({ label }: { label: string }) => (
   </div>
 );
 
-export function WorkflowModal({ workitemId, clientId, phase, onClose, onChanged }: {
-  workitemId: string; clientId: string; phase: string; onClose: () => void; onChanged: () => void;
+const LiveLog = ({ label, lines }: { label: string; lines: string[] }) => {
+  const boxRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { boxRef.current?.scrollTo(0, boxRef.current.scrollHeight); }, [lines.length]);
+  return (
+    <div style={{ padding: "6px 0" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <div className="spin" style={{ display: "inline-block", width: 16, height: 16 }} />
+        <p style={{ fontSize: 13, color: "var(--ink-600)", margin: 0 }}>{label}</p>
+      </div>
+      <div ref={boxRef} style={{ maxHeight: "44vh", overflowY: "auto", background: "var(--surface-muted)", borderRadius: 8, padding: "10px 12px", fontSize: 12, lineHeight: 1.6 }}>
+        {lines.length === 0
+          ? <span style={{ color: "var(--ink-400)" }}>מתחיל…</span>
+          : lines.map((l, i) => (
+              <div key={i} dir={/^[\u{1F300}-\u{1FAFF}]/u.test(l) ? "rtl" : "auto"} style={{ color: l.startsWith("💭") ? "var(--ink-500)" : "var(--ink-700)", whiteSpace: "pre-wrap", marginBottom: 2 }}>{l}</div>
+            ))}
+      </div>
+      <p style={{ marginTop: 6, fontSize: 11, color: "var(--ink-400)" }}>Claude רץ מקומית עם הרישוי שלך — קורא/מחפש בקוד. יכול לקחת 1-3 דקות.</p>
+    </div>
+  );
+};
+
+export function WorkflowModal({ workitemId, clientId, phase, gapCount = 0, openGaps = 0, openBlockingGaps = 0, onClose, onChanged }: {
+  workitemId: string; clientId: string; phase: string;
+  gapCount?: number; openGaps?: number; openBlockingGaps?: number;
+  onClose: () => void; onChanged: () => void;
 }) {
   const alreadyBuilding = phase === "building";
   const [step, setStep] = useState<Step>("choose");
@@ -45,9 +68,23 @@ export function WorkflowModal({ workitemId, clientId, phase, onClose, onChanged 
   const [edited, setEdited] = useState<Record<string, { intent: string; appetite: string }>>({});
   const [build, setBuild] = useState<StartBuildResult | null>(null);
   const [copied, setCopied] = useState("");
+  const [logLines, setLogLines] = useState<string[]>([]);
 
   useEffect(() => { if (step === "assign") getUsers().then((r) => setUsers(r.users)).catch(() => {}); }, [step]);
   useEffect(() => { if (step === "build" && !build) startBuilding(workitemId).then(setBuild).catch((e) => setErr(String(e))); }, [step]);
+
+  // while Claude runs, poll the live activity log
+  useEffect(() => {
+    if (step !== "assessing" && step !== "breaking") return;
+    setLogLines([]);
+    let alive = true;
+    const tick = () => {
+      getFlowProgress(workitemId).then((p) => { if (alive && p) setLogLines(p.lines); }).catch(() => {});
+    };
+    tick();
+    const iv = setInterval(tick, 1500);
+    return () => { alive = false; clearInterval(iv); };
+  }, [step, workitemId]);
 
   const copy = (t: string, k: string) => { navigator.clipboard?.writeText(t); setCopied(k); setTimeout(() => setCopied(""), 1500); };
 
@@ -76,15 +113,25 @@ export function WorkflowModal({ workitemId, clientId, phase, onClose, onChanged 
       {step === "choose" && (
         <>
           <h2 style={{ fontSize: 18, fontWeight: 650, marginBottom: 6 }}>איך ממשיכים?</h2>
-          <p style={{ fontSize: 13, color: "var(--ink-500)", marginBottom: 20 }}>הדרישה מוכנה לטיפול. בחר מסלול.</p>
+          {openBlockingGaps > 0
+            ? <div className="callout crit" style={{ marginBottom: 16 }}><div className="body"><p className="r">{openBlockingGaps} פערים חוסמים פתוחים. סגור אותם בטאב "פערים וחוסמים" (ענה / דחה / פצל) לפני פירוק למשימות.</p></div></div>
+            : gapCount > 0
+              ? <div className="callout" style={{ marginBottom: 16 }}><div className="body"><p>הפערים החוסמים טופלו{openGaps > 0 ? ` (${openGaps} לא-חוסמים עדיין פתוחים)` : ""}. אפשר לפרק למשימות.</p></div></div>
+              : <p style={{ fontSize: 13, color: "var(--ink-500)", marginBottom: 20 }}>בחר מסלול.</p>}
           <div style={{ display: "grid", gap: 12 }}>
             <button className="btn btn-secondary" style={{ padding: "16px", textAlign: "start", flexDirection: "column", alignItems: "flex-start", height: "auto", gap: 4 }} onClick={() => setStep("assign")}>
               <span style={{ fontWeight: 650, fontSize: 14 }}>👤 העבר למשתמש אחר</span>
               <span style={{ fontSize: 12, color: "var(--ink-500)", fontWeight: 400 }}>מישהו אחר ייקח את המשימה מכאן</span>
             </button>
-            <button className="btn btn-primary" style={{ padding: "16px", textAlign: "start", flexDirection: "column", alignItems: "flex-start", height: "auto", gap: 4 }} onClick={doAssess}>
-              <span style={{ fontWeight: 650, fontSize: 14 }}>✦ המשך עם AI</span>
-              <span style={{ fontSize: 12, opacity: 0.85, fontWeight: 400 }}>Claude יתרגם לאנגלית, יבדוק מול ה-repo אם הדרישה אפויה, ואם כן — יפרק למשימות</span>
+            {gapCount > 0 && openBlockingGaps === 0 && (
+              <button className="btn btn-primary" style={{ padding: "16px", textAlign: "start", flexDirection: "column", alignItems: "flex-start", height: "auto", gap: 4 }} onClick={doBreakdown}>
+                <span style={{ fontWeight: 650, fontSize: 14 }}>✦ פרק למשימות</span>
+                <span style={{ fontSize: 12, opacity: 0.85, fontWeight: 400 }}>Claude יפרק את הדרישה למשימות עם תלויות — ואז תאשר כל אחת</span>
+              </button>
+            )}
+            <button className={gapCount > 0 && openBlockingGaps === 0 ? "btn btn-secondary" : "btn btn-primary"} style={{ padding: "16px", textAlign: "start", flexDirection: "column", alignItems: "flex-start", height: "auto", gap: 4 }} onClick={doAssess}>
+              <span style={{ fontWeight: 650, fontSize: 14 }}>✦ {gapCount > 0 ? "הערכה מחדש עם AI" : "המשך עם AI"}</span>
+              <span style={{ fontSize: 12, opacity: 0.85, fontWeight: 400 }}>Claude קורא את הדרישה ואת ה-repo, מסכם בעברית, ובודק אם היא אפויה או שיש פערים</span>
             </button>
             {alreadyBuilding && (
               <button className="btn btn-ghost" style={{ fontSize: 12.5, color: "var(--ink-500)" }} onClick={() => setStep("build")}>
@@ -118,8 +165,8 @@ export function WorkflowModal({ workitemId, clientId, phase, onClose, onChanged 
         </>
       )}
 
-      {step === "assessing" && <Spinner label="Claude קורא את הדרישה ואת ה-repo, מתרגם ומעריך…" />}
-      {step === "breaking" && <Spinner label="Claude מפרק את הדרישה למשימות…" />}
+      {step === "assessing" && <LiveLog label="Claude קורא את הדרישה ואת ה-repo, מסכם ומעריך…" lines={logLines} />}
+      {step === "breaking" && <LiveLog label="Claude מפרק את הדרישה למשימות…" lines={logLines} />}
 
       {step === "assessed" && assess && (
         <>

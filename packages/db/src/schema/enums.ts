@@ -65,6 +65,7 @@ export const workitemPhase = pgEnum("workitem_phase", [
 export const gapState = pgEnum("gap_state", [
   "proposed",
   "verified",
+  "resolved",
   "dismissed",
   "spun_off",
 ]);

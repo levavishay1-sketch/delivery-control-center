@@ -74,6 +74,7 @@ import {
   startBuilding,
   assessRequirement,
   breakdownRequirement,
+  getFlowProgress,
   approveTask,
   rejectTask,
 } from "@dcc/core";
@@ -479,6 +480,12 @@ app.post("/workitems/:id/breakdown", async (req) => {
   return breakdownRequirement({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
 });
 
+// live log of what `claude` is doing right now (polled by the flow modal)
+app.get("/workitems/:id/flow-progress", async (req) => {
+  const { id } = req.params as { id: string };
+  return getFlowProgress(id) ?? { step: "idle", lines: [], done: true };
+});
+
 app.post("/tasks/:id/approve", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
@@ -540,8 +547,9 @@ app.post("/gaps/:id/verify", async (req) => {
   const { id } = req.params as { id: string };
   const b = z
     .object({
-      outcome: z.enum(["verified", "dismissed", "spun_off"]),
+      outcome: z.enum(["verified", "resolved", "dismissed", "spun_off"]),
       spunOffTitle: z.string().optional(),
+      answer: z.string().optional(),
       ownerId: z.string().uuid().optional(),
       clientId: z.string().uuid(),
     })

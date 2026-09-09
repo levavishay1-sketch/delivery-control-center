@@ -58,14 +58,27 @@ export async function verifyGap(input: {
   clientId: string;
   gapId: string;
   by: { userId: string };
-  outcome: "verified" | "dismissed" | "spun_off";
+  outcome: "verified" | "resolved" | "dismissed" | "spun_off";
   /** required when outcome = spun_off */
   spunOffTitle?: string;
+  /** the decision that closes the gap — recorded as a note (outcome = resolved) */
+  answer?: string;
   ownerId?: string;
 }) {
   return withTenant(input.clientId, async (tx) => {
     const [g] = await tx.select().from(gap).where(sql`${gap.id} = ${input.gapId}`).limit(1);
     if (!g) throw new Error("gap not found");
+
+    if (input.outcome === "resolved" && input.answer?.trim()) {
+      await appendEvent({
+        clientId: input.clientId,
+        workitemId: g.workitemId,
+        source: "manual",
+        type: "note.added",
+        actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
+        payload: { body: `החלטה על הפער "${g.description.slice(0, 80)}":\n${input.answer.trim()}` },
+      });
+    }
 
     let spunOffTo: string | null = null;
     if (input.outcome === "spun_off") {

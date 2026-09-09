@@ -55,7 +55,7 @@ const gapProposed = z.object({
 
 const gapVerified = z.object({
   gapId: z.string().uuid(),
-  outcome: z.enum(["verified", "dismissed", "spun_off"]),
+  outcome: z.enum(["verified", "resolved", "dismissed", "spun_off"]),
   spunOffTo: z.string().uuid().optional(),
 });
 

@@ -22,11 +22,54 @@ const CLAUDE_BIN = process.env.DCC_CLAUDE_BIN || (process.platform === "win32" ?
 const CLAUDE_VIA_SHELL = process.platform === "win32";
 const REPO_CACHE = path.join(os.tmpdir(), "dcc-repos");
 
+/* ── live progress: what `claude` is doing right now, per requirement ── */
+
+type FlowProgress = { step: "assessing" | "breaking" | "idle"; lines: string[]; startedAt: number; done: boolean };
+const progress = new Map<string, FlowProgress>();
+
+export function getFlowProgress(workitemId: string): FlowProgress | null {
+  return progress.get(workitemId) ?? null;
+}
+function pushProgress(workitemId: string, line: string) {
+  const p = progress.get(workitemId);
+  if (p) { p.lines.push(line); if (p.lines.length > 300) p.lines.shift(); }
+}
+
+/** Turn one stream-json line into a short human sentence (Hebrew-ish), or null to skip. */
+function describeEvent(line: string): string | null {
+  let e: Record<string, unknown>;
+  try { e = JSON.parse(line); } catch { return null; }
+  if (e.type === "assistant" && e.message && typeof e.message === "object") {
+    const content = (e.message as { content?: unknown[] }).content ?? [];
+    const bits: string[] = [];
+    for (const c of content as Record<string, unknown>[]) {
+      if (c.type === "text" && typeof c.text === "string" && c.text.trim()) {
+        bits.push(`💭 ${c.text.trim().replace(/\s+/g, " ").slice(0, 200)}`);
+      } else if (c.type === "tool_use") {
+        const inp = (c.input ?? {}) as Record<string, unknown>;
+        const arg = inp.file_path ?? inp.path ?? inp.pattern ?? inp.query ?? inp.command ?? "";
+        bits.push(`🔧 ${String(c.name)} ${String(arg).replace(/^.*[/\\]/, "").slice(0, 80)}`.trim());
+      }
+    }
+    return bits.join("\n") || null;
+  }
+  if (e.type === "result") {
+    const cost = typeof e.total_cost_usd === "number" ? ` · $${(e.total_cost_usd as number).toFixed(3)}` : "";
+    const turns = typeof e.num_turns === "number" ? `${e.num_turns} צעדים` : "";
+    return `✓ סיים${turns ? ` (${turns}${cost})` : ""}`;
+  }
+  return null;
+}
+
 /** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back. */
-async function runClaudeJson<T>(cwd: string, prompt: string, opts: { timeoutMs?: number; maxTurns?: number } = {}): Promise<T> {
+async function runClaudeJson<T>(
+  cwd: string,
+  prompt: string,
+  opts: { timeoutMs?: number; maxTurns?: number; progressKey?: string } = {},
+): Promise<T> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain
   const args = [
-    "-p", "--output-format", "json", "--permission-mode", "plan",
+    "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "plan",
     "--allowed-tools", "Read,Grep,Glob",
     "--max-turns", String(opts.maxTurns ?? 40),
   ];
@@ -34,8 +77,19 @@ async function runClaudeJson<T>(cwd: string, prompt: string, opts: { timeoutMs?:
     const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     let out = "";
     let err = "";
+    let buf = "";
     const killer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`claude timed out after ${(opts.timeoutMs ?? 240000) / 1000}s`)); }, opts.timeoutMs ?? 240000);
-    child.stdout.on("data", (d) => (out += d));
+    child.stdout.on("data", (d) => {
+      out += d;
+      if (!opts.progressKey) return;
+      buf += d;
+      const parts = buf.split("\n");
+      buf = parts.pop() ?? "";
+      for (const ln of parts) {
+        const desc = describeEvent(ln.trim());
+        if (desc) for (const s of desc.split("\n")) pushProgress(opts.progressKey, s);
+      }
+    });
     child.stderr.on("data", (d) => (err += d));
     child.on("error", (e) => { clearTimeout(killer); reject(new Error(`cannot run "${CLAUDE_BIN}" — האם claude מותקן ומחובר? (${e.message})`)); });
     child.on("close", (code) => {
@@ -47,12 +101,14 @@ async function runClaudeJson<T>(cwd: string, prompt: string, opts: { timeoutMs?:
     child.stdin.end();
   });
 
-  // --output-format json → { type:"result", result:"<assistant text>", ... }
+  // stream-json → many NDJSON lines; the assistant's answer is the last
+  // {"type":"result","result":"…"} line.
   let text = raw.trim();
+  const resultLine = raw.split("\n").reverse().find((l) => l.includes('"type":"result"'));
   try {
-    const env = JSON.parse(text) as { result?: string };
+    const env = JSON.parse((resultLine ?? text).trim()) as { result?: string };
     if (typeof env.result === "string") text = env.result;
-  } catch { /* not the envelope — treat raw as the text */ }
+  } catch { /* fall back to raw */ }
 
   // pull the JSON object/array out of whatever the model wrapped it in
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, text];
@@ -130,9 +186,21 @@ export type AssessResult = {
 };
 
 export async function assessRequirement(input: { clientId: string; workitemId: string; by: Dev }): Promise<AssessResult> {
+  progress.set(input.workitemId, { step: "assessing", lines: ["מכין עותק עבודה של ה-repo…"], startedAt: Date.now(), done: false });
+  try {
+    return await runAssess(input);
+  } finally {
+    const p = progress.get(input.workitemId);
+    if (p) p.done = true;
+    setTimeout(() => progress.delete(input.workitemId), 60_000);
+  }
+}
+
+async function runAssess(input: { clientId: string; workitemId: string; by: Dev }): Promise<AssessResult> {
   const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
   const cwd = r ? await ensureCheckout(r) : null;
+  pushProgress(input.workitemId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo — מעריך מהטקסט בלבד");
 
   const reqText = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
   const prompt = [
@@ -153,7 +221,8 @@ export async function assessRequirement(input: { clientId: string; workitemId: s
     '{"title": string, "summary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
   ].join("\n");
 
-  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000 });
+  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000, progressKey: input.workitemId });
+  pushProgress(input.workitemId, "כותב סיכום ופערים…");
 
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
@@ -184,9 +253,21 @@ export type BreakdownResult = {
 };
 
 export async function breakdownRequirement(input: { clientId: string; workitemId: string; by: Dev }): Promise<BreakdownResult> {
+  progress.set(input.workitemId, { step: "breaking", lines: ["מכין עותק עבודה של ה-repo…"], startedAt: Date.now(), done: false });
+  try {
+    return await runBreakdown(input);
+  } finally {
+    const p = progress.get(input.workitemId);
+    if (p) p.done = true;
+    setTimeout(() => progress.delete(input.workitemId), 60_000);
+  }
+}
+
+async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev }): Promise<BreakdownResult> {
   const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
   const cwd = r ? await ensureCheckout(r) : null;
+  pushProgress(input.workitemId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo");
 
   const reqText = [`Title: ${wi.title}`, ...notes.map((n) => n.body)].join("\n\n");
   const prompt = [
@@ -205,8 +286,9 @@ export async function breakdownRequirement(input: { clientId: string; workitemId
   ].join("\n");
 
   const proposed = await runClaudeJson<{ seq: number; intent: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]>(
-    cwd ?? process.cwd(), prompt, { timeoutMs: 300000 },
+    cwd ?? process.cwd(), prompt, { timeoutMs: 300000, progressKey: input.workitemId },
   );
+  pushProgress(input.workitemId, "יוצר משימות ותלויות…");
 
   const out = await withTenant(input.clientId, async (tx) => {
     const seqToId = new Map<number, string>();
