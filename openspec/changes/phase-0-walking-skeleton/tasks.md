@@ -59,11 +59,13 @@ smaller). Order matters — each group unblocks the next.
 
 ## 5. Web  ·  `apps/web`
 
-- [ ] 5.1 Vite + React + Radix + Tailwind; the DCC design-system tokens
-      (skill-creator) as the base
-- [ ] 5.2 WorkItem timeline screen — chronological, AI-proposed vs
-      human-confirmed distinct, confidence as a meter
+- [x] 5.1 Vite + React, RTL, IBM Plex, the mockup's visual tokens inline
+      (Radix/Tailwind + a design-system skill come with the real UI phase)
+- [x] 5.2 WorkItem timeline screen — chronological, AI-proposed (dashed
+      amber, ◇) vs human (solid blue, ◆) distinct, confidence as a meter,
+      Context Brief panel showing the SessionStart payload
 - [ ] 5.3 Unassigned inbox list (read-only in Phase 0)
+- [x] 5.4 Runs end to end: PGlite → Fastify → React, verified in browser
 
 ## 6. Prove the exit gate
 

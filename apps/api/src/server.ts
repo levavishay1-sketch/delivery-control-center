@@ -1,7 +1,7 @@
 import Fastify from "fastify";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db, withTenant, timeline, unassigned } from "@dcc/db";
+import { db, dbKind, withTenant, timeline, unassigned } from "@dcc/db";
 import { client, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
 import {
   briefFor,
@@ -23,6 +23,16 @@ app.setErrorHandler((err, _req, reply) => {
 });
 
 app.get("/health", async () => ({ ok: true }));
+
+/** Dev-only: list every WorkItem (works because dev PGlite runs as
+ *  superuser, so RLS is bypassed). 404 on a real Postgres. */
+app.get("/dev/workitems", async (_req, reply) => {
+  if (dbKind !== "pglite") return reply.code(404).send({ error: "dev only" });
+  return db
+    .select({ id: workitem.id, key: workitem.key, title: workitem.title, phase: workitem.phase })
+    .from(workitem)
+    .orderBy(sql`${workitem.createdAt} desc`);
+});
 
 /* ── capture: the hooks POST here ──────────────────────────────────── */
 
