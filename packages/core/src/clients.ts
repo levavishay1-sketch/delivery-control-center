@@ -110,9 +110,10 @@ export async function linkRepoToClient(input: { clientId: string; repoId?: strin
   return r!;
 }
 
-// On-prem Server ships older API surfaces (2019→5.0, 2020→6.0, 2022→7.x);
-// cloud is always current. Try newest first.
-const ADO_API_VERSIONS = ["7.1", "7.0", "6.0"];
+// On-prem Server ships older API surfaces; cloud is always current.
+// Server 2022→7.x, 2020→6.0, 2019→5.0, TFS 2018→4.1. Try newest first;
+// an old server 404s the versions it doesn't know, so we walk down.
+const ADO_API_VERSIONS = ["7.1", "7.0", "6.0", "5.1", "5.0", "4.1"];
 
 function adoAuthHeader(pat: string) {
   return { authorization: `Basic ${Buffer.from(`:${pat}`).toString("base64")}`, accept: "application/json" };
