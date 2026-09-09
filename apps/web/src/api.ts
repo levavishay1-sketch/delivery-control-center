@@ -9,6 +9,7 @@ async function j<T>(r: Response): Promise<T> {
 const get = <T,>(p: string) => fetch(`/api${p}`, { headers: H }).then((r) => j<T>(r));
 const post = <T,>(p: string, body: unknown) =>
   fetch(`/api${p}`, { method: "POST", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
+const del = <T,>(p: string) => fetch(`/api${p}`, { method: "DELETE", headers: H }).then((r) => j<T>(r));
 export const getText = (p: string) => fetch(`/api${p}`, { headers: H }).then((r) => r.text());
 
 // ---------- types ----------
@@ -96,6 +97,10 @@ export type ClientDetail = {
 };
 export const getClient = (id: string) => get<ClientDetail>(`/clients/${id}`);
 export const getRepos = () => get<{ repos: { id: string; name: string; adoRepoRef: string | null; clientId: string | null; clientName: string | null; linkedClients: number }[] }>("/repos");
+export const getAdoProjects = (body: { orgUrl: string; pat: string }) =>
+  post<{ ok: boolean; orgUrl: string; projects: string[]; detail: string }>("/connections/ado/projects", body);
+export const deleteConnection = (clientId: string, id: string) => del<{ deleted: boolean }>(`/clients/${clientId}/connections/${id}`);
+export const checkConnection = (clientId: string, id: string) => post<{ ok: boolean; detail: string }>(`/clients/${clientId}/connections/${id}/check`, {});
 export const getConnections = () => get<{ connections: { id: string; kind: string; displayName: string; config: Record<string, string>; clientName: string; clientId: string; lastCheckOk: string | null }[] }>("/connections");
 export const listWorkItems = () => get<{ id: string; key: string | null; title: string; phase: string }[]>("/dev/workitems");
 export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);

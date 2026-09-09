@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getConnections, getRepos } from "../api.ts";
+import { deleteConnection, getConnections, getRepos } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 import { ConnectAdo, LinkRepo } from "../forms.tsx";
 
@@ -29,9 +29,12 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
             <div className="stat-line" key={c.id} style={{ alignItems: "flex-start" }}>
               <span className="l">
                 <span onClick={() => nav(`#/client/${c.clientId}`)} style={{ color: "var(--color-accent)", cursor: "pointer" }}>{c.clientName}</span>
-                <span style={{ display: "block", direction: "ltr", fontSize: 11, color: "var(--ink-400)" }}>{c.config.orgUrl} · {c.config.project}</span>
+                <span style={{ display: "block", direction: "ltr", fontSize: 11, color: "var(--ink-400)" }}>{c.config.orgUrl}{c.config.project ? ` · ${c.config.project}` : " · (collection)"}</span>
               </span>
-              {c.lastCheckOk && <Pill tone={c.lastCheckOk.startsWith("FAILED") ? "critical" : "healthy"}>{c.lastCheckOk.startsWith("FAILED") ? "נכשל" : "מחובר"}</Pill>}
+              <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                {c.lastCheckOk && <Pill tone={c.lastCheckOk.startsWith("FAILED") ? "critical" : "healthy"}>{c.lastCheckOk.startsWith("FAILED") ? "נכשל" : "מחובר"}</Pill>}
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={() => { if (confirm(`להסיר את החיבור "${c.displayName}"?`)) deleteConnection(c.clientId, c.id).then(reload); }}>הסר</a>
+              </span>
             </div>
           ))}
           {conns && conns.filter((c) => c.kind === "ado").length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>אין חיבורים.</p>}

@@ -13,7 +13,9 @@ import {
   clientDetail,
   contentionFor,
   dashboard,
+  deleteConnection,
   linkRepoToClient,
+  listAdoProjects,
   listConnections,
   listRepos,
   listAlerts,
@@ -76,10 +78,17 @@ app.post("/clients/:id/repos", async (req, reply) => {
   return reply.code(201).send(r);
 });
 
+// live-discover the ADO projects a PAT can see, for the connect form's picker
+app.post("/connections/ado/projects", async (req) => {
+  await actingUser(req);
+  const b = z.object({ orgUrl: z.string().url(), pat: z.string().min(10) }).parse(req.body);
+  return listAdoProjects(b);
+});
+
 app.post("/clients/:id/connections/ado", async (req, reply) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ orgUrl: z.string().url(), project: z.string().min(1), pat: z.string().min(10) }).parse(req.body);
+  const b = z.object({ orgUrl: z.string().url(), project: z.string().optional(), pat: z.string().min(10) }).parse(req.body);
   const out = await addAdoConnection({ clientId: id, ...b, by: { userId: dev.id } });
   return reply.code(201).send({ id: out.id, check: out.check });
 });
@@ -88,6 +97,12 @@ app.post("/clients/:cid/connections/:id/check", async (req) => {
   await actingUser(req);
   const { cid, id } = req.params as { cid: string; id: string };
   return checkAdoConnection(cid, id);
+});
+
+app.delete("/clients/:cid/connections/:id", async (req) => {
+  await actingUser(req);
+  const { cid, id } = req.params as { cid: string; id: string };
+  return deleteConnection(cid, id);
 });
 
 app.get("/list/workitems", async () => ({ items: await listAllWorkItems() }));
@@ -528,9 +543,37 @@ app.post("/projects/:id/repos", async (req, reply) => {
   return reply.code(201).send({ linked: true });
 });
 
+// Dev-only: a clean way to stop the server so PGlite flushes .pgdata.
+// Windows can't deliver SIGINT to a background node process, and a hard
+// kill mid-write can corrupt the embedded Postgres data dir.
+if (dbKind === "pglite") {
+  app.post("/admin/shutdown", async (_req, reply) => {
+    await reply.send({ stopping: true });
+    setTimeout(() => {
+      app.close().then(() => import("@dcc/db").then((m) => m.closeDb())).finally(() => process.exit(0));
+    }, 50);
+  });
+}
+
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3001);
   app.listen({ port, host: "0.0.0.0" }).then(() => app.log.info(`dcc-api on :${port}`));
+
+  // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
+  // un-openable if the process is killed mid-write, so always close it.
+  let closing = false;
+  for (const sig of ["SIGINT", "SIGTERM", "SIGBREAK", "SIGHUP"] as const) {
+    process.on(sig, () => {
+      if (closing) return;
+      closing = true;
+      app.log.info(`${sig} — closing`);
+      app
+        .close()
+        .then(() => import("@dcc/db").then((m) => m.closeDb()))
+        .finally(() => process.exit(0));
+      setTimeout(() => process.exit(0), 3000).unref();
+    });
+  }
 }
 
 export { app, db, client, project, repo, users };

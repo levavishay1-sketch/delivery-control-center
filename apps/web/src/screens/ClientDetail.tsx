@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getClient, type ClientDetail as CD } from "../api.ts";
+import { checkConnection, deleteConnection, getClient, type ClientDetail as CD } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 import { AddRequirement, ConnectAdo, LinkRepo, NewProject } from "../forms.tsx";
 
@@ -81,14 +81,18 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
             <p className="card-title" style={{ margin: 0 }}>Azure DevOps</p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("ado")}>+ חיבור</button>
           </div>
-          {d.connections.filter((c) => c.kind === "ado").map((c) => (
+          {d.connections.filter((c) => c.kind === "ado" && !c.revokedAt).map((c) => (
             <div key={c.id} style={{ fontSize: 12.5, borderTop: "1px solid var(--border-hairline)", paddingTop: 10, marginTop: 10 }}>
               <div style={{ fontWeight: 600 }}>{c.displayName}</div>
-              <div style={{ color: "var(--ink-400)", direction: "ltr", fontSize: 11 }}>{c.config.orgUrl} · {c.config.project}</div>
+              <div style={{ color: "var(--ink-400)", direction: "ltr", fontSize: 11 }}>{c.config.orgUrl}{c.config.project ? ` · ${c.config.project}` : " · (רמת collection)"}</div>
               {c.lastCheckOk && <div style={{ marginTop: 4 }}><Pill tone={c.lastCheckOk.startsWith("FAILED") ? "critical" : "healthy"}>{c.lastCheckOk.startsWith("FAILED") ? "חיבור נכשל" : "מחובר"}</Pill> <span style={{ color: "var(--ink-400)", fontSize: 11 }}>{c.lastCheckOk.replace("FAILED — ", "")}</span></div>}
+              <div style={{ display: "flex", gap: 12, marginTop: 6 }}>
+                <a style={{ fontSize: 11, cursor: "pointer" }} onClick={() => checkConnection(id, c.id).then(reload)}>בדוק שוב</a>
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={() => { if (confirm(`להסיר את החיבור "${c.displayName}"?`)) deleteConnection(id, c.id).then(reload); }}>הסר</a>
+              </div>
             </div>
           ))}
-          {d.connections.filter((c) => c.kind === "ado").length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>לא מחובר ל-Azure DevOps.</p>}
+          {d.connections.filter((c) => c.kind === "ado" && !c.revokedAt).length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>לא מחובר ל-Azure DevOps.</p>}
         </div>
       </div>
     </>

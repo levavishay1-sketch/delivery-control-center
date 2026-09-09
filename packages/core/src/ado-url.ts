@@ -1,34 +1,55 @@
 /**
- * Normalise whatever the user pasted as the "Organization URL" into a
- * clean collection/org base, splitting off the project if they pasted
- * the whole browser URL.
+ * Azure DevOps URL handling — pure, no db imports, unit-testable.
  *
- * Accepts, and maps to { orgUrl, project }:
- *   cloud    https://dev.azure.com/my-org                 → my-org
- *   cloud    https://dev.azure.com/my-org/My Project      → my-org, "My Project"
- *   on-prem  http://server/DefaultCollection              → collection
- *   on-prem  http://server/DefaultCollection/My Project   → collection, "My Project"
- *   on-prem  http://server/tfs/DefaultCollection/My%20Proj (decoded)
+ * Users paste all sorts of things into the "Organization URL" box: the
+ * clean org/collection base, or the full browser URL that also carries
+ * the project (and sometimes a repo path after that). We want to end up
+ * with a clean { orgUrl, project }.
  *
- * No db imports here on purpose — pure and unit-testable.
+ *   cloud    https://dev.azure.com/my-org                    → my-org
+ *   cloud    https://dev.azure.com/my-org/My Project         → my-org, "My Project"
+ *   cloud    https://dev.azure.com/my-org/My Project/_git/x  → my-org, "My Project"
+ *   on-prem  http://host/DefaultCollection                   → collection
+ *   on-prem  http://host/DefaultCollection/My Project        → collection, "My Project"
+ *   on-prem  http://host/tfs/DefaultCollection/My%20Project  → collection (tfs vdir kept)
+ */
+export function splitAdoUrl(rawOrgUrl: string): { orgUrl: string; projectFromUrl: string } {
+  const raw = rawOrgUrl.trim().replace(/\/+$/, "");
+  try {
+    const u = new URL(raw);
+    let segs = u.pathname.split("/").filter(Boolean).map((s) => decodeURIComponent(s));
+
+    // drop anything from a known sub-resource marker onward (_git, _apis, …)
+    const marker = segs.findIndex((s) => s.startsWith("_"));
+    if (marker >= 0) segs = segs.slice(0, marker);
+
+    const isCloud = /(^|\.)dev\.azure\.com$/i.test(u.hostname) || /\.visualstudio\.com$/i.test(u.hostname);
+
+    // how many leading segments form the org/collection base
+    let baseLen: number;
+    if (isCloud) {
+      baseLen = 1; // the org
+    } else {
+      baseLen = segs[0]?.toLowerCase() === "tfs" ? 2 : 1; // optional /tfs/ vdir + collection
+    }
+
+    const baseSegs = segs.slice(0, baseLen);
+    const rest = segs.slice(baseLen);
+    const projectFromUrl = rest[0] ?? "";
+    const orgUrl = `${u.origin}${baseSegs.length ? "/" + baseSegs.join("/") : ""}`;
+    return { orgUrl, projectFromUrl };
+  } catch {
+    return { orgUrl: raw, projectFromUrl: "" };
+  }
+}
+
+/**
+ * Reconcile a pasted URL with a separately-typed project field.
+ * A project in the URL path wins (it's copied from a real ADO page);
+ * otherwise use the typed field.
  */
 export function normaliseAdoUrl(rawOrgUrl: string, rawProject: string): { orgUrl: string; project: string } {
-  let url = rawOrgUrl.trim().replace(/\/+$/, "");
-  let project = rawProject.trim();
-  try {
-    const u = new URL(url);
-    const segs = u.pathname.split("/").filter(Boolean).map((s) => decodeURIComponent(s));
-    if (project && segs.length > 0 && segs[segs.length - 1]!.toLowerCase() === project.toLowerCase()) {
-      // user pasted "<base>/<project>" AND filled the project field
-      segs.pop();
-    } else if (!project && segs.length >= 2) {
-      // "<base>/<project>" with an empty project field — take the last segment
-      // (cloud keeps the org as segment 0; on-prem keeps host+collection).
-      project = segs.pop()!;
-    }
-    url = `${u.origin}/${segs.join("/")}`.replace(/\/+$/, "");
-  } catch {
-    /* not a parseable URL — leave as typed */
-  }
-  return { orgUrl: url, project };
+  const { orgUrl, projectFromUrl } = splitAdoUrl(rawOrgUrl);
+  const project = (projectFromUrl || rawProject).trim();
+  return { orgUrl, project };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getClients, getConnections, getProjectList, getRepos } from "./api.ts";
+import { getAdoProjects, getClients, getConnections, getProjectList, getRepos } from "./api.ts";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -210,6 +210,9 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; o
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [adoProjects, setAdoProjects] = useState<string[] | null>(null);
+  const [projMode, setProjMode] = useState<"none" | "pick" | "type">("type");
+  const [discovering, setDiscovering] = useState(false);
 
   useEffect(() => {
     if (!clientId) getClients().then((r) => setClients(r.clients)).catch(() => {});
@@ -221,14 +224,30 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; o
     if (c) setF((s) => ({ ...s, orgUrl: c.config.orgUrl ?? "", project: c.config.project ?? "" }));
   };
 
+  const discover = async () => {
+    if (!f.orgUrl || !f.pat) return setErr("מלא Organization URL ו-PAT כדי לטעון פרויקטים");
+    setDiscovering(true); setErr(null); setResult(null);
+    try {
+      const r = await getAdoProjects({ orgUrl: f.orgUrl, pat: f.pat });
+      if (!r.ok) { setErr(`טעינת הפרויקטים נכשלה: ${r.detail}`); setDiscovering(false); return; }
+      setAdoProjects(r.projects);
+      setProjMode(r.projects.length ? "pick" : "none");
+      setF((s) => ({ ...s, orgUrl: r.orgUrl, project: r.projects.includes(s.project) ? s.project : "" }));
+      setResult(`✓ ${r.detail}`);
+    } catch (e) { setErr(String(e)); }
+    setDiscovering(false);
+  };
+
   const submit = async () => {
     if (!f.clientId) return setErr("בחר לקוח");
-    if (!f.orgUrl || !f.project || !f.pat) return setErr("Organization URL, Project ו-PAT הם שדות חובה");
+    if (!f.orgUrl || !f.pat) return setErr("Organization URL ו-PAT הם שדות חובה");
     setBusy(true); setErr(null); setResult(null);
     try {
-      const r = await api(`/clients/${f.clientId}/connections/ado`, { orgUrl: f.orgUrl, project: f.project, pat: f.pat });
+      const body: Record<string, string> = { orgUrl: f.orgUrl, pat: f.pat };
+      if (projMode !== "none" && f.project.trim()) body.project = f.project.trim();
+      const r = await api(`/clients/${f.clientId}/connections/ado`, body);
       setResult(r.check.ok ? `✓ החיבור תקין — ${r.check.detail}` : `✗ ${r.check.detail}`);
-      if (r.check.ok) setTimeout(onDone, 900);
+      if (r.check.ok) setTimeout(onDone, 1200);
       else setBusy(false);
     } catch (e) { setErr(String(e)); setBusy(false); }
   };
@@ -241,7 +260,7 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; o
           <label>מלא מחיבור קיים (אופציונלי)</label>
           <select defaultValue="" onChange={(e) => prefill(e.target.value)}>
             <option value="">— חדש —</option>
-            {existing.map((c) => <option key={c.id} value={c.id}>{c.config.orgUrl} · {c.config.project} ({c.clientName})</option>)}
+            {existing.map((c) => <option key={c.id} value={c.id}>{c.config.orgUrl}{c.config.project ? ` · ${c.config.project}` : ""} ({c.clientName})</option>)}
           </select>
         </div>
       )}
@@ -249,17 +268,49 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; o
       <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--surface-muted)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, lineHeight: 1.6 }}>
         <b>מה צריך:</b>
         <ol style={{ margin: "6px 0 0", paddingInlineStart: 18 }}>
-          <li><b>Organization URL</b> — ה-org / collection <u>בלבד</u>, בלי שם הפרויקט:<br />
-            ענן: <code>https://dev.azure.com/&lt;org&gt;</code><br />
-            On-prem (שרת מקומי): <code>http://&lt;server&gt;/&lt;collection&gt;</code> — למשל <code>http://aman-dit-avishil/DefaultCollection</code></li>
-          <li><b>Project</b> — שם הפרויקט בנפרד (למשל <code>Altshuler Trade</code>)</li>
-          <li><b>Personal Access Token</b> — ב-<code>&lt;server&gt;/_usersSettings/tokens</code> · New Token · scopes: <b>Work Items (Read, write &amp; manage)</b> + <b>Code (Read)</b></li>
+          <li><b>Organization URL</b> — ה-org / collection בלבד:<br />
+            ענן <code>https://dev.azure.com/&lt;org&gt;</code> · on-prem <code>http://&lt;server&gt;/&lt;collection&gt;</code></li>
+          <li><b>Personal Access Token</b> — ב-<code>&lt;server&gt;/_usersSettings/tokens</code> · scopes: <b>Work Items (Read, write &amp; manage)</b> + <b>Code (Read)</b></li>
+          <li>לחץ <b>טען פרויקטים</b> ובחר מהרשימה — או השאר ללא פרויקט (חיבור ברמת ה-collection).</li>
         </ol>
-        <span style={{ color: "var(--ink-400)" }}>אם תדביק את כתובת הדפדפן המלאה (כולל הפרויקט) — המערכת תפצל אותה לבד.</span>
       </div>
-      <div className="field" style={{ marginBottom: 12 }}><label>Organization URL (org / collection בלבד)</label><input value={f.orgUrl} onChange={(e) => setF({ ...f, orgUrl: e.target.value })} placeholder="http://aman-dit-avishil/DefaultCollection" style={{ width: "100%" }} dir="ltr" /></div>
-      <div className="field" style={{ marginBottom: 12 }}><label>Project</label><input value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} placeholder="Altshuler Trade" style={{ width: "100%" }} dir="ltr" /></div>
-      <div className="field"><label>Personal Access Token</label><input type="password" value={f.pat} onChange={(e) => setF({ ...f, pat: e.target.value })} placeholder="••••••••••••••••" style={{ width: "100%" }} dir="ltr" /></div>
+      <div className="field" style={{ marginBottom: 12 }}><label>Organization URL</label><input value={f.orgUrl} onChange={(e) => { setF({ ...f, orgUrl: e.target.value }); setAdoProjects(null); }} placeholder="http://aman-dit-avishil/DefaultCollection" style={{ width: "100%" }} dir="ltr" /></div>
+      <div className="field" style={{ marginBottom: 12 }}><label>Personal Access Token</label><input type="password" value={f.pat} onChange={(e) => { setF({ ...f, pat: e.target.value }); setAdoProjects(null); }} placeholder="••••••••••••••••" style={{ width: "100%" }} dir="ltr" /></div>
+
+      <button className="btn btn-secondary btn-sm" disabled={discovering} onClick={discover} style={{ marginBottom: 12 }}>
+        {discovering ? "טוען…" : adoProjects ? "רענן פרויקטים" : "טען פרויקטים"}
+      </button>
+
+      <div className="field" style={{ marginBottom: 12 }}>
+        <label>Project</label>
+        {adoProjects && adoProjects.length > 0 ? (
+          <select
+            value={projMode === "none" ? "__none" : projMode === "type" ? "__type" : f.project}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "__none") { setProjMode("none"); setF({ ...f, project: "" }); }
+              else if (v === "__type") { setProjMode("type"); setF({ ...f, project: "" }); }
+              else { setProjMode("pick"); setF({ ...f, project: v }); }
+            }}
+          >
+            <option value="">— בחר פרויקט —</option>
+            {adoProjects.map((p) => <option key={p} value={p}>{p}</option>)}
+            <option value="__none">— ללא פרויקט (רמת ה-collection) —</option>
+            <option value="__type">— הקלד ידנית —</option>
+          </select>
+        ) : (
+          <select value={projMode} onChange={(e) => { setProjMode(e.target.value as "none" | "type"); if (e.target.value === "none") setF({ ...f, project: "" }); }}>
+            <option value="type">הקלד שם פרויקט</option>
+            <option value="none">ללא פרויקט (רמת ה-collection)</option>
+          </select>
+        )}
+      </div>
+      {projMode === "type" && (
+        <div className="field" style={{ marginBottom: 12 }}>
+          <input value={f.project} onChange={(e) => setF({ ...f, project: e.target.value })} placeholder="Altshuler Trade" style={{ width: "100%" }} dir="ltr" />
+        </div>
+      )}
+
       <Err e={err} />
       {result && <p style={{ fontSize: 12.5, margin: "10px 0 0", color: result.startsWith("✓") ? "var(--status-healthy)" : "var(--status-critical)" }}>{result}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>

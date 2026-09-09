@@ -107,40 +107,114 @@ export async function linkRepoToClient(input: { clientId: string; repoId?: strin
   return r!;
 }
 
+// On-prem Server ships older API surfaces (2019→5.0, 2020→6.0, 2022→7.x);
+// cloud is always current. Try newest first.
+const ADO_API_VERSIONS = ["7.1", "7.0", "6.0"];
+
+function adoAuthHeader(pat: string) {
+  return { authorization: `Basic ${Buffer.from(`:${pat}`).toString("base64")}`, accept: "application/json" };
+}
+
+/** GET an ADO REST path, walking api-versions until one isn't a 404. */
+async function adoGet(base: string, path: string, pat: string) {
+  const clean = base.replace(/\/+$/, "");
+  let last: { status: number; statusText: string } | { network: string } | null = null;
+  for (const v of ADO_API_VERSIONS) {
+    try {
+      const res = await fetch(`${clean}/_apis/${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, {
+        headers: adoAuthHeader(pat),
+      });
+      if (res.ok) return { ok: true as const, apiVersion: v, body: await res.json().catch(() => null) };
+      if (res.status === 401) return { ok: false as const, status: 401, detail: "401 — ה-PAT נדחה. בדוק שהוא בתוקף ושיש לו Work Items + Code (Read)." };
+      last = { status: res.status, statusText: res.statusText };
+      // 404 on an old server can just mean "unknown api-version" — keep trying
+    } catch (e) {
+      last = { network: String((e as Error).message) };
+      break;
+    }
+  }
+  if (last && "network" in last) return { ok: false as const, status: 0, detail: `שגיאת רשת: ${last.network} — האם ${clean} נגיש מהשרת?` };
+  return { ok: false as const, status: last?.status ?? 0, detail: last ? `${last.status} ${last.statusText}` : "no response" };
+}
+
+/**
+ * List the Azure DevOps projects visible to this PAT — for the project
+ * picker in the connect form. Accepts whatever the user pasted as the
+ * URL (splits off a project/repo path if present).
+ */
+export async function listAdoProjects(input: { orgUrl: string; pat: string }) {
+  const { orgUrl } = normaliseAdoUrl(input.orgUrl, "");
+  const r = await adoGet(orgUrl, "projects?$top=500", input.pat);
+  if (!r.ok) return { ok: false as const, orgUrl, projects: [] as string[], detail: r.detail };
+  const names = (((r.body as { value?: { name?: string }[] } | null)?.value ?? [])
+    .map((p) => p.name)
+    .filter((n): n is string => !!n)).sort((a, b) => a.localeCompare(b));
+  return { ok: true as const, orgUrl, projects: names, detail: `${names.length} פרויקטים (api ${r.apiVersion})` };
+}
+
 /**
  * Add an Azure DevOps connection for a client. Works for cloud
- * (dev.azure.com) and on-prem Azure DevOps Server. You need:
+ * (dev.azure.com) and on-prem Azure DevOps Server.
  *   - orgUrl  : cloud   https://dev.azure.com/<org>
  *               on-prem http://<server>/<collection>   (e.g. .../DefaultCollection)
- *   - project : the project name inside that org/collection
+ *   - project : optional. Omit for a collection/org-level connection.
  *   - pat     : a Personal Access Token, scopes
- *               Work Items (Read, write & manage) + Code (Read),
- *               created at  <server-or-org>/_usersSettings/tokens
+ *               Work Items (Read, write & manage) + Code (Read).
  */
 export async function addAdoConnection(input: {
   clientId: string;
   orgUrl: string;
-  project: string;
+  project?: string;
   pat: string;
   by: { userId: string };
 }) {
-  const { orgUrl, project } = normaliseAdoUrl(input.orgUrl, input.project);
-  const [row] = await withTenant(input.clientId, (tx) =>
-    tx
+  const { orgUrl, project } = normaliseAdoUrl(input.orgUrl, input.project ?? "");
+  const displayName = project ? `Azure DevOps — ${project}` : `Azure DevOps — ${orgUrl.replace(/^https?:\/\//, "")}`;
+  const config: Record<string, string> = project ? { orgUrl, project } : { orgUrl };
+
+  const row = await withTenant(input.clientId, async (tx) => {
+    // Reuse a live connection to the same org/project rather than piling
+    // up a new row on every retry — update its PAT + config and re-check.
+    const existing = await tx
+      .select()
+      .from(serviceConnection)
+      .where(sql`${serviceConnection.clientId} = ${input.clientId} and ${serviceConnection.kind} = 'ado'
+        and ${serviceConnection.revokedAt} is null
+        and ${serviceConnection.config}->>'orgUrl' = ${orgUrl}
+        and coalesce(${serviceConnection.config}->>'project','') = ${project}`)
+      .limit(1);
+    if (existing[0]) {
+      const [u] = await tx
+        .update(serviceConnection)
+        .set({ secretRef: input.pat, displayName, config })
+        .where(eq(serviceConnection.id, existing[0].id))
+        .returning();
+      return u!;
+    }
+    const [ins] = await tx
       .insert(serviceConnection)
       .values({
         clientId: input.clientId,
         kind: "ado",
-        displayName: `Azure DevOps — ${project}`,
+        displayName,
         secretRef: input.pat, // pilot: stored directly; prod: Key Vault path
         scope: ["vso.work_write", "vso.code"],
-        config: { orgUrl, project },
+        config,
         createdBy: input.by.userId,
       })
-      .returning(),
+      .returning();
+    return ins!;
+  });
+  const check = await checkAdoConnection(input.clientId, row.id);
+  return { ...row, check };
+}
+
+/** Remove a connection. Pilot: hard delete (pure transport config, no dependents). */
+export async function deleteConnection(clientId: string, connectionId: string) {
+  await withTenant(clientId, (tx) =>
+    tx.delete(serviceConnection).where(eq(serviceConnection.id, connectionId)),
   );
-  const check = await checkAdoConnection(input.clientId, row!.id);
-  return { ...row!, check };
+  return { deleted: true };
 }
 
 /** Live connectivity check against the ADO REST API (cloud or on-prem). */
@@ -152,36 +226,37 @@ export async function checkAdoConnection(clientId: string, connectionId: string)
   const cfg = conn.config as Record<string, string>;
   const orgUrl = (cfg.orgUrl ?? "").replace(/\/+$/, "");
   const proj = cfg.project ?? "";
-  const auth = `Basic ${Buffer.from(`:${conn.secretRef}`).toString("base64")}`;
-  const headers = { authorization: auth, accept: "application/json" };
 
-  // On-prem Server ships older API surfaces (2019→5.0, 2020→6.0, 2022→7.x).
-  const versions = ["7.1", "7.0", "6.0"];
-  let ok = false;
-  let detail = "";
-  for (const v of versions) {
-    const url = `${orgUrl}/_apis/projects/${encodeURIComponent(proj)}?api-version=${v}`;
-    try {
-      const res = await fetch(url, { headers });
-      if (res.ok) {
+  const r = proj
+    ? await adoGet(orgUrl, `projects/${encodeURIComponent(proj)}`, conn.secretRef)
+    : await adoGet(orgUrl, "projects?$top=1", conn.secretRef);
+
+  let ok = r.ok;
+  let detail: string;
+  if (r.ok) {
+    detail = proj ? `הפרויקט "${proj}" נגיש (api ${r.apiVersion})` : `ה-collection נגיש (api ${r.apiVersion})`;
+  } else if (r.status === 404 && proj) {
+    // maybe they left the project inside the URL — retry with the last segment moved out
+    const m = orgUrl.match(/^(.*)\/([^/]+)$/);
+    if (m && decodeURIComponent(m[2]!).toLowerCase() !== proj.toLowerCase()) {
+      const alt = await adoGet(m[1]!, `projects/${encodeURIComponent(proj)}`, conn.secretRef);
+      if (alt.ok) {
+        await withTenant(clientId, (tx) =>
+          tx.update(serviceConnection).set({ config: { orgUrl: m[1]!, project: proj } }).where(eq(serviceConnection.id, connectionId)),
+        );
+        detail = `הפרויקט "${proj}" נגיש (api ${alt.apiVersion}) — תיקנתי את ה-Organization URL ל-${m[1]}`;
         ok = true;
-        detail = `project "${proj}" reachable (api ${v})`;
-        break;
+        await withTenant(clientId, (tx) =>
+          tx.update(serviceConnection).set({ lastCheckedAt: new Date(), lastCheckOk: detail }).where(eq(serviceConnection.id, connectionId)),
+        );
+        return { ok, detail };
       }
-      if (res.status === 401) {
-        detail = "401 — PAT rejected. Check the token is valid, not expired, and has Work Items + Code (Read).";
-        break; // more versions won't help an auth failure
-      }
-      if (res.status === 404) {
-        detail = `404 — not found at ${orgUrl} / project "${proj}". Check the Organization URL is just the org/collection (no project in it) and the project name is exact.`;
-        continue; // a wrong api-version can also 404 on old servers — try the next
-      }
-      detail = `${res.status} ${res.statusText}`;
-    } catch (e) {
-      detail = `network: ${String((e as Error).message)} — is ${orgUrl} reachable from the server?`;
-      break;
     }
+    detail = `404 — לא נמצא הפרויקט "${proj}" תחת ${orgUrl}. ודא ש-Organization URL הוא ה-org/collection בלבד ושם הפרויקט מדויק (או בחר מהרשימה).`;
+  } else {
+    detail = r.detail;
   }
+
   await withTenant(clientId, (tx) =>
     tx.update(serviceConnection).set({ lastCheckedAt: new Date(), lastCheckOk: ok ? detail : `FAILED — ${detail}` }).where(eq(serviceConnection.id, connectionId)),
   );
