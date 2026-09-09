@@ -14,6 +14,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import {
   blockerState,
   executor,
@@ -22,11 +23,10 @@ import {
   riskLevel,
   taskAppetite,
   taskState,
-  workitemKind,
-  workitemLevel,
   workitemPhase,
+  workitemType,
 } from "./enums.ts";
-import { client, project, repo } from "./tenancy.ts";
+import { client, repo } from "./tenancy.ts";
 import { users } from "./identity.ts";
 
 const tenantPolicy = (name: string) =>
@@ -54,9 +54,11 @@ export const workitem = pgTable(
     clientId: uuid("client_id")
       .notNull()
       .references(() => client.id, { onDelete: "restrict" }),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => project.id, { onDelete: "restrict" }),
+    /**
+     * Parent requirement. NULL = a top-level requirement (what used to be
+     * a "project"). RESTRICT: detach or move children before deleting.
+     */
+    parentId: uuid("parent_id").references((): AnyPgColumn => workitem.id, { onDelete: "restrict" }),
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id),
@@ -66,13 +68,13 @@ export const workitem = pgTable(
      * from git. Assigned on create; mirrors the ADO id where there is one.
      */
     key: text("key").unique(),
-    level: workitemLevel("level").notNull().default("story"),
-    kind: workitemKind("kind").notNull().default("task"),
+    /** ADO/TFS work item type — one field (was kind × level). */
+    type: workitemType("type").notNull().default("story"),
     phase: workitemPhase("phase").notNull().default("intake"),
     priority: priority("priority").notNull().default("medium"),
     risk: riskLevel("risk").notNull().default("low"),
     executor: executor("executor").notNull().default("human"),
-    /** Per-WorkItem AI spend ceiling. Null = falls back to the project/client budget. */
+    /** Per-requirement AI spend ceiling. Null = falls back to the client budget. */
     budgetUsd: numeric("budget_usd", { precision: 10, scale: 2 }),
     dueDate: timestamp("due_date", { withTimezone: true }),
     /** 0..100 rollup of task completion, cached for list views. */
@@ -80,21 +82,18 @@ export const workitem = pgTable(
     title: text("title").notNull(),
     /** Null until an ADO work item is linked. ADO is SoT once linked (architecture §8). */
     linkedAdoId: integer("linked_ado_id"),
+    /** ADO area path this requirement syncs under. NULL = inherit from parent / client. */
+    adoAreaPath: text("ado_area_path"),
     /** True once someone chose to start building with gaps still open. Surfaced loudly. */
     startedWithOpenBlocker: boolean("started_with_open_blocker").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
-    index("workitem_project_idx").on(t.projectId),
+    index("workitem_client_idx").on(t.clientId),
+    index("workitem_parent_idx").on(t.parentId),
     index("workitem_owner_idx").on(t.ownerId),
-    // F-6: workitem's client must equal its project's client
-    foreignKey({
-      columns: [t.projectId, t.clientId],
-      foreignColumns: [project.id, project.clientId],
-      name: "workitem_project_client_fk",
-    }),
-    // …and let gap/task/blocker enforce the same against workitem
+    // lets gap/task/blocker enforce "same client all the way down"
     unique("workitem_id_client_uq").on(t.id, t.clientId),
     tenantPolicy("workitem_tenant_isolation"),
   ],

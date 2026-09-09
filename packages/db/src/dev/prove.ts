@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db, withTenant, closeDb } from "../client.ts";
-import { client, project, users, workitem } from "../schema/index.ts";
+import { client, users, workitem } from "../schema/index.ts";
 import { eventLog } from "../schema/events.ts";
 import { appendEvent, timeline } from "../events/index.ts";
 
@@ -34,11 +34,9 @@ const [cA] = await db.insert(client).values({ name: `Client A ${randomUUID()}` }
 const [cB] = await db.insert(client).values({ name: `Client B ${randomUUID()}` }).returning();
 
 const mk = async (c: { id: string; name: string }) => {
-  const [p] = await withTenant(c.id, (tx) =>
-    tx.insert(project).values({ clientId: c.id, name: "Portal" }).returning());
   const [wi] = await withTenant(c.id, (tx) =>
     tx.insert(workitem).values({
-      clientId: c.id, projectId: p!.id, ownerId: alice!.id, title: "Tiered discounts",
+      clientId: c.id, ownerId: alice!.id, title: "Tiered discounts",
     }).returning());
   await appendEvent({
     clientId: c.id, workitemId: wi!.id, source: "manual", type: "note.added",

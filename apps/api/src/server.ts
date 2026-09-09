@@ -2,7 +2,7 @@ import Fastify from "fastify";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
 import { db, dbKind, withTenant, timeline, unassigned } from "@dcc/db";
-import { client, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
+import { client, repo, users, workitem } from "@dcc/db/schema";
 import {
   addAdoConnection,
   answerBlocker,
@@ -16,10 +16,10 @@ import {
   deleteConnection,
   linkRepoToClient,
   listAdoProjects,
+  listInitiatives,
   listConnections,
   listRepos,
   listAlerts,
-  listAllProjects,
   listAllWorkItems,
   listBudgets,
   listClients,
@@ -44,7 +44,7 @@ import {
   verifyGap,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
-import { AuthError, NotFound, actingUser, locateProject, locateWorkItem } from "./context.ts";
+import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" } });
 
@@ -106,7 +106,7 @@ app.delete("/clients/:cid/connections/:id", async (req) => {
 });
 
 app.get("/list/workitems", async () => ({ items: await listAllWorkItems() }));
-app.get("/list/projects", async () => ({ projects: await listAllProjects() }));
+app.get("/list/initiatives", async () => ({ initiatives: await listInitiatives() }));
 app.get("/list/budgets", async () => ({ budgets: await listBudgets() }));
 app.get("/list/alerts", async (req) => ({ alerts: await listAlerts((await actingUser(req)).id) }));
 
@@ -334,9 +334,10 @@ app.post("/workitems/:id/review", async (req, reply) => {
 
 /* ── flow / dependencies ─────────────────────────────────────────── */
 
-app.get("/projects/:id/flow", async (req) => {
-  const p = await locateProject((req.params as { id: string }).id);
-  return flowFor(p.clientId, p.id);
+// Flow view rooted at one requirement (its subtree + dependency edges)
+app.get("/requirements/:id/flow", async (req) => {
+  const wi = await locateWorkItem({ id: (req.params as { id: string }).id });
+  return flowFor(wi.clientId, wi.id);
 });
 
 app.post("/workitems/:id/depends-on", async (req, reply) => {
@@ -444,12 +445,13 @@ app.post("/blockers/:id/answer", async (req) => {
 
 /* ── client onboarding ────────────────────────────────────────────── */
 
+const WITYPE = z.enum(["epic", "feature", "story", "bug", "task", "spike"]);
+
 app.post("/admin/setup-client", async (req, reply) => {
   const dev = await actingUser(req);
   const b = z
     .object({
       clientName: z.string(),
-      projectName: z.string(),
       repo: z
         .object({
           name: z.string(),
@@ -458,8 +460,8 @@ app.post("/admin/setup-client", async (req, reply) => {
           orgShared: z.boolean().optional(),
         })
         .optional(),
-      firstWorkItem: z
-        .object({ key: z.string(), title: z.string(), level: z.enum(["epic", "feature", "story", "task"]).optional() })
+      firstRequirement: z
+        .object({ key: z.string().optional(), title: z.string(), type: WITYPE.optional() })
         .optional(),
     })
     .parse(req.body);
@@ -467,44 +469,53 @@ app.post("/admin/setup-client", async (req, reply) => {
   return reply.code(201).send(result);
 });
 
-/* ── admin ────────────────────────────────────────────────────────── */
+/* ── requirements (WorkItems) ─────────────────────────────────────── */
 
 app.post("/workitems", async (req, reply) => {
   const dev = await actingUser(req);
   const b = z
     .object({
-      projectId: z.string().uuid(),
+      clientId: z.string().uuid().optional(),
+      parentId: z.string().uuid().optional(),
       ownerId: z.string().uuid().optional(),
       key: z.string().optional(),
       title: z.string(),
-      level: z.enum(["epic", "feature", "story", "task"]).optional(),
-      kind: z.enum(["project", "task", "bug", "change"]).optional(),
+      type: WITYPE.optional(),
       priority: z.enum(["low", "medium", "high", "critical"]).optional(),
       risk: z.enum(["low", "medium", "high"]).optional(),
       executor: z.enum(["human", "ai", "mixed"]).optional(),
       dueInDays: z.number().int().optional(),
       budgetUsd: z.number().optional(),
       linkedAdoId: z.number().int().optional(),
+      adoAreaPath: z.string().optional(),
     })
     .parse(req.body);
-  const p = await locateProject(b.projectId);
-  const [wi] = await withTenant(p.clientId, (tx) =>
+
+  // client comes from the parent when nesting, else must be given
+  let clientId = b.clientId;
+  if (b.parentId) {
+    const parent = await locateWorkItem({ id: b.parentId });
+    clientId = parent.clientId;
+  }
+  if (!clientId) throw new NotFound("clientId or parentId is required");
+
+  const [wi] = await withTenant(clientId, (tx) =>
     tx
       .insert(workitem)
       .values({
-        clientId: p.clientId,
-        projectId: b.projectId,
+        clientId,
+        parentId: b.parentId ?? null,
         ownerId: b.ownerId ?? dev.id,
         key: b.key ?? null,
         title: b.title,
-        level: b.level ?? "story",
-        kind: b.kind ?? "task",
+        type: b.type ?? "story",
         priority: b.priority ?? "medium",
         risk: b.risk ?? "low",
         executor: b.executor ?? "human",
         budgetUsd: b.budgetUsd != null ? String(b.budgetUsd) : null,
         dueDate: b.dueInDays != null ? new Date(Date.now() + b.dueInDays * 864e5) : null,
         linkedAdoId: b.linkedAdoId ?? null,
+        adoAreaPath: b.adoAreaPath ?? null,
       })
       .returning(),
   );
@@ -532,16 +543,6 @@ app.post("/workitems/:id/ado-link", async (req) => {
   return row;
 });
 
-app.post("/projects/:id/repos", async (req, reply) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const b = z.object({ repoId: z.string().uuid() }).parse(req.body);
-  const p = await locateProject(id);
-  await withTenant(p.clientId, (tx) =>
-    tx.insert(projectRepo).values({ clientId: p.clientId, projectId: id, repoId: b.repoId, addedBy: dev.id }),
-  );
-  return reply.code(201).send({ linked: true });
-});
 
 // Dev-only: a clean way to stop the server so PGlite flushes .pgdata.
 // Windows can't deliver SIGINT to a background node process, and a hard
@@ -576,4 +577,4 @@ if (import.meta.main) {
   }
 }
 
-export { app, db, client, project, repo, users };
+export { app, db, client, repo, users };

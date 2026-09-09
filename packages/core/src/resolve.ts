@@ -12,7 +12,7 @@ export type ResolvedWorkItem = {
   id: string;
   key: string | null;
   clientId: string;
-  projectId: string;
+  parentId: string | null;
   title: string;
 };
 
@@ -36,7 +36,7 @@ export async function resolveWorkItem(input: {
         id: workitem.id,
         key: workitem.key,
         clientId: workitem.clientId,
-        projectId: workitem.projectId,
+        parentId: workitem.parentId,
         title: workitem.title,
       })
       .from(workitem)

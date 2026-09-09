@@ -1,6 +1,6 @@
 import { desc, eq, isNull, sql } from "drizzle-orm";
 import { db, withTenant, withoutTenant } from "@dcc/db";
-import { client, clientBudget, clientRepo, project, repo, serviceConnection, users, workitem } from "@dcc/db/schema";
+import { client, clientBudget, clientRepo, repo, serviceConnection, users, workitem } from "@dcc/db/schema";
 import { normaliseAdoUrl } from "./ado-url.ts";
 
 /** Every repo in the system, for pickers. Includes which client (if any) it belongs to. */
@@ -36,13 +36,12 @@ export async function listClients() {
     .select({
       id: client.id,
       name: client.name,
-      projects: sql<number>`count(distinct ${project.id})::int`,
+      initiatives: sql<number>`count(distinct ${workitem.id}) filter (where ${workitem.parentId} is null)::int`,
       workitems: sql<number>`count(distinct ${workitem.id})::int`,
       spent: sql<number>`coalesce(max(${clientBudget.spentUsd}),0)::float`,
       budget: sql<number>`coalesce(max(${clientBudget.monthlyUsd}),0)::float`,
     })
     .from(client)
-    .leftJoin(project, eq(project.clientId, client.id))
     .leftJoin(workitem, eq(workitem.clientId, client.id))
     .leftJoin(clientBudget, eq(clientBudget.clientId, client.id))
     .where(isNull(client.archivedAt))
@@ -54,18 +53,22 @@ export async function clientDetail(clientId: string) {
   const [c] = await db.select().from(client).where(eq(client.id, clientId));
   if (!c) throw new Error("client not found");
 
-  const projects = await db
-    .select({
-      id: project.id, name: project.name, status: project.status,
-      connectorType: project.connectorType, budgetUsd: project.budgetUsd,
-      items: sql<number>`count(distinct ${workitem.id})::int`,
-      updatedAt: sql<Date | null>`max(${workitem.updatedAt})`,
-    })
-    .from(project)
-    .leftJoin(workitem, eq(workitem.projectId, project.id))
-    .where(sql`${project.clientId} = ${clientId} and ${project.archivedAt} is null`)
-    .groupBy(project.id)
-    .orderBy(project.name);
+  // the client's requirement forest — every WorkItem, with its parent
+  const requirements = await withTenant(clientId, (tx) =>
+    tx
+      .select({
+        id: workitem.id, key: workitem.key, title: workitem.title, type: workitem.type,
+        phase: workitem.phase, priority: workitem.priority, risk: workitem.risk,
+        parentId: workitem.parentId, ownerName: users.displayName,
+        budgetUsd: workitem.budgetUsd, dueDate: workitem.dueDate, progressPct: workitem.progressPct,
+        updatedAt: workitem.updatedAt,
+        openBlockers: sql<number>`(select count(*) from blocker b where b.workitem_id = ${workitem.id} and b.state = 'open')::int`,
+      })
+      .from(workitem)
+      .innerJoin(users, eq(users.id, workitem.ownerId))
+      .where(eq(workitem.clientId, clientId))
+      .orderBy(workitem.createdAt),
+  );
 
   const repos = await withTenant(clientId, (tx) =>
     tx
@@ -86,7 +89,7 @@ export async function clientDetail(clientId: string) {
       .where(eq(serviceConnection.clientId, clientId)),
   );
 
-  return { client: c, projects, repos, connections };
+  return { client: c, requirements, repos, connections };
 }
 
 /** Explicit, audited repo link (architecture §8). Repos are per-client. */

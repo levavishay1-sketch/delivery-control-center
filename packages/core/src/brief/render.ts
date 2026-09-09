@@ -4,7 +4,7 @@ export type BriefModel = {
   key: string | null;
   title: string;
   phase: string;
-  level: string;
+  type: string;
   linkedAdoId: number | null;
   startedWithOpenBlocker: boolean;
   gaps: { description: string; blocking: boolean; verified: boolean; confidence: number }[];
@@ -33,7 +33,7 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
   out.push(`# ${id} — ${m.title}`);
   out.push("");
   out.push(
-    `**Phase:** ${m.phase} · **Level:** ${m.level}` +
+    `**Phase:** ${m.phase} · **Type:** ${m.type}` +
       (m.linkedAdoId ? ` · **ADO:** #${m.linkedAdoId}` : " · **ADO:** not linked"),
   );
   if (m.startedWithOpenBlocker) {

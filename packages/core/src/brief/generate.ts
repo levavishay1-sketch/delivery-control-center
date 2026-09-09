@@ -70,7 +70,7 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
       key: wi.key,
       title: wi.title,
       phase: wi.phase,
-      level: wi.level,
+      type: wi.type,
       linkedAdoId: wi.linkedAdoId,
       startedWithOpenBlocker: wi.startedWithOpenBlocker,
       gaps: gaps.map((g) => ({

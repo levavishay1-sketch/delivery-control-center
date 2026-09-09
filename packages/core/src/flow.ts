@@ -51,7 +51,8 @@ export type FlowNode = {
   key: string | null;
   title: string;
   phase: string;
-  level: string;
+  type: string;
+  parentId: string | null;
   openBlockingGaps: number;
   openBlockers: number;
   linkedAdoId: number | null;
@@ -64,13 +65,26 @@ export type FlowEdge = {
   adoSynced: boolean;
 };
 
-/** Nodes + edges for a project's Flow view. */
-export async function flowFor(clientId: string, projectId: string): Promise<{ nodes: FlowNode[]; edges: FlowEdge[] }> {
+/**
+ * Nodes + edges for a Flow view rooted at one requirement: the root and
+ * its whole subtree (parent_id chain), plus their dependency edges.
+ */
+export async function flowFor(clientId: string, rootId: string): Promise<{ nodes: FlowNode[]; edges: FlowEdge[] }> {
   return withTenant(clientId, async (tx) => {
+    const subtree = await tx.execute<{ id: string }>(sql`
+      with recursive tree as (
+        select id from workitem where id = ${rootId}
+        union all
+        select w.id from workitem w join tree t on w.parent_id = t.id
+      )
+      select id from tree
+    `);
+    const treeIds = (subtree.rows ?? subtree).map((r: { id: string }) => r.id);
+    if (treeIds.length === 0) return { nodes: [], edges: [] };
     const witems = await tx
       .select()
       .from(workitem)
-      .where(sql`${workitem.projectId} = ${projectId} and ${workitem.phase} <> 'archived'`);
+      .where(sql`${workitem.id} in ${treeIds} and ${workitem.phase} <> 'archived'`);
     const ids = witems.map((w) => w.id);
     if (ids.length === 0) return { nodes: [], edges: [] };
 
@@ -96,7 +110,12 @@ export async function flowFor(clientId: string, projectId: string): Promise<{ no
       .from(gap)
       .where(sql`${gap.spunOffTo} is not null and ${gap.workitemId} in ${ids}`);
 
+    const idSet = new Set(ids);
     const edges: FlowEdge[] = [
+      // parent → child structure
+      ...witems
+        .filter((w) => w.parentId && idSet.has(w.parentId))
+        .map((w) => ({ from: w.parentId!, to: w.id, kind: "parent" as const, reason: null, adoSynced: false })),
       ...deps.map((d) => ({
         from: d.workitemId,
         to: d.dependsOnWorkitemId,
@@ -114,7 +133,7 @@ export async function flowFor(clientId: string, projectId: string): Promise<{ no
 }
 
 function wims2nodes(
-  witems: { id: string; key: string | null; title: string; phase: string; level: string; linkedAdoId: number | null }[],
+  witems: { id: string; key: string | null; title: string; phase: string; type: string; parentId: string | null; linkedAdoId: number | null }[],
   gapMap: Map<string, number>,
   blkMap: Map<string, number>,
 ): FlowNode[] {
@@ -123,7 +142,8 @@ function wims2nodes(
     key: w.key,
     title: w.title,
     phase: w.phase,
-    level: w.level,
+    type: w.type,
+    parentId: w.parentId,
     openBlockingGaps: gapMap.get(w.id) ?? 0,
     openBlockers: blkMap.get(w.id) ?? 0,
     linkedAdoId: w.linkedAdoId,

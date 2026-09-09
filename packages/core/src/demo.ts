@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db, withTenant, closeDb, appendEvent, timeline } from "@dcc/db";
-import { client, project, users, workitem, gap } from "@dcc/db/schema";
+import { client, users, workitem, gap } from "@dcc/db/schema";
 import { recordSession, recordGitActivity, recordNote, resolveWorkItem, briefFor } from "./index.ts";
 
 /**
@@ -16,13 +16,15 @@ import { recordSession, recordGitActivity, recordNote, resolveWorkItem, briefFor
 const [dev] = await db.insert(users).values({
   entraOid: randomUUID(), email: `dev+${randomUUID()}@example.com`, displayName: "Dev",
 }).returning();
-const [c] = await db.insert(client).values({ name: `Medipharm ${randomUUID().slice(0, 8)}` }).returning();
-const [p] = await withTenant(c!.id, (tx) =>
-  tx.insert(project).values({ clientId: c!.id, name: "Customer Portal", adoProjectRef: "Medipharm.Portal" }).returning());
+const [c] = await db.insert(client).values({ name: `Medipharm ${randomUUID().slice(0, 8)}`, adoProjectRef: "Medipharm.Portal" }).returning();
+const [epic] = await withTenant(c!.id, (tx) =>
+  tx.insert(workitem).values({
+    clientId: c!.id, ownerId: dev!.id, title: "Customer Portal", type: "epic", phase: "building",
+  }).returning());
 const [wi] = await withTenant(c!.id, (tx) =>
   tx.insert(workitem).values({
-    clientId: c!.id, projectId: p!.id, ownerId: dev!.id, key: "WI-1284",
-    title: "Tiered discounts for business customers", phase: "building", linkedAdoId: 4471,
+    clientId: c!.id, parentId: epic!.id, ownerId: dev!.id, key: "WI-1284",
+    title: "Tiered discounts for business customers", type: "feature", phase: "building", linkedAdoId: 4471,
   }).returning());
 
 const dctx = { clientId: c!.id, workitemId: wi!.id, dev: { userId: dev!.id } };

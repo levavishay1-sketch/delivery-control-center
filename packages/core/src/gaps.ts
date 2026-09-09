@@ -61,7 +61,6 @@ export async function verifyGap(input: {
   outcome: "verified" | "dismissed" | "spun_off";
   /** required when outcome = spun_off */
   spunOffTitle?: string;
-  projectId?: string;
   ownerId?: string;
 }) {
   return withTenant(input.clientId, async (tx) => {
@@ -71,9 +70,10 @@ export async function verifyGap(input: {
     let spunOffTo: string | null = null;
     if (input.outcome === "spun_off") {
       if (!input.spunOffTitle) throw new Error("spun_off needs spunOffTitle");
-      // Inherit project + owner from the parent WorkItem unless overridden.
-      const [parent] = await tx
-        .select({ projectId: workitem.projectId, ownerId: workitem.ownerId })
+      // The spun-off requirement is a sibling of the origin: same parent,
+      // same owner (unless overridden). A gap is its own small unit of work.
+      const [origin] = await tx
+        .select({ parentId: workitem.parentId, ownerId: workitem.ownerId })
         .from(workitem)
         .where(sql`${workitem.id} = ${g.workitemId}`)
         .limit(1);
@@ -81,10 +81,10 @@ export async function verifyGap(input: {
         .insert(workitem)
         .values({
           clientId: input.clientId,
-          projectId: input.projectId ?? parent!.projectId,
-          ownerId: input.ownerId ?? parent!.ownerId,
+          parentId: origin!.parentId,
+          ownerId: input.ownerId ?? origin!.ownerId,
           title: input.spunOffTitle,
-          level: "task",
+          type: "task",
         })
         .returning();
       spunOffTo = wi!.id;

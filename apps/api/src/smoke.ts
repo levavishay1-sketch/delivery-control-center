@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { closeDb, withTenant } from "@dcc/db";
-import { app, db, client, project, repo, users } from "./server.ts";
+import { app, db, client, repo, users } from "./server.ts";
 import { workitem } from "@dcc/db/schema";
 
 /**
@@ -21,10 +21,10 @@ const check = (name: string, cond: boolean, detail?: unknown) => {
 const email = `dev+${randomUUID()}@example.com`;
 const [dev] = await db.insert(users).values({ entraOid: randomUUID(), email, displayName: "Dev" }).returning();
 const [c] = await db.insert(client).values({ name: `Client ${randomUUID().slice(0, 8)}` }).returning();
-const [p] = await withTenant(c!.id, (tx) =>
-  tx.insert(project).values({ clientId: c!.id, name: "Portal" }).returning());
+const [epic] = await withTenant(c!.id, (tx) =>
+  tx.insert(workitem).values({ clientId: c!.id, ownerId: dev!.id, title: "Portal", type: "epic" }).returning());
 const [wi] = await withTenant(c!.id, (tx) =>
-  tx.insert(workitem).values({ clientId: c!.id, projectId: p!.id, ownerId: dev!.id, key: "WI-9001", title: "Smoke item", phase: "building" }).returning());
+  tx.insert(workitem).values({ clientId: c!.id, parentId: epic!.id, ownerId: dev!.id, key: "WI-9001", title: "Smoke item", phase: "building" }).returning());
 
 const H = { "x-dcc-hook-token": "smoke-secret", "x-dcc-dev-email": email };
 
@@ -73,15 +73,15 @@ check("resolve 404 on no match", r404.statusCode === 404, r404.statusCode);
 const rt = await app.inject({ method: "POST", url: `/workitems/${wi!.id}/route`, headers: H, payload: { capability: "gap_detection", signals: { ambiguity: "high" } } });
 check("route escalates high-ambiguity gap detection to opus", rt.statusCode === 200 && rt.json().tier === "opus", rt.json());
 
-// flow
-const flow = await app.inject({ method: "GET", url: `/projects/${p!.id}/flow` });
-check("flow returns the project's node", flow.statusCode === 200 && flow.json().nodes.length === 1, flow.json());
+// flow — rooted at the epic, its subtree is the epic + WI-9001
+const flow = await app.inject({ method: "GET", url: `/requirements/${epic!.id}/flow` });
+check("flow returns the subtree nodes", flow.statusCode === 200 && flow.json().nodes.length === 2, flow.json());
 
 // contention: two WorkItems touching the same file
 await db.insert(repo).values({ name: `CRM-${randomUUID().slice(0, 8)}`, clientId: c!.id }).returning();
 const [crm] = await db.select().from(repo).where(sql`${repo.clientId} = ${c!.id}`).limit(1);
 const [wi2] = await withTenant(c!.id, (tx) =>
-  tx.insert(workitem).values({ clientId: c!.id, projectId: p!.id, ownerId: dev!.id, key: "WI-9002", title: "Other item" }).returning());
+  tx.insert(workitem).values({ clientId: c!.id, parentId: epic!.id, ownerId: dev!.id, key: "WI-9002", title: "Other item" }).returning());
 await app.inject({ method: "POST", url: `/workitems/${wi!.id}/touches`, headers: H, payload: { repo: crm!.name, paths: ["src/x.ts"], kind: "branch" } });
 const tch = await app.inject({ method: "POST", url: `/workitems/${wi2!.id}/touches`, headers: H, payload: { repo: crm!.name, paths: ["src/x.ts"], kind: "branch" } });
 check("touch surfaces the overlap", tch.statusCode === 201 && tch.json().overlaps.length === 1, tch.json());

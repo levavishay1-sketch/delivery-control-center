@@ -17,29 +17,31 @@ export const eventSource = pgEnum("event_source", [
   "system",
 ]);
 
-/** Size of a WorkItem. Maps to ADO Epic/Feature/Story/Task on sync. */
-export const workitemLevel = pgEnum("workitem_level", [
+/**
+ * Work item type — one field, 1:1 with the Azure DevOps / TFS work item
+ * types. Replaces the old (kind × level) pair. A "requirement" enters as
+ * one of these (default `story`); shaping refines it.
+ *   epic     — a large initiative, months, several deliverables
+ *   feature  — one coherent capability, a PR-series, weeks
+ *   story    — one focused change, one PR, days
+ *   bug      — a defect
+ *   task     — a small unit of execution (often a child of a story)
+ *   spike    — time-boxed investigation, throwaway output
+ */
+export const workitemType = pgEnum("workitem_type", [
   "epic",
   "feature",
   "story",
-  "task",
-]);
-
-/** Kind of work — drives the type chip in the UI. */
-export const workitemKind = pgEnum("workitem_kind", [
-  "project",
-  "task",
   "bug",
-  "change",
+  "task",
+  "spike",
 ]);
 
 export const priority = pgEnum("priority", ["low", "medium", "high", "critical"]);
 
-/** How a project's work items sync. "dcc" = managed only inside DCC. */
+/** How a client's requirements sync outward. "dcc" = managed only inside DCC. */
 export const connectorType = pgEnum("connector_type", ["manual", "ado", "github", "jira", "dcc"]);
 
-/** Coarse project status shown as a pill on the dashboard. */
-export const projectStatus = pgEnum("project_status", ["planning", "active", "blocked", "done"]);
 export const riskLevel = pgEnum("risk_level", ["low", "medium", "high"]);
 
 /** Who is doing the work — human, an AI agent, or both. */

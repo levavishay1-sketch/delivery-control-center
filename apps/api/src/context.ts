@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, dbKind, withTenant } from "@dcc/db";
-import { users, workitem, project } from "@dcc/db/schema";
+import { users, workitem } from "@dcc/db/schema";
 import type { FastifyRequest } from "fastify";
 
 /**
@@ -42,18 +42,12 @@ export async function actingUser(req: FastifyRequest): Promise<{ id: string; ema
 export async function locateWorkItem(ref: { id?: string; key?: string }) {
   const cond = ref.id ? sql`${workitem.id} = ${ref.id}` : sql`${workitem.key} = ${ref.key}`;
   const [wi] = await db
-    .select({ id: workitem.id, key: workitem.key, clientId: workitem.clientId, projectId: workitem.projectId, title: workitem.title })
+    .select({ id: workitem.id, key: workitem.key, clientId: workitem.clientId, parentId: workitem.parentId, title: workitem.title })
     .from(workitem)
     .where(cond)
     .limit(1);
   if (!wi) throw new NotFound("workitem");
   return wi;
-}
-
-export async function locateProject(projectId: string) {
-  const [p] = await db.select({ id: project.id, clientId: project.clientId }).from(project).where(sql`${project.id} = ${projectId}`).limit(1);
-  if (!p) throw new NotFound("project");
-  return p;
 }
 
 export { withTenant };

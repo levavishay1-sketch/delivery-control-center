@@ -11,14 +11,19 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
-import { connectorType, projectStatus } from "./enums.ts";
+import { connectorType } from "./enums.ts";
 
 /**
- * Tenancy model (architecture decision 04).
+ * Tenancy model (architecture decision 04, revised).
  *
- *   client ─┬─ project ─── workitem ─── task
- *           └─ (client_repo) ── repo        repo.client_id NULL = org-shared
- *                                project ─ (project_repo) ─ repo
+ *   client ─┬─ workitem ─┬─ workitem (parent_id, a tree)
+ *           │            └─ task
+ *           └─ (client_repo) ── repo    repo.client_id NULL = org-shared
+ *
+ * There is no "project" layer. A client owns a forest of WorkItems
+ * ("requirements"); a top-level requirement (parent_id NULL) is what
+ * used to be a project. Grouping, budget roll-up and ADO area paths all
+ * ride the tree.
  *
  * The wall between clients (decision 03) is a `client_id` column on every
  * tenant-scoped row + a Postgres RLS policy keyed on the
@@ -44,6 +49,10 @@ const tenantPolicy = (name: string) =>
 export const client = pgTable("client", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull().unique(),
+  /** How this client's requirements sync outward (was project.connector_type). */
+  connectorType: connectorType("connector_type").notNull().default("manual"),
+  /** ADO project reference for sync, e.g. "Altshuler Trade". */
+  adoProjectRef: text("ado_project_ref"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
 });
@@ -51,31 +60,6 @@ export const client = pgTable("client", {
 // tenant-scoped connection to its own row; org-admin tooling connects
 // without the session var set and sees all rows (policy yields false →
 // handled by a separate admin path, not modelled here yet).
-
-export const project = pgTable(
-  "project",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    clientId: uuid("client_id")
-      .notNull()
-      .references(() => client.id, { onDelete: "restrict" }),
-    name: text("name").notNull(),
-    /** ADO project reference (e.g. "Medipharm.Portal"). */
-    adoProjectRef: text("ado_project_ref"),
-    connectorType: connectorType("connector_type").notNull().default("manual"),
-    status: projectStatus("status").notNull().default("planning"),
-    /** Project delivery budget (not the AI-spend budget — that is per client). */
-    budgetUsd: numeric("budget_usd", { precision: 12, scale: 2 }),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    archivedAt: timestamp("archived_at", { withTimezone: true }),
-  },
-  (t) => [
-    unique("project_client_name_uq").on(t.clientId, t.name),
-    // F-6: lets child rows enforce "same client all the way down"
-    unique("project_id_client_uq").on(t.id, t.clientId),
-    tenantPolicy("project_tenant_isolation"),
-  ],
-).enableRLS();
 
 /**
  * A repository. `client_id` NULL ⇒ org-shared (Shared.Libraries, Infra).
@@ -116,28 +100,6 @@ export const clientRepo = pgTable(
   (t) => [
     primaryKey({ columns: [t.clientId, t.repoId] }),
     tenantPolicy("client_repo_tenant_isolation"),
-  ],
-).enableRLS();
-
-/** Which repos a project touches. */
-export const projectRepo = pgTable(
-  "project_repo",
-  {
-    clientId: uuid("client_id")
-      .notNull()
-      .references(() => client.id, { onDelete: "cascade" }),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => project.id, { onDelete: "cascade" }),
-    repoId: uuid("repo_id")
-      .notNull()
-      .references(() => repo.id, { onDelete: "cascade" }),
-    addedBy: uuid("added_by").notNull(),
-    addedAt: timestamp("added_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    primaryKey({ columns: [t.projectId, t.repoId] }),
-    tenantPolicy("project_repo_tenant_isolation"),
   ],
 ).enableRLS();
 

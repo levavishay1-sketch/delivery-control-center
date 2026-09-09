@@ -1,16 +1,17 @@
 import { sql } from "drizzle-orm";
 import { db, withTenant, withoutTenant } from "@dcc/db";
-import { client, clientBudget, clientRepo, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
+import { client, clientBudget, clientRepo, repo, users, workitem } from "@dcc/db/schema";
 
 /**
- * Onboard a client end to end: client → project → repo link → optional
- * first WorkItem. Repo linking is explicit here (a deliberate call with
- * a named actor), never inferred (architecture §8 / tenancy spec).
+ * Onboard a client: client row + AI budget + optional repo link +
+ * optional first requirement (a top-level WorkItem). There is no
+ * "project" — a client owns a forest of requirements. Repo linking is
+ * explicit here (a deliberate call with a named actor), never inferred
+ * (architecture §8 / tenancy spec).
  */
 
 export type SetupResult = {
   clientId: string;
-  projectId: string;
   repoId?: string;
   workitemId?: string;
   workitemKey?: string;
@@ -18,16 +19,13 @@ export type SetupResult = {
 
 export async function setupClient(input: {
   clientName: string;
-  projectName: string;
-  /** Optional. Repositories are linked per-client, not per-project — usually done
-   *  separately via linkRepoToClient. Only pass this to onboard a repo in one shot. */
+  /** Optional. Repositories are linked per-client. Only pass this to onboard a repo in one shot. */
   repo?: { name: string; gitUrl?: string; adoRepoRef?: string; orgShared?: boolean };
   actorEmail: string;
-  firstWorkItem?: {
-    key: string;
+  firstRequirement?: {
+    key?: string;
     title: string;
-    level?: "epic" | "feature" | "story" | "task";
-    kind?: "project" | "task" | "bug" | "change";
+    type?: "epic" | "feature" | "story" | "bug" | "task" | "spike";
     priority?: "low" | "medium" | "high" | "critical";
     risk?: "low" | "medium" | "high";
     executor?: "human" | "ai" | "mixed";
@@ -46,11 +44,7 @@ export async function setupClient(input: {
     tx.insert(clientBudget).values({ clientId: c!.id, monthlyUsd: "300" }).onConflictDoNothing(),
   );
 
-  const [p] = await withTenant(c!.id, (tx) =>
-    tx.insert(project).values({ clientId: c!.id, name: input.projectName }).returning(),
-  );
-
-  const out: SetupResult = { clientId: c!.id, projectId: p!.id };
+  const out: SetupResult = { clientId: c!.id };
 
   if (input.repo) {
     // repo lives outside RLS (may be org-shared); create or reuse by name
@@ -67,29 +61,27 @@ export async function setupClient(input: {
             })
             .returning();
 
-    await withTenant(c!.id, async (tx) => {
-      await tx.insert(clientRepo).values({ clientId: c!.id, repoId: r!.id, addedBy: actor.id }).onConflictDoNothing();
-      await tx.insert(projectRepo).values({ clientId: c!.id, projectId: p!.id, repoId: r!.id, addedBy: actor.id }).onConflictDoNothing();
-    });
+    await withTenant(c!.id, (tx) =>
+      tx.insert(clientRepo).values({ clientId: c!.id, repoId: r!.id, addedBy: actor.id }).onConflictDoNothing(),
+    );
     out.repoId = r!.id;
   }
 
-  if (input.firstWorkItem) {
+  if (input.firstRequirement) {
+    const fr = input.firstRequirement;
     const [wi] = await withTenant(c!.id, (tx) =>
       tx
         .insert(workitem)
         .values({
           clientId: c!.id,
-          projectId: p!.id,
           ownerId: actor.id,
-          key: input.firstWorkItem!.key,
-          title: input.firstWorkItem!.title,
-          level: input.firstWorkItem!.level ?? "story",
-          kind: input.firstWorkItem!.kind ?? "task",
-          priority: input.firstWorkItem!.priority ?? "medium",
-          risk: input.firstWorkItem!.risk ?? "low",
-          executor: input.firstWorkItem!.executor ?? "human",
-          dueDate: input.firstWorkItem!.dueInDays != null ? new Date(Date.now() + input.firstWorkItem!.dueInDays * 864e5) : null,
+          key: fr.key ?? null,
+          title: fr.title,
+          type: fr.type ?? "story",
+          priority: fr.priority ?? "medium",
+          risk: fr.risk ?? "low",
+          executor: fr.executor ?? "human",
+          dueDate: fr.dueInDays != null ? new Date(Date.now() + fr.dueInDays * 864e5) : null,
           phase: "intake",
         })
         .returning(),
