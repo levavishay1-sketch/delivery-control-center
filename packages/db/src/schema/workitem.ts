@@ -54,6 +54,12 @@ export const workitem = pgTable(
     ownerId: uuid("owner_id")
       .notNull()
       .references(() => users.id),
+    /**
+     * Short human key, e.g. "WI-1284". Stable, unique, used in branch
+     * names (`feature/WI-1284-slug`) so hooks can resolve the WorkItem
+     * from git. Assigned on create; mirrors the ADO id where there is one.
+     */
+    key: text("key").unique(),
     level: workitemLevel("level").notNull().default("story"),
     phase: workitemPhase("phase").notNull().default("intake"),
     title: text("title").notNull(),

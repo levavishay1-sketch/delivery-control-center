@@ -8,11 +8,11 @@ export * from "./envelope.ts";
 export * from "./payloads.ts";
 
 export type AppendInput = Omit<EventEnvelope, "occurredAt" | "supersedes" | "links"> & {
-  occurredAt?: Date | string;
-  supersedes?: string | null;
-  links?: EventLink[];
+  occurredAt?: Date | string | undefined;
+  supersedes?: string | null | undefined;
+  links?: EventLink[] | undefined;
   payload: unknown;
-  schemaVersion?: number;
+  schemaVersion?: number | undefined;
 };
 
 /**

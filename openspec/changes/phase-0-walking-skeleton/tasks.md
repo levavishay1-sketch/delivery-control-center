@@ -28,12 +28,15 @@ smaller). Order matters — each group unblocks the next.
 
 ## 2. Core  ·  `@dcc/core`
 
-- [ ] 2.1 `recordSession()` — normalise a Claude session into a
-      `claude.session` event
-- [ ] 2.2 `recordGitActivity()` — normalise commits/PR/branch into `git.activity`
-- [ ] 2.3 Context Brief generator — regenerate a WorkItem's brief on each
-      new event; model chosen by policy (stub: fixed cheap model)
-- [ ] 2.4 `briefFor(workitemId)` — the text a SessionStart hook injects
+- [x] 2.1 `recordSession()` — normalise a Claude session into a
+      `claude.session` event, then refresh the Brief
+- [x] 2.2 `recordGitActivity()` / `recordNote()` — normalise into events
+- [x] 2.3 Context Brief generator — assembled from structured state
+      (gaps, blockers, task counts, recent timeline); `summariseTimeline()`
+      is the model seam, no-LLM path ships in Phase 0
+- [x] 2.4 `briefFor(workitemId)` — the exact SessionStart stdout payload
+- [x] 2.5 `resolveWorkItem()` — from the `WI-nnnn` branch convention
+- [x] 2.6 `demo.ts` proves the exit gate end to end
 
 ## 3. Claude Code hooks  ·  `hooks/`
 
