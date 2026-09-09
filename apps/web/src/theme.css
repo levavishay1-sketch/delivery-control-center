@@ -306,6 +306,18 @@ a { color: var(--color-accent); }
   .grid-row .proj { display: none; }
 }
 @media (max-width: 700px) {
-  .sidebar { display: none; }
+  /* sidebar becomes a horizontal top bar — never hidden */
+  .shell { flex-direction: column; }
+  .sidebar { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 12px; padding: 10px 12px; overflow-x: auto; }
+  .brand { flex-shrink: 0; }
+  .brand-word { display: none; }
+  .nav { flex-direction: row; gap: 4px; flex-wrap: nowrap; }
+  .nav-item { width: auto; white-space: nowrap; padding: 7px 11px; font-size: 12.5px; }
+  .nav-item .ic { display: none; }
+  .sidebar-spacer { display: none; }
+  .sidebar-foot { border-top: none; border-inline-start: 1px solid rgb(255 255 255 / 0.12); padding-top: 0; padding-inline-start: 12px; flex-shrink: 0; }
+  .sidebar-foot .who { display: none; }
+  .canvas { padding: 14px 12px 28px; }
+  .workspace { padding: 20px 16px 24px; border-radius: 16px; min-height: 0; }
   .stat-row, .proj-grid, .form-grid { grid-template-columns: 1fr; }
 }
