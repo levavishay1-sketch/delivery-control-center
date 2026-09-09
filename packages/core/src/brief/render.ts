@@ -9,6 +9,7 @@ export type BriefModel = {
   startedWithOpenBlocker: boolean;
   gaps: { description: string; blocking: boolean; verified: boolean; confidence: number }[];
   openBlockers: { questionType: string; question: string }[];
+  answeredBlockers: { question: string; answer: string }[];
   taskCounts: Record<string, number>;
   recentTimeline: {
     occurredAt: Date;
@@ -57,6 +58,15 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
     for (const b of m.openBlockers) out.push(`- [${b.questionType}] ${b.question}`);
   }
 
+  if (m.answeredBlockers.length) {
+    out.push("");
+    out.push("## Decisions on record");
+    for (const b of m.answeredBlockers) {
+      out.push(`- **Q:** ${b.question}`);
+      out.push(`  **A:** ${b.answer}`);
+    }
+  }
+
   const tc = m.taskCounts;
   const total = Object.values(tc).reduce((a, b) => a + b, 0);
   if (total) {
@@ -76,13 +86,15 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
     for (const e of m.recentTimeline) {
       const p = e.payload as Record<string, unknown>;
       const gist =
-        (p.summary as string) ??
-        (p.body as string) ??
-        (p.description as string) ??
-        (p.question as string) ??
-        `${p.kind ?? ""} ${p.branch ? `on ${p.branch}` : ""}`.trim() ??
+        (p.summary as string) ||
+        (p.body as string) ||
+        (p.answer as string) ||
+        (p.description as string) ||
+        (p.question as string) ||
+        (p.outcome ? `→ ${p.outcome}` : "") ||
+        `${p.kind ?? ""} ${p.branch ? `on ${p.branch}` : ""}`.trim() ||
         e.type;
-      out.push(`- \`${line(e.occurredAt)}\` **${e.source}** ${e.type} — ${String(gist).slice(0, 160)}`);
+      out.push(`- \`${line(e.occurredAt)}\` **${e.source}** ${e.type} — ${String(gist).slice(0, 200)}`);
     }
   }
 

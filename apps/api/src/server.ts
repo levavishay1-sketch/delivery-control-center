@@ -4,12 +4,19 @@ import { sql } from "drizzle-orm";
 import { db, dbKind, withTenant, timeline, unassigned } from "@dcc/db";
 import { client, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
 import {
+  answerBlocker,
+  blockersFor,
   briefFor,
+  proposeGap,
+  raiseBlocker,
   recordGitActivity,
   recordNote,
   recordSession,
   resolveWorkItem,
+  setupClient,
+  verifyGap,
 } from "@dcc/core";
+import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateProject, locateWorkItem } from "./context.ts";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" } });
@@ -125,6 +132,100 @@ app.get("/resolve", async (req, reply) => {
 app.get("/clients/:clientId/inbox", async (req) => {
   const { clientId } = req.params as { clientId: string };
   return { events: await unassigned(clientId) };
+});
+
+/** Full WorkItem detail for the UI: header + gaps + blockers + timeline. */
+app.get("/workitems/:id", async (req) => {
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return withTenant(wi.clientId, async (tx) => ({
+    workitem: wi,
+    gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
+    blockers: await tx.select().from(blocker).where(sql`${blocker.workitemId} = ${id}`).orderBy(sql`${blocker.createdAt} desc`),
+    events: await timeline(wi.clientId, id),
+  }));
+});
+
+app.get("/clients/:clientId/blockers", async (req) => {
+  const dev = await actingUser(req);
+  const { clientId } = req.params as { clientId: string };
+  return { blockers: await blockersFor(clientId, dev.id) };
+});
+
+/* ── gaps ─────────────────────────────────────────────────────────── */
+
+app.post("/workitems/:id/gaps", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({
+      description: z.string(),
+      blocking: z.boolean(),
+      confidence: z.number().min(0).max(1),
+      mode: z.enum(["delegated", "interactive"]).default("delegated"),
+    })
+    .parse(req.body);
+  const wi = await locateWorkItem({ id });
+  const row = await proposeGap({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...b });
+  return reply.code(201).send(row);
+});
+
+app.post("/gaps/:id/verify", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({
+      outcome: z.enum(["verified", "dismissed", "spun_off"]),
+      spunOffTitle: z.string().optional(),
+      projectId: z.string().uuid().optional(),
+      ownerId: z.string().uuid().optional(),
+      clientId: z.string().uuid(),
+    })
+    .parse(req.body);
+  return verifyGap({ gapId: id, by: { userId: dev.id }, ...b });
+});
+
+/* ── blockers ─────────────────────────────────────────────────────── */
+
+app.post("/workitems/:id/blockers", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({ questionType: z.string(), question: z.string(), taskId: z.string().uuid().optional() })
+    .parse(req.body);
+  const wi = await locateWorkItem({ id });
+  const row = await raiseBlocker({ clientId: wi.clientId, workitemId: id, raisedBy: { userId: dev.id }, ...b });
+  return reply.code(201).send(row);
+});
+
+app.post("/blockers/:id/answer", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ answer: z.string(), clientId: z.string().uuid() }).parse(req.body);
+  return answerBlocker({ blockerId: id, answeredBy: { userId: dev.id }, answer: b.answer, clientId: b.clientId });
+});
+
+/* ── client onboarding ────────────────────────────────────────────── */
+
+app.post("/admin/setup-client", async (req, reply) => {
+  const dev = await actingUser(req);
+  const b = z
+    .object({
+      clientName: z.string(),
+      projectName: z.string(),
+      repo: z.object({
+        name: z.string(),
+        gitUrl: z.string().optional(),
+        adoRepoRef: z.string().optional(),
+        orgShared: z.boolean().optional(),
+      }),
+      firstWorkItem: z
+        .object({ key: z.string(), title: z.string(), level: z.enum(["epic", "feature", "story", "task"]).optional() })
+        .optional(),
+    })
+    .parse(req.body);
+  const result = await setupClient({ ...b, actorEmail: dev.email });
+  return reply.code(201).send(result);
 });
 
 /* ── admin ────────────────────────────────────────────────────────── */

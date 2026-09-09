@@ -34,6 +34,13 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
       .from(blocker)
       .where(sql`${blocker.workitemId} = ${workitemId} and ${blocker.state} = 'open'`);
 
+    const answeredBlockers = await tx
+      .select()
+      .from(blocker)
+      .where(sql`${blocker.workitemId} = ${workitemId} and ${blocker.state} = 'answered'`)
+      .orderBy(sql`${blocker.answeredAt} desc`)
+      .limit(5);
+
     const tasks = await tx
       .select({ state: task.state, n: sql<number>`count(*)::int` })
       .from(task)
@@ -66,6 +73,7 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
         confidence: Number(g.confidence),
       })),
       openBlockers: openBlockers.map((b) => ({ questionType: b.questionType, question: b.question })),
+      answeredBlockers: answeredBlockers.map((b) => ({ question: b.question, answer: b.answer ?? "" })),
       taskCounts: Object.fromEntries(tasks.map((t) => [t.state, t.n])),
       recentTimeline: recent.reverse(),
     };

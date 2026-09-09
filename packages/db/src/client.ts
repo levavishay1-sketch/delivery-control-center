@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { sql } from "drizzle-orm";
 import * as schema from "./schema/index.ts";
 
@@ -69,6 +70,8 @@ export const dbKind = handle.kind;
 export const rawExec = handle.exec;
 export const closeDb = handle.close;
 
+const tenantScope = new AsyncLocalStorage<{ clientId: string; tx: Tx }>();
+
 /**
  * Run `fn` with the tenant wall in place. Inside the transaction:
  *   1. drop to the `dcc_app` role (NOSUPERUSER NOBYPASSRLS) so RLS is
@@ -76,13 +79,26 @@ export const closeDb = handle.close;
  *   2. set `app.current_client` so every policy resolves to this tenant.
  * Both are `SET LOCAL`, scoped to the transaction, pool-safe.
  *
+ * Re-entrant: calling `withTenant(sameClient, ...)` while already inside
+ * one reuses the open transaction (no nested BEGIN — which PGlite's
+ * single connection would deadlock on, and which real Postgres turns
+ * into a savepoint). A nested call for a *different* client is a bug and
+ * throws.
+ *
  * This is the only correct way to touch a tenant-scoped table.
  */
 export async function withTenant<T>(clientId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const current = tenantScope.getStore();
+  if (current) {
+    if (current.clientId !== clientId) {
+      throw new Error(`nested withTenant for a different client (${current.clientId} → ${clientId})`);
+    }
+    return fn(current.tx);
+  }
   return db.transaction(async (tx) => {
     await tx.execute(sql`set local role dcc_app`);
     await tx.execute(sql`select set_config('app.current_client', ${clientId}, true)`);
-    return fn(tx);
+    return tenantScope.run({ clientId, tx }, () => fn(tx));
   });
 }
 

@@ -69,8 +69,22 @@ smaller). Order matters — each group unblocks the next.
 
 ## 6. Prove the exit gate
 
-- [ ] 6.1 Seed one client/project/repo/workitem
-- [ ] 6.2 Run a real Claude Code session against a scratch repo with the
-      hooks installed; confirm the session + commits land on the timeline
-- [ ] 6.3 Start a second session; confirm SessionStart injects the Brief
+- [x] 6.1 `setupClient()` + `POST /admin/setup-client` — client → project
+      → repo link → first WorkItem, one call
+- [x] 6.2 `scenario-altshuler.ts` — the pilot's under-baked-requirement
+      flow end to end through the API (as the hooks + skills would drive it)
+- [ ] 6.3 Run a real Claude Code session against ALTSHULER_TRADE with the
+      hooks + skills installed
 - [ ] 6.4 Write up what was and wasn't convenient — the pilot signal
+
+## 7. Phase-1 head start (built alongside Phase 0)
+
+- [x] 7.1 Gaps: `proposeGap` / `verifyGap` (+ spin-off), events, brief
+- [x] 7.2 Blockers: `raiseBlocker` / `answerBlocker` / `blockersFor`
+      queue, events, "Decisions on record" in the brief
+- [x] 7.3 `skills/gap-report` + `skills/raise-blocker` (SKILL.md) and the
+      `skills/dcc.mjs` CLI they call
+- [x] 7.4 `withTenant` made re-entrant (AsyncLocalStorage) — nested
+      tenant calls reuse the open transaction
+- [ ] 7.5 `task-breakdown` skill wrapping OpenSpec
+- [ ] 7.6 Blocker response UI · gap verify UI

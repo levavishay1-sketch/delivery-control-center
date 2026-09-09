@@ -23,6 +23,18 @@ export type AppendInput = Omit<EventEnvelope, "occurredAt" | "supersedes" | "lin
  * Append-only is also enforced at the DB (guards.sql triggers); this
  * function is the front door that keeps the payload honest.
  */
+/**
+ * Event types that are REASONING, not transport. A `system` actor
+ * (transport plumbing) may never author one — reasoning is always a
+ * named person's Claude, even in the background (decision 02).
+ */
+const REASONING_TYPES = new Set([
+  "gap.proposed",
+  "tasks.proposed",
+  "model.routed",
+  "blocker.raised",
+]);
+
 export async function appendEvent(input: AppendInput) {
   const version = input.schemaVersion ?? CURRENT_VERSION;
 
@@ -30,6 +42,10 @@ export async function appendEvent(input: AppendInput) {
     ...input,
     occurredAt: input.occurredAt ?? new Date(),
   });
+
+  if (env.actor.kind === "system" && REASONING_TYPES.has(env.type)) {
+    throw new Error(`event "${env.type}" is reasoning — a system actor may not author it (decision 02)`);
+  }
 
   const payload = payloadSchemaFor(env.type, version).parse(input.payload);
 
