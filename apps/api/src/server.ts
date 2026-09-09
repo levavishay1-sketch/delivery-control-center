@@ -65,6 +65,7 @@ import {
   trySyncNewRequirement,
   deleteAdoForRequirement,
   adoWorkItemUrl,
+  importAdoCsv,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -146,6 +147,14 @@ app.delete("/clients/:cid/repos/:repoId", async (req) => {
   await actingUser(req);
   const { cid, repoId } = req.params as { cid: string; repoId: string };
   return unlinkClientRepo(cid, repoId);
+});
+
+// import work items from an Azure DevOps / TFS CSV export
+app.post("/clients/:id/import/ado-csv", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ csv: z.string().min(10) }).parse(req.body);
+  return importAdoCsv({ clientId: id, csv: b.csv, by: { userId: dev.id } });
 });
 
 // live-discover the ADO projects a PAT can see, for the connect form's picker

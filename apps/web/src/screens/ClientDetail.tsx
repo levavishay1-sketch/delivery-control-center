@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, unlinkClientRepo, REQ_TYPE_HE, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
-import { ConnectAdo, EditClient, EditRepo, LinkRepo, NewRequirement } from "../forms.tsx";
+import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
 
 const PH: Record<string, { label: string; tone: string }> = {
   intake: { label: "קליטה", tone: "inactive" }, shaping: { label: "עיצוב", tone: "healthy" },
@@ -28,7 +28,7 @@ function ordered(reqs: Requirement[]): { r: Requirement; depth: number }[] {
 export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [d, setD] = useState<CD | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [modal, setModal] = useState<"req" | "repo" | "ado" | "editClient" | null>(null);
+  const [modal, setModal] = useState<"req" | "repo" | "ado" | "editClient" | "import" | null>(null);
   const [editRepo, setEditRepo] = useState<{ id: string; name: string; adoRepoRef: string | null } | null>(null);
   const reload = () => getClient(id).then(setD).catch((e) => setErr(String(e)));
   useEffect(() => { reload(); }, [id]);
@@ -55,6 +55,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
         sub={`${d.requirements.length} דרישות · ${d.repos.length} repositories · ${activeConns.length} חיבורים${d.client.adoProjectRef ? ` · ADO: ${d.client.adoProjectRef}` : ""}`}
         actions={
           <>
+            <button className="btn btn-secondary" onClick={() => setModal("import")}>ייבוא מ-ADO</button>
             <button className="btn btn-secondary" onClick={() => setModal("editClient")}>עריכה</button>
             <button className="btn btn-secondary" style={{ color: "var(--status-critical)" }} onClick={onDeleteClient}>מחיקה</button>
             <button className="btn btn-primary" onClick={() => setModal("req")}>+ הוסף דרישה</button>
@@ -66,6 +67,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       {modal === "repo" && <LinkRepo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "ado" && <ConnectAdo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "editClient" && <EditClient client={d.client} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {modal === "import" && <ImportCsv clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {editRepo && <EditRepo repo={editRepo} onClose={() => setEditRepo(null)} onDone={() => { setEditRepo(null); reload(); }} />}
 
       {/* ---- requirements ---- */}

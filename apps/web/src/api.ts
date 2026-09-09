@@ -160,6 +160,8 @@ export const deleteBlocker = (id: string, clientId: string) => del<{ deleted: bo
 export const updateTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => patch<{ updated: boolean }>(`/tasks/${id}`, body);
 export const deleteTask = (id: string, clientId: string) => del<{ deleted: boolean }>(`/tasks/${id}`, { clientId });
 export const correctNote = (workitemId: string, corrects: string, body: string) => post<{ eventId: string }>("/events", { workitemId, kind: "note", note: { body, source: "manual", corrects } });
+export type ImportResult = { total: number; created: number; skipped: number; items: { adoId: number; title: string; status: "created" | "skipped-exists" | "skipped-bad" }[] };
+export const importAdoCsv = (clientId: string, csv: string) => post<ImportResult>(`/clients/${clientId}/import/ado-csv`, { csv });
 
 export const verifyGap = (gapId: string, body: { outcome: "verified" | "dismissed" | "spun_off"; clientId: string; spunOffTitle?: string }) =>
   post(`/gaps/${gapId}/verify`, body);

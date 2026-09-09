@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getAdoProjects, getClients, getConnections, getRepos, linkRepoToReq, updateClient, updateRepo, updateRequirement, type ReqType, type WorkItem } from "./api.ts";
+import { getAdoProjects, getClients, getConnections, getRepos, importAdoCsv, linkRepoToReq, updateClient, updateRepo, updateRequirement, type ImportResult, type ReqType, type WorkItem } from "./api.ts";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -532,6 +532,70 @@ export function LinkRepoToReq({ workitemId, onClose, onDone }: { workitemId: str
         <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "מקשר…" : "קשר"}</button>
         <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
       </div>
+    </Modal>
+  );
+}
+
+/** Import work items from an Azure DevOps / TFS "Export to CSV" file. */
+export function ImportCsv({ clientId, onClose, onDone }: { clientId: string; onClose: () => void; onDone: () => void }) {
+  const [csv, setCsv] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<ImportResult | null>(null);
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setCsv(await file.text());
+  };
+  const submit = async () => {
+    if (csv.trim().length < 10) return setErr("הדבק CSV או בחר קובץ");
+    setBusy(true); setErr(null); setResult(null);
+    try { setResult(await importAdoCsv(clientId, csv)); }
+    catch (e) { setErr(String(e)); }
+    setBusy(false);
+  };
+
+  return (
+    <Modal title="ייבוא מ-Azure DevOps (CSV)" onClose={onClose}>
+      {!result ? (
+        <>
+          <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--surface-muted)", borderRadius: 10, padding: "12px 14px", marginBottom: 14, lineHeight: 1.6 }}>
+            ב-Azure DevOps: <b>Boards → Queries</b> → הרץ query → <b>⋯ → Export to CSV</b>. הדבק כאן או בחר את הקובץ.
+            <br />העמודות הנדרשות: <code>ID</code>, <code>Title</code> · אופציונלי: <code>Work Item Type</code>, <code>State</code>, <code>Area Path</code>, <code>Tags</code>, <code>Description</code>.
+            <br />פריטים שכבר יובאו (לפי ה-ID) יידלגו.
+          </div>
+          <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer", marginBottom: 10, display: "inline-block" }}>
+            📎 בחר קובץ CSV
+            <input type="file" hidden accept=".csv,text/csv" onChange={(e) => onFile(e.target.files?.[0])} />
+          </label>
+          <textarea value={csv} onChange={(e) => setCsv(e.target.value)} placeholder='Work Item Type,ID,Title,State,Area Path,Tags,Description&#10;"Bug","46544","…"' style={{ width: "100%", minHeight: 140, fontFamily: "var(--mono)", fontSize: 11, direction: "ltr" }} />
+          <Err e={err} />
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "מייבא…" : "ייבא"}</button>
+            <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 14, marginBottom: 10 }}>
+            נוצרו <b>{result.created}</b> דרישות · דילגתי על <b>{result.skipped}</b> (מתוך {result.total}).
+          </p>
+          <div style={{ maxHeight: 260, overflowY: "auto", fontSize: 12, border: "1px solid var(--border-hairline)", borderRadius: 8 }}>
+            {result.items.map((it, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, padding: "5px 10px", borderTop: i ? "1px solid var(--border-hairline)" : "none" }}>
+                <span style={{ color: "var(--ink-400)", fontFamily: "var(--mono)", minWidth: 54 }}>#{it.adoId}</span>
+                <span style={{ flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.title}</span>
+                <span style={{ color: it.status === "created" ? "var(--status-healthy)" : "var(--ink-400)" }}>
+                  {it.status === "created" ? "נוצר" : it.status === "skipped-exists" ? "קיים" : "דילוג"}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+            <button className="btn btn-primary" onClick={onDone}>סגור</button>
+          </div>
+        </>
+      )}
     </Modal>
   );
 }

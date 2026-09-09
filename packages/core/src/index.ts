@@ -12,6 +12,7 @@ export { dashboard, auditTrail, listAllWorkItems, listInitiatives, listBudgets, 
 export { listClients, clientDetail, linkRepoToClient, addAdoConnection, checkAdoConnection, deleteConnection, listAdoProjects, listRepos, listConnections } from "./clients.ts";
 export { setupClient, type SetupResult } from "./admin.ts";
 export { syncRequirementToAdo, trySyncNewRequirement, deleteAdoForRequirement, adoWorkItemUrl } from "./ado-sync.ts";
+export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export {
   updateClient, deleteClient, archiveClient,
   updateRequirement, deleteRequirement,
