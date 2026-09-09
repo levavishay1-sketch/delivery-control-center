@@ -442,3 +442,34 @@ export const contextBrief = pgTable(
   },
   () => [tenantPolicy("context_brief_tenant_isolation")],
 ).enableRLS();
+
+/**
+ * A file attached to a requirement. The bytes live in Azure DevOps
+ * (TFS is the mirror); DCC keeps the name + the ADO url + a link back
+ * to the work item. `source` = where it was added first.
+ */
+export const attachment = pgTable(
+  "attachment",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id")
+      .notNull()
+      .references(() => workitem.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    /** ADO attachment GUID (from the relation url), for dedup on pull. */
+    adoAttachmentId: text("ado_attachment_id"),
+    /** ADO attachment content url (needs auth) — what we link to. */
+    adoUrl: text("ado_url"),
+    sizeBytes: integer("size_bytes"),
+    source: text("source").notNull().default("dcc"), // dcc | ado
+    addedBy: uuid("added_by"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("attachment_workitem_idx").on(t.workitemId),
+    tenantPolicy("attachment_tenant_isolation"),
+  ],
+).enableRLS();

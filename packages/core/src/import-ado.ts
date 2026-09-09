@@ -2,6 +2,7 @@ import { and, eq, like } from "drizzle-orm";
 import { appendEvent, withTenant } from "@dcc/db";
 import { workitem } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
+import { htmlToText, mapAdoState, mapAdoType } from "./ado-map.ts";
 
 /**
  * Import work items from an Azure DevOps / TFS CSV export (Boards →
@@ -40,56 +41,6 @@ export function parseCsv(text: string): string[][] {
   return rows.filter((r) => r.some((v) => v.trim() !== ""));
 }
 
-const TYPE_MAP: Record<string, "epic" | "feature" | "story" | "bug" | "task" | "spike"> = {
-  epic: "epic",
-  feature: "feature",
-  "user story": "story",
-  "product backlog item": "story",
-  requirement: "story",
-  "change request": "story",
-  bug: "bug",
-  issue: "task",
-  task: "task",
-  "test case": "task",
-  "test plan": "task",
-  "test suite": "task",
-};
-
-const STATE_MAP: Record<string, "intake" | "shaping" | "building" | "review" | "done" | "archived"> = {
-  new: "intake",
-  proposed: "intake",
-  "to do": "intake",
-  approved: "shaping",
-  design: "shaping",
-  committed: "shaping",
-  active: "building",
-  "in progress": "building",
-  "in development": "building",
-  doing: "building",
-  resolved: "review",
-  "qa test": "review",
-  "prod ready": "review",
-  "ready for prod": "review",
-  released: "done",
-  closed: "done",
-  done: "done",
-  completed: "done",
-  removed: "archived",
-};
-
-const htmlToText = (s: string) =>
-  s
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/(div|p|li|h[1-6])>/gi, "\n")
-    .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;|&apos;/g, "'")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 
 export type ImportResult = {
   total: number;
@@ -145,8 +96,8 @@ export async function importAdoCsv(input: { clientId: string; csv: string; by: {
       out.items.push({ adoId: p.adoId, title: p.title, status: "skipped-exists" });
       continue;
     }
-    const type = TYPE_MAP[p.rawType.toLowerCase()] ?? "task";
-    const phase = STATE_MAP[p.rawState.toLowerCase()] ?? "intake";
+    const type = mapAdoType(p.rawType);
+    const phase = mapAdoState(p.rawState);
 
     // NOTE: linkedAdoId is left NULL. The item already exists in the
     // user's own ADO project (that's where the CSV came from); the key

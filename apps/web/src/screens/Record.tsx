@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement, deleteTask,
-  getBrief, getDetail, progressTask, syncToAdo, unlinkRepoFromReq, verifyGap,
+  getBrief, getDetail, progressTask, syncToAdo, unlinkRepoFromReq, uploadAttachment, verifyGap,
   type Blocker, type EventRow, type Gap, type Task, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
@@ -44,6 +44,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [newGap, setNewGap] = useState({ description: "", blocking: false });
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
   const [syncing, setSyncing] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -80,6 +81,18 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     try { const r = await syncToAdo(wi.id); window.open(r.url, "_blank"); reload(); }
     catch (e) { alert(`סנכרון ל-Azure DevOps נכשל:\n${e}`); }
     setSyncing(false);
+  };
+  const onUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
+      await uploadAttachment(wi.id, file.name, btoa(bin));
+      reload();
+    } catch (e) { alert(`העלאת הקובץ נכשלה:\n${e}`); }
+    setUploading(false);
   };
 
   // events superseded by a later correction
@@ -161,6 +174,30 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                     </tr>
                   ))}
                   {d.repos.length === 0 && <tr><td colSpan={4}><div className="empty">אין repositories מקושרים.</div></td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="section">
+            <div className="section-head">
+              <p className="section-lbl" style={{ margin: 0 }}>צרופות</p>
+              <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+                {uploading ? "מעלה…" : "📎 העלה קובץ"}
+                <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
+              </label>
+            </div>
+            <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+              <table className="wtable">
+                <tbody>
+                  {(d.attachments ?? []).map((a) => (
+                    <tr key={a.id}>
+                      <td>{a.adoUrl ? <a href={a.adoUrl} target="_blank" rel="noreferrer">{a.name} ↗</a> : a.name}</td>
+                      <td style={{ color: "var(--ink-400)", fontSize: 11 }}>{a.sizeBytes != null ? `${Math.round(a.sizeBytes / 1024)} KB` : ""}</td>
+                      <td><Pill tone={a.source === "ado" ? "ai" : "inactive"}>{a.source === "ado" ? "מ-TFS" : "מ-DCC"}</Pill></td>
+                    </tr>
+                  ))}
+                  {(d.attachments ?? []).length === 0 && <tr><td colSpan={3}><div className="empty">אין צרופות. קובץ שתעלה כאן יעלה גם ל-work item ב-TFS.</div></td></tr>}
                 </tbody>
               </table>
             </div>

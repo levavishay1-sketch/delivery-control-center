@@ -45,8 +45,9 @@ export type WorkItem = {
   progressPct: number; linkedAdoId: number | null; adoAreaPath: string | null; startedWithOpenBlocker: boolean;
 };
 export type LinkedRepo = { id: string; name: string; adoRepoRef: string | null; linkKind: "declared" | "auto"; addedAt: string };
+export type Attachment = { id: string; name: string; adoUrl: string | null; sizeBytes: number | null; source: "dcc" | "ado"; createdAt: string };
 export type WorkItemDetail = {
-  workitem: WorkItem; adoUrl: string | null; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
+  workitem: WorkItem; adoUrl: string | null; attachments: Attachment[]; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
   taskDependencies: { taskId: string; dependsOnTaskId: string; reason: string | null }[];
   events: EventRow[];
 };
@@ -164,6 +165,10 @@ export type ImportResult = { total: number; created: number; skipped: number; it
 export const importAdoCsv = (clientId: string, csv: string) => post<ImportResult>(`/clients/${clientId}/import/ado-csv`, { csv });
 export type SyncAllResult = { total: number; created: number; failed: number; items: { title: string; ok: boolean; adoId?: number; url?: string; error?: string }[] };
 export const syncAllToAdo = (clientId: string) => post<SyncAllResult>(`/clients/${clientId}/sync-all-to-ado`, {});
+export type PullResult = { created: number; updated: number; deleted: number; attachmentsAdded: number; detail: string };
+export const syncFromAdo = (clientId: string) => post<PullResult>(`/clients/${clientId}/sync-from-ado`, {});
+export const uploadAttachment = (workitemId: string, name: string, contentBase64: string) =>
+  post<{ id: string; name: string; adoUrl: string | null }>(`/workitems/${workitemId}/attachments`, { name, contentBase64 });
 
 export const verifyGap = (gapId: string, body: { outcome: "verified" | "dismissed" | "spun_off"; clientId: string; spunOffTitle?: string }) =>
   post(`/gaps/${gapId}/verify`, body);

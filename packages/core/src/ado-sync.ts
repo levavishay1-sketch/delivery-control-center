@@ -2,6 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, withTenant } from "@dcc/db";
 import { client, serviceConnection, workitem } from "@dcc/db/schema";
 import { adoDelete, adoSend } from "./ado-http.ts";
+import { DCC_TYPE_TO_ADO } from "./ado-map.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 
 /**
@@ -14,19 +15,9 @@ import { regenerateBrief } from "./brief/generate.ts";
  * rich field mapping. This is the create + parent-link slice.
  */
 
-/** DCC type → Azure DevOps work-item type. Agile process names; falls back to Task. */
-const TYPE_MAP: Record<string, string> = {
-  epic: "Epic",
-  feature: "Feature",
-  story: "User Story",
-  bug: "Bug",
-  task: "Task",
-  spike: "Task",
-};
+export type AdoConn = { id: string; secretRef: string; config: Record<string, string> };
 
-type AdoConn = { id: string; secretRef: string; config: Record<string, string> };
-
-async function activeAdoConnection(clientId: string): Promise<AdoConn | null> {
+export async function activeAdoConnection(clientId: string): Promise<AdoConn | null> {
   const rows = await withTenant(clientId, (tx) =>
     tx
       .select({ id: serviceConnection.id, secretRef: serviceConnection.secretRef, config: serviceConnection.config })
@@ -57,7 +48,7 @@ export async function syncRequirementToAdo(input: { clientId: string; workitemId
   const [wi] = await withTenant(input.clientId, (tx) => tx.select().from(workitem).where(eq(workitem.id, input.workitemId)).limit(1));
   if (!wi) throw new Error("requirement not found");
 
-  const adoType = TYPE_MAP[wi.type] ?? "Task";
+  const adoType = DCC_TYPE_TO_ADO[wi.type as keyof typeof DCC_TYPE_TO_ADO] ?? "Task";
   // only send an AreaPath that actually lives under the connected project —
   // a path from a CSV import (e.g. "Altshul IT\GEMEL\CRM") isn't a valid
   // node here and ADO rejects the whole create (TF401347). Fall back to root.

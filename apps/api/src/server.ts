@@ -67,11 +67,14 @@ import {
   deleteAdoForRequirement,
   adoWorkItemUrl,
   importAdoCsv,
+  pullFromAdo,
+  attachmentsFor,
+  addAttachment,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
 
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" } });
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" }, bodyLimit: 40 * 1024 * 1024 });
 
 // tolerate an empty body on requests that still send `content-type: application/json`
 // (browsers do this on DELETE) — hand the route an empty object instead of 400ing.
@@ -163,6 +166,14 @@ app.post("/clients/:id/sync-all-to-ado", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   return syncAllToAdo(id, { userId: dev.id });
+});
+
+// pull the connected ADO project INTO DCC (TFS is the mirror):
+// new → created, changed → updated, gone → deleted, + attachments
+app.post("/clients/:id/sync-from-ado", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  return pullFromAdo(id, { userId: dev.id });
 });
 
 // live-discover the ADO projects a PAT can see, for the connect form's picker
@@ -341,6 +352,7 @@ app.get("/workitems/:id", async (req) => {
     return {
       workitem: { ...wi, ...full },
       adoUrl,
+      attachments: await attachmentsFor(wi.clientId, id),
       repos: await reposForRequirement(wi.clientId, id),
       gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
       blockers: await tx.select().from(blocker).where(sql`${blocker.workitemId} = ${id}`).orderBy(sql`${blocker.createdAt} desc`),
@@ -401,6 +413,17 @@ app.delete("/workitems/:id/repos/:repoId", async (req) => {
   const { id, repoId } = req.params as { id: string; repoId: string };
   const wi = await locateWorkItem({ id });
   return unlinkRepoFromRequirement({ clientId: wi.clientId, workitemId: id, repoId, by: { userId: dev.id } });
+});
+
+app.post("/workitems/:id/attachments", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ name: z.string().min(1), contentBase64: z.string().min(1) }).parse(req.body);
+  const wi = await locateWorkItem({ id });
+  const bytes = Buffer.from(b.contentBase64, "base64");
+  if (bytes.length > 25 * 1024 * 1024) return reply.code(413).send({ error: "file too large (max 25MB)" });
+  const out = await addAttachment({ clientId: wi.clientId, workitemId: id, name: b.name, bytes, by: { userId: dev.id } });
+  return reply.code(201).send(out);
 });
 
 app.delete("/workitems/:id/depends-on/:depId", async (req) => {

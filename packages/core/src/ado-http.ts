@@ -68,6 +68,32 @@ export async function adoDelete(base: string, apiPath: string, pat: string): Pro
   return sawOnly404 ? { ok: true, status: 404 } : { ok: false, status: last };
 }
 
+/** Upload raw bytes as an ADO attachment → { id, url }. */
+export async function adoUpload(input: {
+  base: string; fileName: string; bytes: Buffer | Uint8Array; pat: string;
+}): Promise<{ ok: true; id: string; url: string } | { ok: false; status: number; detail: string }> {
+  const clean = input.base.replace(/\/+$/, "");
+  let last: { status: number; text: string } | { network: string } | null = null;
+  for (const v of ADO_API_VERSIONS) {
+    try {
+      const res = await fetch(`${clean}/_apis/wit/attachments?fileName=${encodeURIComponent(input.fileName)}&api-version=${v}`, {
+        method: "POST",
+        headers: { ...adoAuthHeader(input.pat), "content-type": "application/octet-stream" },
+        body: input.bytes as unknown as ArrayBuffer,
+      });
+      if (res.ok) {
+        const b = (await res.json().catch(() => ({}))) as { id?: string; url?: string };
+        return { ok: true, id: b.id ?? "", url: b.url ?? "" };
+      }
+      if (res.status === 401) return { ok: false, status: 401, detail: "401 — PAT rejected (needs Work Items: write)" };
+      last = { status: res.status, text: (await res.text().catch(() => "")).slice(0, 200) };
+    } catch (e) {
+      return { ok: false, status: 0, detail: String((e as Error).message) };
+    }
+  }
+  return { ok: false, status: last && "status" in last ? last.status : 0, detail: last && "text" in last ? last.text : "no response" };
+}
+
 export async function adoSend(input: {
   base: string;
   apiPath: string; // e.g. "wit/workitems/$Task" or "wit/workitems/42"

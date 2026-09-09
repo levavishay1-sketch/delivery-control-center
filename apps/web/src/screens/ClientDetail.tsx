@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, syncAllToAdo, unlinkClientRepo, REQ_TYPE_HE, type ClientDetail as CD, type Requirement } from "../api.ts";
+import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, syncAllToAdo, syncFromAdo, unlinkClientRepo, REQ_TYPE_HE, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
 
@@ -40,6 +40,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
   const activeConns = d.connections.filter((c) => c.kind === "ado" && !c.revokedAt);
 
   const [syncingAll, setSyncingAll] = useState(false);
+  const [pulling, setPulling] = useState(false);
   const onSyncAll = async () => {
     if (!confirm(`ליצור ב-Azure DevOps את כל הדרישות שעדיין לא מקושרות? (ייווצרו work items חדשים בפרויקט המחובר)`)) return;
     setSyncingAll(true);
@@ -49,6 +50,13 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       reload();
     } catch (e) { alert(String(e)); }
     setSyncingAll(false);
+  };
+  const onPull = async () => {
+    if (!confirm(`למשוך מ-TFS? TFS הוא המקור: פריטים חדשים ייווצרו, שינויים יעודכנו, פריטים שנמחקו ב-TFS יימחקו גם כאן.`)) return;
+    setPulling(true);
+    try { const r = await syncFromAdo(id); alert(`סנכרון מ-TFS:\n${r.detail}`); reload(); }
+    catch (e) { alert(String(e)); }
+    setPulling(false);
   };
 
   const onDeleteClient = async () => {
@@ -68,8 +76,11 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
         actions={
           <>
             <button className="btn btn-secondary" onClick={() => setModal("import")}>ייבוא מ-ADO</button>
+            {activeConns.length > 0 && (
+              <button className="btn btn-primary" disabled={pulling} onClick={onPull}>{pulling ? "מושך…" : "⟳ סנכרן מ-TFS"}</button>
+            )}
             {activeConns.length > 0 && d.requirements.length > 0 && (
-              <button className="btn btn-secondary" disabled={syncingAll} onClick={onSyncAll}>{syncingAll ? "מסנכרן…" : "סנכרן הכל ל-ADO"}</button>
+              <button className="btn btn-secondary" disabled={syncingAll} onClick={onSyncAll}>{syncingAll ? "מסנכרן…" : "דחוף הכל ל-TFS"}</button>
             )}
             <button className="btn btn-secondary" onClick={() => setModal("editClient")}>עריכה</button>
             <button className="btn btn-secondary" style={{ color: "var(--status-critical)" }} onClick={onDeleteClient}>מחיקה</button>
