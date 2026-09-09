@@ -375,6 +375,14 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
   pushLine(input.runId, `עומק ${depth} → ${ADO_LADDER.slice(MAX_TASK_DEPTH - depth).join(" › ")}`);
 
   const out = await withTenant(input.clientId, async (tx) => {
+    // Re-running a breakdown REPLACES the previous proposal — otherwise
+    // seq numbers collide and stale nodes pile up in the tree. Anything a
+    // person wrote, or that already exists in TFS, is left alone.
+    const dropped = await tx.delete(task).where(
+      sql`${task.workitemId} = ${input.workitemId} and ${task.origin} = 'ai' and ${task.linkedAdoId} is null`,
+    ).returning({ id: task.id });
+    if (dropped.length) pushLine(input.runId, `מחליף ${dropped.length} משימות מהצעה קודמת`);
+
     const seqToId = new Map<number, string>();
     const rows: BreakdownResult["tasks"] = [];
     // parents first so parent_task_id can be set on the way down
