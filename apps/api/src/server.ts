@@ -14,6 +14,8 @@ import {
   contentionFor,
   dashboard,
   linkRepoToClient,
+  listConnections,
+  listRepos,
   listAlerts,
   listAllProjects,
   listAllWorkItems,
@@ -63,12 +65,14 @@ app.get("/dashboard", async (req) => {
 
 app.get("/clients", async () => ({ clients: await listClients() }));
 app.get("/clients/:id", async (req) => clientDetail((req.params as { id: string }).id));
+app.get("/repos", async () => ({ repos: await listRepos() }));
+app.get("/connections", async () => ({ connections: await listConnections() }));
 
 app.post("/clients/:id/repos", async (req, reply) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ name: z.string(), gitUrl: z.string().optional(), adoRepoRef: z.string().optional() }).parse(req.body);
-  const r = await linkRepoToClient({ clientId: id, name: b.name, gitUrl: b.gitUrl, adoRepoRef: b.adoRepoRef, by: { userId: dev.id } });
+  const b = z.object({ repoId: z.string().uuid().optional(), name: z.string().optional(), gitUrl: z.string().optional(), adoRepoRef: z.string().optional() }).parse(req.body);
+  const r = await linkRepoToClient({ clientId: id, ...b, by: { userId: dev.id } });
   return reply.code(201).send(r);
 });
 
@@ -431,12 +435,14 @@ app.post("/admin/setup-client", async (req, reply) => {
     .object({
       clientName: z.string(),
       projectName: z.string(),
-      repo: z.object({
-        name: z.string(),
-        gitUrl: z.string().optional(),
-        adoRepoRef: z.string().optional(),
-        orgShared: z.boolean().optional(),
-      }),
+      repo: z
+        .object({
+          name: z.string(),
+          gitUrl: z.string().optional(),
+          adoRepoRef: z.string().optional(),
+          orgShared: z.boolean().optional(),
+        })
+        .optional(),
       firstWorkItem: z
         .object({ key: z.string(), title: z.string(), level: z.enum(["epic", "feature", "story", "task"]).optional() })
         .optional(),

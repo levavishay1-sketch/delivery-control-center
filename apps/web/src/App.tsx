@@ -12,6 +12,7 @@ import { ClientList } from "./screens/ClientList.tsx";
 import { ClientDetail } from "./screens/ClientDetail.tsx";
 import { Alerts } from "./screens/Alerts.tsx";
 import { Budgets } from "./screens/Budgets.tsx";
+import { Settings } from "./screens/Settings.tsx";
 import { Stub } from "./screens/Stub.tsx";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
@@ -56,7 +57,7 @@ export function App() {
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
   else if (path === "/budgets") screen = <Budgets />;
   else if (path === "/audit") screen = <AuditTrail nav={nav} />;
-  else if (path === "/settings") screen = <Stub title="הגדרות" note="הגדרות קונקטור, קישור repositories ו-model policy. בבנייה." />;
+  else if (path === "/settings") screen = <Settings nav={nav} />;
   else if (path === "/users") screen = <Stub title="משתמשים" note="ניהול משתמשים והרשאות (Entra ID). בבנייה." />;
   else screen = <Dashboard nav={nav} />;
 

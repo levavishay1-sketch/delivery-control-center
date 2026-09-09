@@ -9,5 +9,5 @@ export { route, recordRouting, loadPolicy, type Capability, type RoutingDecision
 export { linkWorkItems, flowFor, type FlowNode, type FlowEdge } from "./flow.ts";
 export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";
 export { dashboard, auditTrail, listAllWorkItems, listAllProjects, listBudgets, listAlerts, type AuditFilter } from "./dashboard.ts";
-export { listClients, clientDetail, linkRepoToClient, addAdoConnection, checkAdoConnection } from "./clients.ts";
+export { listClients, clientDetail, linkRepoToClient, addAdoConnection, checkAdoConnection, listRepos, listConnections } from "./clients.ts";
 export { setupClient, type SetupResult } from "./admin.ts";

@@ -2,6 +2,34 @@ import { desc, eq, isNull, sql } from "drizzle-orm";
 import { db, withTenant, withoutTenant } from "@dcc/db";
 import { client, clientBudget, clientRepo, project, repo, serviceConnection, users, workitem } from "@dcc/db/schema";
 
+/** Every repo in the system, for pickers. Includes which client (if any) it belongs to. */
+export async function listRepos() {
+  return db
+    .select({
+      id: repo.id, name: repo.name, adoRepoRef: repo.adoRepoRef,
+      clientId: repo.clientId, clientName: client.name,
+      linkedClients: sql<number>`(select count(*) from client_repo cr where cr.repo_id = ${repo.id})::int`,
+    })
+    .from(repo)
+    .leftJoin(client, eq(client.id, repo.clientId))
+    .orderBy(repo.name);
+}
+
+/** Every connection in the system, for the "reuse an existing connection" picker. */
+export async function listConnections() {
+  return withoutTenant((tx) =>
+    tx
+      .select({
+        id: sql<string>`sc.id`, kind: sql<string>`sc.kind`, displayName: sql<string>`sc.display_name`,
+        config: sql<Record<string, string>>`sc.config`, clientName: client.name, clientId: client.id,
+        lastCheckOk: sql<string | null>`sc.last_check_ok`,
+      })
+      .from(sql`service_connection sc`)
+      .innerJoin(client, sql`${client.id} = sc.client_id`)
+      .where(sql`sc.revoked_at is null`),
+  );
+}
+
 export async function listClients() {
   return db
     .select({
@@ -60,13 +88,18 @@ export async function clientDetail(clientId: string) {
   return { client: c, projects, repos, connections };
 }
 
-/** Explicit, audited repo link (architecture §8). */
-export async function linkRepoToClient(input: { clientId: string; name: string; gitUrl?: string; adoRepoRef?: string; by: { userId: string } }) {
-  const existing = await withoutTenant((tx) => tx.select().from(repo).where(eq(repo.name, input.name)).limit(1));
-  const [r] =
-    existing.length > 0
+/** Explicit, audited repo link (architecture §8). Repos are per-client. */
+export async function linkRepoToClient(input: { clientId: string; repoId?: string; name?: string; gitUrl?: string; adoRepoRef?: string; by: { userId: string } }) {
+  let r: typeof repo.$inferSelect | undefined;
+  if (input.repoId) {
+    [r] = await withoutTenant((tx) => tx.select().from(repo).where(eq(repo.id, input.repoId!)).limit(1));
+  } else if (input.name) {
+    const existing = await withoutTenant((tx) => tx.select().from(repo).where(eq(repo.name, input.name!)).limit(1));
+    [r] = existing.length > 0
       ? existing
       : await db.insert(repo).values({ name: input.name, clientId: input.clientId, adoRepoRef: input.adoRepoRef ?? input.gitUrl ?? null }).returning();
+  }
+  if (!r) throw new Error("repoId or name is required");
   await withTenant(input.clientId, (tx) =>
     tx.insert(clientRepo).values({ clientId: input.clientId, repoId: r!.id, addedBy: input.by.userId }).onConflictDoNothing(),
   );

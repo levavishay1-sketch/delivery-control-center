@@ -11,7 +11,7 @@ import { client, clientBudget, clientRepo, project, projectRepo, repo, users, wo
 export type SetupResult = {
   clientId: string;
   projectId: string;
-  repoId: string;
+  repoId?: string;
   workitemId?: string;
   workitemKey?: string;
 };
@@ -19,7 +19,9 @@ export type SetupResult = {
 export async function setupClient(input: {
   clientName: string;
   projectName: string;
-  repo: { name: string; gitUrl?: string; adoRepoRef?: string; orgShared?: boolean };
+  /** Optional. Repositories are linked per-client, not per-project — usually done
+   *  separately via linkRepoToClient. Only pass this to onboard a repo in one shot. */
+  repo?: { name: string; gitUrl?: string; adoRepoRef?: string; orgShared?: boolean };
   actorEmail: string;
   firstWorkItem?: {
     key: string;
@@ -48,26 +50,29 @@ export async function setupClient(input: {
     tx.insert(project).values({ clientId: c!.id, name: input.projectName }).returning(),
   );
 
-  // repo lives outside RLS (may be org-shared); create or reuse by name
-  const existing = await withoutTenant((tx) => tx.select().from(repo).where(sql`${repo.name} = ${input.repo.name}`).limit(1));
-  const [r] =
-    existing.length > 0
-      ? existing
-      : await db
-          .insert(repo)
-          .values({
-            name: input.repo.name,
-            clientId: input.repo.orgShared ? null : c!.id,
-            adoRepoRef: input.repo.adoRepoRef ?? input.repo.gitUrl ?? null,
-          })
-          .returning();
+  const out: SetupResult = { clientId: c!.id, projectId: p!.id };
 
-  await withTenant(c!.id, async (tx) => {
-    await tx.insert(clientRepo).values({ clientId: c!.id, repoId: r!.id, addedBy: actor.id }).onConflictDoNothing();
-    await tx.insert(projectRepo).values({ clientId: c!.id, projectId: p!.id, repoId: r!.id, addedBy: actor.id }).onConflictDoNothing();
-  });
+  if (input.repo) {
+    // repo lives outside RLS (may be org-shared); create or reuse by name
+    const existing = await withoutTenant((tx) => tx.select().from(repo).where(sql`${repo.name} = ${input.repo!.name}`).limit(1));
+    const [r] =
+      existing.length > 0
+        ? existing
+        : await db
+            .insert(repo)
+            .values({
+              name: input.repo.name,
+              clientId: input.repo.orgShared ? null : c!.id,
+              adoRepoRef: input.repo.adoRepoRef ?? input.repo.gitUrl ?? null,
+            })
+            .returning();
 
-  const out: SetupResult = { clientId: c!.id, projectId: p!.id, repoId: r!.id };
+    await withTenant(c!.id, async (tx) => {
+      await tx.insert(clientRepo).values({ clientId: c!.id, repoId: r!.id, addedBy: actor.id }).onConflictDoNothing();
+      await tx.insert(projectRepo).values({ clientId: c!.id, projectId: p!.id, repoId: r!.id, addedBy: actor.id }).onConflictDoNothing();
+    });
+    out.repoId = r!.id;
+  }
 
   if (input.firstWorkItem) {
     const [wi] = await withTenant(c!.id, (tx) =>

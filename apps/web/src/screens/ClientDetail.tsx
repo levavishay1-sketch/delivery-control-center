@@ -36,7 +36,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       {modal === "req" && <AddRequirement clientId={id} projects={d.projects} onClose={() => setModal(null)} onDone={(wi) => { setModal(null); if (wi) nav(`#/wi/${wi}`); else reload(); }} />}
       {modal === "repo" && <LinkRepo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "ado" && <ConnectAdo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
-      {modal === "project" && <NewProject onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
+      {modal === "project" && <NewProject fixedClientName={d.client.name} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
 
       {/* ---- projects ---- */}
       <p className="section-lbl">פרויקטים</p>

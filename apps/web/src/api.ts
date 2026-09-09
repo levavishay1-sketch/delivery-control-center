@@ -95,6 +95,8 @@ export type ClientDetail = {
   connections: { id: string; kind: string; displayName: string; config: Record<string, string>; lastCheckedAt: string | null; lastCheckOk: string | null; revokedAt: string | null }[];
 };
 export const getClient = (id: string) => get<ClientDetail>(`/clients/${id}`);
+export const getRepos = () => get<{ repos: { id: string; name: string; adoRepoRef: string | null; clientId: string | null; clientName: string | null; linkedClients: number }[] }>("/repos");
+export const getConnections = () => get<{ connections: { id: string; kind: string; displayName: string; config: Record<string, string>; clientName: string; clientId: string; lastCheckOk: string | null }[] }>("/connections");
 export const listWorkItems = () => get<{ id: string; key: string | null; title: string; phase: string }[]>("/dev/workitems");
 export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);
 export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);

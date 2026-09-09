@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getProjectList } from "./api.ts";
+import { getClients, getConnections, getProjectList, getRepos } from "./api.ts";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -33,28 +33,50 @@ function Err({ e }: { e: string | null }) {
   return e ? <p style={{ color: "var(--status-critical)", fontSize: 12, margin: "8px 0 0" }}>{e}</p> : null;
 }
 
-export function NewProject({ onClose, onDone }: { onClose: () => void; onDone: (id?: string) => void }) {
-  const [f, setF] = useState({ clientName: "", projectName: "", repoName: "", repoUrl: "", connector: "manual" });
+export function NewProject({ onClose, onDone, fixedClientName }: { onClose: () => void; onDone: (id?: string) => void; fixedClientName?: string }) {
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [f, setF] = useState({ clientChoice: fixedClientName ?? "", newClientName: "", projectName: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (fixedClientName) return;
+    getClients().then((r) => {
+      setClients(r.clients);
+      setF((s) => ({ ...s, clientChoice: r.clients[0]?.name ?? "__new" }));
+    }).catch(() => setF((s) => ({ ...s, clientChoice: "__new" })));
+  }, []);
+
+  const clientName = fixedClientName ?? (f.clientChoice === "__new" ? f.newClientName : f.clientChoice);
+
   const submit = async () => {
-    if (!f.clientName || !f.projectName) return setErr("שם לקוח ושם פרויקט הם שדות חובה");
+    if (!clientName || !f.projectName) return setErr("לקוח ושם פרויקט הם שדות חובה");
     setBusy(true); setErr(null);
     try {
-      const r = await api("/admin/setup-client", {
-        clientName: f.clientName, projectName: f.projectName,
-        repo: { name: f.repoName || f.projectName, gitUrl: f.repoUrl || undefined },
-      });
+      const r = await api("/admin/setup-client", { clientName, projectName: f.projectName });
       onDone(r.projectId);
     } catch (e) { setErr(String(e)); setBusy(false); }
   };
   return (
     <Modal title="פרויקט חדש" onClose={onClose}>
-      <div className="form-grid" style={{ marginBottom: 0 }}>
-        <div className="field"><label>שם הלקוח</label><input value={f.clientName} onChange={(e) => setF({ ...f, clientName: e.target.value })} placeholder="למשל: Altshuler Trade" /></div>
-        <div className="field"><label>שם הפרויקט</label><input value={f.projectName} onChange={(e) => setF({ ...f, projectName: e.target.value })} placeholder="למשל: Trading Platform" /></div>
-        <div className="field"><label>שם ה-repository</label><input value={f.repoName} onChange={(e) => setF({ ...f, repoName: e.target.value })} placeholder="ALTSHULER_TRADE" /></div>
-        <div className="field"><label>כתובת Git</label><input value={f.repoUrl} onChange={(e) => setF({ ...f, repoUrl: e.target.value })} placeholder="https://github.com/…" /></div>
+      {!fixedClientName && (
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>לקוח</label>
+          <select value={f.clientChoice} onChange={(e) => setF({ ...f, clientChoice: e.target.value })}>
+            {clients.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
+            <option value="__new">+ לקוח חדש…</option>
+          </select>
+        </div>
+      )}
+      {!fixedClientName && f.clientChoice === "__new" && (
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>שם הלקוח החדש</label>
+          <input value={f.newClientName} onChange={(e) => setF({ ...f, newClientName: e.target.value })} placeholder="למשל: Altshuler Trade" style={{ width: "100%" }} />
+        </div>
+      )}
+      <div className="field">
+        <label>שם הפרויקט</label>
+        <input value={f.projectName} onChange={(e) => setF({ ...f, projectName: e.target.value })} placeholder="למשל: Trading Platform" style={{ width: "100%" }} />
       </div>
       <Err e={err} />
       <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
@@ -123,21 +145,55 @@ export function NewWorkItem({ onClose, onDone, defaultProjectId }: { onClose: ()
   );
 }
 
-export function LinkRepo({ clientId, onClose, onDone }: { clientId: string; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ name: "", gitUrl: "" });
+function ClientPicker({ value, clients, onChange }: { value: string; clients: { id: string; name: string }[]; onChange: (id: string) => void }) {
+  return (
+    <div className="field" style={{ marginBottom: 12 }}>
+      <label>לקוח</label>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        <option value="">— בחר לקוח —</option>
+        {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+    </div>
+  );
+}
+
+export function LinkRepo({ clientId, onClose, onDone }: { clientId?: string; onClose: () => void; onDone: () => void }) {
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [repos, setRepos] = useState<{ id: string; name: string; adoRepoRef: string | null; clientName: string | null }[]>([]);
+  const [f, setF] = useState({ clientId: clientId ?? "", choice: "__new", repoId: "", name: "", gitUrl: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!clientId) getClients().then((r) => setClients(r.clients)).catch(() => {});
+    getRepos().then((r) => setRepos(r.repos)).catch(() => {});
+  }, []);
+
   const submit = async () => {
-    if (!f.name.trim()) return setErr("שם ה-repository הוא שדה חובה");
+    if (!f.clientId) return setErr("בחר לקוח");
+    const body = f.choice === "__new" ? { name: f.name.trim(), gitUrl: f.gitUrl.trim() || undefined } : { repoId: f.choice };
+    if (f.choice === "__new" && !f.name.trim()) return setErr("שם ה-repository הוא שדה חובה");
     setBusy(true); setErr(null);
-    try { await api(`/clients/${clientId}/repos`, { name: f.name.trim(), gitUrl: f.gitUrl.trim() || undefined }); onDone(); }
+    try { await api(`/clients/${f.clientId}/repos`, body); onDone(); }
     catch (e) { setErr(String(e)); setBusy(false); }
   };
   return (
-    <Modal title="חיבור repository" onClose={onClose}>
-      <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 14 }}>הקישור הוא ידני ומפורש — המערכת לא מנחשת. ה-repository ישויך ללקוח הזה.</p>
-      <div className="field" style={{ marginBottom: 12 }}><label>שם ה-repository</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="ALTSHULER_TRADE" style={{ width: "100%" }} /></div>
-      <div className="field"><label>כתובת Git (אופציונלי)</label><input value={f.gitUrl} onChange={(e) => setF({ ...f, gitUrl: e.target.value })} placeholder="https://github.com/…/ALTSHULER_TRADE.git" style={{ width: "100%" }} /></div>
+    <Modal title="חיבור repository ללקוח" onClose={onClose}>
+      <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 14 }}>Repository מקושר <b>ללקוח</b> (לא לפרויקט). הקישור ידני ומפורש.</p>
+      {!clientId && <ClientPicker value={f.clientId} clients={clients} onChange={(id) => setF({ ...f, clientId: id })} />}
+      <div className="field" style={{ marginBottom: 12 }}>
+        <label>repository</label>
+        <select value={f.choice} onChange={(e) => setF({ ...f, choice: e.target.value })}>
+          <option value="__new">+ repository חדש…</option>
+          {repos.map((r) => <option key={r.id} value={r.id}>{r.name}{r.clientName ? ` (${r.clientName})` : " (רוחבי)"}</option>)}
+        </select>
+      </div>
+      {f.choice === "__new" && (
+        <>
+          <div className="field" style={{ marginBottom: 12 }}><label>שם</label><input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="ALTSHULER_TRADE" style={{ width: "100%" }} /></div>
+          <div className="field"><label>כתובת Git (אופציונלי)</label><input value={f.gitUrl} onChange={(e) => setF({ ...f, gitUrl: e.target.value })} placeholder="https://github.com/…" style={{ width: "100%" }} dir="ltr" /></div>
+        </>
+      )}
       <Err e={err} />
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "מחבר…" : "חבר"}</button>
@@ -147,16 +203,30 @@ export function LinkRepo({ clientId, onClose, onDone }: { clientId: string; onCl
   );
 }
 
-export function ConnectAdo({ clientId, onClose, onDone }: { clientId: string; onClose: () => void; onDone: () => void }) {
-  const [f, setF] = useState({ orgUrl: "", project: "", pat: "" });
+export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; onClose: () => void; onDone: () => void }) {
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [existing, setExisting] = useState<{ id: string; config: Record<string, string>; clientName: string }[]>([]);
+  const [f, setF] = useState({ clientId: clientId ?? "", orgUrl: "", project: "", pat: "" });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!clientId) getClients().then((r) => setClients(r.clients)).catch(() => {});
+    getConnections().then((r) => setExisting(r.connections.filter((c) => c.kind === "ado"))).catch(() => {});
+  }, []);
+
+  const prefill = (id: string) => {
+    const c = existing.find((x) => x.id === id);
+    if (c) setF((s) => ({ ...s, orgUrl: c.config.orgUrl ?? "", project: c.config.project ?? "" }));
+  };
+
   const submit = async () => {
-    if (!f.orgUrl || !f.project || !f.pat) return setErr("כל השדות חובה");
+    if (!f.clientId) return setErr("בחר לקוח");
+    if (!f.orgUrl || !f.project || !f.pat) return setErr("Organization URL, Project ו-PAT הם שדות חובה");
     setBusy(true); setErr(null); setResult(null);
     try {
-      const r = await api(`/clients/${clientId}/connections/ado`, f);
+      const r = await api(`/clients/${f.clientId}/connections/ado`, { orgUrl: f.orgUrl, project: f.project, pat: f.pat });
       setResult(r.check.ok ? `✓ החיבור תקין — ${r.check.detail}` : `✗ ${r.check.detail}`);
       if (r.check.ok) setTimeout(onDone, 900);
       else setBusy(false);
@@ -164,12 +234,24 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId: string; on
   };
   return (
     <Modal title="חיבור Azure DevOps" onClose={onClose}>
+      {!clientId && <ClientPicker value={f.clientId} clients={clients} onChange={(id) => setF({ ...f, clientId: id })} />}
+
+      {existing.length > 0 && (
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>מלא מחיבור קיים (אופציונלי)</label>
+          <select defaultValue="" onChange={(e) => prefill(e.target.value)}>
+            <option value="">— חדש —</option>
+            {existing.map((c) => <option key={c.id} value={c.id}>{c.config.orgUrl} · {c.config.project} ({c.clientName})</option>)}
+          </select>
+        </div>
+      )}
+
       <div style={{ fontSize: 12.5, color: "var(--ink-700)", background: "var(--surface-muted)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, lineHeight: 1.6 }}>
         <b>מה צריך:</b>
         <ol style={{ margin: "6px 0 0", paddingInlineStart: 18 }}>
           <li><b>Organization URL</b> — <code>https://dev.azure.com/&lt;org&gt;</code> (ה-org שיצרת)</li>
           <li><b>Project</b> — שם הפרויקט בתוך ה-org</li>
-          <li><b>Personal Access Token</b> — נוצר ב-<code>&lt;orgUrl&gt;/_usersSettings/tokens</code> · New Token · scopes: <b>Work Items (Read, write &amp; manage)</b> + <b>Code (Read)</b></li>
+          <li><b>Personal Access Token</b> — <code>&lt;orgUrl&gt;/_usersSettings/tokens</code> · New Token · scopes: <b>Work Items (Read, write &amp; manage)</b> + <b>Code (Read)</b></li>
         </ol>
       </div>
       <div className="field" style={{ marginBottom: 12 }}><label>Organization URL</label><input value={f.orgUrl} onChange={(e) => setF({ ...f, orgUrl: e.target.value })} placeholder="https://dev.azure.com/my-org" style={{ width: "100%" }} dir="ltr" /></div>

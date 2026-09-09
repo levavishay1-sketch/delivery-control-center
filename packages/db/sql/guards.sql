@@ -11,9 +11,30 @@
 -- ─────────────────────────────────────────────────────────────────────
 
 -- 1 ── event_log is insert-only ──────────────────────────────────────
+--  The one permitted mutation is the FK `on delete set null` action that
+--  detaches an event from a work item being deleted: workitem_id goes
+--  NULL and every other column is untouched. History (what happened,
+--  when, by whom) stays immutable; only the now-dangling pointer clears.
 create or replace function dcc_block_mutation() returns trigger
 language plpgsql as $$
 begin
+  if tg_op = 'UPDATE'
+     and old.workitem_id is not null
+     and new.workitem_id is null
+     and new.id             is not distinct from old.id
+     and new.client_id      is not distinct from old.client_id
+     and new.occurred_at    is not distinct from old.occurred_at
+     and new.recorded_at    is not distinct from old.recorded_at
+     and new.source         is not distinct from old.source
+     and new.type           is not distinct from old.type
+     and new.schema_version is not distinct from old.schema_version
+     and new.actor::text    is not distinct from old.actor::text
+     and new.payload::text  is not distinct from old.payload::text
+     and new.supersedes     is not distinct from old.supersedes
+     and new.links::text    is not distinct from old.links::text
+  then
+    return new;
+  end if;
   raise exception 'event_log is append-only: % is not allowed. Correct with a new row that sets supersedes.', tg_op
     using errcode = 'restrict_violation';
 end;
