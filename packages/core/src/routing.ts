@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { appendEvent } from "@dcc/db";
+import { sql } from "drizzle-orm";
+import { appendEvent, withTenant } from "@dcc/db";
+import { clientBudget } from "@dcc/db/schema";
 
 /**
  * Model routing (architecture §6). EVERY AI call in the system goes
@@ -114,7 +116,17 @@ export async function recordRouting(input: {
   workitemId: string | null;
   by: { userId: string };
   decision: RoutingDecision;
+  /** actual spend for this call, if known. Falls back to a fraction of the budget as an estimate. */
+  actualUsd?: number;
 }) {
+  const spent = input.actualUsd ?? input.decision.budgetUsd * 0.25;
+  await withTenant(input.clientId, (tx) =>
+    tx
+      .update(clientBudget)
+      .set({ spentUsd: sql`${clientBudget.spentUsd} + ${spent}` })
+      .where(sql`${clientBudget.clientId} = ${input.clientId}`),
+  );
+
   return appendEvent({
     clientId: input.clientId,
     workitemId: input.workitemId,

@@ -5,9 +5,11 @@ import { db, dbKind, withTenant, timeline, unassigned } from "@dcc/db";
 import { client, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
 import {
   answerBlocker,
+  auditTrail,
   blockersFor,
   briefFor,
   contentionFor,
+  dashboard,
   flowFor,
   linkWorkItems,
   progressTask,
@@ -42,6 +44,25 @@ app.setErrorHandler((err, _req, reply) => {
 });
 
 app.get("/health", async () => ({ ok: true }));
+
+/* ── dashboard + audit ───────────────────────────────────────────── */
+
+app.get("/dashboard", async (req) => {
+  const dev = await actingUser(req);
+  return dashboard(dev.id);
+});
+
+app.get("/audit", async (req) => {
+  const q = req.query as Record<string, string>;
+  return auditTrail({
+    projectId: q.projectId,
+    actorKind: q.actorKind as "user" | "delegated" | "system" | undefined,
+    type: q.type,
+    from: q.from ? new Date(q.from) : undefined,
+    to: q.to ? new Date(q.to) : undefined,
+    page: q.page ? Number(q.page) : 1,
+  });
+});
 
 /** Dev-only: list every WorkItem (works because dev PGlite runs as
  *  superuser, so RLS is bypassed). 404 on a real Postgres. */
@@ -151,14 +172,17 @@ app.get("/workitems/:id", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
   const t = await tasksFor(wi.clientId, id);
-  return withTenant(wi.clientId, async (tx) => ({
-    workitem: wi,
-    gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
-    blockers: await tx.select().from(blocker).where(sql`${blocker.workitemId} = ${id}`).orderBy(sql`${blocker.createdAt} desc`),
-    tasks: t.tasks,
-    taskDependencies: t.dependencies,
-    events: await timeline(wi.clientId, id),
-  }));
+  return withTenant(wi.clientId, async (tx) => {
+    const [full] = await tx.select().from(workitem).where(sql`${workitem.id} = ${id}`).limit(1);
+    return {
+      workitem: { ...wi, ...full },
+      gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
+      blockers: await tx.select().from(blocker).where(sql`${blocker.workitemId} = ${id}`).orderBy(sql`${blocker.createdAt} desc`),
+      tasks: t.tasks,
+      taskDependencies: t.dependencies,
+      events: await timeline(wi.clientId, id),
+    };
+  });
 });
 
 app.get("/clients/:clientId/blockers", async (req) => {
@@ -395,6 +419,12 @@ app.post("/workitems", async (req, reply) => {
       key: z.string().optional(),
       title: z.string(),
       level: z.enum(["epic", "feature", "story", "task"]).optional(),
+      kind: z.enum(["project", "task", "bug", "change"]).optional(),
+      priority: z.enum(["low", "medium", "high", "critical"]).optional(),
+      risk: z.enum(["low", "medium", "high"]).optional(),
+      executor: z.enum(["human", "ai", "mixed"]).optional(),
+      dueInDays: z.number().int().optional(),
+      budgetUsd: z.number().optional(),
       linkedAdoId: z.number().int().optional(),
     })
     .parse(req.body);
@@ -409,6 +439,12 @@ app.post("/workitems", async (req, reply) => {
         key: b.key ?? null,
         title: b.title,
         level: b.level ?? "story",
+        kind: b.kind ?? "task",
+        priority: b.priority ?? "medium",
+        risk: b.risk ?? "low",
+        executor: b.executor ?? "human",
+        budgetUsd: b.budgetUsd != null ? String(b.budgetUsd) : null,
+        dueDate: b.dueInDays != null ? new Date(Date.now() + b.dueInDays * 864e5) : null,
         linkedAdoId: b.linkedAdoId ?? null,
       })
       .returning(),

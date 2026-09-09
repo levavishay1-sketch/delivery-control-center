@@ -16,9 +16,13 @@ import {
 } from "drizzle-orm/pg-core";
 import {
   blockerState,
+  executor,
   gapState,
+  priority,
+  riskLevel,
   taskAppetite,
   taskState,
+  workitemKind,
   workitemLevel,
   workitemPhase,
 } from "./enums.ts";
@@ -63,7 +67,16 @@ export const workitem = pgTable(
      */
     key: text("key").unique(),
     level: workitemLevel("level").notNull().default("story"),
+    kind: workitemKind("kind").notNull().default("task"),
     phase: workitemPhase("phase").notNull().default("intake"),
+    priority: priority("priority").notNull().default("medium"),
+    risk: riskLevel("risk").notNull().default("low"),
+    executor: executor("executor").notNull().default("human"),
+    /** Per-WorkItem AI spend ceiling. Null = falls back to the project/client budget. */
+    budgetUsd: numeric("budget_usd", { precision: 10, scale: 2 }),
+    dueDate: timestamp("due_date", { withTimezone: true }),
+    /** 0..100 rollup of task completion, cached for list views. */
+    progressPct: integer("progress_pct").notNull().default(0),
     title: text("title").notNull(),
     /** Null until an ADO work item is linked. ADO is SoT once linked (architecture §8). */
     linkedAdoId: integer("linked_ado_id"),
@@ -351,6 +364,53 @@ export const blocker = pgTable(
     }),
     tenantPolicy("blocker_tenant_isolation"),
   ],
+).enableRLS();
+
+/**
+ * A notification — something that wants a person's attention. Feeds the
+ * "Attention Center" nav and the dashboard's recent-alerts panel.
+ */
+export const notification = pgTable(
+  "notification",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => client.id, { onDelete: "cascade" }),
+    forUserId: uuid("for_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").references(() => workitem.id, { onDelete: "cascade" }),
+    /** "blocker" | "budget" | "decision" | "deadline" | "review" | "gap" */
+    kind: text("kind").notNull(),
+    severity: text("severity").notNull().default("info"), // info | warn | critical
+    title: text("title").notNull(),
+    body: text("body"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("notification_user_idx").on(t.forUserId, t.createdAt),
+    tenantPolicy("notification_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
+ * A per-client AI-spend budget, and the running total. The dashboard's
+ * "AI cost" meter reads this; `spentUsd` is bumped whenever a
+ * model.routed / claude.session event carries a cost.
+ */
+export const clientBudget = pgTable(
+  "client_budget",
+  {
+    clientId: uuid("client_id")
+      .primaryKey()
+      .references(() => client.id, { onDelete: "cascade" }),
+    monthlyUsd: numeric("monthly_usd", { precision: 10, scale: 2 }).notNull().default("300"),
+    spentUsd: numeric("spent_usd", { precision: 10, scale: 2 }).notNull().default("0"),
+    periodStart: timestamp("period_start", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [tenantPolicy("client_budget_tenant_isolation")],
 ).enableRLS();
 
 /**

@@ -25,6 +25,20 @@ export const workitemLevel = pgEnum("workitem_level", [
   "task",
 ]);
 
+/** Kind of work — drives the type chip in the UI. */
+export const workitemKind = pgEnum("workitem_kind", [
+  "project",
+  "task",
+  "bug",
+  "change",
+]);
+
+export const priority = pgEnum("priority", ["low", "medium", "high", "critical"]);
+export const riskLevel = pgEnum("risk_level", ["low", "medium", "high"]);
+
+/** Who is doing the work — human, an AI agent, or both. */
+export const executor = pgEnum("executor", ["human", "ai", "mixed"]);
+
 /**
  * Status is a spectrum, not a gate (architecture §3). This enum is only
  * the coarse bucket shown in lists; the rich picture is derived from

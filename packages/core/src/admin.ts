@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withTenant, withoutTenant } from "@dcc/db";
-import { client, clientRepo, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
+import { client, clientBudget, clientRepo, project, projectRepo, repo, users, workitem } from "@dcc/db/schema";
 
 /**
  * Onboard a client end to end: client → project → repo link → optional
@@ -21,7 +21,16 @@ export async function setupClient(input: {
   projectName: string;
   repo: { name: string; gitUrl?: string; adoRepoRef?: string; orgShared?: boolean };
   actorEmail: string;
-  firstWorkItem?: { key: string; title: string; level?: "epic" | "feature" | "story" | "task" };
+  firstWorkItem?: {
+    key: string;
+    title: string;
+    level?: "epic" | "feature" | "story" | "task";
+    kind?: "project" | "task" | "bug" | "change";
+    priority?: "low" | "medium" | "high" | "critical";
+    risk?: "low" | "medium" | "high";
+    executor?: "human" | "ai" | "mixed";
+    dueInDays?: number;
+  };
 }): Promise<SetupResult> {
   const [actor] = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${input.actorEmail.toLowerCase()}`).limit(1);
   if (!actor) throw new Error(`no user for ${input.actorEmail}`);
@@ -30,6 +39,10 @@ export async function setupClient(input: {
     (await db.select().from(client).where(sql`${client.name} = ${input.clientName}`).limit(1)).length > 0
       ? await db.select().from(client).where(sql`${client.name} = ${input.clientName}`).limit(1)
       : await db.insert(client).values({ name: input.clientName }).returning();
+
+  await withTenant(c!.id, (tx) =>
+    tx.insert(clientBudget).values({ clientId: c!.id, monthlyUsd: "300" }).onConflictDoNothing(),
+  );
 
   const [p] = await withTenant(c!.id, (tx) =>
     tx.insert(project).values({ clientId: c!.id, name: input.projectName }).returning(),
@@ -67,6 +80,11 @@ export async function setupClient(input: {
           key: input.firstWorkItem!.key,
           title: input.firstWorkItem!.title,
           level: input.firstWorkItem!.level ?? "story",
+          kind: input.firstWorkItem!.kind ?? "task",
+          priority: input.firstWorkItem!.priority ?? "medium",
+          risk: input.firstWorkItem!.risk ?? "low",
+          executor: input.firstWorkItem!.executor ?? "human",
+          dueDate: input.firstWorkItem!.dueInDays != null ? new Date(Date.now() + input.firstWorkItem!.dueInDays * 864e5) : null,
           phase: "intake",
         })
         .returning(),
