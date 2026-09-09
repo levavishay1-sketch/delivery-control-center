@@ -69,6 +69,7 @@ import {
   getFlowRunView,
   taskFlowFor,
   clientTaskTree,
+  allAdoTasks,
   materializeTasksToAdo,
   approveTask,
   rejectTask,
@@ -440,6 +441,12 @@ app.get("/workitems/:id/flow-run", async (req) => {
   const { id } = req.params as { id: string };
   await locateWorkItem({ id }); // tenant check
   return (await getFlowRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
+});
+
+// org-wide TFS mirror: every client's task hierarchy (Azure DevOps nav screen)
+app.get("/ado-tasks", async (req) => {
+  await actingUser(req);
+  return allAdoTasks();
 });
 
 // the client's whole TFS side: every task across every requirement,

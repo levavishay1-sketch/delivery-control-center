@@ -9,6 +9,7 @@ import { WorkList } from "./screens/WorkList.tsx";
 import { RequirementList } from "./screens/RequirementList.tsx";
 import { ClientList } from "./screens/ClientList.tsx";
 import { ClientDetail } from "./screens/ClientDetail.tsx";
+import { AdoTasks } from "./screens/AdoTasks.tsx";
 import { Alerts } from "./screens/Alerts.tsx";
 import { Budgets } from "./screens/Budgets.tsx";
 import { Settings } from "./screens/Settings.tsx";
@@ -30,6 +31,7 @@ const NAV: { to: string; label: string; icon: React.ReactNode; badge?: boolean }
   { to: "#/", label: "לוח בקרה", icon: ICONS.dashboard },
   { to: "#/clients", label: "לקוחות", icon: ICONS.branch },
   { to: "#/requirements", label: "דרישות", icon: ICONS.folder },
+  { to: "#/ado", label: "Azure DevOps", icon: ICONS.branch },
   { to: "#/work", label: "כל הדרישות", icon: ICONS.list },
   { to: "#/alerts", label: "התראות", icon: ICONS.bell, badge: true },
   { to: "#/budgets", label: "תקציבים", icon: ICONS.slash },
@@ -52,6 +54,7 @@ export function App() {
   else if (path.startsWith("/project/")) screen = <Record id={path.slice(9)} nav={nav} />;
   else if (path === "/clients") screen = <ClientList nav={nav} />;
   else if (path === "/requirements" || path === "/projects") screen = <RequirementList nav={nav} />;
+  else if (path === "/ado") screen = <AdoTasks nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
   else if (path === "/budgets") screen = <Budgets />;

@@ -6,7 +6,7 @@ export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
 export { route, recordRouting, loadPolicy, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
-export { linkWorkItems, flowFor, taskFlowFor, clientTaskTree, type FlowNode, type FlowEdge, type TaskFlowNode, type TaskFlowEdge, type AdoTaskRow } from "./flow.ts";
+export { linkWorkItems, flowFor, taskFlowFor, clientTaskTree, allAdoTasks, type FlowNode, type FlowEdge, type TaskFlowNode, type TaskFlowEdge, type AdoTaskRow } from "./flow.ts";
 export { materializeTasksToAdo, pendingMaterializeCount, type MaterializeResult } from "./task-ado-sync.ts";
 export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";
 export { dashboard, auditTrail, listAllWorkItems, listInitiatives, listBudgets, listAlerts, type AuditFilter } from "./dashboard.ts";

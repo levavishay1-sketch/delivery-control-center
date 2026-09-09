@@ -174,6 +174,11 @@ export type AdoTaskRow = {
 };
 export type AdoTasks = { rows: AdoTaskRow[]; inTfs: number; pending: number };
 export const getClientAdoTasks = (clientId: string) => get<AdoTasks>(`/clients/${clientId}/ado-tasks`);
+export type AllAdoTasks = {
+  clients: { clientId: string; clientName: string; rows: AdoTaskRow[]; inTfs: number; pending: number }[];
+  inTfs: number; pending: number;
+};
+export const getAllAdoTasks = () => get<AllAdoTasks>("/ado-tasks");
 export type MaterializeResult = { created: number; skipped: number; links: number; items: { taskId: string; seq: number; adoId: number; adoType: string; url: string }[]; detail: string };
 export const materializeTasks = (id: string) => post<MaterializeResult>(`/workitems/${id}/materialize`, {});
 /** Agile ladder — the breakdown depth picks the rungs, leaves are always Task. */

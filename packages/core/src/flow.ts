@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { withTenant, appendEvent } from "@dcc/db";
-import { gap, task, taskDependency, workitem, workitemDependency } from "@dcc/db/schema";
+import { db, withTenant, appendEvent } from "@dcc/db";
+import { client, gap, task, taskDependency, workitem, workitemDependency } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 
 /**
@@ -276,6 +276,31 @@ export async function clientTaskTree(clientId: string): Promise<{ rows: AdoTaskR
       pending: rows.filter((r) => !r.linkedAdoId).length,
     };
   });
+}
+
+/**
+ * Every client's task tree in one list — the org-wide TFS mirror behind
+ * the Azure DevOps nav screen. `client` has no RLS, so we enumerate it
+ * and run the tenant-scoped walk per client (sequentially: PGlite has a
+ * single connection).
+ */
+export async function allAdoTasks(): Promise<{
+  clients: { clientId: string; clientName: string; rows: AdoTaskRow[]; inTfs: number; pending: number }[];
+  inTfs: number;
+  pending: number;
+}> {
+  const cs = await db.select({ id: client.id, name: client.name }).from(client).orderBy(client.name);
+  const out: { clientId: string; clientName: string; rows: AdoTaskRow[]; inTfs: number; pending: number }[] = [];
+  for (const c of cs) {
+    const t = await clientTaskTree(c.id);
+    if (t.rows.length === 0) continue;
+    out.push({ clientId: c.id, clientName: c.name, ...t });
+  }
+  return {
+    clients: out,
+    inTfs: out.reduce((n, c) => n + c.inTfs, 0),
+    pending: out.reduce((n, c) => n + c.pending, 0),
+  };
 }
 
 function wims2nodes(
