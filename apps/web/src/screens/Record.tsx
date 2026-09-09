@@ -7,7 +7,7 @@ import {
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
 import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
-import { WorkflowModal } from "./Workflow.tsx";
+import { WorkflowTab } from "./WorkflowTab.tsx";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -17,8 +17,12 @@ const post = async (path: string, body: unknown) => {
   return r.json();
 };
 
-const TABS = ["Overview", "Timeline", "Dependencies", "Tasks", "Gaps & Blockers"] as const;
+const TABS = ["Flow", "Overview", "Timeline", "Dependencies", "Tasks", "Gaps & Blockers"] as const;
 type Tab = (typeof TABS)[number];
+const TAB_HE: Record<Tab, string> = {
+  Flow: "מהלך עבודה", Overview: "Overview", Timeline: "Timeline",
+  Dependencies: "Dependencies", Tasks: "Tasks", "Gaps & Blockers": "פערים וחוסמים",
+};
 
 const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "model.routed", "review.completed"]);
 const isAi = (e: EventRow) => e.actor.kind !== "user" || AI_TYPES.has(e.type);
@@ -48,7 +52,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
   const [syncing, setSyncing] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [flowOpen, setFlowOpen] = useState(false);
 
   // go back to wherever the user came from; fall back to the requirements list
   const back = useCallback(() => {
@@ -133,7 +136,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       {editOpen && <EditRequirement wi={wi} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); reload(); }} />}
       {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
       {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
-      {flowOpen && <WorkflowModal workitemId={wi.id} clientId={wi.clientId} phase={wi.phase} gapCount={d.gaps.length} openGaps={openGaps} openBlockingGaps={openBlockingGaps} onClose={() => setFlowOpen(false)} onChanged={reload} />}
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
@@ -144,7 +146,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </div>
         <div style={{ display: "flex", gap: 6 }}>
           {wi.phase !== "done" && wi.phase !== "archived" && (
-            <button className="btn btn-primary btn-sm" onClick={() => setFlowOpen(true)}>
+            <button className="btn btn-primary btn-sm" onClick={() => setTab("Flow")}>
               {wi.phase === "building" ? "המשך עבודה" : "▶ התחל עבודה"}
             </button>
           )}
@@ -172,10 +174,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
           <button key={t} className="tab" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {t === "Gaps & Blockers" ? "פערים וחוסמים" : t}{t === "Gaps & Blockers" && openGaps + d.blockers.filter((b) => b.state === "open").length > 0 ? ` (${openGaps + d.blockers.filter((b) => b.state === "open").length})` : ""}
+            {TAB_HE[t]}{t === "Gaps & Blockers" && openGaps + d.blockers.filter((b) => b.state === "open").length > 0 ? ` (${openGaps + d.blockers.filter((b) => b.state === "open").length})` : ""}
           </button>
         ))}
       </div>
+
+      {tab === "Flow" && <WorkflowTab d={d} reload={() => reload()} goToTab={(t) => setTab(t as Tab)} />}
 
       {tab === "Overview" && (
         <>
@@ -302,7 +306,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {d.tasks.some((t) => t.origin === "ai" && !t.approvedAt && t.state !== "dropped") && (
             <div className="callout" style={{ marginBottom: 12 }}>
               <div className="body"><p className="q">יש משימות שהוצעו ע"י AI וממתינות לאישור</p>
-                <p className="r"><a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setFlowOpen(true)}>פתח את זרימת האישור ←</a></p>
+                <p className="r"><a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setTab("Flow")}>פתח את מהלך העבודה ←</a></p>
               </div>
             </div>
           )}
