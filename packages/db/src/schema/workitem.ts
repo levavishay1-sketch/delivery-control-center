@@ -211,6 +211,40 @@ export const taskDependency = pgTable(
 ).enableRLS();
 
 /**
+ * WorkItem → WorkItem dependency. Drives the project Flow view, and must
+ * also be written to ADO as a native predecessor/successor link so the
+ * picture is consistent for anyone looking straight at ADO
+ * (architecture §15). `kind` mirrors ADO link semantics.
+ */
+export const workitemDependency = pgTable(
+  "workitem_dependency",
+  {
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id")
+      .notNull()
+      .references(() => workitem.id, { onDelete: "cascade" }),
+    dependsOnWorkitemId: uuid("depends_on_workitem_id")
+      .notNull()
+      .references(() => workitem.id, { onDelete: "cascade" }),
+    /** "predecessor" (default) | "parent" | "related" */
+    kind: text("kind").notNull().default("predecessor"),
+    reason: text("reason"),
+    originGapId: uuid("origin_gap_id").references(() => gap.id),
+    /** Set once the matching link exists in ADO. */
+    adoLinkSyncedAt: timestamp("ado_link_synced_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workitemId, t.dependsOnWorkitemId] }),
+    index("workitem_dependency_from_idx").on(t.workitemId),
+    index("workitem_dependency_to_idx").on(t.dependsOnWorkitemId),
+    tenantPolicy("workitem_dependency_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
  * A Blocker: Claude stopped mid-task and needs an answer. A structured
  * object — not a chat (architecture §13). Routed to the WorkItem owner,
  * answered in a focused UI, answer returned to Claude.

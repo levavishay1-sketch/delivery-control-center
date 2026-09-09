@@ -7,6 +7,8 @@ import {
   answerBlocker,
   blockersFor,
   briefFor,
+  flowFor,
+  linkWorkItems,
   progressTask,
   proposeGap,
   proposeTasks,
@@ -192,6 +194,28 @@ app.post("/gaps/:id/verify", async (req) => {
     })
     .parse(req.body);
   return verifyGap({ gapId: id, by: { userId: dev.id }, ...b });
+});
+
+/* ── flow / dependencies ─────────────────────────────────────────── */
+
+app.get("/projects/:id/flow", async (req) => {
+  const p = await locateProject((req.params as { id: string }).id);
+  return flowFor(p.clientId, p.id);
+});
+
+app.post("/workitems/:id/depends-on", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z
+    .object({
+      dependsOnWorkitemId: z.string().uuid(),
+      kind: z.enum(["predecessor", "parent", "related"]).optional(),
+      reason: z.string().optional(),
+    })
+    .parse(req.body);
+  const wi = await locateWorkItem({ id });
+  await linkWorkItems({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...b });
+  return reply.code(201).send({ linked: true });
 });
 
 /* ── model routing ───────────────────────────────────────────────── */

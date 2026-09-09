@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Flow } from "./Flow.tsx";
 import {
   answerBlocker,
   getBlockers,
@@ -193,7 +194,7 @@ function TaskRow({ t, onProgress }: { t: Task; onProgress: (to: Task["state"]) =
   );
 }
 
-type View = "workitem" | "inbox" | "blockers";
+type View = "workitem" | "flow" | "inbox" | "blockers";
 
 export function App() {
   const [items, setItems] = useState<WorkItemLite[]>([]);
@@ -279,8 +280,8 @@ export function App() {
   );
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "200px minmax(0,1fr) 300px", minHeight: "100vh" }}>
-      <aside style={{ background: C.sunk, borderInlineEnd: `1px solid ${C.rule}`, padding: "14px 0" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "200px minmax(0,1fr) 300px", height: "100vh", overflow: "hidden" }}>
+      <aside style={{ background: C.sunk, borderInlineEnd: `1px solid ${C.rule}`, padding: "14px 0", overflow: "auto" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 16px 14px", fontWeight: 600 }}>
           <span style={{ width: 18, height: 18, borderRadius: 4, background: `linear-gradient(135deg, ${C.ai}, ${C.human})` }} />
           Delivery Control
@@ -298,7 +299,7 @@ export function App() {
         {items.length === 0 && !err && <div style={{ padding: "6px 16px", color: C.ink3 }}>אין WorkItems. הרץ demo / scenario.</div>}
       </aside>
 
-      <main style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <main style={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
         <div style={{ padding: "14px 18px", borderBottom: `1px solid ${C.rule}` }}>
           {wi ? (
             <>
@@ -306,6 +307,7 @@ export function App() {
               <h2 style={{ fontSize: 16, fontWeight: 600, margin: "4px 0 8px" }}>{wi.title}</h2>
               <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
                 {tab("workitem", "Timeline", counts.total)}
+                {tab("flow", "Flow")}
                 {tab("inbox", "לא משויך")}
                 {tab("blockers", "Blockers שלי", counts.openBlk || undefined)}
               </div>
@@ -313,8 +315,10 @@ export function App() {
           ) : <h2 style={{ fontSize: 15, margin: 0, color: C.ink3 }}>בחר WorkItem</h2>}
         </div>
 
-        <div style={{ overflow: "auto", flex: 1 }}>
+        <div style={{ overflow: view === "flow" ? "hidden" : "auto", flex: 1, position: "relative" }}>
           {err && <div style={{ padding: 18, color: C.crit, fontFamily: C.mono, fontSize: 12 }}>{err}</div>}
+
+          {view === "flow" && wi && <Flow projectId={wi.projectId} />}
 
           {view === "workitem" && (
             <>

@@ -69,6 +69,14 @@ check("brief renders with the key", brief.statusCode === 200 && brief.body.inclu
 const r404 = await app.inject({ method: "GET", url: `/resolve?clientId=${c!.id}&branch=nope` });
 check("resolve 404 on no match", r404.statusCode === 404, r404.statusCode);
 
+// routing
+const rt = await app.inject({ method: "POST", url: `/workitems/${wi!.id}/route`, headers: H, payload: { capability: "gap_detection", signals: { ambiguity: "high" } } });
+check("route escalates high-ambiguity gap detection to opus", rt.statusCode === 200 && rt.json().tier === "opus", rt.json());
+
+// flow
+const flow = await app.inject({ method: "GET", url: `/projects/${p!.id}/flow` });
+check("flow returns the project's node", flow.statusCode === 200 && flow.json().nodes.length === 1, flow.json());
+
 console.log(`\n${fail === 0 ? `\x1b[32m✓ all ${pass} passed` : `\x1b[31m✗ ${fail} failed`}\x1b[0m\n`);
 await app.close();
 await closeDb();

@@ -100,5 +100,13 @@ smaller). Order matters — each group unblocks the next.
       `recordRouting()` → `model.routed` events, `POST /workitems/:id/route`,
       `dcc.mjs route`, wired into the brief's LLM seam. `prove:routing`
       10/10. Rendered in the Brief and timeline with model + rationale.
-- [ ] 7.8 Reviewer subagent · Flow/dependency visualisation (React Flow)
+- [x] 7.8a Flow/dependency visualisation — `workitem_dependency` table
+      (migration 0003, syncs to ADO predecessor links later),
+      `linkWorkItems` / `flowFor`, `GET /projects/:id/flow`,
+      `POST /workitems/:id/depends-on`, a **React Flow** (`@xyflow/react`)
+      tab: layered layout, blocking nodes red, spun-off edges amber,
+      dashed = not yet ADO-synced
+- [ ] 7.8b Reviewer subagent (Writer proposes, Reviewer checks the
+      overlap region before human approval)
 - [ ] 7.9 client/workitem policy override layers (global ships now)
+- [ ] 7.10 ADO sync — write the predecessor links, mirror state

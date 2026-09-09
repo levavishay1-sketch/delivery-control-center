@@ -133,6 +133,18 @@ show(
 const tOut = (await get(`/workitems/${workitemId}/tasks`)).json() as { tasks: { id: string; intent: string }[] };
 show("start task 1", await post(`/tasks/${tOut.tasks[0]!.id}/progress`, { to: "in_progress", clientId }));
 
+// 8b ── a real predecessor: WI-3001 needs the risk-engine v4 upgrade first
+const pre = (await post("/workitems", {
+  projectId, ownerId, key: "WI-3000", title: "Upgrade client to risk engine v4", level: "story",
+})).json() as { id: string };
+show(
+  "link WI-3001 → depends on WI-3000",
+  await post(`/workitems/${workitemId}/depends-on`, {
+    dependsOnWorkitemId: pre.id, kind: "predecessor",
+    reason: "notional caps need /limits/notional, only in v4 (from the blocker answer)",
+  }),
+);
+
 // 9 ── what the NEXT Claude session starts from
 console.log("\n" + "═".repeat(72));
 console.log("Context Brief the next SessionStart injects:");
