@@ -2,7 +2,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, withTenant } from "@dcc/db";
 import { client, serviceConnection, workitem } from "@dcc/db/schema";
 import { adoDelete, adoSend } from "./ado-http.ts";
-import { DCC_TYPE_TO_ADO } from "./ado-map.ts";
+import { DCC_TYPE_TO_ADO, PHASE_TO_ADO_STATE, type Phase } from "./ado-map.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 
 /**
@@ -63,10 +63,14 @@ export async function syncRequirementToAdo(input: { clientId: string; workitemId
   }
 
   if (wi.linkedAdoId) {
-    // already linked → patch the title (state mapping is a later slice)
+    // already linked → push title; then try the state (transition may be rejected — non-fatal)
     const patch = [{ op: "add", path: "/fields/System.Title", value: wi.title }];
     const res = await adoSend({ base: projBase, apiPath: `wit/workitems/${wi.linkedAdoId}`, method: "PATCH", body: patch, pat: conn.secretRef });
     if (!res.ok) throw new Error(`עדכון ב-ADO נכשל: ${res.detail}`);
+    const wantState = PHASE_TO_ADO_STATE[wi.phase as Phase];
+    if (wantState) {
+      await adoSend({ base: projBase, apiPath: `wit/workitems/${wi.linkedAdoId}`, method: "PATCH", body: [{ op: "add", path: "/fields/System.State", value: wantState }], pat: conn.secretRef }).catch(() => {});
+    }
     const links = res.body._links as { html?: { href?: string } } | undefined;
     const url = links?.html?.href || adoWorkItemUrl(orgUrl, project, wi.linkedAdoId);
     await appendEvent({

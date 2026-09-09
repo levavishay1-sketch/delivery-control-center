@@ -6,7 +6,25 @@
  * Server 2022→7.x, 2020→6.0, 2019→5.0, TFS 2018→4.1. Newest first; an
  * old server 404s versions it doesn't know, so we walk down.
  */
-export const ADO_API_VERSIONS = ["7.1", "7.0", "6.0", "5.1", "5.0", "4.1"];
+const ALL_VERSIONS = ["7.1", "7.0", "6.0", "5.1", "5.0", "4.1"];
+
+/**
+ * Per-host cache of the api-version that worked. Old on-prem servers
+ * 404 the versions they don't know, so without this every call walks
+ * ~5 dead versions — turning one request into six.
+ */
+const workingVersion = new Map<string, string>();
+function versionsFor(base: string): string[] {
+  const host = base.replace(/^https?:\/\//, "").split("/")[0] ?? base;
+  const cached = workingVersion.get(host);
+  return cached ? [cached, ...ALL_VERSIONS.filter((v) => v !== cached)] : ALL_VERSIONS;
+}
+function rememberVersion(base: string, v: string) {
+  const host = base.replace(/^https?:\/\//, "").split("/")[0] ?? base;
+  workingVersion.set(host, v);
+}
+
+export const ADO_API_VERSIONS = ALL_VERSIONS;
 
 export function adoAuthHeader(pat: string): Record<string, string> {
   return { authorization: `Basic ${Buffer.from(`:${pat}`).toString("base64")}`, accept: "application/json" };
@@ -20,12 +38,12 @@ type GetResult =
 export async function adoGet(base: string, path: string, pat: string): Promise<GetResult> {
   const clean = base.replace(/\/+$/, "");
   let last: { status: number; statusText: string } | { network: string } | null = null;
-  for (const v of ADO_API_VERSIONS) {
+  for (const v of versionsFor(clean)) {
     try {
       const res = await fetch(`${clean}/_apis/${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, {
         headers: adoAuthHeader(pat),
       });
-      if (res.ok) return { ok: true, apiVersion: v, body: await res.json().catch(() => null) };
+      if (res.ok) { rememberVersion(clean, v); return { ok: true, apiVersion: v, body: await res.json().catch(() => null) }; }
       if (res.status === 401) return { ok: false, status: 401, detail: "401 — ה-PAT נדחה. בדוק שהוא בתוקף ושיש לו Work Items + Code (Read)." };
       last = { status: res.status, statusText: res.statusText };
     } catch (e) {
@@ -51,11 +69,11 @@ export async function adoDelete(base: string, apiPath: string, pat: string): Pro
   const clean = base.replace(/\/+$/, "");
   let sawOnly404 = true;
   let last = 0;
-  for (const v of ADO_API_VERSIONS) {
+  for (const v of versionsFor(clean)) {
     try {
       const sep = apiPath.includes("?") ? "&" : "?";
       const res = await fetch(`${clean}/_apis/${apiPath}${sep}api-version=${v}`, { method: "DELETE", headers: adoAuthHeader(pat) });
-      if (res.ok) return { ok: true, status: res.status };
+      if (res.ok) { rememberVersion(clean, v); return { ok: true, status: res.status }; }
       if (res.status === 401) return { ok: false, status: 401, detail: "PAT rejected" };
       if (res.status !== 404) sawOnly404 = false;
       last = res.status;
@@ -74,7 +92,7 @@ export async function adoUpload(input: {
 }): Promise<{ ok: true; id: string; url: string } | { ok: false; status: number; detail: string }> {
   const clean = input.base.replace(/\/+$/, "");
   let last: { status: number; text: string } | { network: string } | null = null;
-  for (const v of ADO_API_VERSIONS) {
+  for (const v of versionsFor(clean)) {
     try {
       const res = await fetch(`${clean}/_apis/wit/attachments?fileName=${encodeURIComponent(input.fileName)}&api-version=${v}`, {
         method: "POST",
@@ -82,6 +100,7 @@ export async function adoUpload(input: {
         body: input.bytes as unknown as ArrayBuffer,
       });
       if (res.ok) {
+        rememberVersion(clean, v);
         const b = (await res.json().catch(() => ({}))) as { id?: string; url?: string };
         return { ok: true, id: b.id ?? "", url: b.url ?? "" };
       }
@@ -105,7 +124,7 @@ export async function adoSend(input: {
   const clean = input.base.replace(/\/+$/, "");
   const ct = input.contentType ?? "application/json-patch+json";
   let last: { status: number; text: string } | { network: string } | null = null;
-  for (const v of ADO_API_VERSIONS) {
+  for (const v of versionsFor(clean)) {
     try {
       const sep = input.apiPath.includes("?") ? "&" : "?";
       const res = await fetch(`${clean}/_apis/${input.apiPath}${sep}api-version=${v}`, {
@@ -113,7 +132,7 @@ export async function adoSend(input: {
         headers: { ...adoAuthHeader(input.pat), "content-type": ct },
         body: JSON.stringify(input.body),
       });
-      if (res.ok) return { ok: true, apiVersion: v, body: (await res.json().catch(() => ({}))) as Record<string, unknown> };
+      if (res.ok) { rememberVersion(clean, v); return { ok: true, apiVersion: v, body: (await res.json().catch(() => ({}))) as Record<string, unknown> }; }
       const text = await res.text().catch(() => "");
       if (res.status === 401) return { ok: false, status: 401, detail: "401 — ה-PAT נדחה (צריך Work Items: Read, write & manage)." };
       // a bad api-version 404s or returns a preview-version error; keep walking

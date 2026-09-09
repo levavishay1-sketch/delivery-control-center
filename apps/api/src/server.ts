@@ -71,6 +71,7 @@ import {
   pullOneFromAdo,
   attachmentsFor,
   addAttachment,
+  startBuilding,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -334,21 +335,22 @@ app.get("/clients/:clientId/inbox", async (req) => {
 app.get("/workitems/:id", async (req, reply) => {
   const { id } = req.params as { id: string };
   const verifyAdo = (req.query as { verifyAdo?: string }).verifyAdo === "1";
-  const dev = verifyAdo ? await actingUser(req) : { id: "" };
   const wi = await locateWorkItem({ id });
+
+  // reconcile this one item against TFS (fields + attachments; TFS wins)
+  // BEFORE opening the read tx — pullOneFromAdo runs its own tx + network.
+  if (verifyAdo) {
+    const dev = await actingUser(req);
+    const r = await pullOneFromAdo(wi.clientId, id, { userId: dev.id }); // "skip" when not linked
+    if (r === "gone") {
+      await deleteRequirement(wi.clientId, id);
+      return reply.code(410).send({ error: "deleted in TFS" });
+    }
+  }
+
   const t = await tasksFor(wi.clientId, id);
   return withTenant(wi.clientId, async (tx) => {
     const [full] = await tx.select().from(workitem).where(sql`${workitem.id} = ${id}`).limit(1);
-
-    // on an explicit check: reconcile this one item against TFS (fields +
-    // attachments; TFS wins). If it was deleted there, mirror that here.
-    if (verifyAdo && full?.linkedAdoId) {
-      const r = await pullOneFromAdo(wi.clientId, id, { userId: dev.id });
-      if (r === "gone") {
-        await deleteRequirement(wi.clientId, id);
-        return reply.code(410).send({ error: "deleted in TFS" });
-      }
-    }
     let adoUrl: string | null = null;
     if (full?.linkedAdoId) {
       // prefer the URL ADO itself returned (format varies by version); fall back to the modern shape
@@ -426,6 +428,13 @@ app.delete("/workitems/:id/repos/:repoId", async (req) => {
   const { id, repoId } = req.params as { id: string; repoId: string };
   const wi = await locateWorkItem({ id });
   return unlinkRepoFromRequirement({ clientId: wi.clientId, workitemId: id, repoId, by: { userId: dev.id } });
+});
+
+app.post("/workitems/:id/start", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return startBuilding({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
 });
 
 app.post("/workitems/:id/attachments", async (req, reply) => {

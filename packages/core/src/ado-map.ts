@@ -50,6 +50,16 @@ export const ADO_STATE_TO_PHASE: Record<string, Phase> = {
   removed: "archived",
 };
 
+/** DCC phase → an ADO state to try (Agile). Best-effort; transitions can be rejected. */
+export const PHASE_TO_ADO_STATE: Record<Phase, string> = {
+  intake: "New",
+  shaping: "New",
+  building: "Active",
+  review: "Resolved",
+  done: "Closed",
+  archived: "Removed",
+};
+
 export const mapAdoType = (raw: string): ReqType => ADO_TYPE_TO_DCC[raw.trim().toLowerCase()] ?? "task";
 export const mapAdoState = (raw: string): Phase => ADO_STATE_TO_PHASE[raw.trim().toLowerCase()] ?? "intake";
 

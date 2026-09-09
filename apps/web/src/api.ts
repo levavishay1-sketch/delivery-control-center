@@ -138,6 +138,12 @@ export const createRequirement = (body: {
   priority?: string; risk?: string; executor?: string;
 }) => post<WorkItem & { ado?: AdoSyncResult }>("/workitems", body);
 export const syncToAdo = (id: string) => post<{ adoId: number; url: string; created: boolean }>(`/workitems/${id}/ado-sync`, {});
+export type StartBuildResult = {
+  key: string; branch: string;
+  repos: { name: string; adoRepoRef: string | null; defaultBranch: string }[];
+  openBlockingGaps: number; openBlockers: number; startedWithOpenBlocker: boolean;
+};
+export const startBuilding = (id: string) => post<StartBuildResult>(`/workitems/${id}/start`, {});
 export const updateRequirement = (id: string, body: Partial<{
   title: string; type: ReqType; priority: string; risk: string; executor: string; phase: string;
   budgetUsd: string | number | null; dueDate: string | null; parentId: string | null; adoAreaPath: string | null; key: string | null;

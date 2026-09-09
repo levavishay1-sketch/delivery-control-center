@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement, deleteTask,
-  getBrief, getDetail, progressTask, syncToAdo, unlinkRepoFromReq, uploadAttachment, verifyGap,
-  type Blocker, type EventRow, type Gap, type Task, type WorkItemDetail,
+  getBrief, getDetail, progressTask, startBuilding, syncToAdo, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  type Blocker, type EventRow, type Gap, type StartBuildResult, type Task, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
@@ -45,6 +45,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
   const [syncing, setSyncing] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [starting, setStarting] = useState<StartBuildResult | null>(null);
 
   // go back to wherever the user came from; fall back to the requirements list
   const back = useCallback(() => {
@@ -99,6 +100,10 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     catch (e) { alert(`סנכרון ל-Azure DevOps נכשל:\n${e}`); }
     setSyncing(false);
   };
+  const onStart = async () => {
+    try { setStarting(await startBuilding(wi.id)); reload(); }
+    catch (e) { alert(String(e)); }
+  };
   const onUpload = async (file: File | undefined) => {
     if (!file) return;
     setUploading(true);
@@ -121,6 +126,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       {editOpen && <EditRequirement wi={wi} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); reload(); }} />}
       {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
       {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
+      {starting && <StartBuildModal r={starting} title={wi.title} onClose={() => setStarting(null)} />}
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
@@ -130,6 +136,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          {(wi.phase === "intake" || wi.phase === "shaping") && (
+            <button className="btn btn-primary btn-sm" onClick={onStart}>▶ התחל עבודה</button>
+          )}
+          {wi.phase === "building" && (
+            <button className="btn btn-secondary btn-sm" onClick={onStart}>הוראות התחלה</button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ אירוע</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setEditOpen(true)}>עריכה</button>
           <button className="btn btn-secondary btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחיקה</button>
@@ -342,6 +354,57 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </>
       )}
     </>
+  );
+}
+
+function StartBuildModal({ r, title, onClose }: { r: StartBuildResult; title: string; onClose: () => void }) {
+  const [copied, setCopied] = useState("");
+  const copy = (t: string, k: string) => { navigator.clipboard?.writeText(t); setCopied(k); setTimeout(() => setCopied(""), 1500); };
+  const repo = r.repos[0];
+  const cmd = repo ? `git checkout -b ${r.branch}` : `git checkout -b ${r.branch}`;
+  const mono: React.CSSProperties = { fontFamily: "var(--mono)", fontSize: 12, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "7vh 16px", zIndex: 100 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(560px, 100%)", padding: "22px 24px", maxHeight: "82vh", overflowY: "auto" }}>
+        <h2 style={{ fontSize: 17, fontWeight: 650, marginBottom: 6 }}>מתחילים לעבוד על "{title}"</h2>
+        <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 16 }}>הדרישה עברה ל-<b>building</b>. פותחים branch לפי המוסכמה ומריצים Claude Code — ה-hooks יזרימו כל commit, קובץ וסיכום חזרה לכאן.</p>
+
+        {r.startedWithOpenBlocker && (
+          <div className="callout crit" style={{ marginBottom: 14 }}>
+            <div className="body"><p className="r">שים לב — יש {r.openBlockingGaps} פערים חוסמים ו-{r.openBlockers} חוסמים פתוחים. אפשר להתחיל, אבל זה מסומן "התחיל עם חוסם פתוח".</p></div>
+          </div>
+        )}
+
+        <div className="field" style={{ marginBottom: 10 }}>
+          <label>מפתח הדרישה</label>
+          <div style={mono}><span>{r.key}</span><a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(r.key, "key")}>{copied === "key" ? "הועתק ✓" : "העתק"}</a></div>
+        </div>
+
+        <div className="field" style={{ marginBottom: 10 }}>
+          <label>שם ה-branch</label>
+          <div style={mono}><span>{r.branch}</span><a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(r.branch, "branch")}>{copied === "branch" ? "הועתק ✓" : "העתק"}</a></div>
+        </div>
+
+        <div className="field" style={{ marginBottom: 10 }}>
+          <label>repositories</label>
+          {r.repos.length === 0
+            ? <p style={{ fontSize: 12, color: "var(--status-critical)" }}>אין repository מקושר — קשר אחד קודם (טאב Overview → "+ קשר repository").</p>
+            : r.repos.map((rp) => <div key={rp.name} style={{ fontSize: 12.5, direction: "ltr" }}>{rp.name}{rp.adoRepoRef ? ` — ${rp.adoRepoRef}` : ""} (base: {rp.defaultBranch})</div>)}
+        </div>
+
+        <div className="field">
+          <label>הפקודה</label>
+          <div style={{ ...mono, whiteSpace: "pre-wrap", display: "block" }}>
+            {`# ב-repository המקושר:\n${cmd}\n\n# ואז:\nclaude`}
+          </div>
+          <span className="hint" style={{ fontSize: 11, color: "var(--ink-400)" }}>ה-SessionStart hook יטען את ה-Context Brief של הדרישה אוטומטית לפי שם ה-branch.</span>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+          <button className="btn btn-primary" onClick={onClose}>הבנתי</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
