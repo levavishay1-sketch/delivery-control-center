@@ -5,6 +5,7 @@ import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, withTenant } from "@dcc/db";
 import { flowRun, repo, task, taskDependency, workitem } from "@dcc/db/schema";
+import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
 
@@ -315,7 +316,13 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
 /* ── 2. breakdown: propose tasks + dependencies ────────────────────── */
 
 export type BreakdownResult = {
-  tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[];
+  /** How deep the proposed tree is — picks the TFS ladder rungs. */
+  depth: number;
+  tasks: {
+    id: string; seq: number; intent: string; appetite: string;
+    affectedPaths: string[]; dependsOnSeq: number[];
+    parentSeq: number | null; level: number; adoType: string;
+  }[];
 };
 
 async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<BreakdownResult> {
@@ -333,31 +340,62 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
     "REQUIREMENT (may be Hebrew):",
     reqText,
     "",
-    "Rules: 3-12 tasks. Each task is one focused, reviewable unit. Give an appetite (small | standard | large). List the files each task will most likely touch. List dependencies by the seq numbers of tasks that must finish first.",
+    "Produce a HIERARCHY, not a flat list. `parentSeq` is the seq of the parent node, or null for a top-level node.",
+    "Choose the depth by how much structure the work genuinely has — do not pad it:",
+    "  depth 1 — a handful of sibling tasks, no grouping needed",
+    "  depth 2 — a few deliverables, each with its own tasks",
+    "  depth 3 — several deliverables that group under themes",
+    "  depth 4 — only for very large, multi-theme work",
+    "Leaves are the actual units of work. Max depth 4, 3-20 nodes total.",
     "",
-    "IMPORTANT: write each task's \"intent\" IN HEBREW (code identifiers and file paths may stay in English). appetite stays one of small|standard|large.",
+    "Rules: each LEAF is one focused, reviewable unit. Give every node an appetite (small | standard | large). On leaves, list the files it will most likely touch. `dependsOnSeq` lists seq numbers that must finish first (ordering between siblings) — it is NOT the hierarchy.",
+    "",
+    "IMPORTANT: write each node's \"intent\" IN HEBREW (code identifiers and file paths may stay in English). appetite stays one of small|standard|large.",
     "",
     'Respond with ONLY this JSON array, no prose:',
-    '[{"seq": number, "intent": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',
+    '[{"seq": number, "parentSeq": number|null, "intent": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',
   ].join("\n");
 
-  const proposed = await runClaudeJson<{ seq: number; intent: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]>(
-    cwd ?? process.cwd(), prompt, { timeoutMs: 300000, runId: input.runId },
-  );
-  pushLine(input.runId, "יוצר משימות ותלויות…");
+  const proposed = await runClaudeJson<
+    { seq: number; parentSeq?: number | null; intent: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]
+  >(cwd ?? process.cwd(), prompt, { timeoutMs: 300000, runId: input.runId });
+  pushLine(input.runId, "בונה את היררכיית המשימות…");
+
+  // resolve the tree: level per node, then the depth that picks TFS types
+  const bySeq = new Map(proposed.map((p) => [p.seq, p]));
+  const levelOf = (seq: number, seen = new Set<number>()): number => {
+    const p = bySeq.get(seq);
+    const parent = p?.parentSeq;
+    if (parent == null || parent === seq || seen.has(seq) || !bySeq.has(parent)) return 0;
+    seen.add(seq);
+    return levelOf(parent, seen) + 1;
+  };
+  const levels = new Map(proposed.map((p) => [p.seq, Math.min(levelOf(p.seq), MAX_TASK_DEPTH - 1)]));
+  const depth = Math.min(Math.max(...[...levels.values(), 0]) + 1, MAX_TASK_DEPTH);
+  pushLine(input.runId, `עומק ${depth} → ${ADO_LADDER.slice(MAX_TASK_DEPTH - depth).join(" › ")}`);
 
   const out = await withTenant(input.clientId, async (tx) => {
     const seqToId = new Map<number, string>();
     const rows: BreakdownResult["tasks"] = [];
-    for (const p of proposed) {
+    // parents first so parent_task_id can be set on the way down
+    const ordered = [...proposed].sort((a, b) => (levels.get(a.seq) ?? 0) - (levels.get(b.seq) ?? 0));
+    for (const p of ordered) {
       const appetite = ["small", "standard", "large"].includes(p.appetite) ? p.appetite : "standard";
+      const level = levels.get(p.seq) ?? 0;
+      const adoType = adoTypeForLevel(level, depth);
+      const parentId = p.parentSeq != null ? seqToId.get(p.parentSeq) ?? null : null;
       const [t] = await tx.insert(task).values({
         clientId: input.clientId, workitemId: input.workitemId, seq: p.seq,
         intent: p.intent, appetite: appetite as "small" | "standard" | "large",
         origin: "ai", state: "pending", affectedPaths: p.affectedPaths ?? [],
+        parentTaskId: parentId, adoType,
       }).returning();
       seqToId.set(p.seq, t!.id);
-      rows.push({ id: t!.id, seq: p.seq, intent: p.intent, appetite, affectedPaths: p.affectedPaths ?? [], dependsOnSeq: p.dependsOnSeq ?? [] });
+      rows.push({
+        id: t!.id, seq: p.seq, intent: p.intent, appetite,
+        affectedPaths: p.affectedPaths ?? [], dependsOnSeq: p.dependsOnSeq ?? [],
+        parentSeq: p.parentSeq ?? null, level, adoType,
+      });
     }
     for (const p of proposed) {
       for (const dep of p.dependsOnSeq ?? []) {
@@ -377,7 +415,8 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
         payload: { taskCount: rows.length, dependencyCount: proposed.reduce((n, p) => n + (p.dependsOnSeq?.length ?? 0), 0), appetite },
       });
     }
-    return { tasks: rows };
+    rows.sort((a, b) => a.seq - b.seq);
+    return { depth, tasks: rows };
   });
   await regenerateBrief(input.clientId, input.workitemId);
   return out;

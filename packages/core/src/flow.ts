@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { withTenant, appendEvent } from "@dcc/db";
-import { gap, workitem, workitemDependency } from "@dcc/db/schema";
+import { gap, task, taskDependency, workitem, workitemDependency } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 
 /**
@@ -129,6 +129,67 @@ export async function flowFor(clientId: string, rootId: string): Promise<{ nodes
     ];
 
     return { nodes, edges };
+  });
+}
+
+/* ── the task tree of one requirement ──────────────────────────────── */
+
+export type TaskFlowNode = {
+  id: string;
+  seq: number;
+  intent: string;
+  appetite: string;
+  state: string;
+  adoType: string | null;
+  level: number;
+  parentTaskId: string | null;
+  approved: boolean;
+  linkedAdoId: number | null;
+  adoUrl: string | null;
+  affectedPaths: string[];
+};
+export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends" };
+
+/**
+ * The proposed/approved task tree for a requirement: hierarchy edges plus
+ * dependency edges. `depth` is what picked the TFS types off the ladder.
+ */
+export async function taskFlowFor(clientId: string, workitemId: string): Promise<{ depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] }> {
+  return withTenant(clientId, async (tx) => {
+    const rows = await tx
+      .select({
+        id: task.id, seq: task.seq, intent: task.intent, appetite: task.appetite, state: task.state,
+        adoType: task.adoType, parentTaskId: task.parentTaskId, approvedAt: task.approvedAt,
+        linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, affectedPaths: task.affectedPaths,
+      })
+      .from(task)
+      .where(sql`${task.workitemId} = ${workitemId} and ${task.state} <> 'dropped'`)
+      .orderBy(task.seq);
+    if (rows.length === 0) return { depth: 0, nodes: [], edges: [] };
+
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const level = (id: string, seen = new Set<string>()): number => {
+      const t = byId.get(id);
+      if (!t?.parentTaskId || seen.has(id) || !byId.has(t.parentTaskId)) return 0;
+      seen.add(id);
+      return level(t.parentTaskId, seen) + 1;
+    };
+    const nodes: TaskFlowNode[] = rows.map((r) => ({
+      id: r.id, seq: r.seq, intent: r.intent, appetite: r.appetite, state: r.state,
+      adoType: r.adoType, level: level(r.id), parentTaskId: r.parentTaskId,
+      approved: r.approvedAt != null, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
+      affectedPaths: (r.affectedPaths ?? []) as string[],
+    }));
+    const depth = Math.max(...nodes.map((n) => n.level)) + 1;
+
+    const ids = rows.map((r) => r.id);
+    const deps = await tx.select().from(taskDependency).where(sql`${taskDependency.taskId} in ${ids}`);
+    const idSet = new Set(ids);
+    const edges: TaskFlowEdge[] = [
+      ...nodes.filter((n) => n.parentTaskId && idSet.has(n.parentTaskId)).map((n) => ({ from: n.parentTaskId!, to: n.id, kind: "parent" as const })),
+      ...deps.filter((d) => idSet.has(d.dependsOnTaskId)).map((d) => ({ from: d.dependsOnTaskId, to: d.taskId, kind: "depends" as const })),
+    ];
+    return { depth, nodes, edges };
   });
 }
 

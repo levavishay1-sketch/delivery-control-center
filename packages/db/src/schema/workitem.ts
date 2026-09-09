@@ -197,6 +197,19 @@ export const task = pgTable(
     approvedBy: uuid("approved_by"),
     /** Files the breakdown expects this task to touch. */
     affectedPaths: jsonb("affected_paths").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Task hierarchy. The DEPTH of this tree picks the TFS work-item type
+     * off the Agile ladder Epic > Feature > User Story > Task, anchored at
+     * the bottom: a 1-deep breakdown is all Tasks, 2-deep is User Story +
+     * Task, 3-deep adds Feature, 4-deep adds Epic.
+     */
+    parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => task.id, { onDelete: "cascade" }),
+    /** The TFS work-item type this task materialises as (from the ladder). */
+    adoType: text("ado_type"),
+    /** Tasks — NOT requirements — are what lives in TFS. */
+    linkedAdoId: integer("linked_ado_id"),
+    adoUrl: text("ado_url"),
+    adoSyncedAt: timestamp("ado_synced_at", { withTimezone: true }),
     /** OpenSpec change id this task belongs to, when applicable. */
     openspecChangeId: text("openspec_change_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -204,6 +217,8 @@ export const task = pgTable(
   },
   (t) => [
     index("task_workitem_idx").on(t.workitemId, t.seq),
+    index("task_parent_idx").on(t.parentTaskId),
+    index("task_ado_idx").on(t.linkedAdoId),
     foreignKey({
       columns: [t.workitemId, t.clientId],
       foreignColumns: [workitem.id, workitem.clientId],

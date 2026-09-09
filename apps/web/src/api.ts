@@ -152,7 +152,24 @@ export const startBuilding = (id: string) => post<StartBuildResult>(`/workitems/
 export const getUsers = () => get<{ users: { id: string; email: string; displayName: string }[] }>("/users");
 export const assignRequirement = (id: string, body: { ownerId?: string; email?: string }) => post<{ assigned: boolean; ownerId: string }>(`/workitems/${id}/assign`, body);
 export type AssessResult = { title: string; summary: string; baked: boolean; rationale: string; gaps: { description: string; blocking: boolean; confidence: number }[]; repoUsed: string | null };
-export type BreakdownResult = { tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[] };
+export type BreakdownResult = {
+  depth: number;
+  tasks: {
+    id: string; seq: number; intent: string; appetite: string; affectedPaths: string[];
+    dependsOnSeq: number[]; parentSeq: number | null; level: number; adoType: string;
+  }[];
+};
+export type TaskFlowNode = {
+  id: string; seq: number; intent: string; appetite: string; state: string;
+  adoType: string | null; level: number; parentTaskId: string | null;
+  approved: boolean; linkedAdoId: number | null; adoUrl: string | null; affectedPaths: string[];
+};
+export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: { from: string; to: string; kind: "parent" | "depends" }[] };
+export const getTaskFlow = (id: string) => get<TaskFlow>(`/workitems/${id}/task-flow`);
+export type MaterializeResult = { created: number; skipped: number; links: number; items: { taskId: string; seq: number; adoId: number; adoType: string; url: string }[]; detail: string };
+export const materializeTasks = (id: string) => post<MaterializeResult>(`/workitems/${id}/materialize`, {});
+/** Agile ladder — the breakdown depth picks the rungs, leaves are always Task. */
+export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
 export const startAssess = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, {});
 export const startBreakdown = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/breakdown`, {});
 export type FlowRun = {

@@ -74,6 +74,8 @@ import {
   startBuilding,
   startFlowRun,
   getFlowRunView,
+  taskFlowFor,
+  materializeTasksToAdo,
   approveTask,
   rejectTask,
 } from "@dcc/core";
@@ -485,6 +487,22 @@ app.get("/workitems/:id/flow-run", async (req) => {
   const { id } = req.params as { id: string };
   await locateWorkItem({ id }); // tenant check
   return (await getFlowRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
+});
+
+// the proposed/approved task tree + dependency edges (drawn in the flow tab)
+app.get("/workitems/:id/task-flow", async (req) => {
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return taskFlowFor(wi.clientId, id);
+});
+
+// approval done → create the tasks in TFS with their hierarchy + links.
+// A requirement never reaches TFS; its tasks are the tracked work items.
+app.post("/workitems/:id/materialize", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return materializeTasksToAdo({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
 });
 
 app.post("/tasks/:id/approve", async (req) => {
