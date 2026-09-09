@@ -42,7 +42,7 @@ export type WorkItem = {
 };
 export type LinkedRepo = { id: string; name: string; adoRepoRef: string | null; linkKind: "declared" | "auto"; addedAt: string };
 export type WorkItemDetail = {
-  workitem: WorkItem; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
+  workitem: WorkItem; adoUrl: string | null; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
   taskDependencies: { taskId: string; dependsOnTaskId: string; reason: string | null }[];
   events: EventRow[];
 };
@@ -127,10 +127,12 @@ export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
 
+export type AdoSyncResult = { synced: boolean; created?: boolean; adoId?: number; url?: string; error?: string };
 export const createRequirement = (body: {
   clientId?: string; parentId?: string; title: string; type?: ReqType;
   priority?: string; risk?: string; executor?: string;
-}) => post<WorkItem>("/workitems", body);
+}) => post<WorkItem & { ado?: AdoSyncResult }>("/workitems", body);
+export const syncToAdo = (id: string) => post<{ adoId: number; url: string; created: boolean }>(`/workitems/${id}/ado-sync`, {});
 export const updateRequirement = (id: string, body: Partial<{
   title: string; type: ReqType; priority: string; risk: string; executor: string; phase: string;
   budgetUsd: string | number | null; dueDate: string | null; parentId: string | null; adoAreaPath: string | null; key: string | null;

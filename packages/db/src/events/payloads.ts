@@ -109,6 +109,8 @@ const adoSynced = z.object({
   direction: z.enum(["to_ado", "from_ado"]),
   adoId: z.number().int().positive(),
   operation: z.enum(["create_workitem", "update_state", "create_link", "reconcile"]),
+  /** the human-facing work item URL (server-provided; format varies by ADO version) */
+  url: z.string().optional(),
 });
 
 const noteAdded = z.object({

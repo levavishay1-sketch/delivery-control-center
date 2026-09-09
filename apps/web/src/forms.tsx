@@ -107,6 +107,12 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
       else body.clientId = f.clientId;
       const wi = await api("/workitems", body);
       if (f.body.trim()) await api("/events", { workitemId: wi.id, kind: "note", note: { body: f.body.trim(), source: "manual" } });
+      if (wi.ado && wi.ado.synced === false && wi.ado.error) {
+        setErr(`הדרישה נוצרה, אבל הסנכרון ל-Azure DevOps נכשל: ${wi.ado.error}. אפשר לנסות שוב מעמוד הדרישה.`);
+        setBusy(false);
+        setTimeout(() => onDone(wi.id), 2500);
+        return;
+      }
       onDone(wi.id);
     } catch (e) { setErr(String(e)); setBusy(false); }
   };

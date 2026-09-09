@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement, deleteTask,
-  getBrief, getDetail, progressTask, unlinkRepoFromReq, verifyGap,
+  getBrief, getDetail, progressTask, syncToAdo, unlinkRepoFromReq, verifyGap,
   type Blocker, type EventRow, type Gap, type Task, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
@@ -70,6 +70,13 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     try { await deleteRequirement(wi.id); nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`); }
     catch (e) { alert(String(e)); }
   };
+  const [syncing, setSyncing] = useState(false);
+  const onSyncAdo = async () => {
+    setSyncing(true);
+    try { const r = await syncToAdo(wi.id); window.open(r.url, "_blank"); reload(); }
+    catch (e) { alert(`סנכרון ל-Azure DevOps נכשל:\n${e}`); }
+    setSyncing(false);
+  };
 
   // events superseded by a later correction
   const supersededIds = new Set(d.events.map((e) => e.supersedes).filter(Boolean) as string[]);
@@ -120,7 +127,11 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             <div><dt>Risk</dt><dd className={wi.risk === "high" ? "overdue" : ""}>{wi.risk}</dd></div>
             <div><dt>Executor</dt><dd>{wi.executor}</dd></div>
             <div><dt>AI budget</dt><dd>{wi.budgetUsd ? `$${wi.budgetUsd}` : "client default"}</dd></div>
-            <div><dt>ADO</dt><dd>{wi.linkedAdoId ? `#${wi.linkedAdoId}` : "not linked"}</dd></div>
+            <div><dt>Azure DevOps</dt><dd>
+              {wi.linkedAdoId
+                ? (d.adoUrl ? <a href={d.adoUrl} target="_blank" rel="noreferrer">#{wi.linkedAdoId} ↗</a> : `#${wi.linkedAdoId}`)
+                : <button className="btn btn-secondary btn-sm" disabled={syncing} onClick={onSyncAdo}>{syncing ? "יוצר…" : "צור ב-Azure DevOps"}</button>}
+            </dd></div>
           </dl>
           <div className="progress-block">
             <div className="top"><span className="l">Progress — {doneTasks}/{d.tasks.length} tasks</span><span>{progress}%</span></div>

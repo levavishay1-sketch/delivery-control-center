@@ -61,6 +61,9 @@ import {
   deleteTask,
   deleteDependency,
   updateConnection,
+  syncRequirementToAdo,
+  trySyncNewRequirement,
+  adoWorkItemUrl,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -294,8 +297,22 @@ app.get("/workitems/:id", async (req) => {
   const t = await tasksFor(wi.clientId, id);
   return withTenant(wi.clientId, async (tx) => {
     const [full] = await tx.select().from(workitem).where(sql`${workitem.id} = ${id}`).limit(1);
+    let adoUrl: string | null = null;
+    if (full?.linkedAdoId) {
+      // prefer the URL ADO itself returned (format varies by version); fall back to the modern shape
+      const [ev] = await tx.select({ p: sql<Record<string, unknown>>`payload` }).from(sql`event_log`)
+        .where(sql`workitem_id = ${id} and type = 'ado.synced' and payload ? 'url'`)
+        .orderBy(sql`occurred_at desc`).limit(1);
+      adoUrl = (ev?.p?.url as string | undefined) ?? null;
+      if (!adoUrl) {
+        const [conn] = await tx.select({ config: sql<Record<string, string>>`config` }).from(sql`service_connection`).where(sql`client_id = ${wi.clientId} and kind = 'ado' and revoked_at is null`).limit(1);
+        const cfg = conn?.config as Record<string, string> | undefined;
+        if (cfg?.orgUrl && cfg?.project) adoUrl = adoWorkItemUrl(cfg.orgUrl, cfg.project, full.linkedAdoId);
+      }
+    }
     return {
       workitem: { ...wi, ...full },
+      adoUrl,
       repos: await reposForRequirement(wi.clientId, id),
       gaps: await tx.select().from(gap).where(sql`${gap.workitemId} = ${id}`).orderBy(sql`${gap.blocking} desc, ${gap.createdAt}`),
       blockers: await tx.select().from(blocker).where(sql`${blocker.workitemId} = ${id}`).orderBy(sql`${blocker.createdAt} desc`),
@@ -325,7 +342,11 @@ app.patch("/workitems/:id", async (req) => {
     key: z.string().nullable().optional(),
   }).parse(req.body);
   const wi = await locateWorkItem({ id });
-  return updateRequirement({ clientId: wi.clientId, id, by: { userId: dev.id }, patch: b });
+  const updated = await updateRequirement({ clientId: wi.clientId, id, by: { userId: dev.id }, patch: b });
+  // mirror the change into ADO when linked (best effort)
+  let ado;
+  if (updated.linkedAdoId) ado = await trySyncNewRequirement(wi.clientId, id, { userId: dev.id });
+  return { ...updated, ado };
 });
 
 app.post("/workitems/:id/repos", async (req, reply) => {
@@ -675,7 +696,16 @@ app.post("/workitems", async (req, reply) => {
       })
       .returning(),
   );
-  return reply.code(201).send(wi);
+  // best-effort push to Azure DevOps when the client syncs there
+  const ado = await trySyncNewRequirement(clientId, wi!.id, { userId: dev.id });
+  return reply.code(201).send({ ...wi, ado });
+});
+
+app.post("/workitems/:id/ado-sync", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return syncRequirementToAdo({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
 });
 
 app.delete("/workitems/:id", async (req, reply) => {

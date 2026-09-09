@@ -2,6 +2,7 @@ import { desc, eq, isNull, sql } from "drizzle-orm";
 import { db, withTenant, withoutTenant } from "@dcc/db";
 import { client, clientBudget, clientRepo, repo, serviceConnection, users, workitem } from "@dcc/db/schema";
 import { normaliseAdoUrl } from "./ado-url.ts";
+import { adoGet } from "./ado-http.ts";
 
 /** Every repo in the system, for pickers. Includes which client (if any) it belongs to. */
 export async function listRepos() {
@@ -108,37 +109,6 @@ export async function linkRepoToClient(input: { clientId: string; repoId?: strin
     tx.insert(clientRepo).values({ clientId: input.clientId, repoId: r!.id, addedBy: input.by.userId }).onConflictDoNothing(),
   );
   return r!;
-}
-
-// On-prem Server ships older API surfaces; cloud is always current.
-// Server 2022→7.x, 2020→6.0, 2019→5.0, TFS 2018→4.1. Try newest first;
-// an old server 404s the versions it doesn't know, so we walk down.
-const ADO_API_VERSIONS = ["7.1", "7.0", "6.0", "5.1", "5.0", "4.1"];
-
-function adoAuthHeader(pat: string) {
-  return { authorization: `Basic ${Buffer.from(`:${pat}`).toString("base64")}`, accept: "application/json" };
-}
-
-/** GET an ADO REST path, walking api-versions until one isn't a 404. */
-async function adoGet(base: string, path: string, pat: string) {
-  const clean = base.replace(/\/+$/, "");
-  let last: { status: number; statusText: string } | { network: string } | null = null;
-  for (const v of ADO_API_VERSIONS) {
-    try {
-      const res = await fetch(`${clean}/_apis/${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, {
-        headers: adoAuthHeader(pat),
-      });
-      if (res.ok) return { ok: true as const, apiVersion: v, body: await res.json().catch(() => null) };
-      if (res.status === 401) return { ok: false as const, status: 401, detail: "401 — ה-PAT נדחה. בדוק שהוא בתוקף ושיש לו Work Items + Code (Read)." };
-      last = { status: res.status, statusText: res.statusText };
-      // 404 on an old server can just mean "unknown api-version" — keep trying
-    } catch (e) {
-      last = { network: String((e as Error).message) };
-      break;
-    }
-  }
-  if (last && "network" in last) return { ok: false as const, status: 0, detail: `שגיאת רשת: ${last.network} — האם ${clean} נגיש מהשרת?` };
-  return { ok: false as const, status: last?.status ?? 0, detail: last ? `${last.status} ${last.statusText}` : "no response" };
 }
 
 /**
