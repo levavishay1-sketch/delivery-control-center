@@ -64,8 +64,13 @@ smaller). Order matters — each group unblocks the next.
 - [x] 5.2 WorkItem timeline screen — chronological, AI-proposed (dashed
       amber, ◇) vs human (solid blue, ◆) distinct, confidence as a meter,
       Context Brief panel showing the SessionStart payload
-- [ ] 5.3 Unassigned inbox list (read-only in Phase 0)
+- [x] 5.3 Unassigned inbox tab (read-only)
 - [x] 5.4 Runs end to end: PGlite → Fastify → React, verified in browser
+- [x] 5.5 Interactive: verify / dismiss / spin-off a gap, answer a
+      blocker — the verify action was clicked in-browser and the
+      resulting `gap.verified` event rendered as a human (solid blue)
+      entry, distinct from the AI proposal above it
+- [x] 5.6 Blockers-routed-to-me tab
 
 ## 6. Prove the exit gate
 

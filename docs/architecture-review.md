@@ -76,11 +76,11 @@ own table. The denormalised `client_id` on `workitem` / `gap` / `task` /
 `blocker` is the correct call for RLS and partition keys.
 
 **Follow-ups**
-- **F-6** (med) — nothing enforces `workitem.client_id == project.client_id`
-  (and the same down to gap/task/blocker). Add composite FKs:
-  `unique (id, client_id)` on `project`, then
-  `workitem (project_id, client_id) → project (id, client_id)`, and the
-  analogous edges. Cheap, closes a whole class of bug.
+- ~~**F-6**~~ **DONE** (migration `0002_f6_composite_fks`) — `unique (id,
+  client_id)` on `project` and `workitem`; composite FKs
+  `workitem (project_id, client_id) → project`,
+  `gap|task|blocker (workitem_id, client_id) → workitem`. A child row
+  can no longer carry a different `client_id` than its parent.
 
 ## 05 — Resolution order  ·  DESIGN APPROVED, implementation pending
 
@@ -111,4 +111,4 @@ sound; there is no code to review yet (Phase 1).
 | F-3 admin path for directory writes | must | before client #2 |
 | F-4 prove against real Postgres as dcc_app | must | before client #2 |
 | F-5 background-job owner resolution | med | Phase 1 |
-| F-6 composite FKs for client_id consistency | med | next schema pass |
+| ~~F-6~~ composite FKs | med | DONE — migration 0002 |

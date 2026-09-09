@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -10,6 +11,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  unique,
   uuid,
 } from "drizzle-orm/pg-core";
 import {
@@ -73,6 +75,14 @@ export const workitem = pgTable(
   (t) => [
     index("workitem_project_idx").on(t.projectId),
     index("workitem_owner_idx").on(t.ownerId),
+    // F-6: workitem's client must equal its project's client
+    foreignKey({
+      columns: [t.projectId, t.clientId],
+      foreignColumns: [project.id, project.clientId],
+      name: "workitem_project_client_fk",
+    }),
+    // …and let gap/task/blocker enforce the same against workitem
+    unique("workitem_id_client_uq").on(t.id, t.clientId),
     tenantPolicy("workitem_tenant_isolation"),
   ],
 ).enableRLS();
@@ -128,6 +138,11 @@ export const gap = pgTable(
   },
   (t) => [
     index("gap_workitem_idx").on(t.workitemId),
+    foreignKey({
+      columns: [t.workitemId, t.clientId],
+      foreignColumns: [workitem.id, workitem.clientId],
+      name: "gap_workitem_client_fk",
+    }),
     tenantPolicy("gap_tenant_isolation"),
   ],
 ).enableRLS();
@@ -163,6 +178,11 @@ export const task = pgTable(
   },
   (t) => [
     index("task_workitem_idx").on(t.workitemId, t.seq),
+    foreignKey({
+      columns: [t.workitemId, t.clientId],
+      foreignColumns: [workitem.id, workitem.clientId],
+      name: "task_workitem_client_fk",
+    }),
     tenantPolicy("task_tenant_isolation"),
   ],
 ).enableRLS();
@@ -220,6 +240,11 @@ export const blocker = pgTable(
   },
   (t) => [
     index("blocker_open_idx").on(t.routedTo).where(sql`state = 'open'`),
+    foreignKey({
+      columns: [t.workitemId, t.clientId],
+      foreignColumns: [workitem.id, workitem.clientId],
+      name: "blocker_workitem_client_fk",
+    }),
     tenantPolicy("blocker_tenant_isolation"),
   ],
 ).enableRLS();

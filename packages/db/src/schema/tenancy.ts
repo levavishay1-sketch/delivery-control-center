@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  foreignKey,
   index,
   pgPolicy,
   pgTable,
@@ -64,6 +65,8 @@ export const project = pgTable(
   },
   (t) => [
     unique("project_client_name_uq").on(t.clientId, t.name),
+    // F-6: lets child rows enforce "same client all the way down"
+    unique("project_id_client_uq").on(t.id, t.clientId),
     tenantPolicy("project_tenant_isolation"),
   ],
 ).enableRLS();

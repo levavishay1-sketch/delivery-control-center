@@ -70,15 +70,19 @@ export async function verifyGap(input: {
 
     let spunOffTo: string | null = null;
     if (input.outcome === "spun_off") {
-      if (!input.spunOffTitle || !input.projectId || !input.ownerId) {
-        throw new Error("spun_off needs spunOffTitle, projectId, ownerId");
-      }
+      if (!input.spunOffTitle) throw new Error("spun_off needs spunOffTitle");
+      // Inherit project + owner from the parent WorkItem unless overridden.
+      const [parent] = await tx
+        .select({ projectId: workitem.projectId, ownerId: workitem.ownerId })
+        .from(workitem)
+        .where(sql`${workitem.id} = ${g.workitemId}`)
+        .limit(1);
       const [wi] = await tx
         .insert(workitem)
         .values({
           clientId: input.clientId,
-          projectId: input.projectId,
-          ownerId: input.ownerId,
+          projectId: input.projectId ?? parent!.projectId,
+          ownerId: input.ownerId ?? parent!.ownerId,
           title: input.spunOffTitle,
           level: "task",
         })

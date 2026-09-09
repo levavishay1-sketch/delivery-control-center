@@ -1,5 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withTenant } from "@dcc/db";
+import { db, dbKind, withTenant } from "@dcc/db";
 import { users, workitem, project } from "@dcc/db/schema";
 import type { FastifyRequest } from "fastify";
 
@@ -23,8 +24,18 @@ export async function actingUser(req: FastifyRequest): Promise<{ id: string; ema
   if (!email) throw new AuthError("missing x-dcc-dev-email");
 
   const [u] = await db.select({ id: users.id, email: users.email }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);
-  if (!u) throw new AuthError(`no user for ${email}`);
-  return u;
+  if (u) return u;
+
+  // Dev convenience: auto-create the acting user on the embedded DB so
+  // the local UI works out of the box. Never on a real Postgres.
+  if (dbKind === "pglite") {
+    const [created] = await db
+      .insert(users)
+      .values({ entraOid: `dev-${randomUUID()}`, email, displayName: email.split("@")[0] ?? email })
+      .returning({ id: users.id, email: users.email });
+    return created!;
+  }
+  throw new AuthError(`no user for ${email}`);
 }
 
 /** Resolve the tenant + WorkItem from an id or a key. */
