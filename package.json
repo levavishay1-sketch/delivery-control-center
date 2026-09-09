@@ -1,0 +1,29 @@
+{
+  "name": "delivery-control-center",
+  "version": "0.0.0",
+  "private": true,
+  "description": "מערכת שעוטפת את מחזור החיים של פיתוח תוכנה מונחה-AI מקצה לקצה, סביב Azure DevOps ו-Claude Code.",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "db:generate": "npm -w @dcc/db run generate",
+    "db:migrate": "npm -w @dcc/db run migrate",
+    "db:guards": "npm -w @dcc/db run guards",
+    "typecheck": "tsc -b",
+    "spec": "openspec"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  },
+  "allowScripts": {
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
+  }
+}

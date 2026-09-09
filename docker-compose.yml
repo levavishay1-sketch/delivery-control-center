@@ -1,0 +1,22 @@
+# Local Postgres for development. `docker compose up -d db`
+# No Docker on this machine yet — until then, point DATABASE_URL at a
+# Neon or Supabase free database instead. The schema is portable.
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: dcc
+      POSTGRES_PASSWORD: dcc
+      POSTGRES_DB: dcc
+    ports:
+      - "5432:5432"
+    volumes:
+      - dcc_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dcc"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  dcc_pgdata:
