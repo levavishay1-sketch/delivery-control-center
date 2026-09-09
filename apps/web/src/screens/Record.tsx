@@ -43,6 +43,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [correcting, setCorrecting] = useState<EventRow | null>(null);
   const [newGap, setNewGap] = useState({ description: "", blocking: false });
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
+  const [syncing, setSyncing] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -70,7 +71,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     try { await deleteRequirement(wi.id); nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`); }
     catch (e) { alert(String(e)); }
   };
-  const [syncing, setSyncing] = useState(false);
   const onSyncAdo = async () => {
     setSyncing(true);
     try { const r = await syncToAdo(wi.id); window.open(r.url, "_blank"); reload(); }
