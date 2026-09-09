@@ -5,9 +5,8 @@ import { getDashboard } from "./api.ts";
 import { Dashboard } from "./screens/Dashboard.tsx";
 import { AuditTrail } from "./screens/AuditTrail.tsx";
 import { Record } from "./screens/Record.tsx";
-import { Project } from "./screens/Project.tsx";
 import { WorkList } from "./screens/WorkList.tsx";
-import { ProjectList } from "./screens/ProjectList.tsx";
+import { RequirementList } from "./screens/RequirementList.tsx";
 import { ClientList } from "./screens/ClientList.tsx";
 import { ClientDetail } from "./screens/ClientDetail.tsx";
 import { Alerts } from "./screens/Alerts.tsx";
@@ -30,8 +29,8 @@ function useHash() {
 const NAV: { to: string; label: string; icon: React.ReactNode; badge?: boolean }[] = [
   { to: "#/", label: "לוח בקרה", icon: ICONS.dashboard },
   { to: "#/clients", label: "לקוחות", icon: ICONS.branch },
-  { to: "#/projects", label: "פרויקטים", icon: ICONS.folder },
-  { to: "#/work", label: "עבודות", icon: ICONS.list },
+  { to: "#/requirements", label: "דרישות", icon: ICONS.folder },
+  { to: "#/work", label: "כל הדרישות", icon: ICONS.list },
   { to: "#/alerts", label: "התראות", icon: ICONS.bell, badge: true },
   { to: "#/budgets", label: "תקציבים", icon: ICONS.slash },
   { to: "#/settings", label: "הגדרות", icon: ICONS.gear },
@@ -50,9 +49,9 @@ export function App() {
   let screen: React.ReactNode;
   if (path.startsWith("/wi/")) screen = <Record id={path.slice(4)} nav={nav} />;
   else if (path.startsWith("/client/")) screen = <ClientDetail id={path.slice(8)} nav={nav} />;
-  else if (path.startsWith("/project/")) screen = <Project id={path.slice(9)} nav={nav} />;
+  else if (path.startsWith("/project/")) screen = <Record id={path.slice(9)} nav={nav} />;
   else if (path === "/clients") screen = <ClientList nav={nav} />;
-  else if (path === "/projects") screen = <ProjectList nav={nav} />;
+  else if (path === "/requirements" || path === "/projects") screen = <RequirementList nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
   else if (path === "/budgets") screen = <Budgets />;
@@ -64,7 +63,7 @@ export function App() {
   const active = (to: string) => {
     if (to === "#/") return path === "/";
     if (to === "#/clients") return path === "/clients" || path.startsWith("/client/");
-    if (to === "#/projects") return path === "/projects" || path.startsWith("/project/") || path.startsWith("/wi/");
+    if (to === "#/requirements") return path === "/requirements" || path === "/projects" || path.startsWith("/project/") || path.startsWith("/wi/");
     return hash.split("?")[0] === to;
   };
 

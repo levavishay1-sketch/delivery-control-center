@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getWorkList, type WorkListRow } from "../api.ts";
 import { PageHead, TypeChip, initials } from "../ui.tsx";
-import { NewWorkItem } from "../forms.tsx";
+import { NewRequirement } from "../forms.tsx";
 
 const PRIO: Record<string, string> = { critical: "קריטית", high: "גבוהה", medium: "בינונית", low: "נמוכה" };
 const PHASE: Record<string, string> = { intake: "קליטה", shaping: "גיבוש", building: "בפיתוח", review: "בבדיקה", done: "הושלם", archived: "ארכיון" };
@@ -28,8 +28,8 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
 
   return (
     <>
-      <PageHead title="עבודות" sub={rows ? `${rows.length} עבודות בכל הפרויקטים` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ עבודה חדשה</button>} />
-      {modal && <NewWorkItem onClose={() => setModal(false)} onDone={(id) => { setModal(false); if (id) nav(`#/wi/${id}`); else reload(); }} />}
+      <PageHead title="עבודות" sub={rows ? `${rows.length} דרישות בכל הלקוחות` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ דרישה חדשה</button>} />
+      {modal && <NewRequirement onClose={() => setModal(false)} onDone={(id) => { setModal(false); if (id) nav(`#/wi/${id}`); else reload(); }} />}
       <div className="filter-bar">
         <div className="field"><label>חיפוש</label><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="כותרת או מפתח…" /></div>
         <div className="field"><label>עדיפות</label>
@@ -52,16 +52,16 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
       {err && <div className="empty">{err}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>עבודה</th><th>פרויקט</th><th>לקוח</th><th>אחראי</th><th>עדיפות</th><th>שלב</th><th>עודכן</th></tr></thead>
+          <thead><tr><th>דרישה</th><th>תחת</th><th>לקוח</th><th>אחראי</th><th>עדיפות</th><th>שלב</th><th>עודכן</th></tr></thead>
           <tbody>
             {filtered.map((w) => (
               <tr key={w.id}>
                 <td>
                   <span className="w-title" onClick={() => nav(`#/wi/${w.id}`)}>{w.title}</span>{" "}
-                  <TypeChip kind={w.kind} />
+                  <TypeChip type={w.type} />
                   {w.openBlockers > 0 && <span className="prio critical" style={{ marginInlineStart: 6 }}>חסום</span>}
                 </td>
-                <td style={{ color: "var(--ink-500)" }}>{w.projectName}</td>
+                <td style={{ color: "var(--ink-500)" }}>{w.parentId ? (w.parentTitle ?? "—") : "—"}</td>
                 <td style={{ color: "var(--ink-500)" }}>{w.clientName}</td>
                 <td><span className="w-owner"><span className="a">{initials(w.ownerName)}</span>{w.ownerName}</span></td>
                 <td><span className={`prio ${w.priority}`}>{PRIO[w.priority]}</span></td>

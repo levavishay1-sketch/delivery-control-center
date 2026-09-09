@@ -1,61 +1,78 @@
 import { useEffect, useState } from "react";
-import { checkConnection, deleteConnection, getClient, type ClientDetail as CD } from "../api.ts";
+import { checkConnection, deleteConnection, getClient, REQ_TYPE_HE, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
-import { AddRequirement, ConnectAdo, LinkRepo, NewProject } from "../forms.tsx";
+import { ConnectAdo, LinkRepo, NewRequirement } from "../forms.tsx";
 
-const CONN: Record<string, string> = { manual: "ידני", ado: "Azure DevOps", github: "GitHub", jira: "Jira", dcc: "DCC" };
-const ST: Record<string, { label: string; tone: string }> = {
-  planning: { label: "בתכנון", tone: "inactive" }, active: { label: "פעיל", tone: "healthy" },
-  blocked: { label: "חסום", tone: "critical" }, done: { label: "הושלם", tone: "active" },
+const PH: Record<string, { label: string; tone: string }> = {
+  intake: { label: "קליטה", tone: "inactive" }, shaping: { label: "עיצוב", tone: "healthy" },
+  building: { label: "בבנייה", tone: "healthy" }, review: { label: "בבדיקה", tone: "healthy" },
+  done: { label: "הושלם", tone: "active" }, archived: { label: "אורכב", tone: "inactive" },
 };
+const CONN: Record<string, string> = { manual: "ידני", ado: "Azure DevOps", github: "GitHub", jira: "Jira", dcc: "DCC" };
+
+/** flatten the forest into rows with a depth, parents before children */
+function ordered(reqs: Requirement[]): { r: Requirement; depth: number }[] {
+  const byParent = new Map<string | null, Requirement[]>();
+  for (const r of reqs) {
+    const k = r.parentId && reqs.some((x) => x.id === r.parentId) ? r.parentId : null;
+    byParent.set(k, [...(byParent.get(k) ?? []), r]);
+  }
+  const out: { r: Requirement; depth: number }[] = [];
+  const walk = (parent: string | null, depth: number) => {
+    for (const r of byParent.get(parent) ?? []) { out.push({ r, depth }); walk(r.id, depth + 1); }
+  };
+  walk(null, 0);
+  return out;
+}
 
 export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [d, setD] = useState<CD | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [modal, setModal] = useState<"req" | "repo" | "ado" | "project" | null>(null);
+  const [modal, setModal] = useState<"req" | "repo" | "ado" | null>(null);
   const reload = () => getClient(id).then(setD).catch((e) => setErr(String(e)));
   useEffect(() => { reload(); }, [id]);
 
   if (err) return <div className="empty">{err}</div>;
   if (!d) return <div className="spin">טוען…</div>;
 
+  const rows = ordered(d.requirements);
+  const activeConns = d.connections.filter((c) => c.kind === "ado" && !c.revokedAt);
+
   return (
     <>
       <PageHead
         crumb={<a onClick={() => nav("#/clients")}>← לקוחות</a>}
         title={d.client.name}
-        sub={`${d.projects.length} פרויקטים · ${d.repos.length} repositories · ${d.connections.filter((c) => !c.revokedAt).length} חיבורים`}
-        actions={
-          <>
-            <button className="btn btn-secondary" onClick={() => setModal("project")}>+ פרויקט</button>
-            <button className="btn btn-primary" onClick={() => setModal("req")} disabled={d.projects.length === 0}>+ הוסף דרישה</button>
-          </>
-        }
+        sub={`${d.requirements.length} דרישות · ${d.repos.length} repositories · ${activeConns.length} חיבורים${d.client.adoProjectRef ? ` · ADO: ${d.client.adoProjectRef}` : ""}`}
+        actions={<button className="btn btn-primary" onClick={() => setModal("req")}>+ הוסף דרישה</button>}
       />
 
-      {modal === "req" && <AddRequirement clientId={id} projects={d.projects} onClose={() => setModal(null)} onDone={(wi) => { setModal(null); if (wi) nav(`#/wi/${wi}`); else reload(); }} />}
+      {modal === "req" && <NewRequirement fixedClientId={id} onClose={() => setModal(null)} onDone={(wi) => { setModal(null); if (wi) nav(`#/wi/${wi}`); else reload(); }} />}
       {modal === "repo" && <LinkRepo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "ado" && <ConnectAdo clientId={id} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
-      {modal === "project" && <NewProject fixedClientName={d.client.name} onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
 
-      {/* ---- projects ---- */}
-      <p className="section-lbl">פרויקטים</p>
+      {/* ---- requirements ---- */}
+      <p className="section-lbl">דרישות</p>
       <div className="panel" style={{ padding: 0, overflow: "hidden", marginBottom: 26 }}>
         <table className="wtable">
-          <thead><tr><th>פרויקט</th><th>סטטוס</th><th>אינטגרציה</th><th>עבודות</th></tr></thead>
+          <thead><tr><th>דרישה</th><th>סוג</th><th>שלב</th><th>עדיפות</th><th>חסמים</th></tr></thead>
           <tbody>
-            {d.projects.map((p) => {
-              const st = ST[p.status]!;
+            {rows.map(({ r, depth }) => {
+              const ph = PH[r.phase] ?? { label: r.phase, tone: "inactive" };
               return (
-                <tr key={p.id}>
-                  <td><span className="w-title" onClick={() => nav(`#/project/${p.id}`)}>{p.name}</span></td>
-                  <td><span className={`pill ${st.tone}`}><span className="dot" />{st.label}</span></td>
-                  <td>{CONN[p.connectorType] ?? p.connectorType}</td>
-                  <td>{p.items}</td>
+                <tr key={r.id}>
+                  <td style={{ paddingInlineStart: 14 + depth * 22 }}>
+                    {depth > 0 && <span style={{ color: "var(--ink-300)" }}>↳ </span>}
+                    <span className="w-title" onClick={() => nav(`#/wi/${r.id}`)}>{r.title}</span>
+                  </td>
+                  <td>{REQ_TYPE_HE[r.type] ?? r.type}</td>
+                  <td><span className={`pill ${ph.tone}`}><span className="dot" />{ph.label}</span></td>
+                  <td>{r.priority}</td>
+                  <td>{r.openBlockers > 0 ? <Pill tone="critical">{r.openBlockers}</Pill> : "—"}</td>
                 </tr>
               );
             })}
-            {d.projects.length === 0 && <tr><td colSpan={4}><div className="empty">אין פרויקטים. לחץ "+ פרויקט".</div></td></tr>}
+            {rows.length === 0 && <tr><td colSpan={5}><div className="empty">אין דרישות. לחץ "+ הוסף דרישה".</div></td></tr>}
           </tbody>
         </table>
       </div>
@@ -81,7 +98,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
             <p className="card-title" style={{ margin: 0 }}>Azure DevOps</p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("ado")}>+ חיבור</button>
           </div>
-          {d.connections.filter((c) => c.kind === "ado" && !c.revokedAt).map((c) => (
+          {activeConns.map((c) => (
             <div key={c.id} style={{ fontSize: 12.5, borderTop: "1px solid var(--border-hairline)", paddingTop: 10, marginTop: 10 }}>
               <div style={{ fontWeight: 600 }}>{c.displayName}</div>
               <div style={{ color: "var(--ink-400)", direction: "ltr", fontSize: 11 }}>{c.config.orgUrl}{c.config.project ? ` · ${c.config.project}` : " · (רמת collection)"}</div>
@@ -92,7 +109,10 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
               </div>
             </div>
           ))}
-          {d.connections.filter((c) => c.kind === "ado" && !c.revokedAt).length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>לא מחובר ל-Azure DevOps.</p>}
+          {activeConns.length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>לא מחובר ל-Azure DevOps.</p>}
+          {CONN[d.client.connectorType] && d.client.connectorType !== "manual" && (
+            <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 8 }}>סוג סנכרון: {CONN[d.client.connectorType]}</p>
+          )}
         </div>
       </div>
     </>

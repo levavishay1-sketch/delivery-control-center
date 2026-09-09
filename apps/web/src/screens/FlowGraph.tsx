@@ -27,10 +27,10 @@ function layout(nodes: FlowData["nodes"], edges: FlowData["edges"]) {
   return pos;
 }
 
-export function FlowGraph({ projectId }: { projectId: string }) {
+export function FlowGraph({ requirementId }: { requirementId: string }) {
   const [data, setData] = useState<FlowData | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { getFlow(projectId).then(setData).catch((e) => setErr(String(e))); }, [projectId]);
+  useEffect(() => { getFlow(requirementId).then(setData).catch((e) => setErr(String(e))); }, [requirementId]);
 
   const { rfNodes, rfEdges } = useMemo(() => {
     if (!data) return { rfNodes: [] as Node[], rfEdges: [] as Edge[] };
@@ -44,7 +44,7 @@ export function FlowGraph({ projectId }: { projectId: string }) {
           label: (
             <div style={{ padding: "8px 10px", textAlign: "left" }}>
               <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, color: "#9698b3" }}>
-                {n.key ?? "—"} · {n.phase}{n.linkedAdoId ? ` · ADO #${n.linkedAdoId}` : ""}
+                {n.key ?? "—"} · {n.type} · {n.phase}{n.linkedAdoId ? ` · ADO #${n.linkedAdoId}` : ""}
               </div>
               <div style={{ fontWeight: 500, marginTop: 2, fontSize: 12 }}>{n.title}</div>
               {blocked && <div style={{ fontSize: 10, color: "#dc2626", marginTop: 3 }}>{n.openBlockingGaps ? `${n.openBlockingGaps} blocking gap ` : ""}{n.openBlockers ? `${n.openBlockers} blocker` : ""}</div>}
@@ -70,7 +70,7 @@ export function FlowGraph({ projectId }: { projectId: string }) {
 
   if (err) return <div className="empty">{err}</div>;
   if (!data) return <div className="spin">Loading…</div>;
-  if (data.nodes.length === 0) return <div className="empty">No work items in this project.</div>;
+  if (data.nodes.length === 0) return <div className="empty">אין תת-דרישות.</div>;
 
   return (
     <ReactFlow nodes={rfNodes} edges={rfEdges} fitView nodesDraggable nodesConnectable={false}>

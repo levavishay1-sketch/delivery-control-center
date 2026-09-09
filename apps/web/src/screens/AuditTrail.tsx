@@ -75,14 +75,14 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
 
       {err && <div className="empty">{err}</div>}
       <div className="grid-rowlist">
-        <div className="grid-row head"><span>Actor</span><span>Action</span><span>Project / Work item</span><span style={{ textAlign: "end" }}>Time</span></div>
+        <div className="grid-row head"><span>Actor</span><span>Action</span><span>Requirement</span><span style={{ textAlign: "end" }}>Time</span></div>
         {(data?.rows ?? []).map((r) => (
           <div className="grid-row" key={r.id}>
             <span className="actor"><span className="actor-ic">{ACTOR_IC[r.actor.kind] ?? "•"}</span> {actorLabel(r.actor)}</span>
             <span>{actionText(r.type, r.payload)}</span>
             <span className="proj">
               {r.workitemId ? <a onClick={() => nav(`#/wi/${r.workitemId}`)}>{r.wiKey ? `${r.wiKey} · ` : ""}{r.wiTitle}</a> : <span>—</span>}
-              <span>{[r.projectName, r.clientName].filter(Boolean).join(" · ")}</span>
+              <span>{r.clientName}</span>
             </span>
             <span className="time">{when(r.occurredAt)}</span>
           </div>

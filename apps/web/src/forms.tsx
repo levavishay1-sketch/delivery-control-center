@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getAdoProjects, getClients, getConnections, getProjectList, getRepos } from "./api.ts";
+import { getAdoProjects, getClients, getConnections, getRepos } from "./api.ts";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -33,96 +33,103 @@ function Err({ e }: { e: string | null }) {
   return e ? <p style={{ color: "var(--status-critical)", fontSize: 12, margin: "8px 0 0" }}>{e}</p> : null;
 }
 
-export function NewProject({ onClose, onDone, fixedClientName }: { onClose: () => void; onDone: (id?: string) => void; fixedClientName?: string }) {
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [f, setF] = useState({ clientChoice: fixedClientName ?? "", newClientName: "", projectName: "" });
+export function NewClient({ onClose, onDone }: { onClose: () => void; onDone: (id?: string) => void }) {
+  const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (fixedClientName) return;
-    getClients().then((r) => {
-      setClients(r.clients);
-      setF((s) => ({ ...s, clientChoice: r.clients[0]?.name ?? "__new" }));
-    }).catch(() => setF((s) => ({ ...s, clientChoice: "__new" })));
-  }, []);
-
-  const clientName = fixedClientName ?? (f.clientChoice === "__new" ? f.newClientName : f.clientChoice);
-
   const submit = async () => {
-    if (!clientName || !f.projectName) return setErr("לקוח ושם פרויקט הם שדות חובה");
+    if (!name.trim()) return setErr("שם הלקוח הוא שדה חובה");
     setBusy(true); setErr(null);
     try {
-      const r = await api("/admin/setup-client", { clientName, projectName: f.projectName });
-      onDone(r.projectId);
+      const r = await api("/admin/setup-client", { clientName: name.trim() });
+      onDone(r.clientId);
     } catch (e) { setErr(String(e)); setBusy(false); }
   };
   return (
-    <Modal title="פרויקט חדש" onClose={onClose}>
-      {!fixedClientName && (
-        <div className="field" style={{ marginBottom: 12 }}>
-          <label>לקוח</label>
-          <select value={f.clientChoice} onChange={(e) => setF({ ...f, clientChoice: e.target.value })}>
-            {clients.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-            <option value="__new">+ לקוח חדש…</option>
-          </select>
-        </div>
-      )}
-      {!fixedClientName && f.clientChoice === "__new" && (
-        <div className="field" style={{ marginBottom: 12 }}>
-          <label>שם הלקוח החדש</label>
-          <input value={f.newClientName} onChange={(e) => setF({ ...f, newClientName: e.target.value })} placeholder="למשל: Altshuler Trade" style={{ width: "100%" }} />
-        </div>
-      )}
+    <Modal title="לקוח חדש" onClose={onClose}>
       <div className="field">
-        <label>שם הפרויקט</label>
-        <input value={f.projectName} onChange={(e) => setF({ ...f, projectName: e.target.value })} placeholder="למשל: Trading Platform" style={{ width: "100%" }} />
+        <label>שם הלקוח</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="למשל: Altshuler Trade" style={{ width: "100%" }} autoFocus />
       </div>
       <Err e={err} />
       <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור פרויקט"}</button>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור לקוח"}</button>
         <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
       </div>
     </Modal>
   );
 }
 
-export function NewWorkItem({ onClose, onDone, defaultProjectId }: { onClose: () => void; onDone: (id?: string) => void; defaultProjectId?: string }) {
-  const [projects, setProjects] = useState<{ id: string; name: string; clientName: string }[]>([]);
-  const [f, setF] = useState({ projectId: defaultProjectId ?? "", title: "", kind: "task", priority: "medium", rawRequirement: "" });
+const TYPE_OPTS: { v: import("./api.ts").ReqType; he: string }[] = [
+  { v: "epic", he: "אפיק (Epic)" }, { v: "feature", he: "פיצ'ר (Feature)" },
+  { v: "story", he: "סיפור (Story)" }, { v: "bug", he: "באג (Bug)" },
+  { v: "task", he: "משימה (Task)" }, { v: "spike", he: "בירור (Spike)" },
+];
+
+/**
+ * Add a requirement — under a client (top-level) or under a parent
+ * requirement. `type` is a hint; shaping refines it. Optional raw text
+ * becomes the first timeline event.
+ */
+export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, parentTitle }: {
+  onClose: () => void; onDone: (id?: string) => void;
+  fixedClientId?: string; fixedParentId?: string; parentTitle?: string;
+}) {
+  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
+  const [f, setF] = useState({ clientId: fixedClientId ?? "", title: "", type: "story", priority: "medium", body: "" });
+  const [fileName, setFileName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => { getProjectList().then((r) => { setProjects(r.projects); if (!f.projectId && r.projects[0]) setF((s) => ({ ...s, projectId: r.projects[0]!.id })); }).catch(() => {}); }, []);
+  useEffect(() => {
+    if (fixedClientId || fixedParentId) return;
+    getClients().then((r) => { setClients(r.clients); if (r.clients[0]) setF((s) => ({ ...s, clientId: r.clients[0]!.id })); }).catch(() => {});
+  }, []);
+
+  const onFile = async (file: File | undefined) => {
+    if (!file) return;
+    setFileName(file.name);
+    if (/^(text\/|application\/json)/.test(file.type) || /\.(txt|md|csv|json|log)$/i.test(file.name)) {
+      const text = await file.text();
+      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n\n" : ""}— מצורף (${file.name}) —\n${text.slice(0, 8000)}` }));
+    } else {
+      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n" : ""}[צורף קובץ: ${file.name}]` }));
+    }
+  };
 
   const submit = async () => {
-    if (!f.projectId || !f.title) return setErr("פרויקט וכותרת הם שדות חובה");
+    if (!fixedParentId && !f.clientId) return setErr("בחר לקוח");
+    if (!f.title.trim()) return setErr("כותרת היא שדה חובה");
     setBusy(true); setErr(null);
     try {
-      const wi = await api("/workitems", { projectId: f.projectId, title: f.title, kind: f.kind, priority: f.priority });
-      if (f.rawRequirement.trim()) {
-        await api("/events", { workitemId: wi.id, kind: "note", note: { body: f.rawRequirement.trim(), source: "manual" } });
-      }
+      const body: Record<string, string> = { title: f.title.trim(), type: f.type, priority: f.priority };
+      if (fixedParentId) body.parentId = fixedParentId;
+      else body.clientId = f.clientId;
+      const wi = await api("/workitems", body);
+      if (f.body.trim()) await api("/events", { workitemId: wi.id, kind: "note", note: { body: f.body.trim(), source: "manual" } });
       onDone(wi.id);
     } catch (e) { setErr(String(e)); setBusy(false); }
   };
 
   return (
-    <Modal title="עבודה חדשה" onClose={onClose}>
+    <Modal title={fixedParentId ? `תת-דרישה תחת "${parentTitle ?? ""}"` : "דרישה חדשה"} onClose={onClose}>
+      {!fixedClientId && !fixedParentId && (
+        <div className="field" style={{ marginBottom: 12 }}>
+          <label>לקוח</label>
+          <select value={f.clientId} onChange={(e) => setF({ ...f, clientId: e.target.value })}>
+            <option value="">— בחר לקוח —</option>
+            {clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
       <div className="field" style={{ marginBottom: 12 }}>
-        <label>פרויקט</label>
-        <select value={f.projectId} onChange={(e) => setF({ ...f, projectId: e.target.value })}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name} — {p.clientName}</option>)}
-        </select>
-      </div>
-      <div className="field" style={{ marginBottom: 12 }}>
-        <label>כותרת</label>
-        <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="תיאור קצר של העבודה" style={{ width: "100%" }} />
+        <label>כותרת הדרישה</label>
+        <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="תיאור קצר" style={{ width: "100%" }} autoFocus />
       </div>
       <div className="form-grid" style={{ marginBottom: 12 }}>
         <div className="field"><label>סוג</label>
-          <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}>
-            <option value="task">משימה</option><option value="bug">באג</option><option value="change">שינוי</option>
+          <select value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}>
+            {TYPE_OPTS.map((t) => <option key={t.v} value={t.v}>{t.he}</option>)}
           </select>
         </div>
         <div className="field"><label>עדיפות</label>
@@ -133,12 +140,16 @@ export function NewWorkItem({ onClose, onDone, defaultProjectId }: { onClose: ()
       </div>
       <div className="field" style={{ marginBottom: 4 }}>
         <label>הדרישה הגולמית (כפי שהתקבלה — מייל / סלאק / שיחה)</label>
-        <textarea value={f.rawRequirement} onChange={(e) => setF({ ...f, rawRequirement: e.target.value })} placeholder="הדבק כאן את הדרישה כמו שהיא, גם אם לא אפויה. זה יהיה האירוע הראשון ב-timeline." style={{ width: "100%", minHeight: 90 }} />
+        <textarea value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} placeholder="הדבק כאן את הדרישה כמו שהיא, גם אם לא אפויה. זה יהיה האירוע הראשון ב-timeline." style={{ width: "100%", minHeight: 90 }} />
         <span className="hint" style={{ fontSize: 11, color: "var(--ink-400)" }}>אופציונלי — אפשר להוסיף אחר כך</span>
       </div>
+      <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+        {fileName ? `📎 ${fileName}` : "📎 צירוף קובץ"}
+        <input type="file" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+      </label>
       <Err e={err} />
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור עבודה"}</button>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור דרישה"}</button>
         <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
       </div>
     </Modal>
@@ -315,71 +326,6 @@ export function ConnectAdo({ clientId, onClose, onDone }: { clientId?: string; o
       {result && <p style={{ fontSize: 12.5, margin: "10px 0 0", color: result.startsWith("✓") ? "var(--status-healthy)" : "var(--status-critical)" }}>{result}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "בודק חיבור…" : "חבר ובדוק"}</button>
-        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
-      </div>
-    </Modal>
-  );
-}
-
-export function AddRequirement({ clientId, projects, onClose, onDone }: {
-  clientId: string; projects: { id: string; name: string }[]; onClose: () => void; onDone: (wiId?: string) => void;
-}) {
-  const [f, setF] = useState({ projectId: projects[0]?.id ?? "", title: "", kind: "task", priority: "medium", body: "" });
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  void clientId;
-
-  const onFile = async (file: File | undefined) => {
-    if (!file) return;
-    setFileName(file.name);
-    if (/^(text\/|application\/json)/.test(file.type) || /\.(txt|md|csv|json|log)$/i.test(file.name)) {
-      const text = await file.text();
-      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n\n" : ""}— מצורף (${file.name}) —\n${text.slice(0, 8000)}` }));
-    } else {
-      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n" : ""}[צורף קובץ: ${file.name}]` }));
-    }
-  };
-
-  const submit = async () => {
-    if (!f.projectId || !f.title.trim()) return setErr("פרויקט וכותרת הם שדות חובה");
-    setBusy(true); setErr(null);
-    try {
-      const wi = await api("/workitems", { projectId: f.projectId, title: f.title.trim(), kind: f.kind, priority: f.priority });
-      if (f.body.trim()) await api("/events", { workitemId: wi.id, kind: "note", note: { body: f.body.trim(), source: "manual" } });
-      onDone(wi.id);
-    } catch (e) { setErr(String(e)); setBusy(false); }
-  };
-
-  return (
-    <Modal title="הוספת דרישה" onClose={onClose}>
-      <div className="field" style={{ marginBottom: 12 }}><label>פרויקט</label>
-        <select value={f.projectId} onChange={(e) => setF({ ...f, projectId: e.target.value })}>
-          {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
-      <div className="field" style={{ marginBottom: 12 }}><label>כותרת הדרישה</label>
-        <input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="תיאור קצר" style={{ width: "100%" }} />
-      </div>
-      <div className="form-grid" style={{ marginBottom: 12 }}>
-        <div className="field"><label>סוג</label>
-          <select value={f.kind} onChange={(e) => setF({ ...f, kind: e.target.value })}><option value="task">משימה</option><option value="bug">באג</option><option value="change">שינוי</option></select>
-        </div>
-        <div className="field"><label>עדיפות</label>
-          <select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}><option value="low">נמוכה</option><option value="medium">בינונית</option><option value="high">גבוהה</option><option value="critical">קריטית</option></select>
-        </div>
-      </div>
-      <div className="field" style={{ marginBottom: 8 }}>
-        <label>הדרישה הגולמית — כפי שהתקבלה</label>
-        <textarea value={f.body} onChange={(e) => setF({ ...f, body: e.target.value })} placeholder="הדבק את הדרישה כמו שהיא, גם אם לא אפויה. זה יהיה האירוע הראשון ב-timeline." style={{ width: "100%", minHeight: 120 }} />
-      </div>
-      <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-        {fileName ? `📎 ${fileName}` : "📎 צירוף קובץ"}
-        <input type="file" hidden onChange={(e) => onFile(e.target.files?.[0])} />
-      </label>
-      <Err e={err} />
-      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור דרישה"}</button>
         <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
       </div>
     </Modal>

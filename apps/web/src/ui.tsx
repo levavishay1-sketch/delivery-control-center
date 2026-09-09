@@ -31,9 +31,9 @@ export function Pill({ tone, children }: { tone: "warning" | "critical" | "activ
   return <span className={`pill ${tone}`}><span className="dot" />{children}</span>;
 }
 
-export function TypeChip({ kind }: { kind: "project" | "task" | "bug" | "change" }) {
-  const label = { project: "Project", task: "Task", bug: "Bug", change: "Change" }[kind];
-  return <span className={`type-chip ${kind}`}>{label}</span>;
+export function TypeChip({ type }: { type: "epic" | "feature" | "story" | "bug" | "task" | "spike" }) {
+  const label = { epic: "Epic", feature: "Feature", story: "Story", bug: "Bug", task: "Task", spike: "Spike" }[type];
+  return <span className={`type-chip ${type}`}>{label}</span>;
 }
 
 const PILL_FOR: Record<string, { tone: "critical" | "active" | "ai" | "healthy"; label: string }> = {

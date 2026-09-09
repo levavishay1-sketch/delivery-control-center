@@ -13,6 +13,14 @@ const del = <T,>(p: string) => fetch(`/api${p}`, { method: "DELETE", headers: H 
 export const getText = (p: string) => fetch(`/api${p}`, { headers: H }).then((r) => r.text());
 
 // ---------- types ----------
+/** Requirement / work-item type — 1:1 with Azure DevOps / TFS. */
+export type ReqType = "epic" | "feature" | "story" | "bug" | "task" | "spike";
+export const REQ_TYPES: ReqType[] = ["epic", "feature", "story", "bug", "task", "spike"];
+export const REQ_TYPE_HE: Record<ReqType, string> = {
+  epic: "אפיק (Epic)", feature: "פיצ'ר (Feature)", story: "סיפור (Story)",
+  bug: "באג (Bug)", task: "משימה (Task)", spike: "בירור (Spike)",
+};
+
 export type EventRow = {
   id: string; workitemId: string | null; occurredAt: string; recordedAt: string;
   source: string; type: string; actor: { kind: string; triggeredBy?: string };
@@ -23,11 +31,11 @@ export type Blocker = { id: string; workitemId: string; questionType: string; qu
 export type Task = { id: string; seq: number; intent: string; appetite: string; state: "pending" | "in_progress" | "blocked" | "done" | "dropped" };
 
 export type WorkItem = {
-  id: string; key: string | null; title: string; clientId: string; projectId: string;
-  kind: "project" | "task" | "bug" | "change"; phase: string;
+  id: string; key: string | null; title: string; clientId: string; parentId: string | null;
+  type: ReqType; phase: string;
   priority: "low" | "medium" | "high" | "critical"; risk: "low" | "medium" | "high";
   executor: "human" | "ai" | "mixed"; budgetUsd: string | null; dueDate: string | null;
-  progressPct: number; linkedAdoId: number | null; startedWithOpenBlocker: boolean;
+  progressPct: number; linkedAdoId: number | null; adoAreaPath: string | null; startedWithOpenBlocker: boolean;
 };
 export type WorkItemDetail = {
   workitem: WorkItem; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
@@ -35,22 +43,24 @@ export type WorkItemDetail = {
   events: EventRow[];
 };
 
+export type Initiative = {
+  id: string; name: string; type: ReqType; phase: string; priority: string;
+  clientName: string; clientId: string; ownerName?: string;
+  budgetUsd: number | null; aiCostUsd?: number; children?: number; items?: number;
+  updatedAt?: string | null;
+};
+
 export type Dashboard = {
   stats: {
-    activeProjects: number; projectsDelta: number;
+    initiatives: number; initiativesDelta: number;
     openItems: number; itemsDelta: number;
     blockedItems: number;
     aiCostUsd: number; aiBudgetUsd: number; aiBudgetPct: number;
   };
-  projects: {
-    id: string; name: string; status: "planning" | "active" | "blocked" | "done";
-    connectorType: "manual" | "ado" | "github" | "jira" | "dcc";
-    clientName: string; budgetUsd: number | null; aiCostUsd: number; items: number;
-    members: { id: string; name: string }[];
-  }[];
+  initiatives: Initiative[];
   recentWorkItems: {
-    id: string; key: string | null; title: string; kind: WorkItem["kind"]; priority: string;
-    projectName: string; ownerName: string; updatedAt: string;
+    id: string; key: string | null; title: string; type: ReqType; priority: string;
+    parentTitle: string | null; clientName: string; ownerName: string; updatedAt: string;
     aiSpentUsd: number; aiBudgetUsd: number | null; trend: "up" | "down" | "flat";
   }[];
   alerts: { id: string; kind: string; severity: string; title: string; body: string | null; createdAt: string; workitemId: string | null }[];
@@ -62,12 +72,12 @@ export type AuditPage = {
     id: string; occurredAt: string; type: string; source: string;
     actor: { kind: string; triggeredBy?: string }; payload: Record<string, unknown>;
     workitemId: string | null; wiKey: string | null; wiTitle: string | null;
-    projectName: string | null; clientName: string | null;
+    clientName: string | null;
   }[];
 };
 
 export type FlowData = {
-  nodes: { id: string; key: string | null; title: string; phase: string; level: string; openBlockingGaps: number; openBlockers: number; linkedAdoId: number | null }[];
+  nodes: { id: string; key: string | null; title: string; phase: string; type: ReqType; parentId: string | null; openBlockingGaps: number; openBlockers: number; linkedAdoId: number | null }[];
   edges: { from: string; to: string; kind: string; reason: string | null; adoSynced: boolean }[];
 };
 
@@ -77,21 +87,27 @@ export const getAudit = (q: Record<string, string>) =>
   get<AuditPage>(`/audit?${new URLSearchParams(q).toString()}`);
 
 export type WorkListRow = {
-  id: string; key: string | null; title: string; kind: WorkItem["kind"]; phase: string;
-  priority: string; risk: string; updatedAt: string; projectName: string; clientName: string;
-  ownerName: string; openBlockers: number;
+  id: string; key: string | null; title: string; type: ReqType; phase: string;
+  priority: string; risk: string; updatedAt: string; parentId: string | null; parentTitle: string | null;
+  clientName: string; ownerName: string; openBlockers: number;
 };
 export const getWorkList = () => get<{ items: WorkListRow[] }>("/list/workitems");
-export const getProjectList = () => get<{ projects: { id: string; name: string; status: string; connectorType: string; budgetUsd: string | null; clientName: string; items: number; updatedAt: string | null }[] }>("/list/projects");
+export const getInitiatives = () => get<{ initiatives: Initiative[] }>("/list/initiatives");
 export const getBudgets = () => get<{ budgets: { clientId: string; clientName: string; monthlyUsd: number; spentUsd: number; pct: number }[] }>("/list/budgets");
 export const getAlerts = () => get<{ alerts: { id: string; kind: string; severity: string; title: string; body: string | null; createdAt: string; workitemId: string | null }[] }>("/list/alerts");
 
-export type ClientRow = { id: string; name: string; projects: number; workitems: number; spent: number; budget: number };
+export type ClientRow = { id: string; name: string; initiatives: number; workitems: number; spent: number; budget: number };
 export const getClients = () => get<{ clients: ClientRow[] }>("/clients");
 
+export type Requirement = {
+  id: string; key: string | null; title: string; type: ReqType; phase: string;
+  priority: string; risk: string; parentId: string | null; ownerName: string;
+  budgetUsd: string | null; dueDate: string | null; progressPct: number;
+  updatedAt: string | null; openBlockers: number;
+};
 export type ClientDetail = {
-  client: { id: string; name: string };
-  projects: { id: string; name: string; status: string; connectorType: string; budgetUsd: string | null; items: number; updatedAt: string | null }[];
+  client: { id: string; name: string; connectorType: string; adoProjectRef: string | null };
+  requirements: Requirement[];
   repos: { id: string; name: string; adoRepoRef: string | null; addedAt: string }[];
   connections: { id: string; kind: string; displayName: string; config: Record<string, string>; lastCheckedAt: string | null; lastCheckOk: string | null; revokedAt: string | null }[];
 };
@@ -102,11 +118,16 @@ export const getAdoProjects = (body: { orgUrl: string; pat: string }) =>
 export const deleteConnection = (clientId: string, id: string) => del<{ deleted: boolean }>(`/clients/${clientId}/connections/${id}`);
 export const checkConnection = (clientId: string, id: string) => post<{ ok: boolean; detail: string }>(`/clients/${clientId}/connections/${id}/check`, {});
 export const getConnections = () => get<{ connections: { id: string; kind: string; displayName: string; config: Record<string, string>; clientName: string; clientId: string; lastCheckOk: string | null }[] }>("/connections");
-export const listWorkItems = () => get<{ id: string; key: string | null; title: string; phase: string }[]>("/dev/workitems");
 export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);
 export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);
-export const getFlow = (projectId: string) => get<FlowData>(`/projects/${projectId}/flow`);
+export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
+
+export const createRequirement = (body: {
+  clientId?: string; parentId?: string; title: string; type?: ReqType;
+  priority?: string; risk?: string; executor?: string;
+}) => post<WorkItem>("/workitems", body);
+export const deleteRequirement = (id: string) => del<Record<string, never>>(`/workitems/${id}`);
 
 export const verifyGap = (gapId: string, body: { outcome: "verified" | "dismissed" | "spun_off"; clientId: string; spunOffTitle?: string }) =>
   post(`/gaps/${gapId}/verify`, body);

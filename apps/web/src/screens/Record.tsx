@@ -65,11 +65,11 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   return (
     <>
       {noteOpen && <AddNote workitemId={wi.id} onClose={() => setNoteOpen(false)} onDone={() => { setNoteOpen(false); reload(); }} />}
-      <p className="crumb"><a onClick={() => nav(`#/project/${wi.projectId}`)}>← לפרויקט</a></p>
+      <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
           <h1>{wi.title}</h1>
-          <TypeChip kind={wi.kind} />
+          <TypeChip type={wi.type} />
           {wi.key && <span style={{ fontFamily: "var(--mono)", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
@@ -139,7 +139,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
       {tab === "Dependencies" && (
         <div style={{ height: "60vh", border: "1px solid var(--border-hairline)", borderRadius: "var(--radius-md)", overflow: "hidden", position: "relative" }}>
-          <FlowGraph projectId={wi.projectId} />
+          <FlowGraph requirementId={wi.id} />
         </div>
       )}
 
