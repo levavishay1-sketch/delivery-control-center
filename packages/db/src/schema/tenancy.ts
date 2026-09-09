@@ -73,6 +73,9 @@ export const repo = pgTable(
     clientId: uuid("client_id").references(() => client.id, { onDelete: "restrict" }),
     name: text("name").notNull(),
     adoRepoRef: text("ado_repo_ref"),
+    /** Local working copy on the machine running DCC — where `claude` runs
+     *  for repo-aware assessment / breakdown. Cloned from the git url if unset. */
+    localPath: text("local_path"),
     defaultBranch: text("default_branch").notNull().default("main"),
     /** Nullable until first index; drives the "last indexed" visibility (architecture risks). */
     lastIndexedAt: timestamp("last_indexed_at", { withTimezone: true }),

@@ -35,7 +35,11 @@ export type EventRow = {
 };
 export type Gap = { id: string; description: string; blocking: boolean; confidence: string; state: "proposed" | "verified" | "dismissed" | "spun_off"; spunOffTo: string | null };
 export type Blocker = { id: string; workitemId: string; questionType: string; question: string; answer: string | null; state: "open" | "answered" | "abandoned" };
-export type Task = { id: string; seq: number; intent: string; appetite: string; state: "pending" | "in_progress" | "blocked" | "done" | "dropped" };
+export type Task = {
+  id: string; seq: number; intent: string; appetite: string;
+  state: "pending" | "in_progress" | "blocked" | "done" | "dropped";
+  origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[];
+};
 
 export type WorkItem = {
   id: string; key: string | null; title: string; clientId: string; parentId: string | null;
@@ -144,6 +148,14 @@ export type StartBuildResult = {
   openBlockingGaps: number; openBlockers: number; startedWithOpenBlocker: boolean;
 };
 export const startBuilding = (id: string) => post<StartBuildResult>(`/workitems/${id}/start`, {});
+export const getUsers = () => get<{ users: { id: string; email: string; displayName: string }[] }>("/users");
+export const assignRequirement = (id: string, body: { ownerId?: string; email?: string }) => post<{ assigned: boolean; ownerId: string }>(`/workitems/${id}/assign`, body);
+export type AssessResult = { englishTitle: string; englishSummary: string; baked: boolean; rationale: string; gaps: { description: string; blocking: boolean; confidence: number }[]; repoUsed: string | null };
+export const assessRequirement = (id: string) => post<AssessResult>(`/workitems/${id}/assess`, {});
+export type BreakdownResult = { tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[] };
+export const breakdownRequirement = (id: string) => post<BreakdownResult>(`/workitems/${id}/breakdown`, {});
+export const approveTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => post<{ approved: boolean }>(`/tasks/${id}/approve`, body);
+export const rejectTask = (id: string, clientId: string) => post<{ rejected: boolean }>(`/tasks/${id}/reject`, { clientId });
 export const updateRequirement = (id: string, body: Partial<{
   title: string; type: ReqType; priority: string; risk: string; executor: string; phase: string;
   budgetUsd: string | number | null; dueDate: string | null; parentId: string | null; adoAreaPath: string | null; key: string | null;

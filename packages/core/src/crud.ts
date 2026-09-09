@@ -177,11 +177,12 @@ export async function reposForRequirement(clientId: string, workitemId: string) 
 
 /* ── repo ───────────────────────────────────────────────────────────── */
 
-export async function updateRepo(input: { repoId: string; name?: string; adoRepoRef?: string | null; defaultBranch?: string }) {
+export async function updateRepo(input: { repoId: string; name?: string; adoRepoRef?: string | null; defaultBranch?: string; localPath?: string | null }) {
   const patch: Record<string, unknown> = {};
   if (input.name !== undefined) patch.name = input.name;
   if (input.adoRepoRef !== undefined) patch.adoRepoRef = input.adoRepoRef;
   if (input.defaultBranch !== undefined) patch.defaultBranch = input.defaultBranch;
+  if (input.localPath !== undefined) patch.localPath = input.localPath || null;
   if (Object.keys(patch).length === 0) return { updated: false };
   await withoutTenant((tx) => tx.update(repo).set(patch).where(eq(repo.id, input.repoId)));
   return { updated: true };

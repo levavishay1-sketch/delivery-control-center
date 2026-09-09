@@ -72,6 +72,10 @@ import {
   attachmentsFor,
   addAttachment,
   startBuilding,
+  assessRequirement,
+  breakdownRequirement,
+  approveTask,
+  rejectTask,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -132,8 +136,13 @@ app.delete("/clients/:id", async (req, reply) => {
 app.patch("/repos/:id", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ name: z.string().min(1).optional(), adoRepoRef: z.string().nullable().optional(), defaultBranch: z.string().optional() }).parse(req.body);
+  const b = z.object({ name: z.string().min(1).optional(), adoRepoRef: z.string().nullable().optional(), defaultBranch: z.string().optional(), localPath: z.string().nullable().optional() }).parse(req.body);
   return updateRepo({ repoId: id, ...b });
+});
+
+app.get("/users", async () => {
+  const rows = await db.select({ id: users.id, email: users.email, displayName: users.displayName }).from(users).orderBy(users.displayName);
+  return { users: rows };
 });
 
 app.delete("/repos/:id", async (req) => {
@@ -435,6 +444,50 @@ app.post("/workitems/:id/start", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
   return startBuilding({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
+});
+
+app.post("/workitems/:id/assign", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ ownerId: z.string().uuid().optional(), email: z.string().email().optional() }).parse(req.body);
+  const wi = await locateWorkItem({ id });
+  let ownerId = b.ownerId;
+  if (!ownerId && b.email) {
+    const [u] = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${b.email.toLowerCase()}`).limit(1);
+    ownerId = u?.id ?? (await db.insert(users).values({ entraOid: `dev-${b.email}`, email: b.email.toLowerCase(), displayName: b.email.split("@")[0]! }).returning({ id: users.id }))[0]!.id;
+  }
+  if (!ownerId) throw new NotFound("ownerId or email required");
+  await withTenant(wi.clientId, (tx) => tx.update(workitem).set({ ownerId, updatedAt: new Date() }).where(sql`${workitem.id} = ${id}`));
+  return { assigned: true, ownerId };
+});
+
+// AI-assisted: translate + assess (spawns the local `claude` CLI — can take 1-3 min)
+app.post("/workitems/:id/assess", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return assessRequirement({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
+});
+
+app.post("/workitems/:id/breakdown", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return breakdownRequirement({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
+});
+
+app.post("/tasks/:id/approve", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional() }).parse(req.body);
+  return approveTask(b.clientId, id, { userId: dev.id }, { intent: b.intent, appetite: b.appetite });
+});
+
+app.post("/tasks/:id/reject", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ clientId: z.string().uuid() }).parse(req.body);
+  return rejectTask(b.clientId, id);
 });
 
 app.post("/workitems/:id/attachments", async (req, reply) => {

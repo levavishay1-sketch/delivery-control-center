@@ -14,6 +14,10 @@ export { setupClient, type SetupResult } from "./admin.ts";
 export { syncRequirementToAdo, trySyncNewRequirement, syncAllToAdo, deleteAdoForRequirement, adoWorkItemUrl } from "./ado-sync.ts";
 export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
+export {
+  assessRequirement, breakdownRequirement, approveTask, rejectTask, pendingApprovalCount,
+  type AssessResult, type BreakdownResult,
+} from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {
   updateClient, deleteClient, archiveClient,

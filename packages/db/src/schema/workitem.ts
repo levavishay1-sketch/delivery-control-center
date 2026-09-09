@@ -190,6 +190,13 @@ export const task = pgTable(
       .default(sql`'[]'::jsonb`),
     appetite: taskAppetite("appetite").notNull().default("standard"),
     state: taskState("state").notNull().default("pending"),
+    /** How this task was created: 'ai' (a breakdown proposal) or 'human'. */
+    origin: text("origin").notNull().default("human"),
+    /** Set when a person has approved this task + its content (AI proposals need this). */
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
+    /** Files the breakdown expects this task to touch. */
+    affectedPaths: jsonb("affected_paths").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     /** OpenSpec change id this task belongs to, when applicable. */
     openspecChangeId: text("openspec_change_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

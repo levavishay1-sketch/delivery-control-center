@@ -1,0 +1,264 @@
+import { spawn } from "node:child_process";
+import { existsSync, mkdirSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { and, eq, isNull, sql } from "drizzle-orm";
+import { appendEvent, withTenant } from "@dcc/db";
+import { gap, repo, task, taskDependency, workitem } from "@dcc/db/schema";
+import { regenerateBrief } from "./brief/generate.ts";
+
+/**
+ * The AI-assisted steps of the flow. These run through the LOCAL `claude`
+ * CLI — the user's own logged-in session (no API key). DCC spawns it
+ * headless (`claude -p … --output-format json`) with the repo as cwd so
+ * Claude can actually read the code, then parses the JSON it returns.
+ */
+
+const CLAUDE_BIN = process.env.DCC_CLAUDE_BIN || "claude";
+const REPO_CACHE = path.join(os.tmpdir(), "dcc-repos");
+
+/** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back. */
+async function runClaudeJson<T>(cwd: string, prompt: string, opts: { timeoutMs?: number; allowWrites?: boolean } = {}): Promise<T> {
+  // prompt goes on stdin so there is nothing to shell-escape; args are all plain
+  const args = ["-p", "--output-format", "json", "--permission-mode", opts.allowWrites ? "acceptEdits" : "plan"];
+  const raw = await new Promise<string>((resolve, reject) => {
+    const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: process.platform === "win32" });
+    let out = "";
+    let err = "";
+    const killer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`claude timed out after ${(opts.timeoutMs ?? 240000) / 1000}s`)); }, opts.timeoutMs ?? 240000);
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (err += d));
+    child.on("error", (e) => { clearTimeout(killer); reject(new Error(`cannot run "${CLAUDE_BIN}" — האם claude מותקן ומחובר? (${e.message})`)); });
+    child.on("close", (code) => {
+      clearTimeout(killer);
+      if (code !== 0) return reject(new Error(`claude exited ${code}: ${(err || out).slice(0, 400)}`));
+      resolve(out);
+    });
+    child.stdin.write(prompt);
+    child.stdin.end();
+  });
+
+  // --output-format json → { type:"result", result:"<assistant text>", ... }
+  let text = raw.trim();
+  try {
+    const env = JSON.parse(text) as { result?: string };
+    if (typeof env.result === "string") text = env.result;
+  } catch { /* not the envelope — treat raw as the text */ }
+
+  // pull the JSON object/array out of whatever the model wrapped it in
+  const m = text.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, text];
+  const jsonText = (m[1] ?? text).trim();
+  const start = jsonText.search(/[[{]/);
+  if (start < 0) throw new Error(`no JSON in claude output: ${text.slice(0, 300)}`);
+  try {
+    return JSON.parse(jsonText.slice(start)) as T;
+  } catch (e) {
+    throw new Error(`could not parse claude JSON (${(e as Error).message}): ${jsonText.slice(0, 300)}`);
+  }
+}
+
+/** Local working copy for the repo — clone or pull. Returns null if we can't get one. */
+async function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+  if (r.localPath && existsSync(r.localPath)) return r.localPath;
+  const gitUrl = r.adoRepoRef && /^(https?:\/\/|git@)/.test(r.adoRepoRef) ? r.adoRepoRef : null;
+  if (!gitUrl) return r.localPath ?? null;
+  mkdirSync(REPO_CACHE, { recursive: true });
+  const dir = path.join(REPO_CACHE, r.id);
+  const run = (args: string[], c?: string) =>
+    new Promise<number>((res) => {
+      const p = spawn("git", args, { cwd: c, windowsHide: true, shell: process.platform === "win32" });
+      p.on("close", (code) => res(code ?? 1));
+      p.on("error", () => res(1));
+    });
+  if (existsSync(path.join(dir, ".git"))) {
+    await run(["pull", "--ff-only"], dir);
+  } else {
+    const code = await run(["clone", "--depth", "80", gitUrl, dir]);
+    if (code !== 0) return null;
+  }
+  return dir;
+}
+
+type Dev = { userId: string };
+
+async function loadRequirementText(clientId: string, workitemId: string) {
+  return withTenant(clientId, async (tx) => {
+    const [wi] = await tx.select().from(workitem).where(eq(workitem.id, workitemId)).limit(1);
+    if (!wi) throw new Error("requirement not found");
+    const notes = await tx.execute<{ body: string; source: string; occurred_at: Date }>(
+      sql`select payload->>'body' as body, source, occurred_at from event_log
+          where workitem_id = ${workitemId} and type = 'note.added' and supersedes is null
+          order by occurred_at asc limit 40`,
+    );
+    return { wi, notes: ((notes.rows ?? notes) as { body: string; source: string }[]).filter((n) => n.body) };
+  });
+}
+
+async function firstRepo(clientId: string, workitemId: string) {
+  return withTenant(clientId, async (tx) => {
+    const linked = await tx
+      .select({ id: repo.id, name: repo.name, localPath: repo.localPath, adoRepoRef: repo.adoRepoRef })
+      .from(sql`workitem_repo wr`).innerJoin(repo, sql`${repo.id} = wr.repo_id`)
+      .where(sql`wr.workitem_id = ${workitemId}`).limit(1);
+    if (linked[0]) return linked[0];
+    const cr = await tx
+      .select({ id: repo.id, name: repo.name, localPath: repo.localPath, adoRepoRef: repo.adoRepoRef })
+      .from(sql`client_repo cr`).innerJoin(repo, sql`${repo.id} = cr.repo_id`)
+      .where(sql`cr.client_id = ${clientId}`).limit(1);
+    return cr[0] ?? null;
+  });
+}
+
+/* ── 1. assess: translate + is it baked? ───────────────────────────── */
+
+export type AssessResult = {
+  englishTitle: string;
+  englishSummary: string;
+  baked: boolean;
+  rationale: string;
+  gaps: { description: string; blocking: boolean; confidence: number }[];
+  repoUsed: string | null;
+};
+
+export async function assessRequirement(input: { clientId: string; workitemId: string; by: Dev }): Promise<AssessResult> {
+  const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
+  const r = await firstRepo(input.clientId, input.workitemId);
+  const cwd = r ? await ensureCheckout(r) : null;
+
+  const reqText = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
+  const prompt = [
+    "You are assessing a software requirement for a delivery team. The requirement text is in Hebrew.",
+    cwd ? `You are in the repository this work would touch (${r?.name}). Read whatever code you need to judge feasibility.` : "There is no code checkout available; judge from the text alone.",
+    "",
+    "REQUIREMENT:",
+    reqText,
+    "",
+    "Do this:",
+    "1. Translate the requirement to clear English (a short title + a 2-5 sentence summary).",
+    "2. Decide if it is specified well enough to start implementing ('baked'), or if there are gaps / ambiguities / missing decisions that a person must resolve first.",
+    "3. List the gaps (empty if baked). Mark each as blocking (must be answered before any code) or not.",
+    "",
+    'Respond with ONLY this JSON, no prose, no markdown fence:',
+    '{"englishTitle": string, "englishSummary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
+  ].join("\n");
+
+  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000 });
+
+  await withTenant(input.clientId, async (tx) => {
+    await appendEvent({
+      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
+      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:assess" },
+      payload: { body: `תרגום ל-EN:\n**${res.englishTitle}**\n${res.englishSummary}\n\nהערכה: ${res.baked ? "אפוי — מוכן לפירוק" : "לא אפוי — צריך אינטראקציה"}\n${res.rationale}` },
+    });
+    for (const g of res.gaps ?? []) {
+      await tx.insert(gap).values({
+        clientId: input.clientId, workitemId: input.workitemId,
+        description: g.description, blocking: !!g.blocking,
+        confidence: String(Math.min(1, Math.max(0, g.confidence ?? 0.7))),
+        state: "proposed",
+      });
+    }
+    await appendEvent({
+      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "gap.proposed",
+      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:assess" },
+      payload: { count: (res.gaps ?? []).length, blocking: (res.gaps ?? []).filter((g) => g.blocking).length, capability: "gap_detection" },
+    });
+    await tx.update(workitem).set({ phase: "shaping", updatedAt: new Date() }).where(eq(workitem.id, input.workitemId));
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+
+  return { ...res, gaps: res.gaps ?? [], repoUsed: r?.name ?? null };
+}
+
+/* ── 2. breakdown: propose tasks + dependencies ────────────────────── */
+
+export type BreakdownResult = {
+  tasks: { id: string; seq: number; intent: string; appetite: string; affectedPaths: string[]; dependsOnSeq: number[] }[];
+};
+
+export async function breakdownRequirement(input: { clientId: string; workitemId: string; by: Dev }): Promise<BreakdownResult> {
+  const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
+  const r = await firstRepo(input.clientId, input.workitemId);
+  const cwd = r ? await ensureCheckout(r) : null;
+
+  const reqText = [`Title: ${wi.title}`, ...notes.map((n) => n.body)].join("\n\n");
+  const prompt = [
+    "Break this software requirement into a concrete implementation task list for the team.",
+    cwd ? `You are in the repository (${r?.name}) — read the code to make the tasks specific and correctly ordered.` : "No code checkout available.",
+    "",
+    "REQUIREMENT (may be Hebrew):",
+    reqText,
+    "",
+    "Rules: 3-12 tasks. Each task is one focused, reviewable unit. Give an appetite (small | standard | large). List the files each task will most likely touch. List dependencies by the seq numbers of tasks that must finish first.",
+    "",
+    'Respond with ONLY this JSON array, no prose:',
+    '[{"seq": number, "intent": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',
+  ].join("\n");
+
+  const proposed = await runClaudeJson<{ seq: number; intent: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]>(
+    cwd ?? process.cwd(), prompt, { timeoutMs: 300000 },
+  );
+
+  const out = await withTenant(input.clientId, async (tx) => {
+    const seqToId = new Map<number, string>();
+    const rows: BreakdownResult["tasks"] = [];
+    for (const p of proposed) {
+      const appetite = ["small", "standard", "large"].includes(p.appetite) ? p.appetite : "standard";
+      const [t] = await tx.insert(task).values({
+        clientId: input.clientId, workitemId: input.workitemId, seq: p.seq,
+        intent: p.intent, appetite: appetite as "small" | "standard" | "large",
+        origin: "ai", state: "pending", affectedPaths: p.affectedPaths ?? [],
+      }).returning();
+      seqToId.set(p.seq, t!.id);
+      rows.push({ id: t!.id, seq: p.seq, intent: p.intent, appetite, affectedPaths: p.affectedPaths ?? [], dependsOnSeq: p.dependsOnSeq ?? [] });
+    }
+    for (const p of proposed) {
+      for (const dep of p.dependsOnSeq ?? []) {
+        const from = seqToId.get(p.seq);
+        const to = seqToId.get(dep);
+        if (from && to && from !== to) {
+          await tx.insert(taskDependency).values({ clientId: input.clientId, taskId: from, dependsOnTaskId: to, reason: "AI breakdown" }).onConflictDoNothing();
+        }
+      }
+    }
+    await appendEvent({
+      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "tasks.proposed",
+      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:breakdown" },
+      payload: { taskCount: rows.length, dependencyCount: proposed.reduce((n, p) => n + (p.dependsOnSeq?.length ?? 0), 0), capability: "decomposition" },
+    });
+    return { tasks: rows };
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+  return out;
+}
+
+/* ── 3. task approval ─────────────────────────────────────────────── */
+
+export async function approveTask(clientId: string, taskId: string, by: Dev, patch?: { intent?: string; appetite?: "small" | "standard" | "large" }) {
+  const wi = await withTenant(clientId, async (tx) => {
+    const set: Record<string, unknown> = { approvedAt: new Date(), approvedBy: by.userId };
+    if (patch?.intent) set.intent = patch.intent;
+    if (patch?.appetite) set.appetite = patch.appetite;
+    const [t] = await tx.update(task).set(set).where(eq(task.id, taskId)).returning();
+    return t?.workitemId;
+  });
+  if (wi) await regenerateBrief(clientId, wi);
+  return { approved: true };
+}
+
+export async function rejectTask(clientId: string, taskId: string) {
+  const wi = await withTenant(clientId, async (tx) => {
+    const [t] = await tx.update(task).set({ state: "dropped" }).where(eq(task.id, taskId)).returning();
+    return t?.workitemId;
+  });
+  if (wi) await regenerateBrief(clientId, wi);
+  return { rejected: true };
+}
+
+export async function pendingApprovalCount(clientId: string, workitemId: string) {
+  const [row] = await withTenant(clientId, (tx) =>
+    tx.select({ n: sql<number>`count(*)::int` }).from(task)
+      .where(and(eq(task.workitemId, workitemId), eq(task.origin, "ai"), isNull(task.approvedAt), sql`${task.state} <> 'dropped'`)),
+  );
+  return row?.n ?? 0;
+}
