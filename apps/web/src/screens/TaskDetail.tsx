@@ -5,19 +5,27 @@ import {
   type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
+import { StepRail } from "./WorkflowTab.tsx";
 
 /**
- * One task — the unit that actually reaches TFS and gets built.
- * "תן ל-Claude לפתח" runs the local CLI with write tools on an ISOLATED
- * clone (never the user's own checkout), on a task branch, and commits
- * locally. It never pushes on its own — "⬆ Push ל-GitHub" is the
- * deliberate, explicit step that sends the branch to the real remote,
- * once the user has reviewed it.
+ * One task — the unit that actually reaches TFS and gets built. Its own
+ * gated FLOW, same pattern as the requirement's: פיתוח → סקירה והחלטה →
+ * הושלם. "תן ל-Claude לפתח" runs the local CLI with write tools on an
+ * ISOLATED clone (never the user's own checkout), on a task branch, and
+ * commits locally. It never pushes on its own — "⬆ Push ל-GitHub" is the
+ * deliberate, explicit action inside the review step, once the user has
+ * decided to keep what changed.
  */
 
 const STATE_HE: Record<string, string> = {
   pending: "ממתין", in_progress: "בעבודה", blocked: "חסום", done: "הושלם", dropped: "נדחה",
 };
+
+const TASK_STEPS = [
+  { key: "implement", label: "פיתוח" },
+  { key: "review", label: "סקירה והחלטה" },
+  { key: "done", label: "הושלם" },
+] as const;
 
 const Transcript = ({ lines }: { lines: string[] }) => {
   const box = useRef<HTMLDivElement>(null);
@@ -63,6 +71,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [delAckCoTouch, setDelAckCoTouch] = useState(false);
   const [delCodeChoice, setDelCodeChoice] = useState<"rollback" | "orphan">("rollback");
   const [delErr, setDelErr] = useState<string | null>(null);
+  const [manualStep, setManualStep] = useState<number | null>(null);
 
   const load = useCallback(() => { getTask(id).then(setD).catch((e) => setErr(String(e))); }, [id]);
   const refreshRun = useCallback(async () => {
@@ -85,6 +94,18 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const t = d.task;
   const blockedOpen = d.blockedBy.filter((b) => b.state !== "done");
   const impl = run?.state === "done" && run.kind === "implement" ? (run.result as unknown as ImplementResult | null) : null;
+
+  // the task's own FLOW: פיתוח → סקירה והחלטה → הושלם. Step 1 unlocks once
+  // an implement run has concluded (something to review); step 2 unlocks
+  // the same moment — marking done doesn't require having pushed, since
+  // not every task ends in a push (some get reviewed and rolled back on
+  // purpose, some are finished by other means).
+  const attempted = run !== null && run.kind === "implement" && run.state !== "running" && run.state !== "idle";
+  const stepDone = [attempted, t.state === "done", t.state === "done"];
+  const stepUnlocked = [true, attempted, attempted];
+  const defaultStep = !attempted ? 0 : t.state === "done" ? 2 : 1;
+  const activeStep = manualStep ?? defaultStep;
+  const goStep = (i: number) => setManualStep(i);
 
   const copy = (s: string, k: string) => { navigator.clipboard?.writeText(s); setCopied(k); setTimeout(() => setCopied(""), 1500); };
 
@@ -175,53 +196,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         sub={`${t.kind === "check" ? "בדיקה" : "משימה"} #${t.seq} · ${t.kind === "check" ? "לא ב-TFS בנפרד" : t.adoType ?? "Task"} · ${t.appetite}`}
         actions={
           <>
-            {(impl || t.state === "in_progress") && (
-              <>
-                <button className="btn btn-secondary" disabled={pushing || running} onClick={push}>
-                  {pushing ? "דוחף…" : "⬆ Push ל-GitHub"}
-                </button>
-                <button className="btn btn-secondary" disabled={rollingBack || running} onClick={rollback}>
-                  {rollingBack ? "מבטל…" : "↩ Rollback"}
-                </button>
-              </>
-            )}
             <button className="btn btn-secondary" disabled={running} onClick={openEdit}>✎ ערוך משימה</button>
             <button className="btn btn-secondary" disabled={running || delLoading} onClick={openDelete} style={{ color: "var(--status-critical)" }}>
               {delLoading && !delReport ? "בודק…" : "🗑 מחק משימה"}
             </button>
-            {t.state !== "done" && (
-              <button className="btn btn-secondary" onClick={async () => { await progressTask(t.id, { to: "done", clientId: t.clientId }); load(); }}>סמן כהושלם</button>
-            )}
-            <button className="btn btn-primary" disabled={running} onClick={start}>
-              {running ? "Claude עובד…" : impl ? "✦ הרץ שוב" : "✦ תן ל-Claude לפתח"}
-            </button>
           </>
         }
       />
-
-      {rollbackMsg && !editing && (
-        <div className="callout" style={{ marginBottom: 16 }}>
-          <div className="body"><p className="r">{rollbackMsg}</p></div>
-        </div>
-      )}
-
-      {pushResult && !editing && (
-        <div className="callout" style={{ marginBottom: 16 }}>
-          <div className="body">
-            {pushResult.pushed ? (
-              <>
-                <p className="r">✓ נדחף ל-GitHub.</p>
-                <p style={{ display: "flex", gap: 14, marginTop: 4 }}>
-                  {pushResult.branchUrl && <a href={pushResult.branchUrl} target="_blank" rel="noreferrer">צפה ב-branch ↗</a>}
-                  {pushResult.compareUrl && <a href={pushResult.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request ↗</a>}
-                </p>
-              </>
-            ) : (
-              <p className="r" style={{ color: "var(--status-critical)" }}>{pushResult.reason ?? "ה-push נכשל."}</p>
-            )}
-          </div>
-        </div>
-      )}
 
       {delReport && (
         <Card tone={delReport.safe ? undefined : "crit"}>
@@ -397,129 +378,206 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         </Card>
       )}
 
-      {running && (
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-            <div className="spin" style={{ display: "inline-block", width: 16, height: 16 }} />
-            <p style={{ fontSize: 13, color: "var(--ink-600)", margin: 0 }}>Claude מפתח את המשימה — קורא, עורך, ומריץ מה שאפשר…</p>
-          </div>
-          <Transcript lines={run?.lines ?? []} />
-          <p style={{ marginTop: 6, fontSize: 11, color: "var(--ink-400)" }}>
-            רץ ברקע על קלון מבודד, על branch נפרד. אפשר לצאת מהמסך. לא נדחף כלום.
-          </p>
-        </Card>
-      )}
+      <div className="panel" style={{ padding: 0, marginBottom: 16 }}>
+        <StepRail steps={TASK_STEPS} done={stepDone} unlocked={stepUnlocked} active={activeStep} onPick={goStep} busy={running} />
+        <div style={{ padding: 16 }}>
 
-      {impl && !running && (
-        <Card tone="ok">
-          <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</h3>
-          <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
-
-          {impl.filesChanged.length > 0 && (
-            <div className="field" style={{ marginBottom: 10 }}>
-              <label>קבצים שהשתנו ({impl.filesChanged.length})</label>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
-                {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
-              </div>
-            </div>
-          )}
-          {impl.affectedConsumers?.length > 0 && (
-            <div className="field" style={{ marginBottom: 10 }}>
-              <label>מי עוד נוגע בקבצים האלה ({impl.affectedConsumers.length})</label>
-              <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: -2, marginBottom: 6 }}>
-                קוד אחר שמפנה/משתמש בקבצים ששונו — יש לשקול לאסוף ולעדכן אותם יחד לפריסת טסט.
-              </p>
-              <div className="rowlist">
-                {impl.affectedConsumers.map((c, i) => (
-                  <div className="row" key={i} style={{ alignItems: "flex-start", flexDirection: "column", gap: 3, paddingBlock: 8 }}>
-                    <span style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{c.path}</span>
-                    <span style={{ fontSize: 12, color: "var(--ink-700)" }}>{c.reason}</span>
-                    {c.usedBy.length > 0 && (
-                      <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
-                        ← {c.usedBy.join(", ")}
-                      </span>
-                    )}
+          {activeStep === 0 && (
+            <>
+              {running ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                    <div className="spin" style={{ display: "inline-block", width: 16, height: 16 }} />
+                    <p style={{ fontSize: 13, color: "var(--ink-600)", margin: 0 }}>Claude מפתח את המשימה — קורא, עורך, ומריץ מה שאפשר…</p>
                   </div>
-                ))}
-              </div>
-            </div>
+                  <Transcript lines={run?.lines ?? []} />
+                  <p style={{ marginTop: 6, fontSize: 11, color: "var(--ink-400)" }}>
+                    רץ ברקע על קלון מבודד, על branch נפרד. אפשר לצאת מהמסך. לא נדחף כלום.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
+                    {attempted ? "אפשר להריץ שוב — למשל אחרי עריכת הפרומט, או כדי לנסות גישה אחרת." : "Claude יקרא, יערוך ויריץ מה שאפשר על קלון מבודד — עוד לא נוגע בקוד שלך ולא בשום remote."}
+                  </p>
+                  <button className="btn btn-primary" onClick={start}>
+                    {attempted ? "✦ הרץ שוב" : "✦ תן ל-Claude לפתח"}
+                  </button>
+                  {run?.state === "error" && (
+                    <div style={{ marginTop: 14 }}>
+                      <p style={{ fontSize: 13, marginBottom: 6, color: "var(--status-critical)" }}>ההרצה האחרונה נכשלה.</p>
+                      <p style={{ fontSize: 12, color: "var(--status-critical)", whiteSpace: "pre-wrap" }}>{run.error}</p>
+                    </div>
+                  )}
+                </>
+              )}
+              {run && run.lines.length > 0 && !running && (
+                <div style={{ marginTop: 14 }}>
+                  <a className="link" style={{ fontSize: 12 }} onClick={() => setShowLog((v) => !v)}>
+                    {showLog ? "▲ הסתר" : "▼ הצג"} את התמלול המלא של ההרצה
+                  </a>
+                  {showLog && <div style={{ marginTop: 8 }}><Transcript lines={run.lines} /></div>}
+                </div>
+              )}
+            </>
           )}
-          {impl.testsRun && (
-            <div className="field" style={{ marginBottom: 10 }}>
-              <label>בדיקות</label>
-              <p style={{ fontSize: 12.5 }}>{impl.testsRun}</p>
-            </div>
-          )}
-          <div className="field" style={{ marginBottom: 10 }}>
-            <label>איפה זה יושב</label>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", whiteSpace: "pre-wrap" }}>
-              {`${impl.dir}\n${impl.branch}${impl.commit ? `  (commit ${impl.commit})` : "  — ללא שינויים"}`}
-            </div>
-          </div>
-          <div className="field">
-            <label>לבדיקה מקומית</label>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 8 }}>
-              <span style={{ whiteSpace: "pre-wrap" }}>{`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`}</span>
-              <a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`, "cmd")}>{copied === "cmd" ? "✓" : "העתק"}</a>
-            </div>
-            <span className="hint" style={{ fontSize: 11, color: "var(--ink-400)" }}>לא נדחף לשום מקום — אתה מחליט אם ל-cherry-pick / push.</span>
-          </div>
 
-          {impl.followUps.length > 0 && (
-            <div style={{ marginTop: 12 }}>
-              <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר</p>
-              <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5, lineHeight: 1.7 }}>
-                {impl.followUps.map((f, i) => <li key={i}>{f}</li>)}
-              </ul>
-            </div>
-          )}
-        </Card>
-      )}
+          {activeStep === 1 && (
+            <>
+              {impl && (
+                <>
+                  <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</h3>
+                  <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
 
-      {run?.state === "error" && !running && (
-        <Card tone="crit">
-          <p style={{ fontSize: 13, marginBottom: 6 }}>ההרצה נכשלה.</p>
-          <p style={{ fontSize: 12, color: "var(--status-critical)", whiteSpace: "pre-wrap" }}>{run.error}</p>
-        </Card>
-      )}
-
-      {run?.state === "rolled_back" && !running && (
-        <Card>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <Pill tone="inactive">↩ בוטל</Pill>
-            <h3 style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</h3>
-          </div>
-          {(() => {
-            const old = run.result as unknown as ImplementResult | null;
-            if (!old) return null;
-            return (
-              <>
-                <p style={{ fontSize: 12.5, color: "var(--ink-500)", whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 8 }}>{old.summary}</p>
-                {old.filesChanged.length > 0 && (
-                  <div className="field">
-                    <label>קבצים שהשתנו אז (כבר לא קיימים ב-branch)</label>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
-                      {old.filesChanged.join(", ")}
+                  {impl.filesChanged.length > 0 && (
+                    <div className="field" style={{ marginBottom: 10 }}>
+                      <label>קבצים שהשתנו ({impl.filesChanged.length})</label>
+                      <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
+                        {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
+                      </div>
+                    </div>
+                  )}
+                  {impl.affectedConsumers?.length > 0 && (
+                    <div className="field" style={{ marginBottom: 10 }}>
+                      <label>מי עוד נוגע בקבצים האלה ({impl.affectedConsumers.length})</label>
+                      <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: -2, marginBottom: 6 }}>
+                        קוד אחר שמפנה/משתמש בקבצים ששונו — יש לשקול לאסוף ולעדכן אותם יחד לפריסת טסט.
+                      </p>
+                      <div className="rowlist">
+                        {impl.affectedConsumers.map((c, i) => (
+                          <div className="row" key={i} style={{ alignItems: "flex-start", flexDirection: "column", gap: 3, paddingBlock: 8 }}>
+                            <span style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{c.path}</span>
+                            <span style={{ fontSize: 12, color: "var(--ink-700)" }}>{c.reason}</span>
+                            {c.usedBy.length > 0 && (
+                              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
+                                ← {c.usedBy.join(", ")}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {impl.testsRun && (
+                    <div className="field" style={{ marginBottom: 10 }}>
+                      <label>בדיקות</label>
+                      <p style={{ fontSize: 12.5 }}>{impl.testsRun}</p>
+                    </div>
+                  )}
+                  <div className="field" style={{ marginBottom: 10 }}>
+                    <label>איפה זה יושב</label>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", whiteSpace: "pre-wrap" }}>
+                      {`${impl.dir}\n${impl.branch}${impl.commit ? `  (commit ${impl.commit})` : "  — ללא שינויים"}`}
                     </div>
                   </div>
-                )}
-              </>
-            );
-          })()}
-          <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 8 }}>
-            נשמר לצורך היסטוריה בלבד — ה-branch אופס וזה לא משקף את מצב הקוד היום. אפשר להריץ מחדש בכל רגע.
-          </p>
-        </Card>
-      )}
+                  <div className="field" style={{ marginBottom: 14 }}>
+                    <label>לבדיקה מקומית</label>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                      <span style={{ whiteSpace: "pre-wrap" }}>{`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`}</span>
+                      <a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`, "cmd")}>{copied === "cmd" ? "✓" : "העתק"}</a>
+                    </div>
+                  </div>
 
-      {run && run.lines.length > 0 && !running && (
-        <div style={{ marginBottom: 14 }}>
-          <a className="link" style={{ fontSize: 12 }} onClick={() => setShowLog((v) => !v)}>
-            {showLog ? "▲ הסתר" : "▼ הצג"} את התמלול המלא של ההרצה
-          </a>
-          {showLog && <div style={{ marginTop: 8 }}><Transcript lines={run.lines} /></div>}
+                  {impl.followUps.length > 0 && (
+                    <div style={{ marginBottom: 14 }}>
+                      <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר</p>
+                      <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5, lineHeight: 1.7 }}>
+                        {impl.followUps.map((f, i) => <li key={i}>{f}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, display: "flex", gap: 8 }}>
+                    <button className="btn btn-primary" disabled={pushing || rollingBack} onClick={push}>
+                      {pushing ? "דוחף…" : "⬆ Push ל-GitHub"}
+                    </button>
+                    <button className="btn btn-secondary" disabled={pushing || rollingBack} onClick={rollback}>
+                      {rollingBack ? "מבטל…" : "↩ Rollback"}
+                    </button>
+                  </div>
+
+                  {pushResult && (
+                    <div className="callout" style={{ marginTop: 12 }}>
+                      <div className="body">
+                        {pushResult.pushed ? (
+                          <>
+                            <p className="r">✓ נדחף ל-GitHub.</p>
+                            <p style={{ display: "flex", gap: 14, marginTop: 4 }}>
+                              {pushResult.branchUrl && <a href={pushResult.branchUrl} target="_blank" rel="noreferrer">צפה ב-branch ↗</a>}
+                              {pushResult.compareUrl && <a href={pushResult.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request ↗</a>}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="r" style={{ color: "var(--status-critical)" }}>{pushResult.reason ?? "ה-push נכשל."}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {rollbackMsg && (
+                    <div className="callout" style={{ marginTop: 12 }}>
+                      <div className="body"><p className="r">{rollbackMsg}</p></div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {!impl && run?.state === "rolled_back" && (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                    <Pill tone="inactive">↩ בוטל</Pill>
+                    <h3 style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</h3>
+                  </div>
+                  {(() => {
+                    const old = run.result as unknown as ImplementResult | null;
+                    if (!old) return null;
+                    return (
+                      <>
+                        <p style={{ fontSize: 12.5, color: "var(--ink-500)", whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 8 }}>{old.summary}</p>
+                        {old.filesChanged.length > 0 && (
+                          <div className="field">
+                            <label>קבצים שהשתנו אז (כבר לא קיימים ב-branch)</label>
+                            <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
+                              {old.filesChanged.join(", ")}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                  <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 8 }}>
+                    אפשר לחזור לשלב הפיתוח ולהריץ מחדש בכל רגע.
+                  </p>
+                </>
+              )}
+
+              {!impl && run?.state === "error" && (
+                <div>
+                  <p style={{ fontSize: 13, marginBottom: 6, color: "var(--status-critical)" }}>ההרצה נכשלה — אין מה לסקור.</p>
+                  <p style={{ fontSize: 12, color: "var(--status-critical)", whiteSpace: "pre-wrap" }}>{run.error}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeStep === 2 && (
+            <>
+              {t.state === "done" ? (
+                <p style={{ fontSize: 13.5, color: "var(--status-healthy)" }}>✓ המשימה סומנה כהושלמה.</p>
+              ) : (
+                <>
+                  <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
+                    לסמן שהעבודה של DCC על המשימה הזו נגמרה. אפשר לעשות זאת גם בלי push — לא כל משימה מסתיימת בקוד.
+                  </p>
+                  <button className="btn btn-primary" onClick={async () => { await progressTask(t.id, { to: "done", clientId: t.clientId }); load(); }}>
+                    סמן כהושלם
+                  </button>
+                </>
+              )}
+            </>
+          )}
+
         </div>
-      )}
+      </div>
 
       <Card>
         <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 10 }}>הקשר</h3>

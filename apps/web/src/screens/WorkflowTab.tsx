@@ -433,7 +433,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
 
 /* ── the step rail ─────────────────────────────────────────────────── */
 
-function StepRail({ steps, done, unlocked, active, onPick, busy }: {
+export function StepRail({ steps, done, unlocked, active, onPick, busy }: {
   steps: readonly { key: string; label: string }[];
   done: boolean[]; unlocked: boolean[]; active: number;
   onPick: (i: number) => void; busy?: boolean;
