@@ -5,6 +5,7 @@ import { getDashboard } from "./api.ts";
 import { Dashboard } from "./screens/Dashboard.tsx";
 import { AuditTrail } from "./screens/AuditTrail.tsx";
 import { Record } from "./screens/Record.tsx";
+import { TaskDetail } from "./screens/TaskDetail.tsx";
 import { WorkList } from "./screens/WorkList.tsx";
 import { RequirementList } from "./screens/RequirementList.tsx";
 import { ClientList } from "./screens/ClientList.tsx";
@@ -50,6 +51,7 @@ export function App() {
   const path = hash.replace(/^#/, "").split("?")[0]!;
   let screen: React.ReactNode;
   if (path.startsWith("/wi/")) screen = <Record id={path.slice(4)} nav={nav} />;
+  else if (path.startsWith("/task/")) screen = <TaskDetail id={path.slice(6)} nav={nav} />;
   else if (path.startsWith("/client/")) screen = <ClientDetail id={path.slice(8)} nav={nav} />;
   else if (path.startsWith("/project/")) screen = <Record id={path.slice(9)} nav={nav} />;
   else if (path === "/clients") screen = <ClientList nav={nav} />;
@@ -66,7 +68,7 @@ export function App() {
   const active = (to: string) => {
     if (to === "#/") return path === "/";
     if (to === "#/clients") return path === "/clients" || path.startsWith("/client/");
-    if (to === "#/requirements") return path === "/requirements" || path === "/projects" || path.startsWith("/project/") || path.startsWith("/wi/");
+    if (to === "#/requirements") return path === "/requirements" || path === "/projects" || path.startsWith("/project/") || path.startsWith("/wi/") || path.startsWith("/task/");
     return hash.split("?")[0] === to;
   };
 

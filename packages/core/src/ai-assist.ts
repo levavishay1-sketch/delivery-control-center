@@ -32,9 +32,9 @@ const REPO_CACHE = path.join(os.tmpdir(), "dcc-repos");
  * the user can leave the screen and come back to everything Claude did.
  */
 
-type FlowKind = "assess" | "breakdown";
+type FlowKind = "assess" | "breakdown" | "implement";
 
-const buffers = new Map<string, { lines: string[]; kind: FlowKind; workitemId: string }>();
+const buffers = new Map<string, { lines: string[]; kind: FlowKind; workitemId: string; taskId?: string }>();
 
 function pushLine(runId: string | undefined, line: string) {
   if (!runId) return;
@@ -55,16 +55,7 @@ export type FlowRunView = {
   finishedAt: string | null;
 };
 
-/** The latest run for a requirement — from the live buffer if one is
- *  active (no DB hit during the spawn), otherwise the persisted row. */
-export async function getFlowRunView(workitemId: string): Promise<FlowRunView | null> {
-  for (const [id, b] of buffers) {
-    if (b.workitemId === workitemId) {
-      return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
-    }
-  }
-  const [row] = await db.select().from(flowRun).where(eq(flowRun.workitemId, workitemId)).orderBy(desc(flowRun.startedAt)).limit(1);
-  if (!row) return null;
+function viewOf(row: typeof flowRun.$inferSelect): FlowRunView {
   return {
     id: row.id, kind: row.kind, state: row.state as FlowRunView["state"],
     lines: (row.log ?? []) as string[], result: row.result ?? null, error: row.error,
@@ -73,22 +64,53 @@ export async function getFlowRunView(workitemId: string): Promise<FlowRunView | 
   };
 }
 
-/** Kick off assess/breakdown in the background. Returns at once. */
-export async function startFlowRun(input: { clientId: string; workitemId: string; kind: FlowKind; by: Dev }): Promise<{ runId: string; alreadyRunning: boolean }> {
-  for (const [id, b] of buffers) if (b.workitemId === input.workitemId) return { runId: id, alreadyRunning: true };
+/** The latest run for a requirement — from the live buffer if one is
+ *  active (no DB hit during the spawn), otherwise the persisted row. */
+export async function getFlowRunView(workitemId: string): Promise<FlowRunView | null> {
+  for (const [id, b] of buffers) {
+    if (b.workitemId === workitemId && !b.taskId) {
+      return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
+    }
+  }
+  const [row] = await db.select().from(flowRun)
+    .where(and(eq(flowRun.workitemId, workitemId), isNull(flowRun.taskId)))
+    .orderBy(desc(flowRun.startedAt)).limit(1);
+  return row ? viewOf(row) : null;
+}
+
+/** The latest implementation run for one task. */
+export async function getTaskRunView(taskId: string): Promise<FlowRunView | null> {
+  for (const [id, b] of buffers) {
+    if (b.taskId === taskId) {
+      return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
+    }
+  }
+  const [row] = await db.select().from(flowRun).where(eq(flowRun.taskId, taskId)).orderBy(desc(flowRun.startedAt)).limit(1);
+  return row ? viewOf(row) : null;
+}
+
+/** Kick off assess/breakdown/implement in the background. Returns at once. */
+export async function startFlowRun(input: { clientId: string; workitemId: string; kind: FlowKind; by: Dev; taskId?: string }): Promise<{ runId: string; alreadyRunning: boolean }> {
+  for (const [id, b] of buffers) {
+    if (input.taskId ? b.taskId === input.taskId : b.workitemId === input.workitemId && !b.taskId) {
+      return { runId: id, alreadyRunning: true };
+    }
+  }
 
   const [row] = await db.insert(flowRun).values({
-    clientId: input.clientId, workitemId: input.workitemId, kind: input.kind,
+    clientId: input.clientId, workitemId: input.workitemId, taskId: input.taskId ?? null, kind: input.kind,
     state: "running", startedBy: input.by.userId, log: [],
   }).returning();
   const runId = row!.id;
-  buffers.set(runId, { lines: [], kind: input.kind, workitemId: input.workitemId });
+  buffers.set(runId, { lines: [], kind: input.kind, workitemId: input.workitemId, ...(input.taskId ? { taskId: input.taskId } : {}) });
 
   void (async () => {
     try {
       const result = input.kind === "assess"
         ? await runAssess({ ...input, runId })
-        : await runBreakdown({ ...input, runId });
+        : input.kind === "implement"
+          ? await runImplement({ ...input, taskId: input.taskId!, runId })
+          : await runBreakdown({ ...input, runId });
       await db.update(flowRun).set({
         state: "done", result: result as unknown as Record<string, unknown>,
         log: buffers.get(runId)?.lines ?? [], finishedAt: new Date(),
@@ -142,14 +164,22 @@ function describeEvent(line: string): string | null {
 async function runClaudeJson<T>(
   cwd: string,
   prompt: string,
-  opts: { timeoutMs?: number; maxTurns?: number; runId?: string } = {},
+  opts: { timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean } = {},
 ): Promise<T> {
-  // prompt goes on stdin so there is nothing to shell-escape; args are all plain
-  const args = [
-    "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "plan",
-    "--allowed-tools", "Read,Grep,Glob",
-    "--max-turns", String(opts.maxTurns ?? 40),
-  ];
+  // prompt goes on stdin so there is nothing to shell-escape; args are all plain.
+  // Read-only by default (plan mode). `write` is only for implementation runs,
+  // and those work on an isolated clone — never the user's own checkout.
+  const args = opts.write
+    ? [
+        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
+        "--allowed-tools", "Read,Grep,Glob,Edit,Write,Bash",
+        "--max-turns", String(opts.maxTurns ?? 80),
+      ]
+    : [
+        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "plan",
+        "--allowed-tools", "Read,Grep,Glob",
+        "--max-turns", String(opts.maxTurns ?? 40),
+      ];
   const raw = await new Promise<string>((resolve, reject) => {
     const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     let out = "";
@@ -321,7 +351,7 @@ export type BreakdownResult = {
   tasks: {
     id: string; seq: number; intent: string; appetite: string;
     affectedPaths: string[]; dependsOnSeq: number[];
-    parentSeq: number | null; level: number; adoType: string;
+    parentSeq: number | null; level: number; adoType: string; prompt: string | null;
   }[];
 };
 
@@ -350,14 +380,22 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
     "",
     "Rules: each LEAF is one focused, reviewable unit. Give every node an appetite (small | standard | large). On leaves, list the files it will most likely touch. `dependsOnSeq` lists seq numbers that must finish first (ordering between siblings) — it is NOT the hierarchy.",
     "",
-    "IMPORTANT: write each node's \"intent\" IN HEBREW (code identifiers and file paths may stay in English). appetite stays one of small|standard|large.",
+    "`prompt` — the MOST IMPORTANT field. It is the exact instruction another",
+    "Claude will be handed, alone, to implement this node. It must stand on its",
+    "own: no reference to this conversation, no \"as discussed\". Name the files,",
+    "functions and symbols to change, say what the change is, what must NOT",
+    "change, and how to tell it worked. For a parent node whose children do the",
+    "work, the prompt describes the integration/verification the parent owns.",
+    "Write it as a direct instruction, 3-10 sentences.",
+    "",
+    "IMPORTANT: write each node's \"intent\" and \"prompt\" IN HEBREW (code identifiers and file paths stay English). appetite stays one of small|standard|large.",
     "",
     'Respond with ONLY this JSON array, no prose:',
-    '[{"seq": number, "parentSeq": number|null, "intent": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',
+    '[{"seq": number, "parentSeq": number|null, "intent": string, "prompt": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',
   ].join("\n");
 
   const proposed = await runClaudeJson<
-    { seq: number; parentSeq?: number | null; intent: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]
+    { seq: number; parentSeq?: number | null; intent: string; prompt?: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]
   >(cwd ?? process.cwd(), prompt, { timeoutMs: 300000, runId: input.runId });
   pushLine(input.runId, "בונה את היררכיית המשימות…");
 
@@ -396,13 +434,13 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
         clientId: input.clientId, workitemId: input.workitemId, seq: p.seq,
         intent: p.intent, appetite: appetite as "small" | "standard" | "large",
         origin: "ai", state: "pending", affectedPaths: p.affectedPaths ?? [],
-        parentTaskId: parentId, adoType,
+        parentTaskId: parentId, adoType, prompt: p.prompt?.trim() || null,
       }).returning();
       seqToId.set(p.seq, t!.id);
       rows.push({
         id: t!.id, seq: p.seq, intent: p.intent, appetite,
         affectedPaths: p.affectedPaths ?? [], dependsOnSeq: p.dependsOnSeq ?? [],
-        parentSeq: p.parentSeq ?? null, level, adoType,
+        parentSeq: p.parentSeq ?? null, level, adoType, prompt: p.prompt?.trim() ?? null,
       });
     }
     for (const p of proposed) {
@@ -430,13 +468,152 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
   return out;
 }
 
-/* ── 3. task approval ─────────────────────────────────────────────── */
+/* ── 3. implement one task ────────────────────────────────────────── */
 
-export async function approveTask(clientId: string, taskId: string, by: Dev, patch?: { intent?: string; appetite?: "small" | "standard" | "large" }) {
+export type ImplementResult = {
+  branch: string;
+  dir: string;
+  repoName: string | null;
+  summary: string;
+  filesChanged: string[];
+  commit: string | null;
+  testsRun: string | null;
+  followUps: string[];
+};
+
+/** Run a git command in `cwd`; resolves { code, out }.
+ *  git.exe is a real executable (not a .cmd shim like npm/claude), so it
+ *  must run WITHOUT shell:true — Windows' cmd.exe re-splits a quoted
+ *  argument at every space, which silently breaks any commit message
+ *  with spaces (e.g. "t1: ..." becomes three separate pathspec args). */
+function git(args: string[], cwd: string): Promise<{ code: number; out: string }> {
+  return new Promise((res) => {
+    const p = spawn("git", args, { cwd, windowsHide: true });
+    let out = "";
+    p.stdout?.on("data", (d) => (out += d));
+    p.stderr?.on("data", (d) => (out += d));
+    p.on("close", (code) => res({ code: code ?? 1, out: out.trim() }));
+    p.on("error", (e) => res({ code: 1, out: String(e) }));
+  });
+}
+
+const slug = (s: string) =>
+  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
+
+async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string }): Promise<ImplementResult> {
+  const { t, wi, notes } = await withTenant(input.clientId, async (tx) => {
+    const [t] = await tx.select().from(task).where(eq(task.id, input.taskId)).limit(1);
+    if (!t) throw new Error("task not found");
+    const [wi] = await tx.select().from(workitem).where(eq(workitem.id, input.workitemId)).limit(1);
+    const n = await tx.execute<{ body: string }>(
+      sql`select payload->>'body' as body from event_log
+          where workitem_id = ${input.workitemId} and type = 'note.added' and supersedes is null
+          order by occurred_at asc limit 20`,
+    );
+    return { t, wi, notes: ((n.rows ?? n) as { body: string }[]).filter((x) => x.body) };
+  });
+
+  const r = await firstRepo(input.clientId, input.workitemId);
+  if (!r) throw new Error("אין repository מקושר לדרישה — אי אפשר לפתח בלי קוד");
+  pushLine(input.runId, `מכין עותק עבודה של ${r.name}…`);
+  // Deliberately the CACHE clone, never r.localPath: an autonomous write
+  // run must not touch the user's own working copy.
+  const dir = await ensureCheckout({ ...r, localPath: null });
+  if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
+
+  const branch = `feature/${wi?.key ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
+  pushLine(input.runId, `branch: ${branch}`);
+
+  // start from a clean, up-to-date base
+  await git(["reset", "--hard"], dir);
+  await git(["clean", "-fd"], dir);
+  const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
+  await git(["checkout", base], dir);
+  await git(["pull", "--ff-only"], dir);
+  const made = await git(["checkout", "-b", branch], dir);
+  if (made.code !== 0) await git(["checkout", branch], dir);
+
+  const ctx = [
+    `Requirement ${wi?.key ?? ""}: ${wi?.title ?? ""}`,
+    ...notes.map((n) => n.body),
+  ].join("\n\n").slice(0, 6000);
+
+  // The task's own prompt is the instruction — written by the breakdown,
+  // reviewed and possibly edited by the user before approval. It is what
+  // runs, verbatim; `intent` is only the fallback for older tasks.
+  const instruction = (t.prompt ?? "").trim() || t.intent;
+  pushLine(input.runId, `הפרומט של המשימה:\n${instruction}`);
+
+  const prompt = [
+    "You are implementing ONE task in this repository. You are on a fresh branch; the working tree is clean.",
+    "",
+    "TASK — this is the instruction, follow it exactly:",
+    instruction,
+    (t.prompt ?? "").trim() && t.prompt!.trim() !== t.intent ? `\n(short title: ${t.intent})` : "",
+    t.affectedPaths.length ? `\nFiles the breakdown expected to change: ${(t.affectedPaths as string[]).join(", ")}` : "",
+    `Appetite: ${t.appetite}`,
+    "",
+    "CONTEXT — the requirement this task came from (Hebrew):",
+    ctx,
+    "",
+    "Do this:",
+    "1. Read the relevant code before changing anything. Match the surrounding style exactly.",
+    "2. Make the change. Keep it to THIS task — do not refactor beyond it, do not touch unrelated files.",
+    "3. If the repo has a build or tests you can run cheaply, run them and report what happened. Do not install dependencies.",
+    "4. Do NOT commit, do NOT push, do NOT create branches — that is handled outside.",
+    "",
+    "IMPORTANT: write `summary` and `followUps` IN HEBREW (code identifiers and paths stay English).",
+    "",
+    "Respond with ONLY this JSON, no prose, no markdown fence:",
+    '{"summary": string, "filesChanged": string[], "testsRun": string|null, "followUps": string[]}',
+  ].filter(Boolean).join("\n");
+
+  const res = await runClaudeJson<{ summary: string; filesChanged?: string[]; testsRun?: string | null; followUps?: string[] }>(
+    dir, prompt, { timeoutMs: 900_000, runId: input.runId, write: true },
+  );
+
+  pushLine(input.runId, "מקומיט מקומית (בלי push)…");
+  await git(["add", "-A"], dir);
+  const stat = await git(["diff", "--cached", "--name-only"], dir);
+  const changed = stat.out.split("\n").map((s) => s.trim()).filter(Boolean);
+  let commit: string | null = null;
+  if (changed.length > 0) {
+    const msg = `${wi?.key ?? "REQ"} t${t.seq}: ${t.intent.slice(0, 90)}\n\nDCC task ${t.id}\n\nCo-Authored-By: Claude <noreply@anthropic.com>`;
+    const c = await git(["-c", "user.name=DCC", "-c", "user.email=dcc@local", "commit", "-m", msg], dir);
+    if (c.code === 0) commit = (await git(["rev-parse", "--short", "HEAD"], dir)).out;
+    pushLine(input.runId, commit ? `✓ commit ${commit} · ${changed.length} קבצים` : `commit נכשל: ${c.out.slice(0, 200)}`);
+  } else {
+    pushLine(input.runId, "לא השתנו קבצים");
+  }
+
+  await withTenant(input.clientId, (tx) =>
+    tx.update(task).set({ state: changed.length > 0 ? "in_progress" : t.state, updatedAt: new Date() }).where(eq(task.id, input.taskId)),
+  );
+  await appendEvent({
+    clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
+    actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:implement" },
+    links: [{ rel: "task", ref: input.taskId }],
+    payload: {
+      body: `🛠 Claude פיתח משימה #${t.seq}: ${t.intent.slice(0, 70)}\nbranch ${branch}${commit ? ` · commit ${commit}` : " · ללא שינויים"}\n\n${res.summary}`,
+    },
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+
+  return {
+    branch, dir, repoName: r.name, summary: res.summary,
+    filesChanged: changed.length ? changed : res.filesChanged ?? [],
+    commit, testsRun: res.testsRun ?? null, followUps: res.followUps ?? [],
+  };
+}
+
+/* ── 4. task approval ─────────────────────────────────────────────── */
+
+export async function approveTask(clientId: string, taskId: string, by: Dev, patch?: { intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string }) {
   const wi = await withTenant(clientId, async (tx) => {
     const set: Record<string, unknown> = { approvedAt: new Date(), approvedBy: by.userId };
     if (patch?.intent) set.intent = patch.intent;
     if (patch?.appetite) set.appetite = patch.appetite;
+    if (patch?.prompt !== undefined) set.prompt = patch.prompt.trim() || null;
     const [t] = await tx.update(task).set(set).where(eq(task.id, taskId)).returning();
     return t?.workitemId;
   });

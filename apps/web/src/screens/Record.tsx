@@ -151,7 +151,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         ))}
       </div>
 
-      {tab === "Flow" && <WorkflowTab d={d} reload={() => reload()} goToTab={(t) => setTab(t as Tab)} />}
+      {tab === "Flow" && <WorkflowTab d={d} reload={() => reload()} goToTab={(t) => setTab(t as Tab)} nav={nav} />}
 
       {tab === "Overview" && (
         <>
@@ -289,7 +289,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             {d.tasks.filter((t) => t.state !== "dropped").map((t) => (
               <div className="row" key={t.id}>
                 <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-400)" }}>{t.seq}</span>
-                <span className="title" style={{ textDecoration: t.state === "done" ? "line-through" : "none", color: t.state === "done" ? "var(--ink-400)" : undefined }}>{t.intent}</span>
+                <span className="title w-title" style={{ textDecoration: t.state === "done" ? "line-through" : "none", color: t.state === "done" ? "var(--ink-400)" : undefined }} onClick={() => nav(`#/task/${t.id}`)}>{t.intent}</span>
                 <span className="spacer" />
                 <span className="stage">{t.appetite}</span>
                 {t.origin === "ai" && (t.approvedAt ? <Pill tone="healthy">מאושר</Pill> : <Pill tone="ai">ממתין לאישור</Pill>)}

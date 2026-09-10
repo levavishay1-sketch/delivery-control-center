@@ -48,8 +48,8 @@ const Card = ({ children, tone }: { children: React.ReactNode; tone?: "crit" | "
   }}>{children}</div>
 );
 
-export function WorkflowTab({ d, reload, goToTab }: {
-  d: WorkItemDetail; reload: () => void; goToTab: (t: string) => void;
+export function WorkflowTab({ d, reload, goToTab, nav }: {
+  d: WorkItemDetail; reload: () => void; goToTab: (t: string) => void; nav: (h: string) => void;
 }) {
   const wi = d.workitem;
   const clientId = wi.clientId;
@@ -62,7 +62,7 @@ export function WorkflowTab({ d, reload, goToTab }: {
   const [assignOpen, setAssignOpen] = useState(false);
   const [assignTo, setAssignTo] = useState("");
   const [assignEmail, setAssignEmail] = useState("");
-  const [edited, setEdited] = useState<Record<string, { intent: string; appetite: string }>>({});
+  const [edited, setEdited] = useState<Record<string, { intent: string; appetite: string; prompt: string }>>({});
   const [build, setBuild] = useState<StartBuildResult | null>(null);
   const [copied, setCopied] = useState("");
   const [materializing, setMaterializing] = useState(false);
@@ -132,8 +132,11 @@ export function WorkflowTab({ d, reload, goToTab }: {
   };
   const approve = async (id: string) => {
     const n = nodes.find((x) => x.id === id);
-    const e = edited[id] ?? { intent: n?.intent ?? "", appetite: n?.appetite ?? "standard" };
-    await approveTask(id, { clientId, intent: e.intent, appetite: e.appetite as "small" | "standard" | "large" });
+    const e = edited[id] ?? { intent: n?.intent ?? "", appetite: n?.appetite ?? "standard", prompt: n?.prompt ?? "" };
+    await approveTask(id, {
+      clientId, intent: e.intent, appetite: e.appetite as "small" | "standard" | "large",
+      ...(e.prompt !== undefined ? { prompt: e.prompt } : {}),
+    });
     await refreshTasks(); reload();
   };
   const doMaterialize = async () => {
@@ -327,7 +330,7 @@ export function WorkflowTab({ d, reload, goToTab }: {
 
             <div style={{ display: "grid", gap: 8 }}>
               {[...nodes].sort((a, b) => a.level - b.level || a.seq - b.seq).map((n) => {
-                const e = edited[n.id] ?? { intent: n.intent, appetite: n.appetite };
+                const e = edited[n.id] ?? { intent: n.intent, appetite: n.appetite, prompt: n.prompt ?? "" };
                 return (
                   <div key={n.id} style={{
                     border: `1px solid ${n.approved ? "var(--border-hairline)" : "var(--status-warning, #b45309)"}`,
@@ -342,7 +345,10 @@ export function WorkflowTab({ d, reload, goToTab }: {
                         : n.approved ? <Pill tone="healthy">מאושר</Pill> : <Pill tone="warning">ממתין לאישור</Pill>}
                     </div>
                     {n.linkedAdoId ? (
-                      <div style={{ fontSize: 12.5 }}>{n.intent}</div>
+                      <>
+                        <div style={{ fontSize: 12.5, marginBottom: 6 }}>{n.intent}</div>
+                        <a className="link" style={{ fontSize: 11.5 }} onClick={() => nav(`#/task/${n.id}`)}>פתח את המשימה ותן ל-Claude לפתח ←</a>
+                      </>
                     ) : (
                       <>
                         <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6 }}>
@@ -350,6 +356,16 @@ export function WorkflowTab({ d, reload, goToTab }: {
                           <select value={e.appetite} onChange={(ev) => setEdited({ ...edited, [n.id]: { ...e, appetite: ev.target.value } })} style={{ fontSize: 12 }}>
                             <option value="small">small</option><option value="standard">standard</option><option value="large">large</option>
                           </select>
+                        </div>
+                        <div className="field" style={{ marginBottom: 8 }}>
+                          <label>הפרומט ש-Claude יריץ למשימה הזו</label>
+                          <textarea
+                            value={e.prompt} rows={5}
+                            onChange={(ev) => setEdited({ ...edited, [n.id]: { ...e, prompt: ev.target.value } })}
+                            placeholder="ההוראה המדויקת שתימסר ל-Claude כשתלחץ &quot;תן ל-Claude לפתח&quot; על המשימה"
+                            style={{ width: "100%", fontSize: 12, lineHeight: 1.6, padding: "8px 10px", border: "1px solid var(--border-hairline)", borderRadius: 7, resize: "vertical" }}
+                          />
+                          <span className="hint" style={{ fontSize: 10.5, color: "var(--ink-400)" }}>נשמר עם האישור. זה מה שירוץ — כדאי לקרוא אותו.</span>
                         </div>
                         {n.affectedPaths.length > 0 && (
                           <div style={{ fontSize: 11, color: "var(--ink-400)", marginBottom: 8 }} dir="ltr">{n.affectedPaths.join(", ")}</div>

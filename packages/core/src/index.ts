@@ -1,7 +1,7 @@
 export { resolveWorkItem, keyFromBranch, type ResolvedWorkItem } from "./resolve.ts";
 export { recordSession, recordGitActivity, recordNote } from "./capture.ts";
 export { proposeGap, verifyGap } from "./gaps.ts";
-export { proposeTasks, progressTask, tasksFor, type TaskInput } from "./tasks.ts";
+export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, type TaskInput, type TaskDetail } from "./tasks.ts";
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
@@ -16,8 +16,8 @@ export { syncRequirementToAdo, trySyncNewRequirement, syncAllToAdo, deleteAdoFor
 export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
-  startFlowRun, getFlowRunView, approveTask, rejectTask, pendingApprovalCount,
-  type AssessResult, type BreakdownResult, type FlowRunView,
+  startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount,
+  type AssessResult, type BreakdownResult, type FlowRunView, type ImplementResult,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {

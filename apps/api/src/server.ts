@@ -41,6 +41,9 @@ import {
   resolveWorkItem,
   setupClient,
   tasksFor,
+  taskDetail,
+  clientOfTask,
+  getTaskRunView,
   verifyGap,
   updateClient,
   deleteClient,
@@ -473,11 +476,43 @@ app.post("/workitems/:id/materialize", async (req) => {
   return materializeTasksToAdo({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
 });
 
+/* ── one task: detail, implement, live run ────────────────────────── */
+
+async function taskClient(id: string): Promise<string> {
+  const c = await clientOfTask(id);
+  if (!c) throw new NotFound("task");
+  return c;
+}
+
+app.get("/tasks/:id", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  return taskDetail(await taskClient(id), id);
+});
+
+// hand the task to Claude. Writes on an ISOLATED clone (never the user's
+// own checkout), commits locally on a task branch, never pushes.
+app.post("/tasks/:id/implement", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const clientId = await taskClient(id);
+  const d = await taskDetail(clientId, id);
+  return startFlowRun({
+    clientId, workitemId: d.requirement.id, taskId: id, kind: "implement", by: { userId: dev.id },
+  });
+});
+
+app.get("/tasks/:id/flow-run", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  return (await getTaskRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
+});
+
 app.post("/tasks/:id/approve", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional() }).parse(req.body);
-  return approveTask(b.clientId, id, { userId: dev.id }, { intent: b.intent, appetite: b.appetite });
+  const b = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional(), prompt: z.string().optional() }).parse(req.body);
+  return approveTask(b.clientId, id, { userId: dev.id }, { intent: b.intent, appetite: b.appetite, prompt: b.prompt });
 });
 
 app.post("/tasks/:id/reject", async (req) => {

@@ -195,6 +195,12 @@ export const task = pgTable(
     /** Set when a person has approved this task + its content (AI proposals need this). */
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     approvedBy: uuid("approved_by"),
+    /**
+     * The exact instruction Claude runs for this task. Written by the
+     * breakdown, editable before approval, executed verbatim by the
+     * implementation run — so the handoff is reviewable, not implicit.
+     */
+    prompt: text("prompt"),
     /** Files the breakdown expects this task to touch. */
     affectedPaths: jsonb("affected_paths").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     /**
@@ -510,7 +516,9 @@ export const flowRun = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
     workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
-    kind: text("kind").notNull(), // assess | breakdown
+    /** Set when the run is about one task (implementation) rather than the requirement. */
+    taskId: uuid("task_id"),
+    kind: text("kind").notNull(), // assess | breakdown | implement
     state: text("state").notNull().default("running"), // running | done | error
     log: jsonb("log").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
     result: jsonb("result"),
@@ -519,5 +527,8 @@ export const flowRun = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
-  (t) => [index("flow_run_workitem_idx").on(t.workitemId, t.startedAt)],
+  (t) => [
+    index("flow_run_workitem_idx").on(t.workitemId, t.startedAt),
+    index("flow_run_task_idx").on(t.taskId, t.startedAt),
+  ],
 );

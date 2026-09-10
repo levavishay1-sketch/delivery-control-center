@@ -41,6 +41,7 @@ export type Task = {
   state: "pending" | "in_progress" | "blocked" | "done" | "dropped";
   origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[];
   parentTaskId: string | null; adoType: string | null; linkedAdoId: number | null; adoUrl: string | null;
+  prompt: string | null;
 };
 
 export type WorkItem = {
@@ -156,13 +157,14 @@ export type BreakdownResult = {
   depth: number;
   tasks: {
     id: string; seq: number; intent: string; appetite: string; affectedPaths: string[];
-    dependsOnSeq: number[]; parentSeq: number | null; level: number; adoType: string;
+    dependsOnSeq: number[]; parentSeq: number | null; level: number; adoType: string; prompt: string | null;
   }[];
 };
 export type TaskFlowNode = {
   id: string; seq: number; intent: string; appetite: string; state: string;
   adoType: string | null; level: number; parentTaskId: string | null;
   approved: boolean; linkedAdoId: number | null; adoUrl: string | null; affectedPaths: string[];
+  prompt: string | null;
 };
 export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: { from: string; to: string; kind: "parent" | "depends" }[] };
 export const getTaskFlow = (id: string) => get<TaskFlow>(`/workitems/${id}/task-flow`);
@@ -186,13 +188,13 @@ export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
 export const startAssess = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, {});
 export const startBreakdown = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/breakdown`, {});
 export type FlowRun = {
-  id: string | null; kind: "assess" | "breakdown" | null;
+  id: string | null; kind: "assess" | "breakdown" | "implement" | null;
   state: "running" | "done" | "error" | "idle";
-  lines: string[]; result: AssessResult | BreakdownResult | null; error: string | null;
+  lines: string[]; result: AssessResult | BreakdownResult | ImplementResult | null; error: string | null;
   startedAt?: string | null; finishedAt?: string | null;
 };
 export const getFlowRun = (id: string) => get<FlowRun>(`/workitems/${id}/flow-run`);
-export const approveTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => post<{ approved: boolean }>(`/tasks/${id}/approve`, body);
+export const approveTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string }) => post<{ approved: boolean }>(`/tasks/${id}/approve`, body);
 export const rejectTask = (id: string, clientId: string) => post<{ rejected: boolean }>(`/tasks/${id}/reject`, { clientId });
 export const updateRequirement = (id: string, body: Partial<{
   title: string; type: ReqType; priority: string; risk: string; executor: string; phase: string;
@@ -228,3 +230,22 @@ export const answerBlocker = (blockerId: string, body: { answer: string; clientI
   post(`/blockers/${blockerId}/answer`, body);
 export const progressTask = (taskId: string, body: { to: Task["state"]; clientId: string }) =>
   post(`/tasks/${taskId}/progress`, { ...body, mode: "interactive" });
+
+/* ── one task ─────────────────────────────────────────────────────── */
+type TaskSlim = { id: string; seq: number; intent: string; state: string; linkedAdoId?: number | null; adoType?: string | null };
+export type TaskDetail = {
+  task: Task & { workitemId: string; clientId: string; acceptance: { given: string; when: string; then: string }[]; adoSyncedAt: string | null };
+  requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
+  parent: { id: string; seq: number; intent: string; adoType: string | null } | null;
+  children: TaskSlim[];
+  blockedBy: TaskSlim[];
+  blocks: TaskSlim[];
+  repos: { id: string; name: string; adoRepoRef: string | null }[];
+};
+export const getTask = (id: string) => get<TaskDetail>(`/tasks/${id}`);
+export const implementTask = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/tasks/${id}/implement`, {});
+export const getTaskRun = (id: string) => get<FlowRun>(`/tasks/${id}/flow-run`);
+export type ImplementResult = {
+  branch: string; dir: string; repoName: string | null; summary: string;
+  filesChanged: string[]; commit: string | null; testsRun: string | null; followUps: string[];
+};

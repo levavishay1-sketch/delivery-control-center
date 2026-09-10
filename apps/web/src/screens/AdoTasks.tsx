@@ -20,7 +20,7 @@ function TaskRows({ rows, nav }: { rows: AdoTaskRow[]; nav: (h: string) => void 
           <tr key={t.id} style={newReq && i > 0 ? { borderTop: "2px solid var(--border-hairline)" } : undefined}>
             <td style={{ paddingInlineStart: 14 + t.level * 22 }}>
               {t.level > 0 && <span style={{ color: "var(--ink-300)" }}>↳ </span>}
-              <span title={t.intent}>{t.intent.length > 100 ? `${t.intent.slice(0, 100)}…` : t.intent}</span>
+              <span className="w-title" onClick={() => nav(`#/task/${t.id}`)} title={t.intent}>{t.intent.length > 100 ? `${t.intent.slice(0, 100)}…` : t.intent}</span>
             </td>
             <td><Pill tone={TYPE_TONE(t.adoType)}>{t.adoType ?? "Task"}</Pill></td>
             <td>

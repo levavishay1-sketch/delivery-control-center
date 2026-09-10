@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { withTenant, appendEvent } from "@dcc/db";
+import { db as dbAny, withTenant, appendEvent } from "@dcc/db";
 import { task, taskDependency, workitem } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 
@@ -134,4 +134,61 @@ export async function tasksFor(clientId: string, workitemId: string) {
       .where(sql`${taskDependency.taskId} in (select id from ${task} where ${task.workitemId} = ${workitemId})`);
     return { tasks: rows, dependencies: deps };
   });
+}
+
+/* ── one task, with everything the task screen needs ───────────────── */
+
+export type TaskDetail = {
+  task: typeof task.$inferSelect;
+  requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
+  parent: { id: string; seq: number; intent: string; adoType: string | null } | null;
+  children: { id: string; seq: number; intent: string; adoType: string | null; state: string; linkedAdoId: number | null }[];
+  /** tasks that must finish before this one */
+  blockedBy: { id: string; seq: number; intent: string; state: string; linkedAdoId: number | null }[];
+  /** tasks waiting on this one */
+  blocks: { id: string; seq: number; intent: string; state: string }[];
+  repos: { id: string; name: string; adoRepoRef: string | null }[];
+};
+
+export async function taskDetail(clientId: string, taskId: string): Promise<TaskDetail> {
+  return withTenant(clientId, async (tx) => {
+    const [t] = await tx.select().from(task).where(sql`${task.id} = ${taskId}`).limit(1);
+    if (!t) throw new Error("task not found");
+    const [wi] = await tx
+      .select({ id: workitem.id, key: workitem.key, title: workitem.title, phase: workitem.phase, clientId: workitem.clientId })
+      .from(workitem).where(sql`${workitem.id} = ${t.workitemId}`).limit(1);
+
+    const slim = { id: task.id, seq: task.seq, intent: task.intent, adoType: task.adoType, state: task.state, linkedAdoId: task.linkedAdoId };
+    const parent = t.parentTaskId
+      ? (await tx.select(slim).from(task).where(sql`${task.id} = ${t.parentTaskId}`).limit(1))[0] ?? null
+      : null;
+    const children = await tx.select(slim).from(task).where(sql`${task.parentTaskId} = ${taskId} and ${task.state} <> 'dropped'`).orderBy(task.seq);
+
+    // exclude 'dropped' — a rejected/replaced proposal leaves its
+    // dependency edges behind (they point at a real row, so no FK to
+    // cascade), and should read as gone, not as a live blocker.
+    const blockedBy = await tx.select(slim).from(task)
+      .where(sql`${task.id} in (select depends_on_task_id from task_dependency where task_id = ${taskId}) and ${task.state} <> 'dropped'`).orderBy(task.seq);
+    const blocks = await tx.select(slim).from(task)
+      .where(sql`${task.id} in (select task_id from task_dependency where depends_on_task_id = ${taskId}) and ${task.state} <> 'dropped'`).orderBy(task.seq);
+
+    const repos = await tx
+      .select({ id: sql<string>`r.id`, name: sql<string>`r.name`, adoRepoRef: sql<string | null>`r.ado_repo_ref` })
+      .from(sql`workitem_repo wr join repo r on r.id = wr.repo_id`)
+      .where(sql`wr.workitem_id = ${t.workitemId}`);
+
+    return {
+      task: t,
+      requirement: wi ?? { id: t.workitemId, key: null, title: "", phase: "", clientId },
+      parent: parent ? { id: parent.id, seq: parent.seq, intent: parent.intent, adoType: parent.adoType } : null,
+      children, blockedBy, blocks,
+      repos: repos as { id: string; name: string; adoRepoRef: string | null }[],
+    };
+  });
+}
+
+/** Which client owns a task — the API needs it before a tenant-scoped read. */
+export async function clientOfTask(taskId: string): Promise<string | null> {
+  const [row] = await dbAny.select({ c: task.clientId }).from(task).where(sql`${task.id} = ${taskId}`).limit(1);
+  return row?.c ?? null;
 }

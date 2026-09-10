@@ -147,6 +147,7 @@ export type TaskFlowNode = {
   linkedAdoId: number | null;
   adoUrl: string | null;
   affectedPaths: string[];
+  prompt: string | null;
 };
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends" };
 
@@ -161,6 +162,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
         id: task.id, seq: task.seq, intent: task.intent, appetite: task.appetite, state: task.state,
         adoType: task.adoType, parentTaskId: task.parentTaskId, approvedAt: task.approvedAt,
         linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, affectedPaths: task.affectedPaths,
+        prompt: task.prompt,
       })
       .from(task)
       .where(sql`${task.workitemId} = ${workitemId} and ${task.state} <> 'dropped'`)
@@ -178,7 +180,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       id: r.id, seq: r.seq, intent: r.intent, appetite: r.appetite, state: r.state,
       adoType: r.adoType, level: level(r.id), parentTaskId: r.parentTaskId,
       approved: r.approvedAt != null, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
-      affectedPaths: (r.affectedPaths ?? []) as string[],
+      affectedPaths: (r.affectedPaths ?? []) as string[], prompt: r.prompt,
     }));
     const depth = Math.max(...nodes.map((n) => n.level)) + 1;
 
