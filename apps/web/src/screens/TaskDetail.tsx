@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getTask, getTaskRun, implementTask, progressTask, editTask, rollbackTask,
-  type FlowRun, type ImplementResult, type TaskDetail as TD,
+  precheckTaskDelete, deleteTask, DeleteBlocked,
+  type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 
@@ -51,6 +52,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [saving, setSaving] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
+  const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
+  const [delLoading, setDelLoading] = useState(false);
+  const [delAckSubtree, setDelAckSubtree] = useState(false);
+  const [delAckAdo, setDelAckAdo] = useState(false);
+  const [delAckCoTouch, setDelAckCoTouch] = useState(false);
+  const [delCodeChoice, setDelCodeChoice] = useState<"rollback" | "orphan">("rollback");
+  const [delErr, setDelErr] = useState<string | null>(null);
 
   const load = useCallback(() => { getTask(id).then(setD).catch((e) => setErr(String(e))); }, [id]);
   const refreshRun = useCallback(async () => {
@@ -113,6 +121,37 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     finally { setRollingBack(false); }
   };
 
+  const openDelete = async () => {
+    setDelErr(null); setDelLoading(true);
+    setDelAckSubtree(false); setDelAckAdo(false); setDelAckCoTouch(false); setDelCodeChoice("rollback");
+    try { setDelReport(await precheckTaskDelete(id)); }
+    catch (e) { setErr(String(e)); }
+    finally { setDelLoading(false); }
+  };
+  const confirmDelete = async () => {
+    if (!delReport) return;
+    setDelLoading(true); setDelErr(null);
+    try {
+      await deleteTask(id, {
+        clientId: t.clientId,
+        confirmSubtree: delAckSubtree,
+        confirmAdoLinked: delAckAdo,
+        confirmCoTouch: delAckCoTouch,
+        rollbackImplemented: delReport.hasImplementedCode && delCodeChoice === "rollback",
+        confirmOrphanCode: delReport.hasImplementedCode && delCodeChoice === "orphan",
+      });
+      nav(`#/wi/${d.requirement.id}`);
+    } catch (e) {
+      if (e instanceof DeleteBlocked) { setDelReport(e.precheck); setDelErr(e.message); }
+      else setDelErr(String(e));
+    } finally { setDelLoading(false); }
+  };
+  const readyToDelete = !!delReport && (
+    (!delReport.hasChildren || delAckSubtree) &&
+    (!delReport.hasAdoLinks || delAckAdo) &&
+    (!delReport.hasCoTouch || delAckCoTouch)
+  );
+
   return (
     <>
       <PageHead
@@ -127,6 +166,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
               </button>
             )}
             <button className="btn btn-secondary" disabled={running} onClick={openEdit}>✎ ערוך משימה</button>
+            <button className="btn btn-secondary" disabled={running || delLoading} onClick={openDelete} style={{ color: "var(--status-critical)" }}>
+              {delLoading && !delReport ? "בודק…" : "🗑 מחק משימה"}
+            </button>
             {t.state !== "done" && (
               <button className="btn btn-secondary" onClick={async () => { await progressTask(t.id, { to: "done", clientId: t.clientId }); load(); }}>סמן כהושלם</button>
             )}
@@ -141,6 +183,106 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         <div className="callout" style={{ marginBottom: 16 }}>
           <div className="body"><p className="r">{rollbackMsg}</p></div>
         </div>
+      )}
+
+      {delReport && (
+        <Card tone={delReport.safe ? undefined : "crit"}>
+          <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 4 }}>מחיקת משימה #{t.seq}</h3>
+          {delReport.safe ? (
+            <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
+              אין תת-פריטים, אין קישור ל-TFS, אין קוד שמומש, ואין משימות אחרות שנגעו באותם קבצים — מחיקה בטוחה.
+            </p>
+          ) : (
+            <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 12 }}>
+              נמצאו {delReport.subtree.length} פריטים שיימחקו. יש לאשר כל נקודה רגישה בנפרד לפני שהמחיקה תתבצע.
+            </p>
+          )}
+
+          {delReport.hasChildren && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label style={{ color: "var(--status-critical)" }}>
+                {delReport.subtree.length - 1} תת-פריטים יימחקו יחד עם המשימה
+              </label>
+              <div className="rowlist" style={{ marginTop: 4 }}>
+                {delReport.subtree.filter((n) => n.id !== t.id).map((n) => (
+                  <div className="row" key={n.id} style={{ fontSize: 12 }}>
+                    <span>#{n.seq} {n.kind === "check" ? "✓ בדיקה" : "משימה"} · {STATE_HE[n.state] ?? n.state}{n.linkedAdoId ? ` · TFS #${n.linkedAdoId}` : ""}{n.commitCount ? ` · ${n.commitCount} commits` : ""}</span>
+                    <span className="spacer" />
+                    <span style={{ color: "var(--ink-500)" }}>{n.intent.slice(0, 50)}</span>
+                  </div>
+                ))}
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, marginTop: 8 }}>
+                <input type="checkbox" style={{ minWidth: 0 }} checked={delAckSubtree} onChange={(e) => setDelAckSubtree(e.target.checked)} />
+                מבין/ה שכל אלה יימחקו יחד עם המשימה
+              </label>
+            </div>
+          )}
+
+          {delReport.hasAdoLinks && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label style={{ color: "var(--status-critical)" }}>חלק כבר קיים ב-TFS</label>
+              <p style={{ fontSize: 12, color: "var(--ink-600)", marginTop: 2 }}>
+                פריטי TFS <b>לא</b> יימחקו — רק יתועד עליהם ב-Discussion שהוסרו מ-DCC:{" "}
+                {delReport.subtree.filter((n) => n.linkedAdoId).map((n) => (
+                  <a key={n.id} href={n.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ marginInlineEnd: 6 }}>#{n.linkedAdoId}</a>
+                ))}
+              </p>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, marginTop: 6 }}>
+                <input type="checkbox" style={{ minWidth: 0 }} checked={delAckAdo} onChange={(e) => setDelAckAdo(e.target.checked)} />
+                מבין/ה שהפריטים ב-TFS נשארים שם ולא נמחקים
+              </label>
+            </div>
+          )}
+
+          {delReport.hasImplementedCode && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label style={{ color: "var(--status-critical)" }}>יש קוד מומש שטרם בוטל</label>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, marginTop: 4 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input type="radio" style={{ minWidth: 0 }} checked={delCodeChoice === "rollback"} onChange={() => setDelCodeChoice("rollback")} />
+                  בטל את השינויים קודם (rollback) — מומלץ
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <input type="radio" style={{ minWidth: 0 }} checked={delCodeChoice === "orphan"} onChange={() => setDelCodeChoice("orphan")} />
+                  השאר את ה-commits כ"יתומים" בקלון המבודד — לא נמחקים בפועל, אבל לא נגישים דרך DCC יותר
+                </label>
+              </div>
+            </div>
+          )}
+
+          {delReport.hasCoTouch && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label style={{ color: "var(--status-critical)" }}>
+                {delReport.coTouchedBy.length} משימות אחרות כבר נגעו באותם קבצים
+              </label>
+              <div className="rowlist" style={{ marginTop: 4 }}>
+                {delReport.coTouchedBy.map((c) => (
+                  <div className="row" key={c.id} style={{ flexDirection: "column", alignItems: "flex-start", gap: 3, paddingBlock: 6 }}>
+                    <span className="w-title" style={{ fontSize: 12.5 }} onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent.slice(0, 60)}</span>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>{c.files.join(", ")}</span>
+                  </div>
+                ))}
+              </div>
+              <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 6 }}>
+                מחיקת המשימה לא תשנה את ה-branch של המשימות האלה — אבל ייתכן שהן תלויות בשינוי הזה או כופלות אותו.
+              </p>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, marginTop: 6 }}>
+                <input type="checkbox" style={{ minWidth: 0 }} checked={delAckCoTouch} onChange={(e) => setDelAckCoTouch(e.target.checked)} />
+                בדקתי את המשימות האלה ורוצה להמשיך במחיקה
+              </label>
+            </div>
+          )}
+
+          {delErr && <p style={{ fontSize: 12, color: "var(--status-critical)", marginBottom: 8 }}>{delErr}</p>}
+
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-primary" disabled={!readyToDelete || delLoading} onClick={confirmDelete} style={{ background: "var(--status-critical)", borderColor: "var(--status-critical)" }}>
+              {delLoading ? "מוחק…" : "אשר מחיקה"}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setDelReport(null)}>ביטול</button>
+          </div>
+        </Card>
       )}
 
       {editing && (

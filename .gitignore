@@ -22,3 +22,4 @@ packages/*/*.js.map
 
 # embedded dev database (PGlite)
 packages/*/.pgdata*
+scratchpad/

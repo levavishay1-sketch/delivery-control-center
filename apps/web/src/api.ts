@@ -222,7 +222,41 @@ export const updateTask = (id: string, body: { clientId: string; intent?: string
 export const editTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string; scopeChanged: boolean }) =>
   patch<{ updated: boolean; adoSynced: boolean }>(`/tasks/${id}`, body);
 export const rollbackTask = (id: string) => post<{ rolledBack: boolean; reason?: string; branch?: string; dir?: string }>(`/tasks/${id}/rollback`, {});
-export const deleteTask = (id: string, clientId: string) => del<{ deleted: boolean }>(`/tasks/${id}`, { clientId });
+
+/* ── deleting a task: never a silent cascade ─────────────────────────
+ * The backend refuses (409, with a precheck report) unless every risk
+ * category it actually found — children, TFS links, implemented code,
+ * other tasks already touching the same files — is explicitly confirmed.
+ * `precheckTaskDelete` lets the UI show that report BEFORE the user
+ * commits to anything. */
+export type TaskDeleteNode = {
+  id: string; seq: number; intent: string; kind: TaskKind; state: string;
+  linkedAdoId: number | null; adoUrl: string | null; approvedAt: string | null; commitCount: number;
+};
+export type TaskDeletePrecheck = {
+  taskId: string;
+  subtree: TaskDeleteNode[];
+  coTouchedBy: { id: string; seq: number; intent: string; state: string; files: string[] }[];
+  hasChildren: boolean; hasAdoLinks: boolean; hasImplementedCode: boolean; hasCoTouch: boolean; safe: boolean;
+};
+export const precheckTaskDelete = (id: string) => get<TaskDeletePrecheck>(`/tasks/${id}/delete-check`);
+
+export class DeleteBlocked extends Error {
+  constructor(message: string, public precheck: TaskDeletePrecheck) { super(message); }
+}
+export type DeleteTaskConfirm = {
+  clientId: string;
+  confirmSubtree?: boolean; confirmAdoLinked?: boolean; confirmCoTouch?: boolean;
+  rollbackImplemented?: boolean; confirmOrphanCode?: boolean;
+};
+export async function deleteTask(id: string, body: DeleteTaskConfirm): Promise<{ deleted: boolean; subtreeDeleted: number; adoNotesPosted: number; rolledBack: string[] }> {
+  const r = await fetch(`/api/tasks/${id}`, { method: "DELETE", headers: H, body: JSON.stringify(body) });
+  if (r.status === 409) {
+    const body409 = await r.json() as { error: string; precheck: TaskDeletePrecheck };
+    throw new DeleteBlocked(body409.error, body409.precheck);
+  }
+  return j<{ deleted: boolean; subtreeDeleted: number; adoNotesPosted: number; rolledBack: string[] }>(r);
+}
 export const correctNote = (workitemId: string, corrects: string, body: string) => post<{ eventId: string }>("/events", { workitemId, kind: "note", note: { body, source: "manual", corrects } });
 export type ImportResult = { total: number; created: number; skipped: number; items: { adoId: number; title: string; status: "created" | "skipped-exists" | "skipped-bad" }[] };
 export const importAdoCsv = (clientId: string, csv: string) => post<ImportResult>(`/clients/${clientId}/import/ado-csv`, { csv });

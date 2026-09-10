@@ -261,16 +261,6 @@ export async function updateTask(input: { clientId: string; id: string; intent?:
   return { updated: true };
 }
 
-export async function deleteTask(clientId: string, id: string) {
-  const wi = await withTenant(clientId, async (tx) => {
-    const [t] = await tx.select({ w: task.workitemId }).from(task).where(eq(task.id, id)).limit(1);
-    await tx.delete(task).where(eq(task.id, id));
-    return t?.w;
-  });
-  if (wi) await regenerateBrief(clientId, wi);
-  return { deleted: true };
-}
-
 export async function deleteDependency(clientId: string, workitemId: string, dependsOnWorkitemId: string) {
   await withTenant(clientId, (tx) =>
     tx.delete(workitemDependency).where(and(eq(workitemDependency.workitemId, workitemId), eq(workitemDependency.dependsOnWorkitemId, dependsOnWorkitemId))),

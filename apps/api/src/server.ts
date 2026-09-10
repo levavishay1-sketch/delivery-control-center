@@ -61,7 +61,6 @@ import {
   updateBlocker,
   deleteBlocker,
   updateTask,
-  deleteTask,
   deleteDependency,
   updateConnection,
   importAdoCsv,
@@ -78,6 +77,9 @@ import {
   rejectTask,
   rollbackTask,
   editTask,
+  precheckTaskDelete,
+  deleteTaskSurgical,
+  DeleteNeedsConfirmation,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -633,10 +635,38 @@ app.patch("/tasks/:id", async (req) => {
   if (b.prompt === undefined && b.scopeChanged === undefined) return updateTask({ id, clientId: b.clientId, intent: b.intent, appetite: b.appetite });
   return editTask({ clientId: b.clientId, taskId: id, by: { userId: dev.id }, patch: { intent: b.intent, appetite: b.appetite, prompt: b.prompt }, scopeChanged: b.scopeChanged ?? false });
 });
-app.delete("/tasks/:id", async (req) => {
+// what deleting this task would actually touch — children, TFS links,
+// implemented code, and other tasks that already touch the same files —
+// so the UI can show it before anyone confirms anything.
+app.get("/tasks/:id/delete-check", async (req) => {
   await actingUser(req);
-  const b = z.object({ clientId: z.string().uuid() }).parse(req.body ?? {});
-  return deleteTask(b.clientId, (req.params as { id: string }).id);
+  const { id } = req.params as { id: string };
+  const clientId = await taskClient(id);
+  const d = await taskDetail(clientId, id);
+  return precheckTaskDelete(clientId, d.requirement.id, id);
+});
+
+app.delete("/tasks/:id", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({
+    clientId: z.string().uuid(),
+    confirmSubtree: z.boolean().optional(),
+    confirmAdoLinked: z.boolean().optional(),
+    confirmCoTouch: z.boolean().optional(),
+    rollbackImplemented: z.boolean().optional(),
+    confirmOrphanCode: z.boolean().optional(),
+  }).parse(req.body ?? {});
+  const d = await taskDetail(b.clientId, id);
+  try {
+    return await deleteTaskSurgical({
+      clientId: b.clientId, workitemId: d.requirement.id, taskId: id, by: { userId: dev.id },
+      opts: { confirmSubtree: b.confirmSubtree, confirmAdoLinked: b.confirmAdoLinked, confirmCoTouch: b.confirmCoTouch, rollbackImplemented: b.rollbackImplemented, confirmOrphanCode: b.confirmOrphanCode },
+    });
+  } catch (e) {
+    if (e instanceof DeleteNeedsConfirmation) return reply.code(409).send({ error: e.message, precheck: e.precheck });
+    throw e;
+  }
 });
 
 /* ── contention map + reviewer ───────────────────────────────────── */

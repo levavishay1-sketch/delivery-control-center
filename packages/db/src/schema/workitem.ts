@@ -218,7 +218,14 @@ export const task = pgTable(
      * the bottom: a 1-deep breakdown is all Tasks, 2-deep is User Story +
      * Task, 3-deep adds Feature, 4-deep adds Epic.
      */
-    parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => task.id, { onDelete: "cascade" }),
+    /**
+     * RESTRICT, not cascade: a parent with children (real sub-tasks, or
+     * checks) must never disappear silently and take an already-approved,
+     * already-implemented, or already-TFS-linked subtree down with it.
+     * `deleteTask` walks and clears the subtree itself, surgically, before
+     * the row delete — see its comment.
+     */
+    parentTaskId: uuid("parent_task_id").references((): AnyPgColumn => task.id, { onDelete: "restrict" }),
     /** The TFS work-item type this task materialises as (from the ladder). */
     adoType: text("ado_type"),
     /** Tasks — NOT requirements — are what lives in TFS. */

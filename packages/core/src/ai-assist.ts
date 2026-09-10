@@ -6,6 +6,8 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, withTenant } from "@dcc/db";
 import { flowRun, repo, task, taskDependency, workitem } from "@dcc/db/schema";
 import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
+import { adoSend } from "./ado-http.ts";
+import { activeAdoConnection } from "./ado-sync.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
 
@@ -529,6 +531,24 @@ function git(args: string[], cwd: string): Promise<{ code: number; out: string }
 const slug = (s: string) =>
   s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
 
+/** Deterministic branch name for a task's implement run — same formula
+ *  everywhere (`runImplement`, `rollbackTask`, the delete precheck) so
+ *  nothing extra needs to be persisted to find a task's branch again. */
+const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
+  `feature/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
+
+/** How many commits a task's branch has beyond the repo's default branch —
+ *  0 means "never implemented" or "implemented but produced no changes". */
+async function taskCommitCount(dir: string, branch: string): Promise<number> {
+  const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
+  if (exists.code !== 0) return 0;
+  const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
+  const mergeBase = (await git(["merge-base", branch, `origin/${base}`], dir)).out;
+  if (!mergeBase) return 0;
+  const count = await git(["rev-list", "--count", `${mergeBase}..${branch}`], dir);
+  return Number(count.out) || 0;
+}
+
 async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string }): Promise<ImplementResult> {
   const { t, wi, notes } = await withTenant(input.clientId, async (tx) => {
     const [t] = await tx.select().from(task).where(eq(task.id, input.taskId)).limit(1);
@@ -550,7 +570,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   const dir = await ensureCheckout({ ...r, localPath: null });
   if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
 
-  const branch = `feature/${wi?.key ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
+  const branch = taskBranchName(wi?.key, t);
   pushLine(input.runId, `branch: ${branch}`);
 
   // start from a clean, up-to-date base
@@ -670,7 +690,7 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
   const dir = await ensureCheckout({ ...r, localPath: null });
   if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
 
-  const branch = `feature/${wi?.key ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
+  const branch = taskBranchName(wi?.key, t);
   const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
   if (exists.code !== 0) return { rolledBack: false, reason: "המשימה עדיין לא פותחה — אין מה לבטל" };
 
@@ -693,6 +713,235 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
   await regenerateBrief(input.clientId, input.workitemId);
 
   return { rolledBack: true, branch, dir };
+}
+
+/* ── deleting a task: surgical, never a silent cascade ───────────────
+ *
+ * The DB itself now REFUSES to delete a task with children (see migration
+ * 0018 — parent_task_id was ON DELETE CASCADE and could silently wipe an
+ * already-approved, already-TFS-linked, already-implemented subtree with
+ * zero warning). Everything below is the deliberate, explicit handling
+ * that cascade used to skip: walk the subtree, see what's really at
+ * stake (children, TFS links, implemented code, and — the sharp edge —
+ * OTHER tasks that already implemented against the same files), and
+ * require the caller to confirm each risk category by name before
+ * anything is actually removed. */
+
+export type TaskDeleteNode = {
+  id: string; seq: number; intent: string; kind: "task" | "check"; state: string;
+  linkedAdoId: number | null; adoUrl: string | null; approvedAt: string | null;
+  commitCount: number; // >0 means real implemented code sits on this task's branch
+};
+export type TaskDeletePrecheck = {
+  taskId: string;
+  /** the task itself plus every descendant (recursive) — what would actually be removed */
+  subtree: TaskDeleteNode[];
+  /** other tasks under the SAME requirement, outside this subtree, whose declared or
+   *  actually-changed files overlap what this subtree touches */
+  coTouchedBy: { id: string; seq: number; intent: string; state: string; files: string[] }[];
+  hasChildren: boolean;
+  hasAdoLinks: boolean;
+  hasImplementedCode: boolean;
+  hasCoTouch: boolean;
+  /** true only when none of the above hold — nothing to confirm, delete is a no-op-risk */
+  safe: boolean;
+};
+
+export class DeleteNeedsConfirmation extends Error {
+  precheck: TaskDeletePrecheck;
+  constructor(message: string, precheck: TaskDeletePrecheck) {
+    super(message);
+    this.precheck = precheck;
+  }
+}
+
+function fileSetOf(paths: string[] | null | undefined): Set<string> {
+  return new Set((paths ?? []).filter(Boolean));
+}
+
+export async function precheckTaskDelete(clientId: string, workitemId: string, taskId: string): Promise<TaskDeletePrecheck> {
+  const { all, wi } = await withTenant(clientId, async (tx) => {
+    const all = await tx.select().from(task).where(eq(task.workitemId, workitemId));
+    const [wi] = await tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, workitemId)).limit(1);
+    return { all, wi };
+  });
+  const byId = new Map(all.map((t) => [t.id, t]));
+  const root = byId.get(taskId);
+  if (!root) throw new Error("משימה לא נמצאה");
+
+  const childrenOf = new Map<string, typeof all>();
+  for (const t of all) {
+    if (!t.parentTaskId) continue;
+    (childrenOf.get(t.parentTaskId) ?? childrenOf.set(t.parentTaskId, []).get(t.parentTaskId)!).push(t);
+  }
+  const subtreeIds = new Set<string>();
+  const queue = [taskId];
+  while (queue.length) {
+    const id = queue.shift()!;
+    if (subtreeIds.has(id)) continue;
+    subtreeIds.add(id);
+    for (const c of childrenOf.get(id) ?? []) queue.push(c.id);
+  }
+  const subtreeRows = [...subtreeIds].map((id) => byId.get(id)!).filter(Boolean);
+
+  // latest DONE implement run per task, for real (not just declared) touched files
+  const runs = await db.select({ taskId: flowRun.taskId, result: flowRun.result, startedAt: flowRun.startedAt })
+    .from(flowRun)
+    .where(and(eq(flowRun.workitemId, workitemId), eq(flowRun.kind, "implement"), eq(flowRun.state, "done")))
+    .orderBy(desc(flowRun.startedAt));
+  const latestRunByTask = new Map<string, ImplementResult>();
+  for (const r of runs) {
+    if (!r.taskId || latestRunByTask.has(r.taskId)) continue;
+    latestRunByTask.set(r.taskId, r.result as unknown as ImplementResult);
+  }
+
+  const r = await firstRepo(clientId, workitemId);
+  const dir = r ? await ensureCheckout({ ...r, localPath: null }) : null;
+
+  const commitCounts = new Map<string, number>();
+  if (dir) {
+    for (const t of subtreeRows) {
+      commitCounts.set(t.id, await taskCommitCount(dir, taskBranchName(wi?.key, t)));
+    }
+  }
+
+  const subtree: TaskDeleteNode[] = subtreeRows.map((t) => ({
+    id: t.id, seq: t.seq, intent: t.intent, kind: (t.kind as "task" | "check") ?? "task", state: t.state,
+    linkedAdoId: t.linkedAdoId, adoUrl: t.adoUrl, approvedAt: t.approvedAt ? t.approvedAt.toISOString() : null,
+    commitCount: commitCounts.get(t.id) ?? 0,
+  }));
+
+  const subtreeFiles = new Set<string>();
+  for (const t of subtreeRows) {
+    for (const f of fileSetOf(t.affectedPaths as string[])) subtreeFiles.add(f);
+    const run = latestRunByTask.get(t.id);
+    if (run) for (const f of run.filesChanged ?? []) subtreeFiles.add(f);
+  }
+
+  const coTouchedBy: TaskDeletePrecheck["coTouchedBy"] = [];
+  if (subtreeFiles.size > 0) {
+    for (const t of all) {
+      if (subtreeIds.has(t.id)) continue;
+      const theirFiles = fileSetOf(t.affectedPaths as string[]);
+      const run = latestRunByTask.get(t.id);
+      if (run) for (const f of run.filesChanged ?? []) theirFiles.add(f);
+      const overlap = [...theirFiles].filter((f) => subtreeFiles.has(f));
+      if (overlap.length > 0) coTouchedBy.push({ id: t.id, seq: t.seq, intent: t.intent, state: t.state, files: overlap });
+    }
+  }
+
+  const hasChildren = subtree.length > 1;
+  const hasAdoLinks = subtree.some((n) => n.linkedAdoId);
+  const hasImplementedCode = subtree.some((n) => n.commitCount > 0);
+  const hasCoTouch = coTouchedBy.length > 0;
+
+  return {
+    taskId, subtree, coTouchedBy, hasChildren, hasAdoLinks, hasImplementedCode, hasCoTouch,
+    safe: !hasChildren && !hasAdoLinks && !hasImplementedCode && !hasCoTouch,
+  };
+}
+
+export type DeleteTaskOptions = {
+  /** required if the precheck reports hasChildren */
+  confirmSubtree?: boolean;
+  /** required if the precheck reports hasAdoLinks — the TFS item(s) are
+   *  NEVER auto-deleted (hard lesson from an earlier incident); a note is
+   *  posted to each one instead, saying DCC no longer tracks it. */
+  confirmAdoLinked?: boolean;
+  /** required if the precheck reports hasCoTouch */
+  confirmCoTouch?: boolean;
+  /** if the precheck reports hasImplementedCode, EXACTLY ONE of these two
+   *  is required: roll the code back first (clean), or explicitly accept
+   *  that the commits are left dangling in the isolated clone (not lost —
+   *  reachable by hash/reflog until a gc — but gone from DCC and from any
+   *  normal branch listing). */
+  rollbackImplemented?: boolean;
+  confirmOrphanCode?: boolean;
+};
+
+export async function deleteTaskSurgical(input: { clientId: string; workitemId: string; taskId: string; by: Dev; opts?: DeleteTaskOptions }) {
+  const pre = await precheckTaskDelete(input.clientId, input.workitemId, input.taskId);
+  const opts = input.opts ?? {};
+  const missing: string[] = [];
+  if (pre.hasChildren && !opts.confirmSubtree) missing.push(`${pre.subtree.length - 1} תת-פריטים ימחקו איתה`);
+  if (pre.hasAdoLinks && !opts.confirmAdoLinked) missing.push("חלק כבר קיים ב-TFS — לא יימחק שם, רק יתועד שהוסר מ-DCC");
+  if (pre.hasCoTouch && !opts.confirmCoTouch) missing.push(`${pre.coTouchedBy.length} משימות אחרות כבר נגעו באותם קבצים`);
+  if (pre.hasImplementedCode && !opts.rollbackImplemented && !opts.confirmOrphanCode) missing.push("יש קוד מומש שטרם בוטל — לבחור rollback או לאשר השארה כ-orphan");
+  if (missing.length > 0) throw new DeleteNeedsConfirmation(`מחיקה חסומה: ${missing.join(" · ")}`, pre);
+
+  // leaves-first deletion order, so the DB's own RESTRICT on parent_task_id
+  // never fires — a child is always removed before its parent.
+  const rows = await withTenant(input.clientId, (tx) =>
+    tx.select({ id: task.id, parentTaskId: task.parentTaskId }).from(task).where(eq(task.workitemId, input.workitemId)),
+  );
+  const parentOf = new Map(rows.map((r) => [r.id, r.parentTaskId]));
+  const remaining = new Map(pre.subtree.map((n) => [n.id, n]));
+  const childrenCount = new Map(pre.subtree.map((n) => [n.id, 0]));
+  for (const n of pre.subtree) {
+    const p = parentOf.get(n.id);
+    if (p && childrenCount.has(p)) childrenCount.set(p, (childrenCount.get(p) ?? 0) + 1);
+  }
+  const order: TaskDeleteNode[] = [];
+  while (remaining.size > 0) {
+    const leaf = [...remaining.values()].find((n) => (childrenCount.get(n.id) ?? 0) === 0);
+    if (!leaf) { order.push(...remaining.values()); break; } // shouldn't happen; let the DB reject a bad case loudly
+    order.push(leaf);
+    remaining.delete(leaf.id);
+    const p = parentOf.get(leaf.id);
+    if (p && childrenCount.has(p)) childrenCount.set(p, (childrenCount.get(p) ?? 0) - 1);
+  }
+
+  const rolledBack: string[] = [];
+  if (opts.rollbackImplemented) {
+    for (const n of pre.subtree) {
+      if (n.commitCount === 0) continue;
+      await rollbackTask({ clientId: input.clientId, workitemId: input.workitemId, taskId: n.id, by: input.by });
+      rolledBack.push(n.id);
+    }
+  }
+
+  let adoNotesPosted = 0;
+  const conn = pre.hasAdoLinks ? await activeAdoConnection(input.clientId) : null;
+  if (conn) {
+    const orgUrl = (conn.config.orgUrl ?? "").replace(/\/+$/, "");
+    const project = conn.config.project ?? "";
+    if (project) {
+      const projBase = `${orgUrl}/${encodeURIComponent(project)}`;
+      for (const n of pre.subtree) {
+        if (!n.linkedAdoId) continue;
+        const r = await adoSend({
+          base: projBase, apiPath: `wit/workitems/${n.linkedAdoId}`, method: "PATCH",
+          body: [{ op: "add", path: "/fields/System.History", value: `🗑 הוסר מ-DCC (לא נמחק כאן ב-TFS) — ע"י ${input.by.userId}.` }],
+          pat: conn.secretRef,
+        });
+        if (r.ok) adoNotesPosted++;
+      }
+    }
+  }
+
+  await appendEvent({
+    clientId: input.clientId, workitemId: input.workitemId, source: "manual", type: "note.added",
+    actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
+    links: [{ rel: "task", ref: input.taskId }],
+    payload: {
+      body: [
+        `🗑 משימה #${pre.subtree.find((n) => n.id === input.taskId)?.seq ?? "?"} נמחקה (${pre.subtree.length} פריטים בסך הכל).`,
+        rolledBack.length ? `בוטל קוד עבור ${rolledBack.length} מהם לפני המחיקה.` : "",
+        adoNotesPosted ? `${adoNotesPosted} פריטי TFS תועדו כ"הוסר מ-DCC" (לא נמחקו שם).` : "",
+      ].filter(Boolean).join("\n"),
+    },
+  });
+
+  await withTenant(input.clientId, async (tx) => {
+    for (const n of order) {
+      await tx.delete(taskDependency).where(eq(taskDependency.taskId, n.id));
+      await tx.delete(taskDependency).where(eq(taskDependency.dependsOnTaskId, n.id));
+      await tx.delete(task).where(eq(task.id, n.id));
+    }
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+
+  return { deleted: true, subtreeDeleted: pre.subtree.length, adoNotesPosted, rolledBack };
 }
 
 /* ── 4. task approval ─────────────────────────────────────────────── */

@@ -17,7 +17,9 @@ export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask,
+  precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation,
   type AssessResult, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult,
+  type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {
@@ -25,6 +27,6 @@ export {
   updateRequirement, deleteRequirement,
   linkRepoToRequirement, unlinkRepoFromRequirement, reposForRequirement,
   updateRepo, deleteRepo, unlinkClientRepo,
-  updateGap, deleteGap, updateBlocker, deleteBlocker, updateTask, deleteTask, deleteDependency,
+  updateGap, deleteGap, updateBlocker, deleteBlocker, updateTask, deleteDependency,
   updateConnection,
 } from "./crud.ts";
