@@ -71,6 +71,10 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const nodes = taskFlow?.nodes ?? [];
   const pending = nodes.filter((n) => !n.approved);
   const unsynced = nodes.filter((n) => n.approved && !n.linkedAdoId);
+  const taskNodes = nodes.filter((n) => n.kind !== "check");
+  const checkNodes = nodes.filter((n) => n.kind === "check");
+  const unsyncedTasks = unsynced.filter((n) => n.kind !== "check").length;
+  const unsyncedChecks = unsynced.filter((n) => n.kind === "check").length;
   const running = run?.state === "running";
 
   const done = [
@@ -281,17 +285,28 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
             {active === 3 && taskFlow && (
               <div>
                 <h3 style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>אישור והקמה ב-TFS</h3>
-                <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 10 }}>
+                <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 4 }}>
                   {pending.length > 0
                     ? `${pending.length} מתוך ${nodes.length} ממתינות לאישור שלך. אחרי שהכל מאושר — ההקמה ב-TFS.`
                     : unsynced.length > 0
-                      ? `כל ${nodes.length} המשימות מאושרות. אפשר להקים אותן ב-TFS עם ההיררכיה והתלויות.`
-                      : `כל המשימות הוקמו ב-TFS.`}
+                      ? `כל ${nodes.length} מאושרות. אפשר להקים אותן.`
+                      : `הכל מוקם.`}
                 </p>
+                {checkNodes.length > 0 && (
+                  <p style={{ fontSize: 11.5, color: "var(--ov-label)", marginBottom: 10 }}>
+                    {taskNodes.length} מתוכן הן משימות אמיתיות שיהפכו ל-work item ב-TFS. {checkNodes.length} הן בדיקות/וידוא — לא הופכות ל-work item בפני עצמן, אלא מתועדות כרשימת בדיקה בתוך ה-Discussion של המשימה שהן שייכות לה.
+                  </p>
+                )}
                 <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
                   {pending.length === 0 && unsynced.length > 0 && (
                     <button className="btn btn-primary btn-sm" disabled={materializing} onClick={doMaterialize}>
-                      {materializing ? "מקים ב-TFS…" : `הקם ${unsynced.length} פריטים ב-TFS`}
+                      {materializing ? "מקים ב-TFS…" : (
+                        unsyncedTasks && unsyncedChecks
+                          ? `הקם ${unsyncedTasks} משימות + תעד ${unsyncedChecks} בדיקות`
+                          : unsyncedTasks
+                            ? `הקם ${unsyncedTasks} משימות ב-TFS`
+                            : `תעד ${unsyncedChecks} בדיקות ב-Discussion`
+                      )}
                     </button>
                   )}
                   {unsynced.length === 0 && nodes.length > 0 && (
@@ -317,15 +332,21 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                       }}>
                         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
                           <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ov-label)" }}>#{n.seq}</span>
-                          <Pill tone={n.adoType === "Task" ? "inactive" : "ai"}>{n.adoType ?? "Task"}</Pill>
+                          {n.kind === "check"
+                            ? <Pill tone="neutral">✓ בדיקה</Pill>
+                            : <Pill tone={n.adoType === "Task" ? "inactive" : "ai"}>{n.adoType ?? "Task"}</Pill>}
                           {n.linkedAdoId
-                            ? <a href={n.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--status-healthy)" }}>TFS #{n.linkedAdoId} ↗</a>
+                            ? (n.kind === "check"
+                                ? <a href={n.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--status-healthy)" }}>תועד ב-Discussion ↗</a>
+                                : <a href={n.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--status-healthy)" }}>TFS #{n.linkedAdoId} ↗</a>)
                             : n.approved ? <Pill tone="healthy">מאושר</Pill> : <Pill tone="warning">ממתין לאישור</Pill>}
                         </div>
                         {n.linkedAdoId ? (
                           <>
                             <div style={{ fontSize: 12.5, marginBottom: 6 }}>{n.intent}</div>
-                            <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => nav(`#/task/${n.id}`)}>פתח את המשימה ותן ל-Claude לפתח ←</a>
+                            {n.kind !== "check" && (
+                              <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => nav(`#/task/${n.id}`)}>פתח את המשימה ותן ל-Claude לפתח ←</a>
+                            )}
                           </>
                         ) : (
                           <>
@@ -336,14 +357,16 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                               </select>
                             </div>
                             <div className="field" style={{ marginBottom: 8 }}>
-                              <label>הפרומט ש-Claude יריץ למשימה הזו</label>
+                              <label>{n.kind === "check" ? "מה בדיוק צריך לוודא/לבדוק" : "הפרומט ש-Claude יריץ למשימה הזו"}</label>
                               <textarea
-                                value={e.prompt} rows={5}
+                                value={e.prompt} rows={n.kind === "check" ? 3 : 5}
                                 onChange={(ev) => setEdited({ ...edited, [n.id]: { ...e, prompt: ev.target.value } })}
-                                placeholder="ההוראה המדויקת שתימסר ל-Claude כשתלחץ &quot;תן ל-Claude לפתח&quot; על המשימה"
+                                placeholder={n.kind === "check" ? "מה לבדוק/לוודא/לתעד לפני שהמשימה ההורה נחשבת גמורה" : "ההוראה המדויקת שתימסר ל-Claude כשתלחץ &quot;תן ל-Claude לפתח&quot; על המשימה"}
                                 style={{ width: "100%", fontSize: 12, lineHeight: 1.6, padding: "8px 10px", border: "1px solid var(--border-hairline)", borderRadius: 7, resize: "vertical" }}
                               />
-                              <span className="hint" style={{ fontSize: 10.5, color: "var(--ink-400)" }}>נשמר עם האישור. זה מה שירוץ — כדאי לקרוא אותו.</span>
+                              <span className="hint" style={{ fontSize: 10.5, color: "var(--ink-400)" }}>
+                                {n.kind === "check" ? "יתועד כשורה ברשימת הבדיקה על המשימה ההורה ב-TFS." : "נשמר עם האישור. זה מה שירוץ — כדאי לקרוא אותו."}
+                              </span>
                             </div>
                             {n.affectedPaths.length > 0 && (
                               <div style={{ fontSize: 11, color: "var(--ov-label)", marginBottom: 8 }} dir="ltr">{n.affectedPaths.join(", ")}</div>

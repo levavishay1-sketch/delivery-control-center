@@ -15,6 +15,10 @@ const TYPE_TONE: Record<string, { bg: string; border: string }> = {
   "User Story": { bg: "#f0fdf4", border: "#059669" },
   Task: { bg: "#ffffff", border: "#c9cade" },
 };
+// a "check" is never its own TFS item — folded into its parent task's
+// Discussion instead, so it gets a distinct neutral/dashed look, not a
+// ladder-type color.
+const CHECK_TONE = { bg: "#F5F4FA", border: "#B3B0C9" };
 
 export function TaskGraph({ flow, height = 380 }: { flow: TaskFlow; height?: number }) {
   const { rfNodes, rfEdges } = useMemo(() => {
@@ -28,7 +32,8 @@ export function TaskGraph({ flow, height = 380 }: { flow: TaskFlow; height?: num
     for (const [lvl, ids] of byLevel) ids.forEach((id, i) => pos.set(id, { x: lvl * 260, y: i * 96 }));
 
     const rfNodes: Node[] = flow.nodes.map((n) => {
-      const tone = TYPE_TONE[n.adoType ?? "Task"] ?? TYPE_TONE.Task!;
+      const isCheck = n.kind === "check";
+      const tone = isCheck ? CHECK_TONE : TYPE_TONE[n.adoType ?? "Task"] ?? TYPE_TONE.Task!;
       return {
         id: n.id,
         position: pos.get(n.id) ?? { x: 0, y: 0 },
@@ -37,7 +42,7 @@ export function TaskGraph({ flow, height = 380 }: { flow: TaskFlow; height?: num
             <div style={{ padding: "8px 10px", textAlign: "start", direction: "rtl" }}>
               <div style={{ fontSize: 10, color: "#6b6d8a", display: "flex", gap: 6, justifyContent: "space-between" }}>
                 <span style={{ fontFamily: "ui-monospace, monospace" }}>#{n.seq}</span>
-                <span style={{ fontWeight: 600, direction: "ltr" }}>{n.adoType ?? "Task"}</span>
+                <span style={{ fontWeight: 600, direction: "ltr" }}>{isCheck ? "✓ בדיקה" : n.adoType ?? "Task"}</span>
               </div>
               <div title={n.intent} style={{
                 fontWeight: 500, marginTop: 3, fontSize: 11.5, lineHeight: 1.4,
@@ -45,16 +50,18 @@ export function TaskGraph({ flow, height = 380 }: { flow: TaskFlow; height?: num
               }}>{n.intent}</div>
               <div style={{ fontSize: 9.5, color: "#6b6d8a", marginTop: 4, display: "flex", gap: 6 }}>
                 <span>{n.appetite}</span>
-                {n.linkedAdoId
-                  ? <span style={{ color: "#059669" }}>TFS #{n.linkedAdoId}</span>
-                  : n.approved ? <span style={{ color: "#2563eb" }}>מאושר</span> : <span style={{ color: "#b45309" }}>ממתין</span>}
+                {isCheck
+                  ? (n.linkedAdoId ? <span style={{ color: "#059669" }}>תועד ב-Discussion</span> : n.approved ? <span style={{ color: "#2563eb" }}>מאושר</span> : <span style={{ color: "#b45309" }}>ממתין</span>)
+                  : n.linkedAdoId
+                    ? <span style={{ color: "#059669" }}>TFS #{n.linkedAdoId}</span>
+                    : n.approved ? <span style={{ color: "#2563eb" }}>מאושר</span> : <span style={{ color: "#b45309" }}>ממתין</span>}
               </div>
             </div>
           ),
         },
         style: {
           width: 210, borderRadius: 10, padding: 0, fontSize: 12,
-          border: `1.5px ${n.approved ? "solid" : "dashed"} ${tone.border}`,
+          border: `1.5px ${n.approved ? (isCheck ? "dashed" : "solid") : "dashed"} ${tone.border}`,
           background: tone.bg, color: "#10122b",
         },
       };
@@ -82,7 +89,7 @@ export function TaskGraph({ flow, height = 380 }: { flow: TaskFlow; height?: num
         </ReactFlow>
       </div>
       <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 6 }}>
-        קו אפור = היררכיה · קו סגול מקווקו = תלות (מה חייב להסתיים קודם) · מסגרת מקווקוות = טרם אושר
+        קו אפור = היררכיה · קו סגול מקווקו = תלות (מה חייב להסתיים קודם) · מסגרת מקווקוות = טרם אושר · תיבה אפורה "✓ בדיקה" = לא הופכת ל-work item, מתועדת בהדיסקשן של המשימה שלה
       </p>
     </div>
   );

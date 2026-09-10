@@ -10,23 +10,30 @@ import { regenerateBrief } from "./brief/generate.ts";
  * is never pushed (architecture correction: the requirement is shaping,
  * the tasks are the tracked work).
  *
- * On approval the task tree is materialised top-down: each node becomes a
- * work item whose TYPE came off the Agile ladder when the breakdown chose
- * its depth (Epic > Feature > User Story > Task), wired to its parent with
- * Hierarchy-Reverse and to its predecessors with Dependency-Reverse.
+ * On approval the task tree is materialised top-down: each "task"-kind
+ * node becomes a work item whose TYPE came off the Agile ladder when the
+ * breakdown chose its depth (Epic > Feature > User Story > Task), wired
+ * to its parent with Hierarchy-Reverse and to its predecessors with
+ * Dependency-Reverse.
+ *
+ * "check"-kind nodes (verification / regression / documentation the
+ * parent task needs before it's done) never become their own work item —
+ * they are folded into the parent's Discussion (System.History) as a
+ * checklist once the parent exists in TFS.
  */
 
 export type MaterializeResult = {
   created: number;
   skipped: number;
   links: number;
+  checksPosted: number;
   items: { taskId: string; seq: number; adoId: number; adoType: string; url: string }[];
   detail: string;
 };
 
 type TaskRow = {
-  id: string; seq: number; intent: string; adoType: string | null;
-  parentTaskId: string | null; linkedAdoId: number | null;
+  id: string; seq: number; kind: string; intent: string; prompt: string | null; adoType: string | null;
+  parentTaskId: string | null; linkedAdoId: number | null; adoUrl: string | null;
   affectedPaths: string[]; appetite: string;
 };
 
@@ -54,8 +61,8 @@ export async function materializeTasksToAdo(input: { clientId: string; workitemI
     const [wi] = await tx.select({ key: workitem.key, title: workitem.title }).from(workitem).where(eq(workitem.id, input.workitemId)).limit(1);
     const rows = (await tx
       .select({
-        id: task.id, seq: task.seq, intent: task.intent, adoType: task.adoType,
-        parentTaskId: task.parentTaskId, linkedAdoId: task.linkedAdoId,
+        id: task.id, seq: task.seq, kind: task.kind, intent: task.intent, prompt: task.prompt, adoType: task.adoType,
+        parentTaskId: task.parentTaskId, linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl,
         affectedPaths: task.affectedPaths, appetite: task.appetite,
       })
       .from(task)
@@ -71,10 +78,12 @@ export async function materializeTasksToAdo(input: { clientId: string; workitemI
   if (rows.length === 0) throw new Error("אין משימות מאושרות להקמה");
 
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const ordered = [...rows].sort((a, b) => levelOf(a.id, byId) - levelOf(b.id, byId) || a.seq - b.seq);
+  const tasksOnly = rows.filter((r) => r.kind !== "check");
+  const ordered = [...tasksOnly].sort((a, b) => levelOf(a.id, byId) - levelOf(b.id, byId) || a.seq - b.seq);
 
-  const res: MaterializeResult = { created: 0, skipped: 0, links: 0, items: [], detail: "" };
+  const res: MaterializeResult = { created: 0, skipped: 0, links: 0, checksPosted: 0, items: [], detail: "" };
   const adoIdOf = new Map<string, number>(rows.filter((r) => r.linkedAdoId).map((r) => [r.id, r.linkedAdoId!]));
+  const adoUrlOf = new Map<string, string>(rows.filter((r) => r.linkedAdoId && r.adoUrl).map((r) => [r.id, r.adoUrl!]));
 
   for (const t of ordered) {
     if (t.linkedAdoId) { res.skipped++; continue; }
@@ -105,6 +114,7 @@ export async function materializeTasksToAdo(input: { clientId: string; workitemI
     const url = links?.html?.href || adoWorkItemUrl(orgUrl, project, adoId);
 
     adoIdOf.set(t.id, adoId);
+    adoUrlOf.set(t.id, url);
     await withTenant(input.clientId, (tx) =>
       tx.update(task).set({ linkedAdoId: adoId, adoUrl: url, adoSyncedAt: new Date(), updatedAt: new Date() }).where(eq(task.id, t.id)),
     );
@@ -131,9 +141,113 @@ export async function materializeTasksToAdo(input: { clientId: string; workitemI
     if (r.ok) res.links++;
   }
 
+  // "check" nodes never get their own work item — approved, unposted ones
+  // are folded into their parent task's Discussion as a checklist.
+  const checksByParent = new Map<string, TaskRow[]>();
+  for (const c of rows) {
+    if (c.kind !== "check" || c.linkedAdoId || !c.parentTaskId) continue;
+    (checksByParent.get(c.parentTaskId) ?? checksByParent.set(c.parentTaskId, []).get(c.parentTaskId)!).push(c);
+  }
+  for (const [parentTaskId, checks] of checksByParent) {
+    const parentAdoId = adoIdOf.get(parentTaskId);
+    if (!parentAdoId) continue; // parent itself not (yet) in TFS
+    const lines = [
+      "רשימת בדיקה להשלמת המשימה (מ-DCC):",
+      ...checks.sort((a, b) => a.seq - b.seq).map((c) => `☐ ${c.intent}${c.prompt && c.prompt !== c.intent ? ` — ${c.prompt}` : ""}`),
+    ];
+    const r = await adoSend({
+      base: projBase, apiPath: `wit/workitems/${parentAdoId}`, method: "PATCH",
+      body: [{ op: "add", path: "/fields/System.History", value: lines.join("<br>") }],
+      pat: conn.secretRef,
+    });
+    if (!r.ok) continue; // best-effort — the checklist still shows in DCC either way
+    const parentUrl = adoUrlOf.get(parentTaskId) ?? adoWorkItemUrl(orgUrl, project, parentAdoId);
+    for (const c of checks) {
+      await withTenant(input.clientId, (tx) =>
+        tx.update(task).set({ linkedAdoId: parentAdoId, adoUrl: parentUrl, adoSyncedAt: new Date(), updatedAt: new Date() }).where(eq(task.id, c.id)),
+      );
+      await appendEvent({
+        clientId: input.clientId, workitemId: input.workitemId, source: "ado", type: "ado.synced",
+        actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
+        links: [{ rel: "ado_workitem", ref: String(parentAdoId) }, { rel: "task", ref: c.id }],
+        payload: { direction: "to_ado", adoId: parentAdoId, operation: "reconcile", url: parentUrl },
+      });
+      res.checksPosted++;
+    }
+  }
+
   await regenerateBrief(input.clientId, input.workitemId);
-  res.detail = `הוקמו ${res.created} פריטים ב-TFS · ${res.links} קישורי תלות${res.skipped ? ` · ${res.skipped} היו מסונכרנים` : ""}`;
+  res.detail = `הוקמו ${res.created} משימות ב-TFS · ${res.links} קישורי תלות`
+    + (res.checksPosted ? ` · ${res.checksPosted} בדיקות תועדו ב-Discussion` : "")
+    + (res.skipped ? ` · ${res.skipped} כבר היו מסונכרנות` : "");
   return res;
+}
+
+export type EditTaskResult = { updated: boolean; adoSynced: boolean };
+
+/**
+ * Edit a task's content at any state — before OR after it's been approved,
+ * materialized to TFS, or implemented. The caller (the UI) is the one who
+ * decides whether the edit is "just wording" or "the scope actually
+ * changed" (`scopeChanged`) — we don't try to infer that from a text diff;
+ * we just record it plainly and, when it's linked to TFS already, mirror
+ * the title there and leave a Discussion note so anyone looking at the
+ * work item sees the scope-change flag too, not only DCC.
+ */
+export async function editTask(input: {
+  clientId: string; taskId: string; by: { userId: string };
+  patch: { intent?: string; prompt?: string; appetite?: "small" | "standard" | "large" };
+  scopeChanged: boolean;
+}): Promise<EditTaskResult> {
+  const before = await withTenant(input.clientId, async (tx) => {
+    const [row] = await tx.select().from(task).where(eq(task.id, input.taskId)).limit(1);
+    return row;
+  });
+  if (!before) throw new Error("משימה לא נמצאה");
+
+  const set: Record<string, unknown> = { updatedAt: new Date() };
+  if (input.patch.intent !== undefined && input.patch.intent.trim()) set.intent = input.patch.intent.trim();
+  if (input.patch.appetite !== undefined) set.appetite = input.patch.appetite;
+  if (input.patch.prompt !== undefined) set.prompt = input.patch.prompt.trim() || null;
+  if (Object.keys(set).length === 1) return { updated: false, adoSynced: false };
+
+  await withTenant(input.clientId, (tx) => tx.update(task).set(set).where(eq(task.id, input.taskId)));
+
+  const titleChanged = typeof set.intent === "string" && set.intent !== before.intent;
+  let adoSynced = false;
+  if (before.linkedAdoId && before.kind !== "check" && titleChanged) {
+    const conn = await activeAdoConnection(input.clientId);
+    if (conn) {
+      const orgUrl = (conn.config.orgUrl ?? "").replace(/\/+$/, "");
+      const project = conn.config.project ?? "";
+      if (project) {
+        const projBase = `${orgUrl}/${encodeURIComponent(project)}`;
+        const r = await adoSend({
+          base: projBase, apiPath: `wit/workitems/${before.linkedAdoId}`, method: "PATCH",
+          body: [{ op: "add", path: "/fields/System.Title", value: (set.intent as string).slice(0, 250) }],
+          pat: conn.secretRef,
+        });
+        adoSynced = r.ok;
+      }
+    }
+  }
+
+  const noteLines = [
+    `✎ משימה #${before.seq} נערכה על ידי משתמש.`,
+    input.scopeChanged
+      ? "⚠ סומן כשינוי בהיקף העבודה — מומלץ לבדוק מחדש תלויות/בדיקות תחת המשימה."
+      : "עדכון ניסוח/תוכן בלבד, ללא שינוי בהיקף.",
+    adoSynced ? "כותרת ה-work item ב-TFS סונכרנה בהתאם." : "",
+  ].filter(Boolean);
+  await appendEvent({
+    clientId: input.clientId, workitemId: before.workitemId, source: "manual", type: "note.added",
+    actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
+    links: [{ rel: "task", ref: input.taskId }],
+    payload: { body: noteLines.join("\n") },
+  });
+  await regenerateBrief(input.clientId, before.workitemId);
+
+  return { updated: true, adoSynced };
 }
 
 /** Approved tasks that have not been pushed to TFS yet. */

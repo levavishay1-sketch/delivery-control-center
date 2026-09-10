@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getTask, getTaskRun, implementTask, progressTask,
+  getTask, getTaskRun, implementTask, progressTask, editTask, rollbackTask,
   type FlowRun, type ImplementResult, type TaskDetail as TD,
 } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
@@ -43,6 +43,14 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [run, setRun] = useState<FlowRun | null>(null);
   const [showLog, setShowLog] = useState(false);
   const [copied, setCopied] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [editIntent, setEditIntent] = useState("");
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editAppetite, setEditAppetite] = useState<"small" | "standard" | "large">("standard");
+  const [editScope, setEditScope] = useState<"text" | "scope">("text");
+  const [saving, setSaving] = useState(false);
+  const [rollingBack, setRollingBack] = useState(false);
+  const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
 
   const load = useCallback(() => { getTask(id).then(setD).catch((e) => setErr(String(e))); }, [id]);
   const refreshRun = useCallback(async () => {
@@ -74,14 +82,51 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     catch (e) { setErr(String(e)); }
   };
 
+  const openEdit = () => {
+    setEditIntent(t.intent);
+    setEditPrompt(t.prompt ?? "");
+    setEditAppetite(t.appetite as "small" | "standard" | "large");
+    setEditScope("text");
+    setEditing(true);
+  };
+  const saveEdit = async () => {
+    setSaving(true); setErr(null);
+    try {
+      await editTask(id, {
+        clientId: t.clientId, intent: editIntent, appetite: editAppetite, prompt: editPrompt,
+        scopeChanged: editScope === "scope",
+      });
+      setEditing(false);
+      load();
+    } catch (e) { setErr(String(e)); }
+    finally { setSaving(false); }
+  };
+
+  const rollback = async () => {
+    if (!confirm("זה יבטל את כל שינויי הקוד שנעשו במשימה הזו (branch מבודד, לא בקוד שלך) ויחזיר אותה ל-\"ממתין\". לא ניתן לשחזר מה-DCC. להמשיך?")) return;
+    setRollingBack(true); setErr(null); setRollbackMsg(null);
+    try {
+      const r = await rollbackTask(id);
+      setRollbackMsg(r.rolledBack ? "✓ שינויי הקוד בוטלו — ה-branch אופס לבסיס." : (r.reason ?? "אין מה לבטל."));
+      load();
+    } catch (e) { setErr(String(e)); }
+    finally { setRollingBack(false); }
+  };
+
   return (
     <>
       <PageHead
         crumb={<a onClick={() => nav(`#/wi/${d.requirement.id}`)}>← {d.requirement.key ?? "לדרישה"}: {d.requirement.title.slice(0, 50)}</a>}
         title={t.intent}
-        sub={`משימה #${t.seq} · ${t.adoType ?? "Task"} · ${t.appetite}`}
+        sub={`${t.kind === "check" ? "בדיקה" : "משימה"} #${t.seq} · ${t.kind === "check" ? "לא ב-TFS בנפרד" : t.adoType ?? "Task"} · ${t.appetite}`}
         actions={
           <>
+            {(impl || t.state === "in_progress") && (
+              <button className="btn btn-secondary" disabled={rollingBack || running} onClick={rollback}>
+                {rollingBack ? "מבטל…" : "↩ Rollback"}
+              </button>
+            )}
+            <button className="btn btn-secondary" disabled={running} onClick={openEdit}>✎ ערוך משימה</button>
             {t.state !== "done" && (
               <button className="btn btn-secondary" onClick={async () => { await progressTask(t.id, { to: "done", clientId: t.clientId }); load(); }}>סמן כהושלם</button>
             )}
@@ -92,14 +137,68 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         }
       />
 
+      {rollbackMsg && !editing && (
+        <div className="callout" style={{ marginBottom: 16 }}>
+          <div className="body"><p className="r">{rollbackMsg}</p></div>
+        </div>
+      )}
+
+      {editing && (
+        <Card>
+          <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 10 }}>עריכת משימה</h3>
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label>כותרת / intent</label>
+            <textarea value={editIntent} onChange={(e) => setEditIntent(e.target.value)} rows={2} />
+          </div>
+          <div className="field" style={{ marginBottom: 10 }}>
+            <label>הפרומט המדוייק שיורץ ל-Claude</label>
+            <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} rows={5} placeholder="ריק = ישתמש ב-intent" />
+          </div>
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>גודל</label>
+            <select value={editAppetite} onChange={(e) => setEditAppetite(e.target.value as "small" | "standard" | "large")}>
+              <option value="small">small</option>
+              <option value="standard">standard</option>
+              <option value="large">large</option>
+            </select>
+          </div>
+          <div className="field" style={{ marginBottom: 14 }}>
+            <label>מה מאפיין את השינוי?</label>
+            <div style={{ display: "flex", gap: 14, fontSize: 12.5, marginTop: 4 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <input type="radio" style={{ minWidth: 0 }} checked={editScope === "text"} onChange={() => setEditScope("text")} />
+                רק ניסוח / הבהרה — ההיקף לא השתנה
+              </label>
+              <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <input type="radio" style={{ minWidth: 0 }} checked={editScope === "scope"} onChange={() => setEditScope("scope")} />
+                היקף העבודה השתנה — צריך לבדוק תלויות/בדיקות מחדש
+              </label>
+            </div>
+            {editScope === "scope" && (
+              <p style={{ fontSize: 11.5, color: "var(--status-warning)", marginTop: 6 }}>
+                יתועד כך גם ב-DCC וגם ב-Discussion של TFS (אם קיים). מומלץ לעבור על הפירוק/הבדיקות של המשימה מול השינוי.
+              </p>
+            )}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-primary" disabled={saving} onClick={saveEdit}>{saving ? "שומר…" : "שמור"}</button>
+            <button className="btn btn-secondary" onClick={() => setEditing(false)}>ביטול</button>
+          </div>
+        </Card>
+      )}
+
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
         <Pill tone={t.state === "done" ? "healthy" : t.state === "in_progress" ? "active" : t.state === "blocked" ? "critical" : "inactive"}>
           {STATE_HE[t.state] ?? t.state}
         </Pill>
-        <Pill tone={t.adoType && t.adoType !== "Task" ? "ai" : "inactive"}>{t.adoType ?? "Task"}</Pill>
+        {t.kind === "check"
+          ? <Pill tone="neutral">✓ בדיקה — לא work item בפני עצמה</Pill>
+          : <Pill tone={t.adoType && t.adoType !== "Task" ? "ai" : "inactive"}>{t.adoType ?? "Task"}</Pill>}
         {t.linkedAdoId
-          ? <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--status-healthy)" }}>TFS #{t.linkedAdoId} ↗</a>
-          : <Pill tone="warning">{t.approvedAt ? "מאושר, טרם הוקם ב-TFS" : "ממתין לאישור"}</Pill>}
+          ? (t.kind === "check"
+              ? <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--status-healthy)" }}>תועד ב-Discussion של המשימה ההורה ↗</a>
+              : <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--status-healthy)" }}>TFS #{t.linkedAdoId} ↗</a>)
+          : <Pill tone="warning">{t.approvedAt ? (t.kind === "check" ? "מאושר, טרם תועד" : "מאושר, טרם הוקם ב-TFS") : "ממתין לאישור"}</Pill>}
         {t.origin === "ai" && <Pill tone="ai">הוצע ע"י AI</Pill>}
       </div>
 
@@ -141,6 +240,27 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
               <label>קבצים שהשתנו ({impl.filesChanged.length})</label>
               <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
                 {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
+              </div>
+            </div>
+          )}
+          {impl.affectedConsumers?.length > 0 && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label>מי עוד נוגע בקבצים האלה ({impl.affectedConsumers.length})</label>
+              <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: -2, marginBottom: 6 }}>
+                קוד אחר שמפנה/משתמש בקבצים ששונו — יש לשקול לאסוף ולעדכן אותם יחד לפריסת טסט.
+              </p>
+              <div className="rowlist">
+                {impl.affectedConsumers.map((c, i) => (
+                  <div className="row" key={i} style={{ alignItems: "flex-start", flexDirection: "column", gap: 3, paddingBlock: 8 }}>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{c.path}</span>
+                    <span style={{ fontSize: 12, color: "var(--ink-700)" }}>{c.reason}</span>
+                    {c.usedBy.length > 0 && (
+                      <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
+                        ← {c.usedBy.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -206,15 +326,36 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
             <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{t.affectedPaths.join(", ")}</div>
           </div>
         )}
-        {d.children.length > 0 && (
+        {d.children.filter((c) => c.kind !== "check").length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({d.children.length})</p>
+            <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({d.children.filter((c) => c.kind !== "check").length})</p>
             <div className="rowlist">
-              {d.children.map((c) => (
+              {d.children.filter((c) => c.kind !== "check").map((c) => (
                 <div className="row" key={c.id}>
                   <span className="title w-title" onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent}</span>
                   <span className="spacer" />
                   <Pill tone={c.state === "done" ? "healthy" : "inactive"}>{STATE_HE[c.state] ?? c.state}</Pill>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {d.children.filter((c) => c.kind === "check").length > 0 && (
+          <div style={{ marginTop: 12 }}>
+            <p className="section-lbl" style={{ marginBottom: 6 }}>
+              רשימת בדיקה להשלמת המשימה ({d.children.filter((c) => c.kind === "check").length})
+            </p>
+            <p style={{ fontSize: 11, color: "var(--ov-label)", marginTop: -4, marginBottom: 6 }}>
+              לא work items נפרדים ב-TFS — מתועדות ב-Discussion של המשימה הזו כשהיא מוקמת.
+            </p>
+            <div className="rowlist">
+              {d.children.filter((c) => c.kind === "check").map((c) => (
+                <div className="row" key={c.id}>
+                  <span className={c.state === "done" ? "title" : "title w-title"} style={{ textDecoration: c.state === "done" ? "line-through" : "none", color: c.state === "done" ? "var(--ink-400)" : undefined }} onClick={() => nav(`#/task/${c.id}`)}>
+                    {c.state === "done" ? "☑" : "☐"} #{c.seq} {c.intent}
+                  </span>
+                  <span className="spacer" />
+                  {c.linkedAdoId ? <Pill tone="healthy">תועד ב-Discussion</Pill> : <Pill tone="inactive">{STATE_HE[c.state] ?? c.state}</Pill>}
                 </div>
               ))}
             </div>

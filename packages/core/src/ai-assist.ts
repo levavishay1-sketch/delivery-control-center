@@ -318,7 +318,7 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
     '{"title": string, "summary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
   ].join("\n");
 
-  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 300000, runId: input.runId });
+  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 600000, runId: input.runId });
   pushLine(input.runId, "כותב סיכום ופערים…");
 
   await appendEvent({
@@ -349,9 +349,9 @@ export type BreakdownResult = {
   /** How deep the proposed tree is — picks the TFS ladder rungs. */
   depth: number;
   tasks: {
-    id: string; seq: number; intent: string; appetite: string;
+    id: string; seq: number; kind: "task" | "check"; intent: string; appetite: string;
     affectedPaths: string[]; dependsOnSeq: number[];
-    parentSeq: number | null; level: number; adoType: string; prompt: string | null;
+    parentSeq: number | null; level: number; adoType: string | null; prompt: string | null;
   }[];
 };
 
@@ -380,27 +380,42 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
     "",
     "Rules: each LEAF is one focused, reviewable unit. Give every node an appetite (small | standard | large). On leaves, list the files it will most likely touch. `dependsOnSeq` lists seq numbers that must finish first (ordering between siblings) — it is NOT the hierarchy.",
     "",
+    "`kind` — classify EVERY node as one of:",
+    '  "task"  — real implementation work. Becomes its own tracked work item.',
+    '  "check" — verification, regression testing, or documentation needed',
+    "            before the PARENT task can be called done — it does not",
+    "            change product code on its own. A check is always a LEAF",
+    "            (never has children of its own) and its parentSeq MUST point",
+    "            at a \"task\" node. Prefer \"check\" whenever a node's job is to",
+    "            confirm/validate/document something the parent task already",
+    "            did, rather than to make its own code change.",
+    "",
     "`prompt` — the MOST IMPORTANT field. It is the exact instruction another",
-    "Claude will be handed, alone, to implement this node. It must stand on its",
-    "own: no reference to this conversation, no \"as discussed\". Name the files,",
-    "functions and symbols to change, say what the change is, what must NOT",
-    "change, and how to tell it worked. For a parent node whose children do the",
-    "work, the prompt describes the integration/verification the parent owns.",
-    "Write it as a direct instruction, 3-10 sentences.",
+    "Claude will be handed, alone, to carry out this node (implement it, if",
+    "\"task\"; verify/test/document it, if \"check\"). It must stand on its own:",
+    "no reference to this conversation, no \"as discussed\". Name the files,",
+    "functions and symbols involved, say exactly what to do, what must NOT",
+    "change, and how to tell it worked. Write it as a direct instruction,",
+    "3-10 sentences.",
     "",
     "IMPORTANT: write each node's \"intent\" and \"prompt\" IN HEBREW (code identifiers and file paths stay English). appetite stays one of small|standard|large.",
     "",
     'Respond with ONLY this JSON array, no prose:',
-    '[{"seq": number, "parentSeq": number|null, "intent": string, "prompt": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',
+    '[{"seq": number, "parentSeq": number|null, "kind": "task"|"check", "intent": string, "prompt": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "dependsOnSeq": number[]}]',
   ].join("\n");
 
   const proposed = await runClaudeJson<
-    { seq: number; parentSeq?: number | null; intent: string; prompt?: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]
-  >(cwd ?? process.cwd(), prompt, { timeoutMs: 300000, runId: input.runId });
+    { seq: number; parentSeq?: number | null; kind?: string; intent: string; prompt?: string; appetite: string; affectedPaths?: string[]; dependsOnSeq?: number[] }[]
+  >(cwd ?? process.cwd(), prompt, { timeoutMs: 600000, runId: input.runId });
   pushLine(input.runId, "בונה את היררכיית המשימות…");
 
-  // resolve the tree: level per node, then the depth that picks TFS types
+  // resolve the tree: level per node, then the depth that picks TFS types.
+  // A "check" is always a leaf — if the model gave one children anyway,
+  // it must really be work (a check can't be a parent), so promote it.
   const bySeq = new Map(proposed.map((p) => [p.seq, p]));
+  const hasChildren = new Set(proposed.filter((p) => p.parentSeq != null).map((p) => p.parentSeq));
+  const kindOf = (seq: number): "task" | "check" =>
+    hasChildren.has(seq) ? "task" : bySeq.get(seq)?.kind === "check" ? "check" : "task";
   const levelOf = (seq: number, seen = new Set<number>()): number => {
     const p = bySeq.get(seq);
     const parent = p?.parentSeq;
@@ -409,8 +424,14 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
     return levelOf(parent, seen) + 1;
   };
   const levels = new Map(proposed.map((p) => [p.seq, Math.min(levelOf(p.seq), MAX_TASK_DEPTH - 1)]));
-  const depth = Math.min(Math.max(...[...levels.values(), 0]) + 1, MAX_TASK_DEPTH);
-  pushLine(input.runId, `עומק ${depth} → ${ADO_LADDER.slice(MAX_TASK_DEPTH - depth).join(" › ")}`);
+  // depth (→ the TFS ladder) is driven only by "task" nodes — a check never
+  // gets a rung of its own and never stretches the ladder.
+  const depth = Math.min(
+    Math.max(0, ...proposed.filter((p) => kindOf(p.seq) === "task").map((p) => levels.get(p.seq) ?? 0)) + 1,
+    MAX_TASK_DEPTH,
+  );
+  const checkCount = proposed.filter((p) => kindOf(p.seq) === "check").length;
+  pushLine(input.runId, `עומק ${depth} → ${ADO_LADDER.slice(MAX_TASK_DEPTH - depth).join(" › ")}${checkCount ? ` · ${checkCount} בדיקות (לא ב-TFS בנפרד)` : ""}`);
 
   const out = await withTenant(input.clientId, async (tx) => {
     // Re-running a breakdown REPLACES the previous proposal — otherwise
@@ -428,17 +449,18 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
     for (const p of ordered) {
       const appetite = ["small", "standard", "large"].includes(p.appetite) ? p.appetite : "standard";
       const level = levels.get(p.seq) ?? 0;
-      const adoType = adoTypeForLevel(level, depth);
+      const kind = kindOf(p.seq);
+      const adoType = kind === "task" ? adoTypeForLevel(level, depth) : null;
       const parentId = p.parentSeq != null ? seqToId.get(p.parentSeq) ?? null : null;
       const [t] = await tx.insert(task).values({
-        clientId: input.clientId, workitemId: input.workitemId, seq: p.seq,
+        clientId: input.clientId, workitemId: input.workitemId, seq: p.seq, kind,
         intent: p.intent, appetite: appetite as "small" | "standard" | "large",
         origin: "ai", state: "pending", affectedPaths: p.affectedPaths ?? [],
         parentTaskId: parentId, adoType, prompt: p.prompt?.trim() || null,
       }).returning();
       seqToId.set(p.seq, t!.id);
       rows.push({
-        id: t!.id, seq: p.seq, intent: p.intent, appetite,
+        id: t!.id, seq: p.seq, kind, intent: p.intent, appetite,
         affectedPaths: p.affectedPaths ?? [], dependsOnSeq: p.dependsOnSeq ?? [],
         parentSeq: p.parentSeq ?? null, level, adoType, prompt: p.prompt?.trim() ?? null,
       });
@@ -479,6 +501,13 @@ export type ImplementResult = {
   commit: string | null;
   testsRun: string | null;
   followUps: string[];
+  /**
+   * For each changed file, other files/components in the repo that
+   * reference it (import it, call it, register it as a plugin, etc.) —
+   * so a shared BL class used by 5 plugins surfaces those 5 as "must be
+   * packaged together for a test deploy", not just the file itself.
+   */
+  affectedConsumers: { path: string; usedBy: string[]; reason: string }[];
 };
 
 /** Run a git command in `cwd`; resolves { code, out }.
@@ -561,14 +590,21 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     "2. Make the change. Keep it to THIS task — do not refactor beyond it, do not touch unrelated files.",
     "3. If the repo has a build or tests you can run cheaply, run them and report what happened. Do not install dependencies.",
     "4. Do NOT commit, do NOT push, do NOT create branches — that is handled outside.",
+    "5. Blast radius: for EACH file you changed, search the rest of the repository (grep/glob — do not guess) for other files that",
+    "   import, call, extend, instantiate, or register it (e.g. other plugins that call a shared BL class, other webresources that",
+    "   load a shared JS module, other configs that reference it). This tells the user what else must be packaged/retested together",
+    "   with this change. If a changed file has no other consumers, omit it from this list — do not pad it with unrelated files.",
     "",
-    "IMPORTANT: write `summary` and `followUps` IN HEBREW (code identifiers and paths stay English).",
+    "IMPORTANT: write `summary`, `followUps` and every `reason` IN HEBREW (code identifiers and paths stay English).",
     "",
     "Respond with ONLY this JSON, no prose, no markdown fence:",
-    '{"summary": string, "filesChanged": string[], "testsRun": string|null, "followUps": string[]}',
+    '{"summary": string, "filesChanged": string[], "testsRun": string|null, "followUps": string[], "affectedConsumers": [{"path": string, "usedBy": string[], "reason": string}]}',
   ].filter(Boolean).join("\n");
 
-  const res = await runClaudeJson<{ summary: string; filesChanged?: string[]; testsRun?: string | null; followUps?: string[] }>(
+  const res = await runClaudeJson<{
+    summary: string; filesChanged?: string[]; testsRun?: string | null; followUps?: string[];
+    affectedConsumers?: { path: string; usedBy?: string[]; reason: string }[];
+  }>(
     dir, prompt, { timeoutMs: 900_000, runId: input.runId, write: true },
   );
 
@@ -603,7 +639,60 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     branch, dir, repoName: r.name, summary: res.summary,
     filesChanged: changed.length ? changed : res.filesChanged ?? [],
     commit, testsRun: res.testsRun ?? null, followUps: res.followUps ?? [],
+    affectedConsumers: (res.affectedConsumers ?? []).map((c) => ({ path: c.path, usedBy: c.usedBy ?? [], reason: c.reason })),
   };
+}
+
+export type RollbackResult = { rolledBack: boolean; reason?: string; branch?: string; dir?: string };
+
+/**
+ * Undo everything `runImplement` did for one task, in its isolated clone.
+ * The branch name is fully deterministic from task fields (see `runImplement`),
+ * so nothing extra needs to be persisted to find it again. Rollback resets
+ * that branch back to its merge-base with the repo's default branch — i.e.
+ * discards every local commit DCC made for this task — and re-cleans the
+ * tree. Nothing is pushed anywhere, so this only ever touches the DCC cache
+ * clone, never the user's own working copy.
+ */
+export async function rollbackTask(input: { clientId: string; workitemId: string; taskId: string; by: Dev }): Promise<RollbackResult> {
+  const t = await withTenant(input.clientId, async (tx) => {
+    const [row] = await tx.select().from(task).where(eq(task.id, input.taskId)).limit(1);
+    return row;
+  });
+  if (!t) throw new Error("משימה לא נמצאה");
+  const wi = await withTenant(input.clientId, async (tx) => {
+    const [row] = await tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, input.workitemId)).limit(1);
+    return row;
+  });
+
+  const r = await firstRepo(input.clientId, input.workitemId);
+  if (!r) throw new Error("אין repository מקושר לדרישה");
+  const dir = await ensureCheckout({ ...r, localPath: null });
+  if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
+
+  const branch = `feature/${wi?.key ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
+  const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
+  if (exists.code !== 0) return { rolledBack: false, reason: "המשימה עדיין לא פותחה — אין מה לבטל" };
+
+  await git(["checkout", branch], dir);
+  const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
+  await git(["fetch", "origin", base], dir);
+  const mergeBase = (await git(["merge-base", "HEAD", `origin/${base}`], dir)).out;
+  if (mergeBase) await git(["reset", "--hard", mergeBase], dir);
+  await git(["clean", "-fd"], dir);
+
+  await withTenant(input.clientId, (tx) =>
+    tx.update(task).set({ state: t.state === "in_progress" ? "pending" : t.state, updatedAt: new Date() }).where(eq(task.id, input.taskId)),
+  );
+  await appendEvent({
+    clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
+    actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
+    links: [{ rel: "task", ref: input.taskId }],
+    payload: { body: `↩ שינויי הקוד של משימה #${t.seq} (${t.intent.slice(0, 60)}) בוטלו — ה-branch אופס לבסיס.` },
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+
+  return { rolledBack: true, branch, dir };
 }
 
 /* ── 4. task approval ─────────────────────────────────────────────── */

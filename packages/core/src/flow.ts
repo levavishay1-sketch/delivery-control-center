@@ -137,6 +137,7 @@ export async function flowFor(clientId: string, rootId: string): Promise<{ nodes
 export type TaskFlowNode = {
   id: string;
   seq: number;
+  kind: string;
   intent: string;
   appetite: string;
   state: string;
@@ -159,7 +160,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
   return withTenant(clientId, async (tx) => {
     const rows = await tx
       .select({
-        id: task.id, seq: task.seq, intent: task.intent, appetite: task.appetite, state: task.state,
+        id: task.id, seq: task.seq, kind: task.kind, intent: task.intent, appetite: task.appetite, state: task.state,
         adoType: task.adoType, parentTaskId: task.parentTaskId, approvedAt: task.approvedAt,
         linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, affectedPaths: task.affectedPaths,
         prompt: task.prompt,
@@ -177,12 +178,15 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       return level(t.parentTaskId, seen) + 1;
     };
     const nodes: TaskFlowNode[] = rows.map((r) => ({
-      id: r.id, seq: r.seq, intent: r.intent, appetite: r.appetite, state: r.state,
+      id: r.id, seq: r.seq, kind: r.kind, intent: r.intent, appetite: r.appetite, state: r.state,
       adoType: r.adoType, level: level(r.id), parentTaskId: r.parentTaskId,
       approved: r.approvedAt != null, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
       affectedPaths: (r.affectedPaths ?? []) as string[], prompt: r.prompt,
     }));
-    const depth = Math.max(...nodes.map((n) => n.level)) + 1;
+    // depth (→ the ladder) is driven only by "task" nodes — a "check" leaf
+    // can sit one level deeper without stretching the ladder.
+    const taskLevels = nodes.filter((n) => n.kind !== "check").map((n) => n.level);
+    const depth = Math.max(0, ...taskLevels) + 1;
 
     const ids = rows.map((r) => r.id);
     const deps = await tx.select().from(taskDependency).where(sql`${taskDependency.taskId} in ${ids}`);
@@ -213,18 +217,22 @@ export type AdoTaskRow = {
   approved: boolean;
   parentTaskId: string | null;
   level: number;
+  /** approved verification/regression/doc children folded into this task's
+   *  TFS Discussion instead of becoming their own work items. */
+  checksCount: number;
+  checksPosted: number;
 };
 
 /**
- * Every task of a client, across all its requirements — the mirror of
- * what the client has (or will have) in TFS. Ordered by requirement, then
- * depth-first through the task hierarchy.
+ * Every TASK (not "check") of a client, across all its requirements — a
+ * true 1:1 mirror of what the client has (or will have) in TFS. Ordered
+ * by requirement, then depth-first through the task hierarchy.
  */
 export async function clientTaskTree(clientId: string): Promise<{ rows: AdoTaskRow[]; inTfs: number; pending: number }> {
   return withTenant(clientId, async (tx) => {
     const raw = await tx
       .select({
-        id: task.id, requirementId: task.workitemId, seq: task.seq, intent: task.intent,
+        id: task.id, requirementId: task.workitemId, seq: task.seq, kind: task.kind, intent: task.intent,
         appetite: task.appetite, state: task.state, adoType: task.adoType,
         linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, adoSyncedAt: task.adoSyncedAt,
         approvedAt: task.approvedAt, parentTaskId: task.parentTaskId,
@@ -243,13 +251,22 @@ export async function clientTaskTree(clientId: string): Promise<{ rows: AdoTaskR
       return level(t.parentTaskId, seen) + 1;
     };
 
-    const all: AdoTaskRow[] = raw.map((r) => ({
+    const checksCount = new Map<string, number>();
+    const checksPosted = new Map<string, number>();
+    for (const r of raw) {
+      if (r.kind !== "check" || !r.parentTaskId) continue;
+      checksCount.set(r.parentTaskId, (checksCount.get(r.parentTaskId) ?? 0) + 1);
+      if (r.linkedAdoId) checksPosted.set(r.parentTaskId, (checksPosted.get(r.parentTaskId) ?? 0) + 1);
+    }
+
+    const all: AdoTaskRow[] = raw.filter((r) => r.kind !== "check").map((r) => ({
       id: r.id, requirementId: r.requirementId,
       requirementKey: r.requirementKey, requirementTitle: r.requirementTitle,
       seq: r.seq, intent: r.intent, appetite: r.appetite, state: r.state,
       adoType: r.adoType, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
       adoSyncedAt: r.adoSyncedAt ? new Date(r.adoSyncedAt).toISOString() : null,
       approved: r.approvedAt != null, parentTaskId: r.parentTaskId, level: level(r.id),
+      checksCount: checksCount.get(r.id) ?? 0, checksPosted: checksPosted.get(r.id) ?? 0,
     }));
 
     // depth-first within each requirement so the hierarchy reads top-down

@@ -36,8 +36,9 @@ export type EventRow = {
 export type GapState = "proposed" | "verified" | "resolved" | "dismissed" | "spun_off";
 export type Gap = { id: string; description: string; blocking: boolean; confidence: string; state: GapState; spunOffTo: string | null };
 export type Blocker = { id: string; workitemId: string; questionType: string; question: string; answer: string | null; state: "open" | "answered" | "abandoned" };
+export type TaskKind = "task" | "check";
 export type Task = {
-  id: string; seq: number; intent: string; appetite: string;
+  id: string; seq: number; kind: TaskKind; intent: string; appetite: string;
   state: "pending" | "in_progress" | "blocked" | "done" | "dropped";
   origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[];
   parentTaskId: string | null; adoType: string | null; linkedAdoId: number | null; adoUrl: string | null;
@@ -156,12 +157,12 @@ export type AssessResult = { title: string; summary: string; baked: boolean; rat
 export type BreakdownResult = {
   depth: number;
   tasks: {
-    id: string; seq: number; intent: string; appetite: string; affectedPaths: string[];
-    dependsOnSeq: number[]; parentSeq: number | null; level: number; adoType: string; prompt: string | null;
+    id: string; seq: number; kind: TaskKind; intent: string; appetite: string; affectedPaths: string[];
+    dependsOnSeq: number[]; parentSeq: number | null; level: number; adoType: string | null; prompt: string | null;
   }[];
 };
 export type TaskFlowNode = {
-  id: string; seq: number; intent: string; appetite: string; state: string;
+  id: string; seq: number; kind: TaskKind; intent: string; appetite: string; state: string;
   adoType: string | null; level: number; parentTaskId: string | null;
   approved: boolean; linkedAdoId: number | null; adoUrl: string | null; affectedPaths: string[];
   prompt: string | null;
@@ -173,6 +174,7 @@ export type AdoTaskRow = {
   seq: number; intent: string; appetite: string; state: string;
   adoType: string | null; linkedAdoId: number | null; adoUrl: string | null; adoSyncedAt: string | null;
   approved: boolean; parentTaskId: string | null; level: number;
+  checksCount: number; checksPosted: number;
 };
 export type AdoTasks = { rows: AdoTaskRow[]; inTfs: number; pending: number };
 export const getClientAdoTasks = (clientId: string) => get<AdoTasks>(`/clients/${clientId}/ado-tasks`);
@@ -181,7 +183,7 @@ export type AllAdoTasks = {
   inTfs: number; pending: number;
 };
 export const getAllAdoTasks = () => get<AllAdoTasks>("/ado-tasks");
-export type MaterializeResult = { created: number; skipped: number; links: number; items: { taskId: string; seq: number; adoId: number; adoType: string; url: string }[]; detail: string };
+export type MaterializeResult = { created: number; skipped: number; links: number; checksPosted: number; items: { taskId: string; seq: number; adoId: number; adoType: string; url: string }[]; detail: string };
 export const materializeTasks = (id: string) => post<MaterializeResult>(`/workitems/${id}/materialize`, {});
 /** Agile ladder — the breakdown depth picks the rungs, leaves are always Task. */
 export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
@@ -217,6 +219,9 @@ export const deleteGap = (id: string, clientId: string) => del<{ deleted: boolea
 export const updateBlocker = (id: string, body: { clientId: string; question?: string; questionType?: string }) => patch<{ updated: boolean }>(`/blockers/${id}`, body);
 export const deleteBlocker = (id: string, clientId: string) => del<{ deleted: boolean }>(`/blockers/${id}`, { clientId });
 export const updateTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => patch<{ updated: boolean }>(`/tasks/${id}`, body);
+export const editTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string; scopeChanged: boolean }) =>
+  patch<{ updated: boolean; adoSynced: boolean }>(`/tasks/${id}`, body);
+export const rollbackTask = (id: string) => post<{ rolledBack: boolean; reason?: string; branch?: string; dir?: string }>(`/tasks/${id}/rollback`, {});
 export const deleteTask = (id: string, clientId: string) => del<{ deleted: boolean }>(`/tasks/${id}`, { clientId });
 export const correctNote = (workitemId: string, corrects: string, body: string) => post<{ eventId: string }>("/events", { workitemId, kind: "note", note: { body, source: "manual", corrects } });
 export type ImportResult = { total: number; created: number; skipped: number; items: { adoId: number; title: string; status: "created" | "skipped-exists" | "skipped-bad" }[] };
@@ -232,7 +237,7 @@ export const progressTask = (taskId: string, body: { to: Task["state"]; clientId
   post(`/tasks/${taskId}/progress`, { ...body, mode: "interactive" });
 
 /* ── one task ─────────────────────────────────────────────────────── */
-type TaskSlim = { id: string; seq: number; intent: string; state: string; linkedAdoId?: number | null; adoType?: string | null };
+type TaskSlim = { id: string; seq: number; intent: string; state: string; kind?: TaskKind; linkedAdoId?: number | null; adoType?: string | null };
 export type TaskDetail = {
   task: Task & { workitemId: string; clientId: string; acceptance: { given: string; when: string; then: string }[]; adoSyncedAt: string | null };
   requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
@@ -248,4 +253,5 @@ export const getTaskRun = (id: string) => get<FlowRun>(`/tasks/${id}/flow-run`);
 export type ImplementResult = {
   branch: string; dir: string; repoName: string | null; summary: string;
   filesChanged: string[]; commit: string | null; testsRun: string | null; followUps: string[];
+  affectedConsumers: { path: string; usedBy: string[]; reason: string }[];
 };

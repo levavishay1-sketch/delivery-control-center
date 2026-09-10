@@ -126,6 +126,11 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
                   <td style={{ paddingInlineStart: 14 + t.level * 22 }}>
                     {t.level > 0 && <span style={{ color: "var(--ink-300)" }}>↳ </span>}
                     <span className="w-title" onClick={() => nav(`#/task/${t.id}`)} title={t.intent}>{t.intent.length > 90 ? `${t.intent.slice(0, 90)}…` : t.intent}</span>
+                    {t.checksCount > 0 && (
+                      <span title={`${t.checksCount} בדיקות — לא work items בפני עצמן, מתועדות ב-Discussion של המשימה הזו`} style={{ fontSize: 10.5, color: "var(--ink-400)", marginInlineStart: 6 }}>
+                        +{t.checksCount} בדיקות{t.checksPosted < t.checksCount ? "" : " ✓"}
+                      </span>
+                    )}
                   </td>
                   <td><Pill tone={t.adoType && t.adoType !== "Task" ? "ai" : "inactive"}>{t.adoType ?? "Task"}</Pill></td>
                   <td>

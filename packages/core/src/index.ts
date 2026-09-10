@@ -7,7 +7,7 @@ export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
 export { route, recordRouting, loadPolicy, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
 export { linkWorkItems, flowFor, taskFlowFor, clientTaskTree, allAdoTasks, type FlowNode, type FlowEdge, type TaskFlowNode, type TaskFlowEdge, type AdoTaskRow } from "./flow.ts";
-export { materializeTasksToAdo, pendingMaterializeCount, type MaterializeResult } from "./task-ado-sync.ts";
+export { materializeTasksToAdo, pendingMaterializeCount, editTask, type MaterializeResult, type EditTaskResult } from "./task-ado-sync.ts";
 export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";
 export { dashboard, auditTrail, listAllWorkItems, listInitiatives, listBudgets, listAlerts, type AuditFilter } from "./dashboard.ts";
 export { listClients, clientDetail, linkRepoToClient, addAdoConnection, checkAdoConnection, deleteConnection, listAdoProjects, listRepos, listConnections } from "./clients.ts";
@@ -16,8 +16,8 @@ export { syncRequirementToAdo, trySyncNewRequirement, syncAllToAdo, deleteAdoFor
 export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
-  startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount,
-  type AssessResult, type BreakdownResult, type FlowRunView, type ImplementResult,
+  startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask,
+  type AssessResult, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {

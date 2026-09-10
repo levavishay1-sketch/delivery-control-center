@@ -142,7 +142,7 @@ export type TaskDetail = {
   task: typeof task.$inferSelect;
   requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
   parent: { id: string; seq: number; intent: string; adoType: string | null } | null;
-  children: { id: string; seq: number; intent: string; adoType: string | null; state: string; linkedAdoId: number | null }[];
+  children: { id: string; seq: number; intent: string; adoType: string | null; kind: string; state: string; linkedAdoId: number | null }[];
   /** tasks that must finish before this one */
   blockedBy: { id: string; seq: number; intent: string; state: string; linkedAdoId: number | null }[];
   /** tasks waiting on this one */
@@ -158,7 +158,7 @@ export async function taskDetail(clientId: string, taskId: string): Promise<Task
       .select({ id: workitem.id, key: workitem.key, title: workitem.title, phase: workitem.phase, clientId: workitem.clientId })
       .from(workitem).where(sql`${workitem.id} = ${t.workitemId}`).limit(1);
 
-    const slim = { id: task.id, seq: task.seq, intent: task.intent, adoType: task.adoType, state: task.state, linkedAdoId: task.linkedAdoId };
+    const slim = { id: task.id, seq: task.seq, intent: task.intent, adoType: task.adoType, kind: task.kind, state: task.state, linkedAdoId: task.linkedAdoId };
     const parent = t.parentTaskId
       ? (await tx.select(slim).from(task).where(sql`${task.id} = ${t.parentTaskId}`).limit(1))[0] ?? null
       : null;

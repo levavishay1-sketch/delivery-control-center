@@ -182,6 +182,15 @@ export const task = pgTable(
       .notNull()
       .references(() => workitem.id, { onDelete: "cascade" }),
     seq: integer("seq").notNull(),
+    /**
+     * "task" — real work, becomes a TFS work item.
+     * "check" — verification / regression / documentation needed to call
+     * the parent task done. Never its own TFS item; folded into the
+     * parent's Discussion (System.History) on materialize. Always a leaf,
+     * always has a parentTaskId pointing at a "task" node, never counted
+     * toward the ladder depth.
+     */
+    kind: text("kind").notNull().default("task"),
     intent: text("intent").notNull(),
     /** Given/When/Then acceptance criteria, structured. */
     acceptance: jsonb("acceptance")

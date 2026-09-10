@@ -76,6 +76,8 @@ import {
   materializeTasksToAdo,
   approveTask,
   rejectTask,
+  rollbackTask,
+  editTask,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -508,6 +510,17 @@ app.get("/tasks/:id/flow-run", async (req) => {
   return (await getTaskRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
 });
 
+// undo everything a Claude implement run did for this task, in its
+// isolated clone — resets its branch back to the base. Fast (local git
+// only), so runs synchronously rather than through a flow_run.
+app.post("/tasks/:id/rollback", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const clientId = await taskClient(id);
+  const d = await taskDetail(clientId, id);
+  return rollbackTask({ clientId, workitemId: d.requirement.id, taskId: id, by: { userId: dev.id } });
+});
+
 app.post("/tasks/:id/approve", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
@@ -606,10 +619,19 @@ app.delete("/blockers/:id", async (req) => {
 });
 
 app.patch("/tasks/:id", async (req) => {
-  await actingUser(req);
+  const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional() }).parse(req.body);
-  return updateTask({ id, ...b });
+  const b = z.object({
+    clientId: z.string().uuid(),
+    intent: z.string().optional(),
+    appetite: z.enum(["small", "standard", "large"]).optional(),
+    prompt: z.string().optional(),
+    scopeChanged: z.boolean().optional(),
+  }).parse(req.body);
+  // pure old-shape calls (no prompt/scopeChanged) keep the light crud path;
+  // anything richer goes through editTask (TFS title mirror + scope note).
+  if (b.prompt === undefined && b.scopeChanged === undefined) return updateTask({ id, clientId: b.clientId, intent: b.intent, appetite: b.appetite });
+  return editTask({ clientId: b.clientId, taskId: id, by: { userId: dev.id }, patch: { intent: b.intent, appetite: b.appetite, prompt: b.prompt }, scopeChanged: b.scopeChanged ?? false });
 });
 app.delete("/tasks/:id", async (req) => {
   await actingUser(req);
