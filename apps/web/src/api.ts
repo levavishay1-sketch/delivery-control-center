@@ -191,7 +191,9 @@ export const startAssess = (id: string) => post<{ runId: string; alreadyRunning:
 export const startBreakdown = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/breakdown`, {});
 export type FlowRun = {
   id: string | null; kind: "assess" | "breakdown" | "implement" | null;
-  state: "running" | "done" | "error" | "idle";
+  /** "rolled_back" — a past implement run whose code was undone; the
+   *  transcript/result stay for history, but it's no longer the live state. */
+  state: "running" | "done" | "error" | "idle" | "rolled_back";
   lines: string[]; result: AssessResult | BreakdownResult | ImplementResult | null; error: string | null;
   startedAt?: string | null; finishedAt?: string | null;
 };
@@ -221,7 +223,7 @@ export const deleteBlocker = (id: string, clientId: string) => del<{ deleted: bo
 export const updateTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large" }) => patch<{ updated: boolean }>(`/tasks/${id}`, body);
 export const editTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string; scopeChanged: boolean }) =>
   patch<{ updated: boolean; adoSynced: boolean }>(`/tasks/${id}`, body);
-export const rollbackTask = (id: string) => post<{ rolledBack: boolean; reason?: string; branch?: string; dir?: string }>(`/tasks/${id}/rollback`, {});
+export const rollbackTask = (id: string) => post<{ rolledBack: boolean; reason?: string; branch?: string; dir?: string; invalidatedRuns?: number }>(`/tasks/${id}/rollback`, {});
 
 /* ── deleting a task: never a silent cascade ─────────────────────────
  * The backend refuses (409, with a precheck report) unless every risk

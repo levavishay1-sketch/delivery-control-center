@@ -49,7 +49,10 @@ function pushLine(runId: string | undefined, line: string) {
 export type FlowRunView = {
   id: string;
   kind: string;
-  state: "running" | "done" | "error";
+  /** "rolled_back" — an implement run whose code was later undone by
+   *  `rollbackTask`. The transcript/result stay (history), but nothing
+   *  should treat it as a live, current result any more. */
+  state: "running" | "done" | "error" | "rolled_back";
   lines: string[];
   result: unknown;
   error: string | null;
@@ -663,7 +666,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   };
 }
 
-export type RollbackResult = { rolledBack: boolean; reason?: string; branch?: string; dir?: string };
+export type RollbackResult = { rolledBack: boolean; reason?: string; branch?: string; dir?: string; invalidatedRuns?: number };
 
 /**
  * Undo everything `runImplement` did for one task, in its isolated clone.
@@ -704,15 +707,27 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
   await withTenant(input.clientId, (tx) =>
     tx.update(task).set({ state: t.state === "in_progress" ? "pending" : t.state, updatedAt: new Date() }).where(eq(task.id, input.taskId)),
   );
+
+  // The task is meant to look exactly like it never ran — no live "here's
+  // what Claude changed" card, no filesChanged, nothing. The record of
+  // what happened stays (transcript + result), just no longer flagged as
+  // a current, live outcome — every past "done" implement run for this
+  // task is marked rolled_back instead. `regenerateBrief` reads task/event
+  // state, not flow_run, so it doesn't need to know about this.
+  const invalidated = await db.update(flowRun)
+    .set({ state: "rolled_back" })
+    .where(and(eq(flowRun.taskId, input.taskId), eq(flowRun.kind, "implement"), eq(flowRun.state, "done")))
+    .returning({ id: flowRun.id });
+
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
     actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
     links: [{ rel: "task", ref: input.taskId }],
-    payload: { body: `↩ שינויי הקוד של משימה #${t.seq} (${t.intent.slice(0, 60)}) בוטלו — ה-branch אופס לבסיס.` },
+    payload: { body: `↩ שינויי הקוד של משימה #${t.seq} (${t.intent.slice(0, 60)}) בוטלו — ה-branch אופס לבסיס. המשימה נקייה כמו לפני שפותחה; מה שקרה נשאר בהיסטוריה.` },
   });
   await regenerateBrief(input.clientId, input.workitemId);
 
-  return { rolledBack: true, branch, dir };
+  return { rolledBack: true, branch, dir, invalidatedRuns: invalidated.length };
 }
 
 /* ── deleting a task: surgical, never a silent cascade ───────────────

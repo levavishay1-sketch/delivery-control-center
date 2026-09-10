@@ -115,8 +115,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     setRollingBack(true); setErr(null); setRollbackMsg(null);
     try {
       const r = await rollbackTask(id);
-      setRollbackMsg(r.rolledBack ? "✓ שינויי הקוד בוטלו — ה-branch אופס לבסיס." : (r.reason ?? "אין מה לבטל."));
+      setRollbackMsg(r.rolledBack ? "✓ שינויי הקוד בוטלו — ה-branch אופס לבסיס. המשימה נקייה כמו לפני שפותחה." : (r.reason ?? "אין מה לבטל."));
       load();
+      await refreshRun();
     } catch (e) { setErr(String(e)); }
     finally { setRollingBack(false); }
   };
@@ -442,6 +443,35 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         <Card tone="crit">
           <p style={{ fontSize: 13, marginBottom: 6 }}>ההרצה נכשלה.</p>
           <p style={{ fontSize: 12, color: "var(--status-critical)", whiteSpace: "pre-wrap" }}>{run.error}</p>
+        </Card>
+      )}
+
+      {run?.state === "rolled_back" && !running && (
+        <Card>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Pill tone="inactive">↩ בוטל</Pill>
+            <h3 style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</h3>
+          </div>
+          {(() => {
+            const old = run.result as unknown as ImplementResult | null;
+            if (!old) return null;
+            return (
+              <>
+                <p style={{ fontSize: 12.5, color: "var(--ink-500)", whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 8 }}>{old.summary}</p>
+                {old.filesChanged.length > 0 && (
+                  <div className="field">
+                    <label>קבצים שהשתנו אז (כבר לא קיימים ב-branch)</label>
+                    <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
+                      {old.filesChanged.join(", ")}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
+          <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 8 }}>
+            נשמר לצורך היסטוריה בלבד — ה-branch אופס וזה לא משקף את מצב הקוד היום. אפשר להריץ מחדש בכל רגע.
+          </p>
         </Card>
       )}
 
