@@ -265,7 +265,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       </div>
 
       {tab === "Overview" && (
-        <div className="req-bg" style={{ paddingTop: 22 }}>
+        <div className="req-bg">
           {openBlocker && (
             <div className="callout crit" style={{ marginBottom: 18 }}>
               <span className="ic"><svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="var(--status-critical)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v5M12 16h.01" /></svg></span>
@@ -302,7 +302,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
               {d.repos.map((r, i) => (
                 <div key={r.id} style={{ padding: "8px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                    <Pill tone={r.linkKind === "auto" ? "ai" : "inactive"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill>
+                    <Pill tone={r.linkKind === "auto" ? "ai" : "neutral"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill>
                     <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.name}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>

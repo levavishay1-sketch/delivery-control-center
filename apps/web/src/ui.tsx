@@ -27,7 +27,7 @@ export const ICONS = {
   export: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></>,
 };
 
-export function Pill({ tone, children }: { tone: "warning" | "critical" | "active" | "healthy" | "ai" | "inactive"; children: ReactNode }) {
+export function Pill({ tone, children }: { tone: "warning" | "critical" | "active" | "healthy" | "ai" | "inactive" | "neutral"; children: ReactNode }) {
   return <span className={`pill ${tone}`}><span className="dot" />{children}</span>;
 }
 
