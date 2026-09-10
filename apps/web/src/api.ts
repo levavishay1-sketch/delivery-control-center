@@ -226,6 +226,7 @@ export const updateTask = (id: string, body: { clientId: string; intent?: string
 export const editTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string; scopeChanged: boolean }) =>
   patch<{ updated: boolean; adoSynced: boolean }>(`/tasks/${id}`, body);
 export const rollbackTask = (id: string) => post<{ rolledBack: boolean; reason?: string; branch?: string; dir?: string; invalidatedRuns?: number }>(`/tasks/${id}/rollback`, {});
+export const pushTask = (id: string) => post<{ pushed: boolean; reason?: string; branch?: string; branchUrl?: string; compareUrl?: string }>(`/tasks/${id}/push`, {});
 
 /* ── deleting a task: never a silent cascade ─────────────────────────
  * The backend refuses (409, with a precheck report) unless every risk

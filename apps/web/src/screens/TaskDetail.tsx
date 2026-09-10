@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getTask, getTaskRun, implementTask, progressTask, editTask, rollbackTask,
+  getTask, getTaskRun, implementTask, progressTask, editTask, rollbackTask, pushTask,
   precheckTaskDelete, deleteTask, DeleteBlocked,
   type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
@@ -10,7 +10,9 @@ import { PageHead, Pill } from "../ui.tsx";
  * One task — the unit that actually reaches TFS and gets built.
  * "תן ל-Claude לפתח" runs the local CLI with write tools on an ISOLATED
  * clone (never the user's own checkout), on a task branch, and commits
- * locally. It never pushes: the user reviews and decides.
+ * locally. It never pushes on its own — "⬆ Push ל-GitHub" is the
+ * deliberate, explicit step that sends the branch to the real remote,
+ * once the user has reviewed it.
  */
 
 const STATE_HE: Record<string, string> = {
@@ -52,6 +54,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [saving, setSaving] = useState(false);
   const [rollingBack, setRollingBack] = useState(false);
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
+  const [pushing, setPushing] = useState(false);
+  const [pushResult, setPushResult] = useState<{ pushed: boolean; reason?: string; branchUrl?: string; compareUrl?: string } | null>(null);
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
   const [delLoading, setDelLoading] = useState(false);
   const [delAckSubtree, setDelAckSubtree] = useState(false);
@@ -122,6 +126,16 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     finally { setRollingBack(false); }
   };
 
+  const push = async () => {
+    if (!confirm("זה ידחוף את ה-branch של המשימה הזו ל-GitHub (origin האמיתי של ה-repo). להמשיך?")) return;
+    setPushing(true); setErr(null); setPushResult(null);
+    try {
+      const r = await pushTask(id);
+      setPushResult(r);
+    } catch (e) { setErr(String(e)); }
+    finally { setPushing(false); }
+  };
+
   const openDelete = async () => {
     setDelErr(null); setDelLoading(true);
     setDelAckSubtree(false); setDelAckAdo(false); setDelAckCoTouch(false); setDelCodeChoice("rollback");
@@ -162,9 +176,14 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         actions={
           <>
             {(impl || t.state === "in_progress") && (
-              <button className="btn btn-secondary" disabled={rollingBack || running} onClick={rollback}>
-                {rollingBack ? "מבטל…" : "↩ Rollback"}
-              </button>
+              <>
+                <button className="btn btn-secondary" disabled={pushing || running} onClick={push}>
+                  {pushing ? "דוחף…" : "⬆ Push ל-GitHub"}
+                </button>
+                <button className="btn btn-secondary" disabled={rollingBack || running} onClick={rollback}>
+                  {rollingBack ? "מבטל…" : "↩ Rollback"}
+                </button>
+              </>
             )}
             <button className="btn btn-secondary" disabled={running} onClick={openEdit}>✎ ערוך משימה</button>
             <button className="btn btn-secondary" disabled={running || delLoading} onClick={openDelete} style={{ color: "var(--status-critical)" }}>
@@ -183,6 +202,24 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       {rollbackMsg && !editing && (
         <div className="callout" style={{ marginBottom: 16 }}>
           <div className="body"><p className="r">{rollbackMsg}</p></div>
+        </div>
+      )}
+
+      {pushResult && !editing && (
+        <div className="callout" style={{ marginBottom: 16 }}>
+          <div className="body">
+            {pushResult.pushed ? (
+              <>
+                <p className="r">✓ נדחף ל-GitHub.</p>
+                <p style={{ display: "flex", gap: 14, marginTop: 4 }}>
+                  {pushResult.branchUrl && <a href={pushResult.branchUrl} target="_blank" rel="noreferrer">צפה ב-branch ↗</a>}
+                  {pushResult.compareUrl && <a href={pushResult.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request ↗</a>}
+                </p>
+              </>
+            ) : (
+              <p className="r" style={{ color: "var(--status-critical)" }}>{pushResult.reason ?? "ה-push נכשל."}</p>
+            )}
+          </div>
         </div>
       )}
 

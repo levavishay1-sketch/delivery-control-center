@@ -16,9 +16,9 @@ export { syncRequirementToAdo, trySyncNewRequirement, syncAllToAdo, deleteAdoFor
 export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
-  startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask,
+  startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation,
-  type AssessResult, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult,
+  type AssessResult, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";

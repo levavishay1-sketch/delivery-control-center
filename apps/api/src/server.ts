@@ -76,6 +76,7 @@ import {
   approveTask,
   rejectTask,
   rollbackTask,
+  pushTask,
   editTask,
   precheckTaskDelete,
   deleteTaskSurgical,
@@ -521,6 +522,17 @@ app.post("/tasks/:id/rollback", async (req) => {
   const clientId = await taskClient(id);
   const d = await taskDetail(clientId, id);
   return rollbackTask({ clientId, workitemId: d.requirement.id, taskId: id, by: { userId: dev.id } });
+});
+
+// the one deliberately-manual step: push a task's branch to the repo's
+// real remote (GitHub/ADO), using whatever git credentials are already
+// configured locally. Never automatic — the user decides when.
+app.post("/tasks/:id/push", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const clientId = await taskClient(id);
+  const d = await taskDetail(clientId, id);
+  return pushTask({ clientId, workitemId: d.requirement.id, taskId: id, by: { userId: dev.id } });
 });
 
 app.post("/tasks/:id/approve", async (req) => {

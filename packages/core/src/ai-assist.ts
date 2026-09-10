@@ -520,14 +520,33 @@ export type ImplementResult = {
  *  must run WITHOUT shell:true — Windows' cmd.exe re-splits a quoted
  *  argument at every space, which silently breaks any commit message
  *  with spaces (e.g. "t1: ..." becomes three separate pathspec args). */
-function git(args: string[], cwd: string): Promise<{ code: number; out: string }> {
+function git(args: string[], cwd: string, opts?: { timeoutMs?: number }): Promise<{ code: number; out: string }> {
   return new Promise((res) => {
-    const p = spawn("git", args, { cwd, windowsHide: true });
+    // GIT_TERMINAL_PROMPT=0 stops git's own credential prompt from hanging
+    // a headless spawn — but a credential HELPER (e.g. Git Credential
+    // Manager) can still pop its own GUI/browser prompt that this process
+    // can never answer, so network operations (push/fetch against a
+    // remote with no cached credential) also get a hard timeout below.
+    const p = spawn("git", args, { cwd, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
     let out = "";
+    let done = false;
+    const finish = (r: { code: number; out: string }) => { if (!done) { done = true; if (killer) clearTimeout(killer); res(r); } };
+    const killer = opts?.timeoutMs
+      ? setTimeout(() => {
+          // A stuck push is usually a credential HELPER (e.g. Git Credential
+          // Manager) that spawned its own child (a GUI/browser prompt) —
+          // killing just the `git` PID leaves that orphaned and still
+          // running. On Windows, taskkill /t kills the whole tree; p.kill()
+          // is the fallback elsewhere.
+          if (process.platform === "win32" && p.pid) spawn("taskkill", ["/pid", String(p.pid), "/t", "/f"], { windowsHide: true });
+          else p.kill("SIGKILL");
+          finish({ code: 1, out: `git ${args[0]} לא הגיב תוך ${Math.round(opts.timeoutMs! / 1000)}s — כנראה נדרש אימות אינטראקטיבי (credential manager) שלא זמין מכאן. בצע "git push" פעם אחת מהטרמינל שלך כדי שהפרטים יישמרו, ואז נסה שוב.` });
+        }, opts.timeoutMs)
+      : null;
     p.stdout?.on("data", (d) => (out += d));
     p.stderr?.on("data", (d) => (out += d));
-    p.on("close", (code) => res({ code: code ?? 1, out: out.trim() }));
-    p.on("error", (e) => res({ code: 1, out: String(e) }));
+    p.on("close", (code) => finish({ code: code ?? 1, out: out.trim() }));
+    p.on("error", (e) => finish({ code: 1, out: String(e) }));
   });
 }
 
@@ -728,6 +747,66 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
   await regenerateBrief(input.clientId, input.workitemId);
 
   return { rolledBack: true, branch, dir, invalidatedRuns: invalidated.length };
+}
+
+/** git@github.com:owner/repo.git or https://github.com/owner/repo.git → https://github.com/owner/repo */
+function httpsRepoUrl(remote: string): string | null {
+  const ssh = remote.match(/^git@([^:]+):(.+?)(\.git)?$/);
+  if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
+  const https = remote.match(/^https?:\/\/([^/]+)\/(.+?)(\.git)?$/);
+  if (https) return `https://${https[1]}/${https[2]}`;
+  return null;
+}
+
+export type PushResult = { pushed: boolean; reason?: string; branch?: string; branchUrl?: string; compareUrl?: string };
+
+/**
+ * Push a task's branch to the repo's real remote — the one and only step
+ * that was deliberately never automatic (`runImplement` only ever commits
+ * locally). Explicit, per-task, so the user decides exactly when work
+ * leaves the machine. Uses whatever git credentials are already set up
+ * for that remote locally (same as the `pull` `ensureCheckout` already
+ * does) — nothing new to authenticate.
+ */
+export async function pushTask(input: { clientId: string; workitemId: string; taskId: string; by: Dev }): Promise<PushResult> {
+  const t = await withTenant(input.clientId, async (tx) => {
+    const [row] = await tx.select().from(task).where(eq(task.id, input.taskId)).limit(1);
+    return row;
+  });
+  if (!t) throw new Error("משימה לא נמצאה");
+  const wi = await withTenant(input.clientId, async (tx) => {
+    const [row] = await tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, input.workitemId)).limit(1);
+    return row;
+  });
+
+  const r = await firstRepo(input.clientId, input.workitemId);
+  if (!r) throw new Error("אין repository מקושר לדרישה");
+  const dir = await ensureCheckout({ ...r, localPath: null });
+  if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
+
+  const branch = taskBranchName(wi?.key, t);
+  const commits = await taskCommitCount(dir, branch);
+  if (commits === 0) return { pushed: false, reason: "אין קוד מומש על המשימה הזו — אין מה לדחוף" };
+
+  await git(["checkout", branch], dir);
+  const res = await git(["push", "-u", "origin", branch], dir, { timeoutMs: 25_000 });
+  if (res.code !== 0) return { pushed: false, reason: `push נכשל: ${res.out.slice(0, 400)}` };
+
+  const remote = (await git(["remote", "get-url", "origin"], dir)).out;
+  const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
+  const httpsBase = httpsRepoUrl(remote);
+  const branchUrl = httpsBase ? `${httpsBase}/tree/${encodeURIComponent(branch)}` : undefined;
+  const compareUrl = httpsBase ? `${httpsBase}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}?expand=1` : undefined;
+
+  await appendEvent({
+    clientId: input.clientId, workitemId: input.workitemId, source: "git", type: "note.added",
+    actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
+    links: [{ rel: "task", ref: input.taskId }],
+    payload: { body: `⬆ הקוד של משימה #${t.seq} (${t.intent.slice(0, 60)}) נדחף ל-GitHub — branch ${branch}.` },
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+
+  return { pushed: true, branch, branchUrl, compareUrl };
 }
 
 /* ── deleting a task: surgical, never a silent cascade ───────────────
