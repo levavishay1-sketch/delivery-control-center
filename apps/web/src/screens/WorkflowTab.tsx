@@ -275,7 +275,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                     <p className="section-lbl" style={{ marginBottom: 8 }}>
                       ההיררכיה שהוצעה — עומק {taskFlow.depth} ({ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})
                     </p>
-                    <TaskGraph flow={taskFlow} />
+                    <TaskGraph flow={taskFlow} nav={nav} />
                   </>
                 )}
               </div>
@@ -319,7 +319,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 <p className="section-lbl" style={{ marginBottom: 8 }}>
                   עומק {taskFlow.depth} ({ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})
                 </p>
-                <TaskGraph flow={taskFlow} height={300} />
+                <TaskGraph flow={taskFlow} height={340} nav={nav} />
 
                 <div style={{ display: "grid", gap: 8, marginTop: 16 }}>
                   {[...nodes].sort((a, b) => a.level - b.level || a.seq - b.seq).map((n) => {

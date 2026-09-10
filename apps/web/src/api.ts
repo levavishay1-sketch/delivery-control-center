@@ -165,9 +165,11 @@ export type TaskFlowNode = {
   id: string; seq: number; kind: TaskKind; intent: string; appetite: string; state: string;
   adoType: string | null; level: number; parentTaskId: string | null;
   approved: boolean; linkedAdoId: number | null; adoUrl: string | null; affectedPaths: string[];
-  prompt: string | null;
+  prompt: string | null; origin: "ai" | "human"; approvedAt: string | null; adoSyncedAt: string | null;
+  checks: { id: string; seq: number; intent: string; state: string }[];
 };
-export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: { from: string; to: string; kind: "parent" | "depends" }[] };
+export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
+export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] };
 export const getTaskFlow = (id: string) => get<TaskFlow>(`/workitems/${id}/task-flow`);
 export type AdoTaskRow = {
   id: string; requirementId: string; requirementKey: string | null; requirementTitle: string;

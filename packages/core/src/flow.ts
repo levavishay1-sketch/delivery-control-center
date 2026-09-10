@@ -149,8 +149,13 @@ export type TaskFlowNode = {
   adoUrl: string | null;
   affectedPaths: string[];
   prompt: string | null;
+  origin: string;
+  approvedAt: string | null;
+  adoSyncedAt: string | null;
+  /** check-kind children folded into this node (never their own flow node — see the FLOW screen). */
+  checks: { id: string; seq: number; intent: string; state: string }[];
 };
-export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends" };
+export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 
 /**
  * The proposed/approved task tree for a requirement: hierarchy edges plus
@@ -163,7 +168,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
         id: task.id, seq: task.seq, kind: task.kind, intent: task.intent, appetite: task.appetite, state: task.state,
         adoType: task.adoType, parentTaskId: task.parentTaskId, approvedAt: task.approvedAt,
         linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, affectedPaths: task.affectedPaths,
-        prompt: task.prompt,
+        prompt: task.prompt, origin: task.origin, adoSyncedAt: task.adoSyncedAt,
       })
       .from(task)
       .where(sql`${task.workitemId} = ${workitemId} and ${task.state} <> 'dropped'`)
@@ -177,23 +182,37 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       seen.add(id);
       return level(t.parentTaskId, seen) + 1;
     };
-    const nodes: TaskFlowNode[] = rows.map((r) => ({
+    // depth (→ the ladder) is driven only by "task" nodes — a "check" leaf
+    // can sit one level deeper without stretching the ladder.
+    const taskLevels = rows.filter((r) => r.kind !== "check").map((r) => level(r.id));
+    const depth = Math.max(0, ...taskLevels) + 1;
+
+    // "check" rows never get their own FLOW node (never a TFS item) — they
+    // fold into their parent task's card as a checklist instead.
+    const checksByParent = new Map<string, TaskFlowNode["checks"]>();
+    for (const r of rows) {
+      if (r.kind !== "check" || !r.parentTaskId) continue;
+      (checksByParent.get(r.parentTaskId) ?? checksByParent.set(r.parentTaskId, []).get(r.parentTaskId)!)
+        .push({ id: r.id, seq: r.seq, intent: r.intent, state: r.state });
+    }
+
+    const nodes: TaskFlowNode[] = rows.filter((r) => r.kind !== "check").map((r) => ({
       id: r.id, seq: r.seq, kind: r.kind, intent: r.intent, appetite: r.appetite, state: r.state,
       adoType: r.adoType, level: level(r.id), parentTaskId: r.parentTaskId,
       approved: r.approvedAt != null, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
-      affectedPaths: (r.affectedPaths ?? []) as string[], prompt: r.prompt,
+      affectedPaths: (r.affectedPaths ?? []) as string[], prompt: r.prompt, origin: r.origin,
+      approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null,
+      adoSyncedAt: r.adoSyncedAt ? r.adoSyncedAt.toISOString() : null,
+      checks: (checksByParent.get(r.id) ?? []).sort((a, b) => a.seq - b.seq),
     }));
-    // depth (→ the ladder) is driven only by "task" nodes — a "check" leaf
-    // can sit one level deeper without stretching the ladder.
-    const taskLevels = nodes.filter((n) => n.kind !== "check").map((n) => n.level);
-    const depth = Math.max(0, ...taskLevels) + 1;
 
+    const idSet = new Set(nodes.map((n) => n.id)); // exposed (non-check) nodes only
     const ids = rows.map((r) => r.id);
     const deps = await tx.select().from(taskDependency).where(sql`${taskDependency.taskId} in ${ids}`);
-    const idSet = new Set(ids);
     const edges: TaskFlowEdge[] = [
-      ...nodes.filter((n) => n.parentTaskId && idSet.has(n.parentTaskId)).map((n) => ({ from: n.parentTaskId!, to: n.id, kind: "parent" as const })),
-      ...deps.filter((d) => idSet.has(d.dependsOnTaskId)).map((d) => ({ from: d.dependsOnTaskId, to: d.taskId, kind: "depends" as const })),
+      ...nodes.filter((n) => n.parentTaskId && idSet.has(n.parentTaskId)).map((n) => ({ from: n.parentTaskId!, to: n.id, kind: "parent" as const, reason: null })),
+      ...deps.filter((d) => idSet.has(d.dependsOnTaskId) && idSet.has(d.taskId))
+        .map((d) => ({ from: d.dependsOnTaskId, to: d.taskId, kind: "depends" as const, reason: d.reason })),
     ];
     return { depth, nodes, edges };
   });
