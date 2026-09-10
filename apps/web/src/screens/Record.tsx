@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement, deleteTask,
-  getBrief, getDetail, progressTask, unlinkRepoFromReq, uploadAttachment, verifyGap,
-  type Blocker, type EventRow, type Gap, type Task, type WorkItemDetail,
+  answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement,
+  getBrief, getDetail, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  type Blocker, type EventRow, type Gap, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
@@ -17,12 +17,9 @@ const post = async (path: string, body: unknown) => {
   return r.json();
 };
 
-const TABS = ["Flow", "Overview", "Timeline", "Dependencies", "Tasks", "Gaps & Blockers"] as const;
+// Overview first (rightmost in RTL), then Timeline, then Dependencies.
+const TABS = ["Overview", "Timeline", "Dependencies"] as const;
 type Tab = (typeof TABS)[number];
-const TAB_HE: Record<Tab, string> = {
-  Flow: "מהלך עבודה", Overview: "Overview", Timeline: "Timeline",
-  Dependencies: "Dependencies", Tasks: "Tasks", "Gaps & Blockers": "פערים וחוסמים",
-};
 
 const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "model.routed", "review.completed"]);
 const isAi = (e: EventRow) => e.actor.kind !== "user" || AI_TYPES.has(e.type);
@@ -77,10 +74,11 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const wi = d.workitem;
   const openBlocker = d.blockers.find((b) => b.state === "open");
   const isOpenGap = (g: Gap) => g.state === "proposed" || g.state === "verified";
-  const openBlockingGaps = d.gaps.filter((g) => g.blocking && isOpenGap(g)).length;
-  const openGaps = d.gaps.filter(isOpenGap).length;
-  const doneTasks = d.tasks.filter((t) => t.state === "done").length;
-  const progress = d.tasks.length ? Math.round((doneTasks / d.tasks.length) * 100) : wi.progressPct;
+  const openGaps = d.gaps.filter(isOpenGap);
+  const liveTasks = d.tasks.filter((t) => t.state !== "dropped");
+  const doneTasks = liveTasks.filter((t) => t.state === "done").length;
+  const tasksInTfs = liveTasks.filter((t) => t.linkedAdoId).length;
+  const progressPct = liveTasks.length ? Math.round((doneTasks / liveTasks.length) * 100) : 0;
 
   const onGap = async (g: Gap, outcome: "verified" | "resolved" | "dismissed" | "spun_off", answer?: string) => {
     await verifyGap(g.id, {
@@ -91,7 +89,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     setAnswering(null);
     reload();
   };
-  const onTask = async (t: Task, to: Task["state"]) => { await progressTask(t.id, { to, clientId: wi.clientId }); reload(); };
   const onAnswer = async (b: Blocker, answer: string) => { await answerBlocker(b.id, { answer, clientId: wi.clientId }); reload(); };
   const onDelete = async () => {
     const tfsNote = d.tasks.some((t) => t.linkedAdoId)
@@ -117,6 +114,129 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   // events superseded by a later correction
   const supersededIds = new Set(d.events.map((e) => e.supersedes).filter(Boolean) as string[]);
 
+  // the gaps/blockers management panel — lives inside step 2 of the
+  // workflow card now, not a top-level tab (unchanged functionality).
+  const gapsPanel = (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות</p>
+        <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
+          {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
+        </a>
+      </div>
+
+      {gapHelp && (
+        <div className="callout" style={{ marginTop: 10, marginBottom: 14, fontSize: 12.5, lineHeight: 1.7 }}>
+          <div className="body">
+            <p><b>פער</b> = משהו שחסר / לא הוחלט / דו-משמעי בדרישה. Claude מציע פערים אחרי שהוא קורא את הדרישה ואת ה-repo; אתה מחליט מה לעשות עם כל אחד:</p>
+            <ul style={{ margin: "6px 0", paddingInlineStart: 18 }}>
+              <li><b>אמיתי</b> — הפער נכון וצריך מענה. אם הוא <b>חוסם</b> — אי אפשר להתחיל לעבוד עד שעונים עליו.</li>
+              <li><b>ענה ונסגר</b> — כותב את ההחלטה (נשמרת כהערה ב-timeline) והפער נסגר.</li>
+              <li><b>נדחה</b> — לא באמת פער (כבר הוחלט במקום אחר, או לא רלוונטי). נעלם מהרשימה.</li>
+              <li><b>פצל לדרישה</b> — פער אמיתי אבל לא שייך לדרישה הזו; נפתחת דרישה נפרדת והעבודה כאן ממשיכה.</li>
+            </ul>
+          </div>
+        </div>
+      )}
+
+      <div className="filter-bar" style={{ margin: "10px 0 14px" }}>
+        <div className="field" style={{ flex: 1 }}><label>הוסף פער שזיהית בעצמך</label>
+          <input value={newGap.description} onChange={(e) => setNewGap({ ...newGap, description: e.target.value })} placeholder="למשל: לא מוגדר מה קורה כשלקוח עובר דרגה באמצע חודש" style={{ minWidth: 260 }} />
+        </div>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+          <input type="checkbox" style={{ minWidth: 0 }} checked={newGap.blocking} onChange={(e) => setNewGap({ ...newGap, blocking: e.target.checked })} /> חוסם
+        </label>
+        <button className="btn btn-primary btn-sm" onClick={async () => { if (!newGap.description.trim()) return; await post(`/workitems/${wi.id}/gaps`, { description: newGap.description.trim(), blocking: newGap.blocking, confidence: 1, mode: "interactive" }); setNewGap({ description: "", blocking: false }); reload(); }}>הוסף</button>
+      </div>
+
+      {d.gaps.length === 0 && (
+        <div className="empty" style={{ marginBottom: 18 }}>אין פערים. הרץ "המשך עם AI" בשלב 1 כדי ש-Claude יבדוק את הדרישה.</div>
+      )}
+
+      <div style={{ display: "grid", gap: 10, marginBottom: 18 }}>
+        {openGaps.map((g) => (
+          <div key={g.id} style={{ border: `1px solid ${g.blocking ? "var(--status-critical)" : "var(--border-hairline)"}`, borderRadius: 12, padding: "12px 14px", background: "#fff" }}>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 7 }}>
+              {g.blocking
+                ? <Pill tone="critical">🔴 חוסם — חייב הכרעה כדי להתחיל</Pill>
+                : <Pill tone="inactive">לא חוסם — אפשר להשאיר</Pill>}
+              {g.state === "verified" && <Pill tone="warning">✓ נבדק — ממתין להכרעה</Pill>}
+              <span className="stage">ביטחון {Math.round(Number(g.confidence) * 100)}%</span>
+            </div>
+            <div style={{ fontSize: 13, lineHeight: 1.65, marginBottom: 11 }}>{g.description}</div>
+
+            {answering?.id === g.id ? (
+              <div style={{ display: "grid", gap: 8 }}>
+                <textarea
+                  value={answering.text} autoFocus rows={3}
+                  onChange={(e) => setAnswering({ id: g.id, text: e.target.value })}
+                  placeholder="כתוב את ההכרעה — מה ההחלטה, מה עושים. תישמר כהערה ב-timeline והפער ייסגר."
+                  style={{ width: "100%", fontSize: 12.5, padding: "8px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8, resize: "vertical" }}
+                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button className="btn btn-primary btn-sm" disabled={!answering.text.trim()} onClick={() => onGap(g, "resolved", answering.text.trim())}>שמור וסגור פער</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => setAnswering(null)}>ביטול</button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button className="btn btn-primary btn-sm" onClick={() => setAnswering({ id: g.id, text: "" })}>✎ הכרע / ענה</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "dismissed")}>✕ לא פער אמיתי</button>
+                  {!g.blocking && <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "spun_off")}>↗ פתח דרישה נפרדת</button>}
+                </div>
+                <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
+                  {g.state === "proposed" && <a className="link" style={{ fontSize: 11.5 }} onClick={() => onGap(g, "verified")}>סמן שנבדק, אכריע בהמשך</a>}
+                  <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--ink-400)" }} onClick={async () => { if (confirm("למחוק את הפער לגמרי?")) { await deleteGap(g.id, wi.clientId); reload(); } }}>מחק</a>
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {d.gaps.filter((g) => !isOpenGap(g)).length > 0 && (
+        <details style={{ marginBottom: 22 }}>
+          <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--ink-500)" }}>
+            טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})
+          </summary>
+          <div className="rowlist" style={{ marginTop: 8 }}>
+            {d.gaps.filter((g) => !isOpenGap(g)).map((g) => (
+              <div className="row" key={g.id} style={{ alignItems: "flex-start" }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12.5, color: "var(--ink-600)" }}>{g.description}</div>
+                </div>
+                {g.state === "resolved" && <Pill tone="healthy">נענה</Pill>}
+                {g.state === "dismissed" && <Pill tone="inactive">לא פער</Pill>}
+                {g.state === "spun_off" && <Pill tone="inactive">דרישה נפרדת</Pill>}
+                <a className="link" style={{ fontSize: 11 }} onClick={() => onGap(g, "verified")}>החזר לפתוח</a>
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--ink-400)" }} onClick={async () => { if (confirm("למחוק את הפער לגמרי?")) { await deleteGap(g.id, wi.clientId); reload(); } }}>מחק</a>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+
+      <p className="section-lbl">חוסמים (Blockers)</p>
+      <p style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: -6, marginBottom: 10 }}>שאלה פתוחה שעוצרת את העבודה עד שמישהו עונה — למשל החלטה שצריך מגורם אחר.</p>
+      <div className="filter-bar" style={{ marginBottom: 14 }}>
+        <div className="field"><label>סוג</label>
+          <select value={newBlk.questionType} onChange={(e) => setNewBlk({ ...newBlk, questionType: e.target.value })}>
+            <option value="unclear_requirement">דרישה לא ברורה</option><option value="missing_access">חסרה גישה</option><option value="budget_exceeded">חריגת תקציב</option>
+          </select>
+        </div>
+        <div className="field" style={{ flex: 1 }}><label>השאלה</label>
+          <input value={newBlk.question} onChange={(e) => setNewBlk({ ...newBlk, question: e.target.value })} placeholder="מה חוסם ומה צריך כדי להמשיך" style={{ minWidth: 260 }} />
+        </div>
+        <button className="btn btn-primary btn-sm" onClick={async () => { if (!newBlk.question.trim()) return; await post(`/workitems/${wi.id}/blockers`, { questionType: newBlk.questionType, question: newBlk.question.trim() }); setNewBlk({ questionType: "unclear_requirement", question: "" }); reload(); }}>הוסף חוסם</button>
+      </div>
+      <div style={{ display: "grid", gap: 10 }}>
+        {d.blockers.map((b) => <BlockerRow key={b.id} b={b} onAnswer={(a) => onAnswer(b, a)} onDelete={async () => { if (confirm("למחוק את החוסם?")) { await deleteBlocker(b.id, wi.clientId); reload(); } }} />)}
+        {d.blockers.length === 0 && <div className="empty">אין חוסמים.</div>}
+      </div>
+    </div>
+  );
+
   return (
     <>
       {noteOpen && <AddNote workitemId={wi.id} onClose={() => setNoteOpen(false)} onDone={() => { setNoteOpen(false); reload(); }} />}
@@ -132,11 +252,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {wi.phase !== "done" && wi.phase !== "archived" && (
-            <button className="btn btn-primary btn-sm" onClick={() => setTab("Flow")}>
-              {wi.phase === "building" ? "המשך עבודה" : "▶ התחל עבודה"}
-            </button>
-          )}
           <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ אירוע</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setEditOpen(true)}>עריכה</button>
           <button className="btn btn-secondary btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחיקה</button>
@@ -145,18 +260,14 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
-          <button key={t} className="tab" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
-            {TAB_HE[t]}{t === "Gaps & Blockers" && openGaps + d.blockers.filter((b) => b.state === "open").length > 0 ? ` (${openGaps + d.blockers.filter((b) => b.state === "open").length})` : ""}
-          </button>
+          <button key={t} className="tab" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>
         ))}
       </div>
 
-      {tab === "Flow" && <WorkflowTab d={d} reload={() => reload()} goToTab={(t) => setTab(t as Tab)} nav={nav} />}
-
       {tab === "Overview" && (
-        <>
+        <div className="req-bg" style={{ paddingTop: 22 }}>
           {openBlocker && (
-            <div className="callout crit">
+            <div className="callout crit" style={{ marginBottom: 18 }}>
               <span className="ic"><svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="var(--status-critical)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 8v5M12 16h.01" /></svg></span>
               <div className="body">
                 <p className="q">Blocked — {openBlocker.questionType.replace(/_/g, " ")}</p>
@@ -164,79 +275,79 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
               </div>
             </div>
           )}
-          <dl className="detail-grid">
-            <div><dt>Phase</dt><dd>{wi.phase}</dd></div>
-            <div><dt>Priority</dt><dd>{wi.priority}</dd></div>
-            <div><dt>Risk</dt><dd className={wi.risk === "high" ? "overdue" : ""}>{wi.risk}</dd></div>
-            <div><dt>Executor</dt><dd>{wi.executor}</dd></div>
-            <div><dt>AI budget</dt><dd>{wi.budgetUsd ? `$${wi.budgetUsd}` : "client default"}</dd></div>
-            <div><dt>TFS</dt><dd>
-              {(() => {
-                const synced = d.tasks.filter((t) => t.linkedAdoId).length;
-                return synced > 0
-                  ? <span>{synced} משימות הוקמו</span>
-                  : <span style={{ color: "var(--ink-400)", fontSize: 12 }}>הדרישה עצמה לא ב-TFS — רק המשימות שיוקמו ממנה</span>;
-              })()}
-            </dd></div>
-          </dl>
-          <div className="progress-block">
-            <div className="top"><span className="l">Progress — {doneTasks}/{d.tasks.length} tasks</span><span>{progress}%</span></div>
-            <div className="progress-track"><div className="progress-fill" style={{ width: `${progress}%` }} /></div>
+
+          {/* metrics · repositories · attachments — one row, 3 columns */}
+          <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 20, marginBottom: 20 }}>
+            <div className="ov-card" style={{ padding: "16px 18px" }}>
+              <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
+                <div className="ov-metric"><div className="lbl">Phase</div><div className="val">{wi.phase}</div></div>
+                <div className="ov-metric"><div className="lbl">Priority</div><div className="val">{wi.priority}</div></div>
+                <div className="ov-metric"><div className="lbl">Risk</div><div className="val">{wi.risk}</div></div>
+                <div className="ov-metric"><div className="lbl">Executor</div><div className="val">{wi.executor}</div></div>
+                <div className="ov-metric"><div className="lbl">AI budget</div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
+                <div className="ov-metric"><div className="lbl">TFS</div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "#9B98B8" }}>משימות</span></div></div>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 11, color: "#9B98B8", flexShrink: 0 }}>{progressPct}%</span>
+                <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
+                <span style={{ fontSize: 11, color: "#9B98B8", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks</span>
+              </div>
+            </div>
+
+            <div className="ov-card" style={{ padding: "14px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: "#9B98B8", textTransform: "uppercase", letterSpacing: "0.04em" }}>Repositories</span>
+                <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר</button>
+              </div>
+              {d.repos.map((r, i) => (
+                <div key={r.id} style={{ padding: "8px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                    <Pill tone={r.linkKind === "auto" ? "ai" : "inactive"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill>
+                    <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.name}</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
+                    <span style={{ fontSize: 10.5, color: "#9B98B8", direction: "ltr", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.adoRepoRef ?? "—"}</span>
+                    <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)", flexShrink: 0 }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
+                  </div>
+                </div>
+              ))}
+              {d.repos.length === 0 && <div style={{ textAlign: "center", color: "#9B98B8", fontSize: 12, padding: "20px 0" }}>אין repositories מקושרים</div>}
+            </div>
+
+            <div className="ov-card" style={{ padding: "14px 16px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: "#9B98B8", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות</span>
+                <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+                  {uploading ? "מעלה…" : "העלה"}
+                  <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
+                </label>
+              </div>
+              {(d.attachments ?? []).map((a, i) => (
+                <div key={a.id} style={{ padding: "7px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                  {a.adoUrl ? <a href={a.adoUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↗</a> : <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>}
+                  <Pill tone={a.source === "ado" ? "ai" : "inactive"}>{a.source === "ado" ? "TFS" : "DCC"}</Pill>
+                </div>
+              ))}
+              {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "#9B98B8", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
+            </div>
           </div>
 
-          <div className="section">
-            <div className="section-head">
-              <p className="section-lbl" style={{ margin: 0 }}>Repositories שהדרישה נוגעת בהם</p>
-              <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר repository</button>
-            </div>
-            <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-              <table className="wtable">
-                <tbody>
-                  {d.repos.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.name}</td>
-                      <td><Pill tone={r.linkKind === "auto" ? "ai" : "inactive"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill></td>
-                      <td style={{ direction: "ltr", fontSize: 11, color: "var(--ink-400)" }}>{r.adoRepoRef ?? "—"}</td>
-                      <td style={{ textAlign: "end" }}>
-                        <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
-                      </td>
-                    </tr>
-                  ))}
-                  {d.repos.length === 0 && <tr><td colSpan={4}><div className="empty">אין repositories מקושרים.</div></td></tr>}
-                </tbody>
-              </table>
-            </div>
+          {/* the requirement's full text */}
+          <div className="ov-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "#9B98B8", marginBottom: 8 }}>פירוט הדרישה</p>
+            <p style={{ fontSize: 13, lineHeight: 1.8, color: "#3A3760" }}>{wi.title}</p>
           </div>
 
-          <div className="section">
-            <div className="section-head">
-              <p className="section-lbl" style={{ margin: 0 }}>צרופות</p>
-              <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-                {uploading ? "מעלה…" : "📎 העלה קובץ"}
-                <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
-              </label>
-            </div>
-            <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
-              <table className="wtable">
-                <tbody>
-                  {(d.attachments ?? []).map((a) => (
-                    <tr key={a.id}>
-                      <td>{a.adoUrl ? <a href={a.adoUrl} target="_blank" rel="noreferrer">{a.name} ↗</a> : a.name}</td>
-                      <td style={{ color: "var(--ink-400)", fontSize: 11 }}>{a.sizeBytes != null ? `${Math.round(a.sizeBytes / 1024)} KB` : ""}</td>
-                      <td><Pill tone={a.source === "ado" ? "ai" : "inactive"}>{a.source === "ado" ? "מ-TFS" : "מ-DCC"}</Pill></td>
-                    </tr>
-                  ))}
-                  {(d.attachments ?? []).length === 0 && <tr><td colSpan={3}><div className="empty">אין צרופות. קובץ שתעלה כאן יעלה גם ל-work item ב-TFS.</div></td></tr>}
-                </tbody>
-              </table>
-            </div>
+          {/* the guided workflow: stepper + step content, one unit */}
+          <div style={{ marginBottom: 20 }}>
+            <WorkflowTab d={d} reload={reload} nav={nav} gapsPanel={gapsPanel} />
           </div>
 
           <div className="section">
             <p className="section-lbl">Context Brief — what the next Claude session loads</p>
             <div className="panel"><pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "ui-monospace, monospace", fontSize: 11.5, lineHeight: 1.6, color: "var(--ink-700)" }}>{brief || "—"}</pre></div>
           </div>
-        </>
+        </div>
       )}
 
       {tab === "Timeline" && (
@@ -274,171 +385,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         <div style={{ height: "60vh", border: "1px solid var(--border-hairline)", borderRadius: "var(--radius-md)", overflow: "hidden", position: "relative" }}>
           <FlowGraph requirementId={wi.id} />
         </div>
-      )}
-
-      {tab === "Tasks" && (
-        <>
-          {d.tasks.some((t) => t.origin === "ai" && !t.approvedAt && t.state !== "dropped") && (
-            <div className="callout" style={{ marginBottom: 12 }}>
-              <div className="body"><p className="q">יש משימות שהוצעו ע"י AI וממתינות לאישור</p>
-                <p className="r"><a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setTab("Flow")}>פתח את מהלך העבודה ←</a></p>
-              </div>
-            </div>
-          )}
-          <div className="rowlist">
-            {d.tasks.filter((t) => t.state !== "dropped").map((t) => (
-              <div className="row" key={t.id}>
-                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-400)" }}>{t.seq}</span>
-                <span className="title w-title" style={{ textDecoration: t.state === "done" ? "line-through" : "none", color: t.state === "done" ? "var(--ink-400)" : undefined }} onClick={() => nav(`#/task/${t.id}`)}>{t.intent}</span>
-                <span className="spacer" />
-                <span className="stage">{t.appetite}</span>
-                {t.origin === "ai" && (t.approvedAt ? <Pill tone="healthy">מאושר</Pill> : <Pill tone="ai">ממתין לאישור</Pill>)}
-                <Pill tone={t.state === "done" ? "healthy" : t.state === "in_progress" ? "active" : t.state === "blocked" ? "critical" : "inactive"}>{t.state.replace(/_/g, " ")}</Pill>
-                {(t.origin !== "ai" || t.approvedAt) && t.state !== "done" && (
-                  <a className="link" onClick={() => onTask(t, t.state === "in_progress" ? "done" : "in_progress")}>{t.state === "in_progress" ? "mark done" : "start"}</a>
-                )}
-                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => { if (confirm("למחוק את המשימה?")) { await deleteTask(t.id, wi.clientId); reload(); } }}>מחק</a>
-              </div>
-            ))}
-            {d.tasks.filter((t) => t.state !== "dropped").length === 0 && <div className="empty">אין פירוק עדיין. לחץ "▶ התחל עבודה" → "המשך עם AI".</div>}
-          </div>
-        </>
-      )}
-
-      {tab === "Gaps & Blockers" && (
-        <>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <p className="section-lbl">פערים ואי-בהירויות</p>
-            <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
-              {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
-            </a>
-          </div>
-
-          {gapHelp && (
-            <div className="callout" style={{ marginBottom: 14, fontSize: 12.5, lineHeight: 1.7 }}>
-              <div className="body">
-                <p><b>פער</b> = משהו שחסר / לא הוחלט / דו-משמעי בדרישה. Claude מציע פערים אחרי שהוא קורא את הדרישה ואת ה-repo; אתה מחליט מה לעשות עם כל אחד:</p>
-                <ul style={{ margin: "6px 0", paddingInlineStart: 18 }}>
-                  <li><b>אמיתי</b> — הפער נכון וצריך מענה. אם הוא <b>חוסם</b> — אי אפשר להתחיל לעבוד עד שעונים עליו.</li>
-                  <li><b>ענה ונסגר</b> — כותב את ההחלטה (נשמרת כהערה ב-timeline) והפער נסגר. זו הדרך לפתוח דרישה חוסמת.</li>
-                  <li><b>נדחה</b> — לא באמת פער (כבר הוחלט במקום אחר, או לא רלוונטי). נעלם מהרשימה.</li>
-                  <li><b>פצל לדרישה</b> — פער אמיתי אבל לא שייך לדרישה הזו; נפתחת דרישה נפרדת והעבודה כאן ממשיכה.</li>
-                </ul>
-                <p>כשאין יותר פערים <b>חוסמים</b> פתוחים — כפתור <b>"המשך עבודה"</b> יציע לפרק את הדרישה למשימות.</p>
-              </div>
-            </div>
-          )}
-
-          {openBlockingGaps > 0 ? (
-            <div className="callout crit" style={{ marginBottom: 14 }}>
-              <div className="body"><p className="r">{openBlockingGaps} פערים חוסמים פתוחים — ענה עליהם / דחה אותם / פצל, כדי שאפשר יהיה להתחיל לעבוד.</p></div>
-            </div>
-          ) : openGaps > 0 ? (
-            <div className="callout" style={{ marginBottom: 14 }}>
-              <div className="body"><p>אין פערים חוסמים. {openGaps} פערים לא-חוסמים עדיין פתוחים (אפשר להתקדם גם ככה). לחץ <b>"המשך עבודה"</b> למעלה כדי לפרק למשימות.</p></div>
-            </div>
-          ) : d.gaps.length > 0 ? (
-            <div className="callout" style={{ marginBottom: 14 }}>
-              <div className="body"><p>כל הפערים טופלו. לחץ <b>"המשך עבודה"</b> למעלה כדי לפרק למשימות.</p></div>
-            </div>
-          ) : null}
-
-          <div className="filter-bar" style={{ marginBottom: 14 }}>
-            <div className="field" style={{ flex: 1 }}><label>הוסף פער שזיהית בעצמך</label>
-              <input value={newGap.description} onChange={(e) => setNewGap({ ...newGap, description: e.target.value })} placeholder="למשל: לא מוגדר מה קורה כשלקוח עובר דרגה באמצע חודש" style={{ minWidth: 320 }} />
-            </div>
-            <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
-              <input type="checkbox" style={{ minWidth: 0 }} checked={newGap.blocking} onChange={(e) => setNewGap({ ...newGap, blocking: e.target.checked })} /> חוסם
-            </label>
-            <button className="btn btn-primary btn-sm" onClick={async () => { if (!newGap.description.trim()) return; await post(`/workitems/${wi.id}/gaps`, { description: newGap.description.trim(), blocking: newGap.blocking, confidence: 1, mode: "interactive" }); setNewGap({ description: "", blocking: false }); reload(); }}>הוסף</button>
-          </div>
-
-          {d.gaps.filter(isOpenGap).length === 0 && d.gaps.length === 0 && (
-            <div className="empty" style={{ marginBottom: 22 }}>אין פערים. הרץ "התחל עבודה" → "המשך עם AI" כדי ש-Claude יבדוק את הדרישה.</div>
-          )}
-
-          <div style={{ display: "grid", gap: 10, marginBottom: 18 }}>
-            {d.gaps.filter(isOpenGap).map((g) => (
-              <div key={g.id} style={{ border: `1px solid ${g.blocking ? "var(--status-critical)" : "var(--border-hairline)"}`, borderRadius: 12, padding: "12px 14px", background: "var(--surface)" }}>
-                <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 7 }}>
-                  {g.blocking
-                    ? <Pill tone="critical">🔴 חוסם — חייב הכרעה כדי להתחיל</Pill>
-                    : <Pill tone="inactive">לא חוסם — אפשר להשאיר</Pill>}
-                  {g.state === "verified" && <Pill tone="warning">✓ נבדק — ממתין להכרעה</Pill>}
-                  <span className="stage">ביטחון {Math.round(Number(g.confidence) * 100)}%</span>
-                </div>
-                <div style={{ fontSize: 13, lineHeight: 1.65, marginBottom: 11 }}>{g.description}</div>
-
-                {answering?.id === g.id ? (
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <textarea
-                      value={answering.text} autoFocus rows={3}
-                      onChange={(e) => setAnswering({ id: g.id, text: e.target.value })}
-                      placeholder="כתוב את ההכרעה — מה ההחלטה, מה עושים. תישמר כהערה ב-timeline והפער ייסגר."
-                      style={{ width: "100%", fontSize: 12.5, padding: "8px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8, resize: "vertical" }}
-                    />
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button className="btn btn-primary btn-sm" disabled={!answering.text.trim()} onClick={() => onGap(g, "resolved", answering.text.trim())}>שמור וסגור פער</button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setAnswering(null)}>ביטול</button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <button className="btn btn-primary btn-sm" onClick={() => setAnswering({ id: g.id, text: "" })}>✎ הכרע / ענה</button>
-                      <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "dismissed")}>✕ לא פער אמיתי</button>
-                      {!g.blocking && <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "spun_off")}>↗ פתח דרישה נפרדת</button>}
-                    </div>
-                    <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
-                      {g.state === "proposed" && <a className="link" style={{ fontSize: 11.5 }} onClick={() => onGap(g, "verified")}>סמן שנבדק, אכריע בהמשך</a>}
-                      <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--ink-400)" }} onClick={async () => { if (confirm("למחוק את הפער לגמרי?")) { await deleteGap(g.id, wi.clientId); reload(); } }}>מחק</a>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {d.gaps.filter((g) => !isOpenGap(g)).length > 0 && (
-            <details style={{ marginBottom: 22 }}>
-              <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--ink-500)" }}>
-                טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})
-              </summary>
-              <div className="rowlist" style={{ marginTop: 8 }}>
-                {d.gaps.filter((g) => !isOpenGap(g)).map((g) => (
-                  <div className="row" key={g.id} style={{ alignItems: "flex-start" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12.5, color: "var(--ink-600)" }}>{g.description}</div>
-                    </div>
-                    {g.state === "resolved" && <Pill tone="healthy">נענה</Pill>}
-                    {g.state === "dismissed" && <Pill tone="inactive">לא פער</Pill>}
-                    {g.state === "spun_off" && <Pill tone="inactive">דרישה נפרדת</Pill>}
-                    <a className="link" style={{ fontSize: 11 }} onClick={() => onGap(g, "verified")}>החזר לפתוח</a>
-                    <a style={{ fontSize: 11, cursor: "pointer", color: "var(--ink-400)" }} onClick={async () => { if (confirm("למחוק את הפער לגמרי?")) { await deleteGap(g.id, wi.clientId); reload(); } }}>מחק</a>
-                  </div>
-                ))}
-              </div>
-            </details>
-          )}
-
-          <p className="section-lbl">חוסמים (Blockers)</p>
-          <p style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: -6, marginBottom: 10 }}>שאלה פתוחה שעוצרת את העבודה עד שמישהו עונה — למשל החלטה שצריך מגורם אחר.</p>
-          <div className="filter-bar" style={{ marginBottom: 14 }}>
-            <div className="field"><label>סוג</label>
-              <select value={newBlk.questionType} onChange={(e) => setNewBlk({ ...newBlk, questionType: e.target.value })}>
-                <option value="unclear_requirement">דרישה לא ברורה</option><option value="missing_access">חסרה גישה</option><option value="budget_exceeded">חריגת תקציב</option>
-              </select>
-            </div>
-            <div className="field" style={{ flex: 1 }}><label>השאלה</label>
-              <input value={newBlk.question} onChange={(e) => setNewBlk({ ...newBlk, question: e.target.value })} placeholder="מה חוסם ומה צריך כדי להמשיך" style={{ minWidth: 320 }} />
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={async () => { if (!newBlk.question.trim()) return; await post(`/workitems/${wi.id}/blockers`, { questionType: newBlk.questionType, question: newBlk.question.trim() }); setNewBlk({ questionType: "unclear_requirement", question: "" }); reload(); }}>הוסף חוסם</button>
-          </div>
-          <div style={{ display: "grid", gap: 10 }}>
-            {d.blockers.map((b) => <BlockerRow key={b.id} b={b} onAnswer={(a) => onAnswer(b, a)} onDelete={async () => { if (confirm("למחוק את החוסם?")) { await deleteBlocker(b.id, wi.clientId); reload(); } }} />)}
-            {d.blockers.length === 0 && <div className="empty">אין חוסמים.</div>}
-          </div>
-        </>
       )}
     </>
   );
