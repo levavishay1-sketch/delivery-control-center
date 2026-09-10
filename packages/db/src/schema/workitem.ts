@@ -148,8 +148,13 @@ export const gap = pgTable(
     state: gapState("state").notNull().default("proposed"),
     /** Set when verified/dismissed — who made the human call. */
     resolvedBy: uuid("resolved_by").references(() => users.id),
-    /** When spun off, the WorkItem it became. */
-    spunOffTo: uuid("spun_off_to").references((): any => workitem.id),
+    /**
+     * When spun off, the WorkItem it became. SET NULL, not the default
+     * (NO ACTION/restrict): deleting the spun-off requirement should never
+     * be blocked by — or silently take down — the gap that spawned it; the
+     * gap just loses the pointer and keeps its own history.
+     */
+    spunOffTo: uuid("spun_off_to").references((): any => workitem.id, { onDelete: "set null" }),
     /** The event that proposed this gap — back-link for traceability. */
     proposedByEvent: uuid("proposed_by_event"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
