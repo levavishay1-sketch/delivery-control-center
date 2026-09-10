@@ -285,18 +285,18 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                 <div className="ov-metric"><div className="lbl">Risk</div><div className="val">{wi.risk}</div></div>
                 <div className="ov-metric"><div className="lbl">Executor</div><div className="val">{wi.executor}</div></div>
                 <div className="ov-metric"><div className="lbl">AI budget</div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
-                <div className="ov-metric"><div className="lbl">TFS</div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "#9B98B8" }}>משימות</span></div></div>
+                <div className="ov-metric"><div className="lbl">TFS</div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 11, color: "#9B98B8", flexShrink: 0 }}>{progressPct}%</span>
+                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{progressPct}%</span>
                 <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
-                <span style={{ fontSize: 11, color: "#9B98B8", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks</span>
+                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks</span>
               </div>
             </div>
 
             <div className="ov-card" style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "#9B98B8", textTransform: "uppercase", letterSpacing: "0.04em" }}>Repositories</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Repositories</span>
                 <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר</button>
               </div>
               {d.repos.map((r, i) => (
@@ -306,17 +306,17 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                     <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.name}</span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
-                    <span style={{ fontSize: 10.5, color: "#9B98B8", direction: "ltr", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.adoRepoRef ?? "—"}</span>
+                    <span style={{ fontSize: 10.5, color: "var(--ov-label)", direction: "ltr", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.adoRepoRef ?? "—"}</span>
                     <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)", flexShrink: 0 }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
                   </div>
                 </div>
               ))}
-              {d.repos.length === 0 && <div style={{ textAlign: "center", color: "#9B98B8", fontSize: 12, padding: "20px 0" }}>אין repositories מקושרים</div>}
+              {d.repos.length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין repositories מקושרים</div>}
             </div>
 
             <div className="ov-card" style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "#9B98B8", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות</span>
                 <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
                   {uploading ? "מעלה…" : "העלה"}
                   <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
@@ -328,14 +328,14 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                   <Pill tone={a.source === "ado" ? "ai" : "inactive"}>{a.source === "ado" ? "TFS" : "DCC"}</Pill>
                 </div>
               ))}
-              {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "#9B98B8", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
+              {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
             </div>
           </div>
 
           {/* the requirement's full text */}
           <div className="ov-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "#9B98B8", marginBottom: 8 }}>פירוט הדרישה</p>
-            <p style={{ fontSize: 13, lineHeight: 1.8, color: "#3A3760" }}>{wi.title}</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)", marginBottom: 8 }}>פירוט הדרישה</p>
+            <p style={{ fontSize: 13, lineHeight: 1.8, color: "var(--ov-body)", fontWeight: 500 }}>{wi.title}</p>
           </div>
 
           {/* the guided workflow: stepper + step content, one unit */}

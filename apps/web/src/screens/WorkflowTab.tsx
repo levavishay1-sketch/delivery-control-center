@@ -33,7 +33,7 @@ const Transcript = ({ lines }: { lines: string[] }) => {
   return (
     <div ref={boxRef} style={{ maxHeight: "42vh", overflowY: "auto", background: "#F5F4FA", border: "1px solid #EAE8F5", borderRadius: 9, padding: "10px 12px", fontSize: 12, lineHeight: 1.6 }}>
       {lines.length === 0
-        ? <span style={{ color: "#9B98B8" }}>מתחיל…</span>
+        ? <span style={{ color: "var(--ov-label)" }}>מתחיל…</span>
         : lines.map((l, i) => (
             <div key={i} style={{ color: l.startsWith("💭") ? "#6b6d8c" : "#1B1741", whiteSpace: "pre-wrap", marginBottom: 3 }}>{l}</div>
           ))}
@@ -158,12 +158,12 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
               <div className="spin" style={{ display: "inline-block", width: 16, height: 16 }} />
-              <p style={{ fontSize: 13, color: "#3A3760", margin: 0, fontWeight: 600 }}>
+              <p style={{ fontSize: 13, color: "var(--ov-body)", margin: 0, fontWeight: 600 }}>
                 {run?.kind === "breakdown" ? "Claude מפרק את הדרישה למשימות…" : run?.kind === "implement" ? "Claude מפתח את המשימה…" : "Claude קורא את הדרישה ואת ה-repo, מסכם ומעריך…"}
               </p>
             </div>
             <Transcript lines={run?.lines ?? []} />
-            <p style={{ marginTop: 8, fontSize: 11, color: "#9B98B8" }}>
+            <p style={{ marginTop: 8, fontSize: 11, color: "var(--ov-label)" }}>
               רץ ברקע עם הרישוי שלך. אפשר לצאת מהמסך — כשתחזור זה יהיה כאן, כולל כל מה ש-Claude עשה.
             </p>
           </div>
@@ -177,7 +177,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                     <h3 style={{ fontSize: 14.5, fontWeight: 700, color: "#1B1741" }}>מה Claude הבין ומה הוא חושב</h3>
                     <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => kick("assess")}>הרץ הערכה מחדש</a>
                   </div>
-                  <p style={{ fontSize: 12.5, color: "#3A3760", whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
+                  <p style={{ fontSize: 12.5, color: "var(--ov-body)", fontWeight: 500, whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
                     {(assessNote.payload.body as string).replace(/^סיכום Claude:\n/, "")}
                   </p>
                   <div style={{ marginTop: 8 }}>
@@ -233,13 +233,13 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
             {active === 1 && (
               <div>
                 {openBlockingGaps > 0 ? (
-                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741" }}>
+                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>
                     <b>{openBlockingGaps} פערים חוסמים פתוחים.</b> צריך להכריע בכל אחד (ענה / לא פער / דרישה נפרדת) לפני שאפשר לפרק למשימות.
                   </p>
                 ) : openGaps > 0 ? (
-                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741" }}>אין פערים חוסמים. {openGaps} לא-חוסמים עדיין פתוחים — אפשר להתקדם גם ככה.</p>
+                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>אין פערים חוסמים. {openGaps} לא-חוסמים עדיין פתוחים — אפשר להתקדם גם ככה.</p>
                 ) : (
-                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741" }}>כל הפערים טופלו.</p>
+                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>כל הפערים טופלו.</p>
                 )}
                 {done[1] && <div style={{ marginBottom: 16 }}><button className="btn btn-primary btn-sm" onClick={() => setView(2)}>לפירוק למשימות ←</button></div>}
                 {gapsPanel}
@@ -316,7 +316,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                         marginInlineStart: n.level * 22,
                       }}>
                         <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                          <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "#9B98B8" }}>#{n.seq}</span>
+                          <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ov-label)" }}>#{n.seq}</span>
                           <Pill tone={n.adoType === "Task" ? "inactive" : "ai"}>{n.adoType ?? "Task"}</Pill>
                           {n.linkedAdoId
                             ? <a href={n.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: "var(--status-healthy)" }}>TFS #{n.linkedAdoId} ↗</a>
@@ -346,7 +346,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                               <span className="hint" style={{ fontSize: 10.5, color: "var(--ink-400)" }}>נשמר עם האישור. זה מה שירוץ — כדאי לקרוא אותו.</span>
                             </div>
                             {n.affectedPaths.length > 0 && (
-                              <div style={{ fontSize: 11, color: "#9B98B8", marginBottom: 8 }} dir="ltr">{n.affectedPaths.join(", ")}</div>
+                              <div style={{ fontSize: 11, color: "var(--ov-label)", marginBottom: 8 }} dir="ltr">{n.affectedPaths.join(", ")}</div>
                             )}
                             <div style={{ display: "flex", gap: 8 }}>
                               {!n.approved && <button className="btn btn-primary btn-sm" onClick={() => approve(n.id)}>אשר</button>}
@@ -378,7 +378,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                     {build.startedWithOpenBlocker && <div className="callout crit" style={{ marginBottom: 12 }}><div className="body"><p className="r">יש {build.openBlockingGaps} פערים חוסמים / {build.openBlockers} חוסמים פתוחים.</p></div></div>}
                     {(["key", "branch"] as const).map((k) => (
                       <div key={k} style={{ marginBottom: 10 }}>
-                        <label style={{ display: "block", fontSize: 11, color: "#9B98B8", marginBottom: 4 }}>{k === "key" ? "מפתח" : "branch"}</label>
+                        <label style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginBottom: 4 }}>{k === "key" ? "מפתח" : "branch"}</label>
                         <div className="ov-field">
                           <span className="v">{build[k]}</span>
                           <a className="copy" onClick={() => copy(build[k], k)}>{copied === k ? "✓" : "העתק"}</a>
@@ -386,15 +386,15 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                       </div>
                     ))}
                     <div style={{ marginBottom: 10 }}>
-                      <label style={{ display: "block", fontSize: 11, color: "#9B98B8", marginBottom: 4 }}>repository</label>
+                      <label style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginBottom: 4 }}>repository</label>
                       {build.repos.length === 0
                         ? <p style={{ fontSize: 12, color: "var(--status-critical)" }}>אין repository מקושר.</p>
                         : build.repos.map((r) => <div key={r.name} style={{ fontSize: 12.5, direction: "ltr", textAlign: "left" }}>{r.name}{r.adoRepoRef ? ` — ${r.adoRepoRef}` : ""}</div>)}
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, color: "#9B98B8", marginBottom: 4 }}>הפקודה</label>
+                      <label style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginBottom: 4 }}>הפקודה</label>
                       <div className="ov-code">{`git checkout -b ${build.branch}\nclaude`}</div>
-                      <span style={{ display: "block", fontSize: 11, color: "#9B98B8", marginTop: 6 }}>ה-SessionStart hook יטען את ה-Context Brief אוטומטית.</span>
+                      <span style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginTop: 6 }}>ה-SessionStart hook יטען את ה-Context Brief אוטומטית.</span>
                     </div>
                     <Err />
                   </>
