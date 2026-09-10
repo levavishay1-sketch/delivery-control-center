@@ -121,62 +121,65 @@ function Card({ node, tone, onClick }: { node: TaskFlowNode; tone: Tone; onClick
   );
 }
 
-function Detail({ node, tone, blockers, downstream, byId, nav, onClose, onJump }: {
+function Detail({ node, tone, blockers, downstream, nav, onClose, onJump }: {
   node: TaskFlowNode; tone: Tone; blockers: { node: TaskFlowNode; reason: string | null }[]; downstream: number;
-  byId: Map<string, TaskFlowNode>; nav: (h: string) => void; onClose: () => void; onJump: (id: string) => void;
+  nav: (h: string) => void; onClose: () => void; onJump: (id: string) => void;
 }) {
   const blocked = blockers.length > 0 || node.state === "blocked";
   return (
     <div style={{
-      position: "absolute", inset: 0, background: "rgb(27 23 65 / 0.35)", display: "flex",
-      alignItems: "center", justifyContent: "center", zIndex: 20, borderRadius: 10,
+      position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex",
+      alignItems: "center", justifyContent: "center", zIndex: 1000,
     }} onClick={onClose}>
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: 420, maxWidth: "90%", maxHeight: "85%", overflowY: "auto", background: tone.bg,
-          border: `1.5px solid ${tone.border}`, borderRadius: 14, padding: 18, direction: "rtl", textAlign: "start",
-          boxShadow: "var(--shadow-panel)",
+          width: "min(680px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: tone.bg,
+          border: `1.5px solid ${tone.border}`, borderRadius: 16, padding: "24px 28px", direction: "rtl", textAlign: "start",
+          boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 700, color: tone.border }}>
-            <span style={{ width: 7, height: 7, borderRadius: 99, background: tone.dot, display: "inline-block" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, fontWeight: 700, color: tone.border }}>
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: tone.dot, display: "inline-block" }} />
             {blocked ? "חסום — לא ניתן להתקדם כרגע" : tone.label}
           </span>
-          <a onClick={onClose} style={{ fontSize: 13, color: "var(--ink-500)", cursor: "pointer" }}>✕</a>
+          <a onClick={onClose} title="סגור" style={{
+            fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex",
+            alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface)",
+          }}>✕</a>
         </div>
-        <p style={{ fontWeight: 650, fontSize: 14, marginBottom: 4 }}>{node.intent}</p>
-        <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 12 }}>
+        <p style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.4, marginBottom: 6 }}>{node.intent}</p>
+        <p style={{ fontSize: 13, color: "var(--ink-500)", marginBottom: 18 }}>
           {node.adoType ?? "Task"} · {node.appetite} · {node.linkedAdoId ? `TFS #${node.linkedAdoId}` : "טרם הוקם ב-TFS"}
         </p>
 
         {blocked && (
-          <div style={{ background: "var(--surface)", borderRadius: 10, padding: 12, marginBottom: 12 }}>
+          <div style={{ background: "var(--surface)", borderRadius: 12, padding: 16, marginBottom: 16 }}>
             {blockers.length > 0 ? blockers.map((b) => (
-              <div key={b.node.id} style={{ marginBottom: 10 }}>
-                <div className="detail-grid" style={{ display: "grid", gap: 6 }}>
+              <div key={b.node.id} style={{ marginBottom: 12 }}>
+                <div style={{ display: "grid", gap: 10 }}>
                   <div>
-                    <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginBottom: 2 }}>מי חוסם?</p>
-                    <a onClick={() => onJump(b.node.id)} style={{ fontSize: 12.5, cursor: "pointer" }}>
-                      {b.node.linkedAdoId ? `#${b.node.linkedAdoId}` : `הצעה #${b.node.seq}`} — {b.node.intent.slice(0, 50)}
+                    <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 3 }}>מי חוסם?</p>
+                    <a onClick={() => onJump(b.node.id)} style={{ fontSize: 14, cursor: "pointer" }}>
+                      {b.node.linkedAdoId ? `#${b.node.linkedAdoId}` : `הצעה #${b.node.seq}`} — {b.node.intent.slice(0, 60)}
                     </a>
                   </div>
                   <div>
-                    <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginBottom: 2 }}>מה צריך לקרות?</p>
-                    <p style={{ fontSize: 12.5 }}>{b.reason || `להשלים את "${b.node.intent.slice(0, 40)}" (כרגע: ${b.node.state === "in_progress" ? "בביצוע" : "טרם התחיל"})`}</p>
+                    <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 3 }}>מה צריך לקרות?</p>
+                    <p style={{ fontSize: 13.5, lineHeight: 1.5 }}>{b.reason || `להשלים את "${b.node.intent.slice(0, 50)}" (כרגע: ${b.node.state === "in_progress" ? "בביצוע" : "טרם התחיל"})`}</p>
                   </div>
                 </div>
               </div>
             )) : (
-              <p style={{ fontSize: 12.5 }}>המשימה סומנה כחסומה ידנית.</p>
+              <p style={{ fontSize: 13.5 }}>המשימה סומנה כחסומה ידנית.</p>
             )}
             {downstream > 0 && (
-              <p style={{ fontSize: 11.5, color: "var(--status-critical)", marginTop: 4 }}>
+              <p style={{ fontSize: 12.5, color: "var(--status-critical)", marginTop: 6 }}>
                 השפעה: {downstream} משימות בהמשך ה-flow ממתינות לפתיחת החסימה הזו.
               </p>
             )}
-            <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               {blockers[0] && (
                 <a onClick={() => onJump(blockers[0]!.node.id)} className="btn btn-secondary btn-sm">פתח גורם חוסם</a>
               )}
@@ -185,30 +188,30 @@ function Detail({ node, tone, blockers, downstream, byId, nav, onClose, onJump }
         )}
 
         {node.prompt && (
-          <div style={{ marginBottom: 10 }}>
-            <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginBottom: 3 }}>הפרומט</p>
-            <p style={{ fontSize: 12, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{node.prompt.slice(0, 300)}</p>
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 5 }}>הפרומט</p>
+            <p style={{ fontSize: 13.5, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{node.prompt}</p>
           </div>
         )}
         {node.affectedPaths.length > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginBottom: 3 }}>קבצים צפויים</p>
-            <p style={{ fontFamily: "var(--mono)", fontSize: 11, direction: "ltr", textAlign: "left" }}>{node.affectedPaths.join(", ")}</p>
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 5 }}>קבצים צפויים</p>
+            <p style={{ fontFamily: "var(--mono)", fontSize: 12.5, direction: "ltr", textAlign: "left", lineHeight: 1.7 }}>{node.affectedPaths.join(", ")}</p>
           </div>
         )}
         {node.checks.length > 0 && (
-          <div style={{ marginBottom: 10 }}>
-            <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginBottom: 4 }}>רשימת בדיקה ({node.checks.filter((c) => c.state === "done").length}/{node.checks.length})</p>
+          <div style={{ marginBottom: 16 }}>
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 6 }}>רשימת בדיקה ({node.checks.filter((c) => c.state === "done").length}/{node.checks.length})</p>
             {node.checks.map((c) => (
-              <p key={c.id} style={{ fontSize: 12, margin: "2px 0", textDecoration: c.state === "done" ? "line-through" : "none", color: c.state === "done" ? "var(--ink-400)" : "var(--ink-700)" }}>
+              <p key={c.id} style={{ fontSize: 13.5, margin: "4px 0", textDecoration: c.state === "done" ? "line-through" : "none", color: c.state === "done" ? "var(--ink-400)" : "var(--ink-700)" }}>
                 {c.state === "done" ? "☑" : "☐"} {c.intent}
               </p>
             ))}
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <button className="btn btn-primary btn-sm" onClick={() => nav(`#/task/${node.id}`)}>פתח את מסך המשימה ←</button>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>סגור</button>
+        <div style={{ display: "flex", gap: 10, marginTop: 20, paddingTop: 16, borderTop: `1px solid ${tone.border}33` }}>
+          <button className="btn btn-primary" onClick={() => nav(`#/task/${node.id}`)}>פתח את מסך המשימה ←</button>
+          <button className="btn btn-secondary" onClick={onClose}>סגור</button>
         </div>
       </div>
     </div>
@@ -298,7 +301,7 @@ export function TaskGraph({ flow, height = 420, nav }: { flow: TaskFlow; height?
           <Detail
             node={open} tone={toneOf(open, blockersOf(open, byId, flow.edges).length > 0)}
             blockers={blockersOf(open, byId, flow.edges)} downstream={downstreamCount(open.id, flow.edges)}
-            byId={byId} nav={nav} onClose={() => setOpenId(null)} onJump={(id) => setOpenId(id)}
+            nav={nav} onClose={() => setOpenId(null)} onJump={(id) => setOpenId(id)}
           />
         )}
       </div>
