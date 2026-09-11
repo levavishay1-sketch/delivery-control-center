@@ -84,6 +84,7 @@ import {
   listPrompts,
   updatePrompt,
   previewAssessPrompt,
+  composeClientLetter,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -627,6 +628,15 @@ app.post("/workitems/:id/gaps", async (req, reply) => {
   const wi = await locateWorkItem({ id });
   const row = await proposeGap({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...b });
   return reply.code(201).send(row);
+});
+
+// compose (never send) a business-language message to the requirement's
+// requester, listing the open questions. Cheap model — this is rephrasing.
+app.post("/workitems/:id/gap-letter", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return composeClientLetter({ clientId: wi.clientId, workitemId: id });
 });
 
 app.post("/gaps/:id/verify", async (req) => {

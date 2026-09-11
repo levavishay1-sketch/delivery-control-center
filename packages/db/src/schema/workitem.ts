@@ -141,7 +141,22 @@ export const gap = pgTable(
     workitemId: uuid("workitem_id")
       .notNull()
       .references(() => workitem.id, { onDelete: "cascade" }),
+    /** The QUESTION itself — phrased so a person can answer it, not an observation. */
     description: text("description").notNull(),
+    /** One short line: why this matters. */
+    why: text("why"),
+    /** "business" | "technical" | "missing_info" | "new_scope" — what kind of decision this is. */
+    kind: text("kind").notNull().default("missing_info"),
+    /**
+     * "client" = only the person who asked for the requirement can decide
+     * (a business call); "team" = we can decide it ourselves. Getting this
+     * fork wrong is what builds the wrong thing, so it is explicit.
+     */
+    whoAnswers: text("who_answers").notNull().default("team"),
+    /** Candidate answers the reader can pick instead of writing one. */
+    options: jsonb("options").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** One short line: what breaks if we guess and guess wrong. */
+    impactIfWrong: text("impact_if_wrong"),
     blocking: boolean("blocking").notNull().default(false),
     /** 0..1 — never binary. Shown as a meter, not a percentage (architecture UI §3). */
     confidence: numeric("confidence", { precision: 3, scale: 2 }).notNull(),

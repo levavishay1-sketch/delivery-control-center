@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement,
+  answerBlocker, composeGapLetter, correctNote, deleteBlocker, deleteGap, deleteRequirement,
   getBrief, getDetail, unlinkRepoFromReq, uploadAttachment, verifyGap,
   type Blocker, type EventRow, type Gap, type WorkItemDetail,
 } from "../api.ts";
@@ -46,6 +46,9 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [newGap, setNewGap] = useState({ description: "", blocking: false });
   const [answering, setAnswering] = useState<{ id: string; text: string } | null>(null);
   const [gapHelp, setGapHelp] = useState(false);
+  const [letter, setLetter] = useState<{ subject: string; body: string; gapCount: number } | null>(null);
+  const [letterBusy, setLetterBusy] = useState(false);
+  const [letterCopied, setLetterCopied] = useState(false);
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
   const [uploading, setUploading] = useState(false);
 
@@ -120,20 +123,66 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     <div style={{ marginTop: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות</p>
-        <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
-          {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
-        </a>
+        <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+          {openGaps.length > 0 && (
+            <a style={{ fontSize: 11.5, cursor: letterBusy ? "default" : "pointer", color: "var(--color-accent)", fontWeight: 600 }}
+               onClick={async () => {
+                 if (letterBusy) return;
+                 setLetterBusy(true); setLetterCopied(false);
+                 try { setLetter(await composeGapLetter(wi.id)); } catch (e) { alert(String(e)); }
+                 finally { setLetterBusy(false); }
+               }}>
+              {letterBusy ? "מנסח…" : "✉ נסח פערים ללקוח"}
+            </a>
+          )}
+          <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
+            {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
+          </a>
+        </div>
       </div>
+
+      {letter && (
+        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLetter(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: "min(680px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
+            border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl",
+            boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700 }}>הודעה למבקש הדרישה</h3>
+              <a onClick={() => setLetter(null)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
+              {letter.gapCount} שאלות פתוחות, מנוסחות בשפה עסקית. DCC לא שולח — העתק ושלח בעצמך.
+            </p>
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label>נושא</label>
+              <div style={{ fontSize: 13.5, fontWeight: 600, background: "var(--surface-muted)", borderRadius: 8, padding: "8px 10px" }}>{letter.subject}</div>
+            </div>
+            <div className="field" style={{ marginBottom: 14 }}>
+              <label>גוף ההודעה</label>
+              <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: 0, fontFamily: "inherit" }}>{letter.body}</pre>
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" onClick={() => { navigator.clipboard?.writeText(`${letter.subject}\n\n${letter.body}`); setLetterCopied(true); setTimeout(() => setLetterCopied(false), 1800); }}>
+                {letterCopied ? "✓ הועתק" : "העתק הכל"}
+              </button>
+              <button className="btn btn-secondary" onClick={() => setLetter(null)}>סגור</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {gapHelp && (
         <div className="callout" style={{ marginTop: 10, marginBottom: 14, fontSize: 12.5, lineHeight: 1.7 }}>
           <div className="body">
-            <p><b>פער</b> = משהו שחסר / לא הוחלט / דו-משמעי בדרישה. Claude מציע פערים אחרי שהוא קורא את הדרישה ואת ה-repo; אתה מחליט מה לעשות עם כל אחד:</p>
+            <p><b>פער</b> = שאלה פתוחה שצריך לענות עליה לפני שמתחילים. <b>אי אפשר להתקדם לפירוק משימות עד שכל הפערים סגורים</b> — זו הנקודה שבה מונעים בנייה של הדבר הלא נכון.</p>
+            <p style={{ marginTop: 6 }}>לכל פער מסומן <b>מי יכול לענות</b>: החלטה שלנו (טכנית — אפשר להכריע כאן) או החלטה של מבקש הדרישה (עסקית — צריך לשאול אותו).</p>
             <ul style={{ margin: "6px 0", paddingInlineStart: 18 }}>
-              <li><b>אמיתי</b> — הפער נכון וצריך מענה. אם הוא <b>חוסם</b> — אי אפשר להתחיל לעבוד עד שעונים עליו.</li>
-              <li><b>ענה ונסגר</b> — כותב את ההחלטה (נשמרת כהערה ב-timeline) והפער נסגר.</li>
-              <li><b>נדחה</b> — לא באמת פער (כבר הוחלט במקום אחר, או לא רלוונטי). נעלם מהרשימה.</li>
-              <li><b>פצל לדרישה</b> — פער אמיתי אבל לא שייך לדרישה הזו; נפתחת דרישה נפרדת והעבודה כאן ממשיכה.</li>
+              <li><b>ענה</b> — כותב את ההכרעה, או לוחץ על אחת התשובות המוצעות. נשמרת כהערה ונכנסת אוטומטית לפרומפט של הפירוק.</li>
+              <li><b>לא פער אמיתי</b> — חובה לכתוב למה. הסיבה נשמרת כדי שהשאלה לא תעלה שוב בהרצה הבאה.</li>
+              <li><b>פתח דרישה נפרדת</b> — שאלה אמיתית אבל של סקופ אחר; נפתחת דרישה נפרדת והעבודה כאן ממשיכה.</li>
+              <li><b>✉ נסח פערים ללקוח</b> — הופך את כל השאלות הפתוחות למייל בשפה עסקית, בלי קוד. DCC לא שולח — אתה מעתיק ושולח.</li>
             </ul>
           </div>
         </div>
@@ -157,16 +206,30 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         {openGaps.map((g) => (
           <div key={g.id} style={{ border: `1px solid ${g.blocking ? "var(--status-critical)" : "var(--border-hairline)"}`, borderRadius: 12, padding: "12px 14px", background: "#fff" }}>
             <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 7 }}>
-              {g.blocking
-                ? <Pill tone="critical">🔴 חוסם — חייב הכרעה כדי להתחיל</Pill>
-                : <Pill tone="inactive">לא חוסם — אפשר להשאיר</Pill>}
+              {g.whoAnswers === "client"
+                ? <Pill tone="warning">👤 החלטה של מבקש הדרישה</Pill>
+                : <Pill tone="neutral">🛠 החלטה שלנו</Pill>}
+              {g.blocking && <Pill tone="critical">🔴 חוסם</Pill>}
               {g.state === "verified" && <Pill tone="warning">✓ נבדק — ממתין להכרעה</Pill>}
               <span className="stage">ביטחון {Math.round(Number(g.confidence) * 100)}%</span>
             </div>
-            <div style={{ fontSize: 13, lineHeight: 1.65, marginBottom: 11 }}>{g.description}</div>
+            <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.55, marginBottom: g.why ? 4 : 10 }}>{g.description}</div>
+            {g.why && <div style={{ fontSize: 12.5, color: "var(--ink-600)", lineHeight: 1.6, marginBottom: 8 }}>{g.why}</div>}
+            {g.impactIfWrong && (
+              <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 10 }}>
+                <b style={{ color: "var(--ink-600)" }}>אם ננחש לא נכון:</b> {g.impactIfWrong}
+              </div>
+            )}
 
             {answering?.id === g.id ? (
               <div style={{ display: "grid", gap: 8 }}>
+                {g.options.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {g.options.map((o, i) => (
+                      <button key={i} className="btn btn-secondary btn-sm" onClick={() => setAnswering({ id: g.id, text: o })}>{o}</button>
+                    ))}
+                  </div>
+                )}
                 <textarea
                   value={answering.text} autoFocus rows={3}
                   onChange={(e) => setAnswering({ id: g.id, text: e.target.value })}
@@ -180,10 +243,20 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
               </div>
             ) : (
               <>
+                {g.options.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                    {g.options.map((o, i) => (
+                      <button key={i} className="btn btn-secondary btn-sm" title="בחר תשובה זו וסגור את הפער" onClick={() => onGap(g, "resolved", o)}>✓ {o}</button>
+                    ))}
+                  </div>
+                )}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn btn-primary btn-sm" onClick={() => setAnswering({ id: g.id, text: "" })}>✎ הכרע / ענה</button>
-                  <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "dismissed")}>✕ לא פער אמיתי</button>
-                  {!g.blocking && <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "spun_off")}>↗ פתח דרישה נפרדת</button>}
+                  <button className="btn btn-secondary btn-sm" onClick={() => {
+                    const why = prompt("למה זה לא פער אמיתי? (יישמר כדי שהשאלה לא תעלה שוב)");
+                    if (why?.trim()) onGap(g, "dismissed", why.trim());
+                  }}>✕ לא פער אמיתי</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => onGap(g, "spun_off")}>↗ פתח דרישה נפרדת</button>
                 </div>
                 <div style={{ display: "flex", gap: 14, marginTop: 8 }}>
                   {g.state === "proposed" && <a className="link" style={{ fontSize: 11.5 }} onClick={() => onGap(g, "verified")}>סמן שנבדק, אכריע בהמשך</a>}

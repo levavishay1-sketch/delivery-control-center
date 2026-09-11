@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, withTenant } from "@dcc/db";
-import { flowRun, repo, task, taskDependency, workitem } from "@dcc/db/schema";
+import { flowRun, gap, repo, task, taskDependency, workitem } from "@dcc/db/schema";
 import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
 import { adoSend } from "./ado-http.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
@@ -294,17 +294,37 @@ async function firstRepo(clientId: string, workitemId: string) {
 
 /* ── 1. assess: translate + is it baked? ───────────────────────────── */
 
+/**
+ * Shaped for a human reader, not for density: short bullets instead of
+ * paragraphs, and every gap is an answerable QUESTION with who-can-answer
+ * on it. The shape is enforced by the shared output-contract template.
+ */
+export type AssessGap = {
+  question: string;
+  why: string;
+  kind: "business" | "technical" | "missing_info" | "new_scope";
+  whoAnswers: "client" | "team";
+  options: string[];
+  impactIfWrong: string;
+  blocking: boolean;
+  confidence: number;
+};
 export type AssessResult = {
   title: string;
   summary: string;
+  /** 2-5 one-line bullets: what actually changes. */
+  whatChanges: string[];
   baked: boolean;
-  rationale: string;
-  gaps: { description: string; blocking: boolean; confidence: number }[];
+  /** 2-4 one-line bullets, one reason each — never a paragraph. */
+  rationale: string[];
+  gaps: AssessGap[];
   repoUsed: string | null;
 };
 
 /** The default readiness prompt, used when the caller doesn't pick a tier. */
 const DEFAULT_ASSESS_PROMPT_KEY = "assess.readiness.standard";
+/** Output shape shared by every readiness tier — appended to whichever runs. */
+const ASSESS_CONTRACT_KEY = "assess.shared.output_contract";
 
 /**
  * Builds the actual prompt for one readiness-check tier — shared by the
@@ -339,14 +359,20 @@ async function buildAssessPrompt(input: {
     varsHe.CUSTOM_EMPHASIS = input.customEmphasis?.trim() || "(לא צוין)";
   }
 
-  const prompt = tmpl ? renderPrompt(tmpl.body, varsEn) : [
-    // fallback if the template row is somehow missing — never hard-fail the flow over it
-    "You are assessing a software requirement for a delivery team. The requirement text is in Hebrew.",
-    varsEn.REPO_CONTEXT, "", "REQUIREMENT:", varsEn.REQUIREMENT, "",
-    'Respond with ONLY this JSON, no prose, no markdown fence:',
-    '{"title": string, "summary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
-  ].join("\n");
-  const promptHe = tmpl?.bodyHe ? renderPrompt(tmpl.bodyHe, varsHe) : null;
+  // The output SHAPE is authored once, shared by every tier — so fixing
+  // how an answer reads fixes it everywhere instead of in five places.
+  const contract = await getPromptByKey(ASSESS_CONTRACT_KEY);
+  const join = (focus: string, shape: string | null | undefined) => (shape ? `${focus}\n\n${shape}` : focus);
+
+  const prompt = join(
+    tmpl ? renderPrompt(tmpl.body, varsEn) : [
+      // fallback if the template row is somehow missing — never hard-fail the flow over it
+      "You are assessing a software requirement for a delivery team. The requirement text is in Hebrew.",
+      varsEn.REPO_CONTEXT, "", "REQUIREMENT:", varsEn.REQUIREMENT,
+    ].join("\n"),
+    contract?.body,
+  );
+  const promptHe = tmpl?.bodyHe ? join(renderPrompt(tmpl.bodyHe, varsHe), contract?.bodyHe) : null;
   const model = input.model || tmpl?.defaultModel || undefined;
 
   return { prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
@@ -366,21 +392,55 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   });
   pushLine(input.runId, built.cwd ? `קורא את ה-repo ${built.repoName} · ${built.templateTitle}` : `אין עותק repo — מעריך מהטקסט בלבד · ${built.templateTitle}`);
 
-  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(built.cwd ?? process.cwd(), built.prompt, { timeoutMs: 600000, runId: input.runId, model: built.model });
+  const raw = await runClaudeJson<Partial<AssessResult> & { rationale?: string | string[]; whatChanges?: string | string[] }>(
+    built.cwd ?? process.cwd(), built.prompt, { timeoutMs: 600000, runId: input.runId, model: built.model },
+  );
   pushLine(input.runId, "כותב סיכום ופערים…");
+
+  // The contract asks for bullet arrays; a model can still hand back one
+  // string. Normalise rather than render a paragraph the user has to fight.
+  const lines = (v: string | string[] | undefined): string[] =>
+    Array.isArray(v) ? v.filter(Boolean).map((s) => String(s).trim())
+      : typeof v === "string" ? v.split("\n").map((s) => s.replace(/^[-•*]\s*/, "").trim()).filter(Boolean)
+      : [];
+
+  const res: Omit<AssessResult, "repoUsed"> = {
+    title: raw.title ?? "",
+    summary: raw.summary ?? "",
+    whatChanges: lines(raw.whatChanges),
+    baked: !!raw.baked,
+    rationale: lines(raw.rationale),
+    gaps: (raw.gaps ?? []).filter((g) => g && (g.question || (g as { description?: string }).description)).map((g) => ({
+      question: g.question ?? (g as { description?: string }).description ?? "",
+      why: g.why ?? "",
+      kind: g.kind ?? "missing_info",
+      whoAnswers: g.whoAnswers === "client" ? "client" : "team",
+      options: Array.isArray(g.options) ? g.options.filter(Boolean).map(String) : [],
+      impactIfWrong: g.impactIfWrong ?? "",
+      blocking: !!g.blocking,
+      confidence: Math.min(1, Math.max(0, Number(g.confidence) || 0.7)),
+    })),
+  };
 
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
     actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:assess" },
-    payload: { body: `סיכום Claude:\n**${res.title}**\n${res.summary}\n\nהערכה: ${res.baked ? "אפוי — מוכן לפירוק" : "לא אפוי — צריך אינטראקציה"}\n${res.rationale}` },
+    payload: {
+      body: [
+        `סיכום Claude: ${res.title}`,
+        res.summary,
+        ...(res.whatChanges.length ? ["", "מה משתנה:", ...res.whatChanges.map((l) => `• ${l}`)] : []),
+        "",
+        res.baked ? "הערכה: אפויה — מוכנה לפירוק" : "הערכה: לא אפויה — יש שאלות פתוחות",
+        ...res.rationale.map((l) => `• ${l}`),
+      ].join("\n"),
+    },
   });
-  const gaps = (res.gaps ?? []).filter((g) => g && g.description);
-  for (const g of gaps) {
+  for (const g of res.gaps) {
     await proposeGap({
       clientId: input.clientId, workitemId: input.workitemId, by: input.by,
-      description: g.description, blocking: !!g.blocking,
-      confidence: Math.min(1, Math.max(0, Number(g.confidence) || 0.7)),
-      mode: "delegated",
+      description: g.question, blocking: g.blocking, confidence: g.confidence, mode: "delegated",
+      why: g.why, kind: g.kind, whoAnswers: g.whoAnswers, options: g.options, impactIfWrong: g.impactIfWrong,
     });
   }
   await withTenant(input.clientId, (tx) =>
@@ -388,7 +448,50 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   );
   await regenerateBrief(input.clientId, input.workitemId);
 
-  return { ...res, gaps, repoUsed: built.repoName };
+  return { ...res, repoUsed: built.repoName };
+}
+
+/* ── 1b. the letter to the requester ───────────────────────────────── */
+
+export type ClientLetter = { subject: string; body: string; gapCount: number };
+
+/**
+ * Turns the open gaps into a message the REQUESTER can actually read — no
+ * code, no jargon, questions numbered, options offered. We compose it and
+ * the user sends it themselves (there is no channel to the client from
+ * here, and pretending otherwise would be worse than useless).
+ * Runs on the cheap model: this is rephrasing, not analysis.
+ */
+export async function composeClientLetter(input: { clientId: string; workitemId: string }): Promise<ClientLetter> {
+  const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
+  const open = await withTenant(input.clientId, (tx) =>
+    tx.select().from(gap)
+      .where(and(eq(gap.workitemId, input.workitemId), sql`${gap.state} in ('proposed','verified')`))
+      .orderBy(desc(gap.blocking), gap.createdAt),
+  );
+  if (open.length === 0) throw new Error("אין פערים פתוחים — אין מה לשלוח");
+
+  const gapsText = open.map((g, i) => [
+    `${i + 1}. ${g.description}`,
+    g.why ? `   רקע: ${g.why}` : "",
+    (g.options as string[])?.length ? `   אפשרויות: ${(g.options as string[]).join(" / ")}` : "",
+    `   ${g.whoAnswers === "client" ? "החלטה של מבקש הדרישה" : "החלטה שלנו — הוזכר רק אם רלוונטי לו"}`,
+  ].filter(Boolean).join("\n")).join("\n\n");
+
+  const tmpl = await getPromptByKey("gaps.client_letter");
+  const vars = {
+    REQUIREMENT_TITLE: wi.title,
+    REQUIREMENT_TEXT: notes.map((n) => n.body).join("\n\n").slice(0, 4000),
+    GAPS: gapsText,
+  };
+  const prompt = tmpl
+    ? renderPrompt(tmpl.body, vars)
+    : `Write a short Hebrew business message asking these questions, no code or jargon:\n${gapsText}\n\nRespond with ONLY {"subject": string, "body": string}`;
+
+  const res = await runClaudeJson<{ subject?: string; body?: string }>(process.cwd(), prompt, {
+    timeoutMs: 180_000, maxTurns: 3, model: tmpl?.defaultModel || "haiku",
+  });
+  return { subject: res.subject ?? `שאלות פתוחות — ${wi.title}`, body: res.body ?? "", gapCount: open.length };
 }
 
 /* ── 2. breakdown: propose tasks + dependencies ────────────────────── */

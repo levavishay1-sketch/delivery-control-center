@@ -73,6 +73,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const isOpenGap = (g: { state: string }) => g.state === "proposed" || g.state === "verified";
   const openGaps = d.gaps.filter(isOpenGap).length;
   const openBlockingGaps = d.gaps.filter((g) => g.blocking && isOpenGap(g)).length;
+  const clientGaps = d.gaps.filter((g) => isOpenGap(g) && g.whoAnswers === "client").length;
   const assessNote = [...d.events].reverse().find(
     (e) => e.type === "note.added" && typeof e.payload.body === "string" && (e.payload.body as string).startsWith("סיכום Claude"),
   );
@@ -87,7 +88,10 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
 
   const done = [
     !!assessNote,
-    !!assessNote && openBlockingGaps === 0,
+    // EVERY gap must be closed before breakdown — not just the blocking
+    // ones. An open question is an open question: deciding it later means
+    // re-doing the task tree that was built on the wrong assumption.
+    !!assessNote && openGaps === 0,
     nodes.length > 0,
     nodes.length > 0 && pending.length === 0 && unsynced.length === 0,
     wi.phase === "building" || wi.phase === "review" || wi.phase === "done",
@@ -101,7 +105,13 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
     try {
       const r = await getFlowRun(wi.id);
       setRun((prev) => {
-        if (prev?.state === "running" && r.state !== "running" && r.state !== "idle") reload();
+        if (prev?.state === "running" && r.state !== "running" && r.state !== "idle") {
+          reload();
+          // a finished run moves the flow on: drop any manually-pinned step
+          // so the rail lands on what actually needs attention now — the
+          // gaps if the check found any, the breakdown if it didn't.
+          setView(null);
+        }
         return r;
       });
     } catch { /* ignore */ }
@@ -241,9 +251,28 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                     <h3 style={{ fontSize: 14.5, fontWeight: 700, color: "#1B1741" }}>מה Claude הבין ומה הוא חושב</h3>
                     <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => kick("assess")}>הרץ הערכה מחדש</a>
                   </div>
-                  <p style={{ fontSize: 12.5, color: "var(--ov-body)", fontWeight: 500, whiteSpace: "pre-wrap", lineHeight: 1.7 }}>
-                    {(assessNote.payload.body as string).replace(/^סיכום Claude:\n/, "")}
-                  </p>
+                  {/* rendered line-by-line, not as one pre-wrap blob: bullets
+                      become a real list and headings get their own weight, so a
+                      busy reader can scan it instead of parsing a paragraph. */}
+                  <div style={{ fontSize: 13, color: "var(--ov-body)", lineHeight: 1.75 }}>
+                    {(assessNote.payload.body as string)
+                      .replace(/^סיכום Claude:\s*/, "")
+                      .split("\n")
+                      .map((ln, i) => {
+                        const t = ln.trim();
+                        if (!t) return <div key={i} style={{ height: 8 }} />;
+                        if (t.startsWith("•")) return (
+                          <div key={i} style={{ display: "flex", gap: 7, marginBottom: 3 }}>
+                            <span style={{ color: "var(--color-accent)", flexShrink: 0 }}>•</span>
+                            <span>{t.replace(/^•\s*/, "")}</span>
+                          </div>
+                        );
+                        if (t.endsWith(":") || t.startsWith("הערכה:")) return (
+                          <div key={i} style={{ fontWeight: 700, color: "#1B1741", marginTop: i ? 6 : 0, marginBottom: 3 }}>{t}</div>
+                        );
+                        return <div key={i} style={{ marginBottom: 3 }}>{t}</div>;
+                      })}
+                  </div>
                   <div style={{ marginTop: 8 }}>
                     {(assessNote.payload.body as string).includes("לא אפוי")
                       ? <Pill tone="warning">לא אפויה — צריך הכרעה בפערים</Pill>
@@ -332,14 +361,13 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
             {/* ── 2. gaps ───────────────────────────────────────── */}
             {active === 1 && (
               <div>
-                {openBlockingGaps > 0 ? (
+                {openGaps > 0 ? (
                   <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>
-                    <b>{openBlockingGaps} פערים חוסמים פתוחים.</b> צריך להכריע בכל אחד (ענה / לא פער / דרישה נפרדת) לפני שאפשר לפרק למשימות.
+                    <b>{openGaps} שאלות פתוחות</b>{openBlockingGaps > 0 ? ` (${openBlockingGaps} מהן חוסמות)` : ""} — צריך לסגור את כולן לפני פירוק למשימות.
+                    {clientGaps > 0 && <> מתוכן <b>{clientGaps}</b> דורשות תשובה ממבקש הדרישה — אפשר לנסח לו אותן בכפתור למטה.</>}
                   </p>
-                ) : openGaps > 0 ? (
-                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>אין פערים חוסמים. {openGaps} לא-חוסמים עדיין פתוחים — אפשר להתקדם גם ככה.</p>
                 ) : (
-                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>כל הפערים טופלו.</p>
+                  <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>כל השאלות נסגרו — אפשר להתקדם.</p>
                 )}
                 {done[1] && <div style={{ marginBottom: 16 }}><button className="btn btn-primary btn-sm" onClick={() => setView(2)}>לפירוק למשימות ←</button></div>}
                 {gapsPanel}

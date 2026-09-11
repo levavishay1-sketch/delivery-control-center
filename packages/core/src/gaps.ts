@@ -16,9 +16,17 @@ export async function proposeGap(input: {
   by: { userId: string };
   /** delegated: Claude acting for a user. interactive: a human logged it. */
   mode: "delegated" | "interactive";
+  /** the question itself, phrased so a person can answer it */
   description: string;
   blocking: boolean;
   confidence: number;
+  /** one short line — why this matters */
+  why?: string;
+  kind?: "business" | "technical" | "missing_info" | "new_scope";
+  /** "client" = only the requester can decide; "team" = we can */
+  whoAnswers?: "client" | "team";
+  options?: string[];
+  impactIfWrong?: string;
 }) {
   const [row] = await withTenant(input.clientId, (tx) =>
     tx
@@ -30,6 +38,11 @@ export async function proposeGap(input: {
         blocking: input.blocking,
         confidence: input.confidence.toFixed(2),
         state: "proposed",
+        why: input.why ?? null,
+        kind: input.kind ?? "missing_info",
+        whoAnswers: input.whoAnswers ?? "team",
+        options: input.options ?? [],
+        impactIfWrong: input.impactIfWrong ?? null,
       })
       .returning(),
   );
@@ -69,14 +82,18 @@ export async function verifyGap(input: {
     const [g] = await tx.select().from(gap).where(sql`${gap.id} = ${input.gapId}`).limit(1);
     if (!g) throw new Error("gap not found");
 
-    if (input.outcome === "resolved" && input.answer?.trim()) {
+    // Both the decision AND the "this isn't a real gap" reason are recorded:
+    // the reason is exactly what stops the next person (or the next Claude
+    // run) from raising the same question again. It rides into the brief.
+    if ((input.outcome === "resolved" || input.outcome === "dismissed") && input.answer?.trim()) {
+      const lead = input.outcome === "resolved" ? "החלטה על הפער" : "נדחה כלא-פער";
       await appendEvent({
         clientId: input.clientId,
         workitemId: g.workitemId,
         source: "manual",
         type: "note.added",
         actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
-        payload: { body: `החלטה על הפער "${g.description.slice(0, 80)}":\n${input.answer.trim()}` },
+        payload: { body: `${lead} "${g.description.slice(0, 80)}":\n${input.answer.trim()}` },
       });
     }
 

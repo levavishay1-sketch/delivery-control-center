@@ -34,7 +34,11 @@ export type EventRow = {
   payload: Record<string, unknown>; supersedes: string | null; links: { rel: string; ref: string }[];
 };
 export type GapState = "proposed" | "verified" | "resolved" | "dismissed" | "spun_off";
-export type Gap = { id: string; description: string; blocking: boolean; confidence: string; state: GapState; spunOffTo: string | null };
+export type GapKind = "business" | "technical" | "missing_info" | "new_scope";
+export type Gap = {
+  id: string; description: string; blocking: boolean; confidence: string; state: GapState; spunOffTo: string | null;
+  why: string | null; kind: GapKind; whoAnswers: "client" | "team"; options: string[]; impactIfWrong: string | null;
+};
 export type Blocker = { id: string; workitemId: string; questionType: string; question: string; answer: string | null; state: "open" | "answered" | "abandoned" };
 export type TaskKind = "task" | "check";
 export type Task = {
@@ -153,7 +157,16 @@ export type StartBuildResult = {
 export const startBuilding = (id: string) => post<StartBuildResult>(`/workitems/${id}/start`, {});
 export const getUsers = () => get<{ users: { id: string; email: string; displayName: string }[] }>("/users");
 export const assignRequirement = (id: string, body: { ownerId?: string; email?: string }) => post<{ assigned: boolean; ownerId: string }>(`/workitems/${id}/assign`, body);
-export type AssessResult = { title: string; summary: string; baked: boolean; rationale: string; gaps: { description: string; blocking: boolean; confidence: number }[]; repoUsed: string | null };
+export type AssessGap = {
+  question: string; why: string; kind: GapKind; whoAnswers: "client" | "team";
+  options: string[]; impactIfWrong: string; blocking: boolean; confidence: number;
+};
+export type AssessResult = {
+  title: string; summary: string; whatChanges: string[]; baked: boolean; rationale: string[];
+  gaps: AssessGap[]; repoUsed: string | null;
+};
+export const composeGapLetter = (id: string) =>
+  post<{ subject: string; body: string; gapCount: number }>(`/workitems/${id}/gap-letter`, {});
 export type BreakdownResult = {
   depth: number;
   tasks: {
