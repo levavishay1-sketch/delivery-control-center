@@ -2,7 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   approveTask, assignRequirement, getFlowRun, getTaskFlow, getUsers, materializeTasks,
   rejectTask, startAssess, startBreakdown, startBuilding,
-  ADO_LADDER, type FlowRun, type MaterializeResult, type StartBuildResult, type TaskFlow, type WorkItemDetail,
+  ADO_LADDER, type AssessDepth, type FlowRun, type MaterializeResult, type StartBuildResult, type TaskFlow, type WorkItemDetail,
 } from "../api.ts";
 import { Pill } from "../ui.tsx";
 import { TaskGraph } from "./TaskGraph.tsx";
@@ -20,7 +20,7 @@ import { TaskGraph } from "./TaskGraph.tsx";
  */
 
 const STEPS = [
-  { key: "assess", label: "בדיקת אפייה" },
+  { key: "assess", label: "בחינת בשלות הדרישה" },
   { key: "gaps", label: "פערים" },
   { key: "breakdown", label: "פירוק למשימות" },
   { key: "approve", label: "אישור והקמה" },
@@ -60,6 +60,8 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const [copied, setCopied] = useState("");
   const [materializing, setMaterializing] = useState(false);
   const [materialized, setMaterialized] = useState<MaterializeResult | null>(null);
+  const [assessDepth, setAssessDepth] = useState<AssessDepth>("standard");
+  const [assessModel, setAssessModel] = useState("");
 
   /* ── state of the world ─────────────────────────────────────────── */
   const isOpenGap = (g: { state: string }) => g.state === "proposed" || g.state === "verified";
@@ -116,7 +118,9 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const kick = async (what: "assess" | "breakdown") => {
     setErr(null);
     try {
-      await (what === "assess" ? startAssess(wi.id) : startBreakdown(wi.id));
+      await (what === "assess"
+        ? startAssess(wi.id, { depth: assessDepth, model: assessModel || undefined })
+        : startBreakdown(wi.id));
       setShowLog(true); await refreshRun();
     } catch (e) { setErr(String(e)); }
   };
@@ -202,6 +206,34 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                   <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 14 }}>
                     הדרישה קיימת רק כאן ב-DCC. Claude יקרא אותה ואת ה-repo ויגיד אם היא אפויה מספיק לפירוק.
                   </p>
+
+                  <div style={{ background: "var(--surface-muted)", borderRadius: 10, padding: 12, marginBottom: 14 }}>
+                    <div className="field" style={{ marginBottom: 10 }}>
+                      <label>מה אתה מצפה מהבדיקה?</label>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+                        {([
+                          ["quick", "שטחית וזריזה — רק לוודא שאין חוסר קריטי"],
+                          ["standard", "רגילה — איזון בין מהירות לעומק"],
+                          ["thorough", "מעמיקה — עם הסבר תהליכים ותלויות"],
+                        ] as [AssessDepth, string][]).map(([v, label]) => (
+                          <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                            <input type="radio" style={{ minWidth: 0 }} checked={assessDepth === v} onChange={() => setAssessDepth(v)} />
+                            {label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="field">
+                      <label>מודל</label>
+                      <select value={assessModel} onChange={(e) => setAssessModel(e.target.value)}>
+                        <option value="">ברירת מחדל</option>
+                        <option value="sonnet">Sonnet — מאוזן</option>
+                        <option value="opus">Opus — יסודי יותר, איטי ויקר יותר</option>
+                        <option value="haiku">Haiku — מהיר וזול, לבדיקות פשוטות</option>
+                      </select>
+                    </div>
+                  </div>
+
                   <div style={{ display: "grid", gap: 10 }}>
                     <button className="btn btn-primary" style={{ padding: 14, textAlign: "start", flexDirection: "column", alignItems: "flex-start", height: "auto", gap: 3 }} onClick={() => kick("assess")}>
                       <span style={{ fontWeight: 700, fontSize: 13.5 }}>✦ המשך עם AI</span>

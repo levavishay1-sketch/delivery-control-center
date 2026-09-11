@@ -8,6 +8,7 @@ import { flowRun, repo, task, taskDependency, workitem } from "@dcc/db/schema";
 import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
 import { adoSend } from "./ado-http.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
+import { getPromptByKey, renderPrompt } from "./prompts.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
 
@@ -95,7 +96,11 @@ export async function getTaskRunView(taskId: string): Promise<FlowRunView | null
 }
 
 /** Kick off assess/breakdown/implement in the background. Returns at once. */
-export async function startFlowRun(input: { clientId: string; workitemId: string; kind: FlowKind; by: Dev; taskId?: string }): Promise<{ runId: string; alreadyRunning: boolean }> {
+export async function startFlowRun(input: {
+  clientId: string; workitemId: string; kind: FlowKind; by: Dev; taskId?: string;
+  /** assess-only: how the user wants the readiness check to run. */
+  assessOpts?: { depth?: "quick" | "standard" | "thorough"; model?: string };
+}): Promise<{ runId: string; alreadyRunning: boolean }> {
   for (const [id, b] of buffers) {
     if (input.taskId ? b.taskId === input.taskId : b.workitemId === input.workitemId && !b.taskId) {
       return { runId: id, alreadyRunning: true };
@@ -112,7 +117,7 @@ export async function startFlowRun(input: { clientId: string; workitemId: string
   void (async () => {
     try {
       const result = input.kind === "assess"
-        ? await runAssess({ ...input, runId })
+        ? await runAssess({ ...input, runId, ...input.assessOpts })
         : input.kind === "implement"
           ? await runImplement({ ...input, taskId: input.taskId!, runId })
           : await runBreakdown({ ...input, runId });
@@ -169,7 +174,7 @@ function describeEvent(line: string): string | null {
 async function runClaudeJson<T>(
   cwd: string,
   prompt: string,
-  opts: { timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean } = {},
+  opts: { timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string } = {},
 ): Promise<T> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain.
   // Read-only by default (plan mode). `write` is only for implementation runs,
@@ -185,6 +190,7 @@ async function runClaudeJson<T>(
         "--allowed-tools", "Read,Grep,Glob",
         "--max-turns", String(opts.maxTurns ?? 40),
       ];
+  if (opts.model) args.push("--model", opts.model);
   const raw = await new Promise<string>((resolve, reject) => {
     const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     let out = "";
@@ -297,7 +303,13 @@ export type AssessResult = {
   repoUsed: string | null;
 };
 
-async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<AssessResult> {
+const DEPTH_INSTRUCTION: Record<"quick" | "standard" | "thorough", string> = {
+  quick: "DEPTH: quick pass. Prefer speed over detail — flag only what actually blocks starting work. Do not spell out process explanations.",
+  standard: "DEPTH: standard pass. Balance speed and depth — explain your reasoning briefly, without walking through full processes unless it genuinely matters.",
+  thorough: "DEPTH: thorough pass. Spell out your reasoning, including likely effects on other processes/components and non-obvious dependencies. A longer answer is fine here.",
+};
+
+async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; depth?: "quick" | "standard" | "thorough"; model?: string }): Promise<AssessResult> {
   pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
   const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
@@ -305,25 +317,25 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   pushLine(input.runId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo — מעריך מהטקסט בלבד");
 
   const reqText = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
-  const prompt = [
+  const tmpl = await getPromptByKey("assess.readiness");
+  const depth = input.depth ?? "standard";
+  const vars = {
+    DEPTH_INSTRUCTION: DEPTH_INSTRUCTION[depth],
+    REPO_CONTEXT: cwd
+      ? `You are in the repository this work would touch (${r?.name}). Read whatever code you need to judge feasibility.`
+      : "There is no code checkout available; judge from the text alone.",
+    REQUIREMENT: reqText,
+  };
+  const prompt = tmpl ? renderPrompt(tmpl.body, vars) : [
+    // fallback if the template row is somehow missing — never hard-fail the flow over it
     "You are assessing a software requirement for a delivery team. The requirement text is in Hebrew.",
-    cwd ? `You are in the repository this work would touch (${r?.name}). Read whatever code you need to judge feasibility.` : "There is no code checkout available; judge from the text alone.",
-    "",
-    "REQUIREMENT:",
-    reqText,
-    "",
-    "Do this:",
-    "1. Restate the requirement clearly (a short title + a 2-5 sentence summary). You may name code symbols / file paths in English, but everything else must be Hebrew.",
-    "2. Decide if it is specified well enough to start implementing ('baked'), or if there are gaps / ambiguities / missing decisions that a person must resolve first.",
-    "3. List the gaps (empty if baked). Mark each as blocking (must be answered before any code) or not.",
-    "",
-    "IMPORTANT: write title, summary, rationale and every gap description IN HEBREW. Reason in English internally if it helps, but the JSON string values must be Hebrew (code identifiers and paths may stay in English).",
-    "",
+    vars.REPO_CONTEXT, "", "REQUIREMENT:", vars.REQUIREMENT, "",
     'Respond with ONLY this JSON, no prose, no markdown fence:',
     '{"title": string, "summary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
   ].join("\n");
+  const model = input.model || tmpl?.defaultModel || undefined;
 
-  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 600000, runId: input.runId });
+  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 600000, runId: input.runId, model });
   pushLine(input.runId, "כותב סיכום ופערים…");
 
   await appendEvent({

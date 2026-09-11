@@ -81,6 +81,8 @@ import {
   precheckTaskDelete,
   deleteTaskSurgical,
   DeleteNeedsConfirmation,
+  listPrompts,
+  updatePrompt,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -216,6 +218,25 @@ app.delete("/clients/:cid/connections/:id", async (req) => {
 });
 
 app.get("/list/workitems", async () => ({ items: await listAllWorkItems() }));
+
+/* ── prompt library ───────────────────────────────────────────────── */
+
+app.get("/prompts", async (req) => {
+  await actingUser(req);
+  return { items: await listPrompts() };
+});
+
+app.patch("/prompts/:id", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({
+    title: z.string().optional(),
+    description: z.string().nullable().optional(),
+    body: z.string().optional(),
+    defaultModel: z.string().nullable().optional(),
+  }).parse(req.body ?? {});
+  return updatePrompt({ id, ...b, by: { userId: dev.id } });
+});
 app.get("/list/initiatives", async () => ({ initiatives: await listInitiatives() }));
 app.get("/list/budgets", async () => ({ budgets: await listBudgets() }));
 app.get("/list/alerts", async (req) => ({ alerts: await listAlerts((await actingUser(req)).id) }));
@@ -433,8 +454,12 @@ app.post("/workitems/:id/assign", async (req) => {
 app.post("/workitems/:id/assess", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
+  const b = z.object({
+    depth: z.enum(["quick", "standard", "thorough"]).optional(),
+    model: z.string().optional(),
+  }).parse(req.body ?? {});
   const wi = await locateWorkItem({ id });
-  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "assess", by: { userId: dev.id } });
+  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "assess", by: { userId: dev.id }, assessOpts: b });
 });
 
 app.post("/workitems/:id/breakdown", async (req) => {

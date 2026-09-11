@@ -3,3 +3,4 @@ export * from "./identity.ts";
 export * from "./tenancy.ts";
 export * from "./workitem.ts";
 export * from "./events.ts";
+export * from "./prompts.ts";
