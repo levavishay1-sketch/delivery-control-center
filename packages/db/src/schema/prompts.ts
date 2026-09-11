@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 /**
  * The system's own prompt library. Not tenant data — org-shared config,
@@ -21,8 +21,14 @@ export const promptTemplate = pgTable(
     /** One-line explanation of when/how this template is used. */
     description: text("description"),
     body: text("body").notNull(),
-    /** claude CLI --model value (e.g. "sonnet" | "opus" | "haiku"); null = CLI default. */
+    /** Hand-authored Hebrew translation of `body`, for the preview modal's
+     *  עברית/English toggle only — never sent to Claude (the real prompt
+     *  stays English for consistency across the system). */
+    bodyHe: text("body_he"),
+    /** claude CLI --model value (e.g. "sonnet" | "opus" | "haiku"); null = CLI default / user must choose. */
     defaultModel: text("default_model"),
+    /** Display/pick order within a family (e.g. all "assess.readiness.*" keys). */
+    sortOrder: integer("sort_order").notNull().default(0),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     updatedBy: uuid("updated_by"),
   },

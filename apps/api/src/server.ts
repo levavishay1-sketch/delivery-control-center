@@ -83,6 +83,7 @@ import {
   DeleteNeedsConfirmation,
   listPrompts,
   updatePrompt,
+  previewAssessPrompt,
 } from "@dcc/core";
 import { blocker, gap } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -233,6 +234,7 @@ app.patch("/prompts/:id", async (req) => {
     title: z.string().optional(),
     description: z.string().nullable().optional(),
     body: z.string().optional(),
+    bodyHe: z.string().nullable().optional(),
     defaultModel: z.string().nullable().optional(),
   }).parse(req.body ?? {});
   return updatePrompt({ id, ...b, by: { userId: dev.id } });
@@ -455,11 +457,22 @@ app.post("/workitems/:id/assess", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   const b = z.object({
-    depth: z.enum(["quick", "standard", "thorough"]).optional(),
+    promptKey: z.string().optional(),
+    customEmphasis: z.string().optional(),
     model: z.string().optional(),
   }).parse(req.body ?? {});
   const wi = await locateWorkItem({ id });
   return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "assess", by: { userId: dev.id }, assessOpts: b });
+});
+
+// render (never run) one readiness-check tier's actual prompt — powers
+// the "what will be sent" preview modal.
+app.get("/workitems/:id/assess-preview", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const q = z.object({ promptKey: z.string(), customEmphasis: z.string().optional() }).parse(req.query ?? {});
+  const wi = await locateWorkItem({ id });
+  return previewAssessPrompt({ clientId: wi.clientId, workitemId: id, promptKey: q.promptKey, customEmphasis: q.customEmphasis });
 });
 
 app.post("/workitems/:id/breakdown", async (req) => {

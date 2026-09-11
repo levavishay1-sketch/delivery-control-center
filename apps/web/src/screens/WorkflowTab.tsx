@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   approveTask, assignRequirement, getFlowRun, getTaskFlow, getUsers, materializeTasks,
-  rejectTask, startAssess, startBreakdown, startBuilding,
-  ADO_LADDER, type AssessDepth, type FlowRun, type MaterializeResult, type StartBuildResult, type TaskFlow, type WorkItemDetail,
+  rejectTask, startAssess, startBreakdown, startBuilding, getPrompts, previewAssess,
+  ADO_LADDER, type FlowRun, type MaterializeResult, type PromptTemplate, type StartBuildResult, type TaskFlow, type WorkItemDetail,
 } from "../api.ts";
 import { Pill } from "../ui.tsx";
 import { TaskGraph } from "./TaskGraph.tsx";
@@ -60,8 +60,14 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const [copied, setCopied] = useState("");
   const [materializing, setMaterializing] = useState(false);
   const [materialized, setMaterialized] = useState<MaterializeResult | null>(null);
-  const [assessDepth, setAssessDepth] = useState<AssessDepth>("standard");
-  const [assessModel, setAssessModel] = useState("");
+  const [assessPrompts, setAssessPrompts] = useState<PromptTemplate[]>([]);
+  const [assessPromptKey, setAssessPromptKey] = useState("assess.readiness.standard");
+  const [assessCustomEmphasis, setAssessCustomEmphasis] = useState("");
+  const [assessCustomModel, setAssessCustomModel] = useState("");
+  const [previewKey, setPreviewKey] = useState<string | null>(null);
+  const [previewData, setPreviewData] = useState<{ prompt: string; promptHe: string | null; model: string | null; templateTitle: string } | null>(null);
+  const [previewLang, setPreviewLang] = useState<"he" | "en">("he");
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   /* ── state of the world ─────────────────────────────────────────── */
   const isOpenGap = (g: { state: string }) => g.state === "proposed" || g.state === "verified";
@@ -112,17 +118,29 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   }, [running, refreshRun]);
   useEffect(() => { if (assignOpen && users.length === 0) getUsers().then((r) => setUsers(r.users)).catch(() => {}); }, [assignOpen, users.length]);
   useEffect(() => { if (active === 4 && !build) startBuilding(wi.id).then(setBuild).catch((e) => setErr(String(e))); }, [active, build, wi.id]);
+  useEffect(() => { getPrompts().then((r) => setAssessPrompts(r.items.filter((p) => p.key.startsWith("assess.readiness.")).sort((a, b) => a.sortOrder - b.sortOrder))).catch(() => {}); }, []);
 
   const copy = (t: string, k: string) => { navigator.clipboard?.writeText(t); setCopied(k); setTimeout(() => setCopied(""), 1500); };
 
+  const isCustom = assessPromptKey === "assess.readiness.custom";
   const kick = async (what: "assess" | "breakdown") => {
     setErr(null);
     try {
       await (what === "assess"
-        ? startAssess(wi.id, { depth: assessDepth, model: assessModel || undefined })
+        ? startAssess(wi.id, {
+            promptKey: assessPromptKey,
+            ...(isCustom ? { customEmphasis: assessCustomEmphasis, model: assessCustomModel } : {}),
+          })
         : startBreakdown(wi.id));
       setShowLog(true); await refreshRun();
     } catch (e) { setErr(String(e)); }
+  };
+
+  const openPreview = async (key: string) => {
+    setPreviewKey(key); setPreviewData(null); setPreviewLoading(true); setPreviewLang("he");
+    try { setPreviewData(await previewAssess(wi.id, key, isCustom && key === assessPromptKey ? assessCustomEmphasis : undefined)); }
+    catch (e) { setErr(String(e)); }
+    finally { setPreviewLoading(false); }
   };
   const doAssign = async () => {
     setErr(null);
@@ -157,6 +175,44 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
 
   return (
     <div className="ov-card" style={{ overflow: "hidden" }}>
+      {previewKey && (
+        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setPreviewKey(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: "min(760px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
+            border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl", textAlign: "start",
+            boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700 }}>{previewData?.templateTitle ?? "תצוגה מקדימה"}</h3>
+              <a onClick={() => setPreviewKey(null)} style={{
+                fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex",
+                alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)",
+              }}>✕</a>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
+              זה בדיוק מה שיישלח ל-Claude (הפרומפט האמיתי תמיד רץ באנגלית — התצוגה בעברית היא תרגום לנוחות הקריאה בלבד).
+            </p>
+            {previewLoading ? (
+              <div className="spin">טוען…</div>
+            ) : previewData ? (
+              <>
+                <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+                  <button className={`btn btn-sm ${previewLang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setPreviewLang("he")}>עברית</button>
+                  <button className={`btn btn-sm ${previewLang === "en" ? "btn-primary" : "btn-secondary"}`} onClick={() => setPreviewLang("en")}>English</button>
+                  {previewData.model && <Pill tone="neutral">מודל: {previewData.model}</Pill>}
+                </div>
+                <pre style={{
+                  whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, fontFamily: previewLang === "en" ? "var(--mono)" : "inherit",
+                  direction: previewLang === "en" ? "ltr" : "rtl", textAlign: previewLang === "en" ? "left" : "start",
+                  background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: 0,
+                }}>
+                  {(previewLang === "he" ? previewData.promptHe : previewData.prompt) ?? "(אין תרגום לעברית לפרומפט הזה)"}
+                </pre>
+              </>
+            ) : null}
+          </div>
+        </div>
+      )}
       <StepRail steps={STEPS} done={done} unlocked={unlocked} active={running ? (run?.kind === "breakdown" ? 2 : 0) : active} onPick={(i) => { if (unlocked[i] && !running) { setView(i); setErr(null); } }} busy={running} />
       {lastRunLink && <div style={{ padding: "10px 16px 0" }}>{lastRunLink}</div>}
       {showLog && run && !running && <div style={{ padding: "8px 16px 0" }}><Transcript lines={run.lines} />{run.state === "error" && run.error && <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 6 }}>{run.error}</p>}</div>}
@@ -208,34 +264,42 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                   </p>
 
                   <div style={{ background: "var(--surface-muted)", borderRadius: 10, padding: 12, marginBottom: 14 }}>
-                    <div className="field" style={{ marginBottom: 10 }}>
-                      <label>מה אתה מצפה מהבדיקה?</label>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-                        {([
-                          ["quick", "שטחית וזריזה — רק לוודא שאין חוסר קריטי"],
-                          ["standard", "רגילה — איזון בין מהירות לעומק"],
-                          ["thorough", "מעמיקה — עם הסבר תהליכים ותלויות"],
-                        ] as [AssessDepth, string][]).map(([v, label]) => (
-                          <label key={v} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
-                            <input type="radio" style={{ minWidth: 0 }} checked={assessDepth === v} onChange={() => setAssessDepth(v)} />
-                            {label}
-                          </label>
-                        ))}
+                    <label style={{ fontSize: 12, fontWeight: 650, color: "var(--ov-label)", display: "block", marginBottom: 6 }}>מה אתה מצפה מהבדיקה?</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {assessPrompts.map((p) => (
+                        <div key={p.key}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
+                            <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", flex: 1 }}>
+                              <input type="radio" style={{ minWidth: 0 }} checked={assessPromptKey === p.key} onChange={() => setAssessPromptKey(p.key)} />
+                              <span>{p.title.replace(/^בחינת בשלות — /, "")} <span style={{ color: "var(--ink-400)" }}>({p.defaultModel ? p.defaultModel[0]!.toUpperCase() + p.defaultModel.slice(1) : "בחירה"})</span></span>
+                            </label>
+                            <a style={{ fontSize: 11, color: "var(--color-accent)", cursor: "pointer", whiteSpace: "nowrap" }} onClick={() => openPreview(p.key)}>👁 תצוגה מקדימה</a>
+                          </div>
+                          {p.description && <p style={{ fontSize: 11, color: "var(--ink-400)", margin: "1px 0 0 24px" }}>{p.description}</p>}
+                        </div>
+                      ))}
+                    </div>
+                    {isCustom && (
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-hairline)" }}>
+                        <div className="field" style={{ marginBottom: 8 }}>
+                          <label>דגש מיוחד לבדיקה הזו</label>
+                          <textarea value={assessCustomEmphasis} onChange={(e) => setAssessCustomEmphasis(e.target.value)} rows={2} placeholder="למשל: תשים לב במיוחד להשפעה על מודול X" />
+                        </div>
+                        <div className="field">
+                          <label>מודל (חובה לבחור)</label>
+                          <select value={assessCustomModel} onChange={(e) => setAssessCustomModel(e.target.value)}>
+                            <option value="">— בחר —</option>
+                            <option value="sonnet">Sonnet — מאוזן</option>
+                            <option value="opus">Opus — יסודי יותר, איטי ויקר יותר</option>
+                            <option value="haiku">Haiku — מהיר וזול, לבדיקות פשוטות</option>
+                          </select>
+                        </div>
                       </div>
-                    </div>
-                    <div className="field">
-                      <label>מודל</label>
-                      <select value={assessModel} onChange={(e) => setAssessModel(e.target.value)}>
-                        <option value="">ברירת מחדל</option>
-                        <option value="sonnet">Sonnet — מאוזן</option>
-                        <option value="opus">Opus — יסודי יותר, איטי ויקר יותר</option>
-                        <option value="haiku">Haiku — מהיר וזול, לבדיקות פשוטות</option>
-                      </select>
-                    </div>
+                    )}
                   </div>
 
                   <div style={{ display: "grid", gap: 10 }}>
-                    <button className="btn btn-primary" style={{ padding: 14, textAlign: "start", flexDirection: "column", alignItems: "flex-start", height: "auto", gap: 3 }} onClick={() => kick("assess")}>
+                    <button className="btn btn-primary" disabled={isCustom && !assessCustomModel} style={{ padding: 14, textAlign: "start", flexDirection: "column", alignItems: "flex-start", height: "auto", gap: 3 }} onClick={() => kick("assess")}>
                       <span style={{ fontWeight: 700, fontSize: 13.5 }}>✦ המשך עם AI</span>
                       <span style={{ fontSize: 12, opacity: 0.85, fontWeight: 400 }}>מסכם בעברית, בודק אפייה ומזהה פערים. רץ ברקע.</span>
                     </button>

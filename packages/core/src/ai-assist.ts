@@ -99,7 +99,7 @@ export async function getTaskRunView(taskId: string): Promise<FlowRunView | null
 export async function startFlowRun(input: {
   clientId: string; workitemId: string; kind: FlowKind; by: Dev; taskId?: string;
   /** assess-only: how the user wants the readiness check to run. */
-  assessOpts?: { depth?: "quick" | "standard" | "thorough"; model?: string };
+  assessOpts?: { promptKey?: string; customEmphasis?: string; model?: string };
 }): Promise<{ runId: string; alreadyRunning: boolean }> {
   for (const [id, b] of buffers) {
     if (input.taskId ? b.taskId === input.taskId : b.workitemId === input.workitemId && !b.taskId) {
@@ -303,39 +303,70 @@ export type AssessResult = {
   repoUsed: string | null;
 };
 
-const DEPTH_INSTRUCTION: Record<"quick" | "standard" | "thorough", string> = {
-  quick: "DEPTH: quick pass. Prefer speed over detail — flag only what actually blocks starting work. Do not spell out process explanations.",
-  standard: "DEPTH: standard pass. Balance speed and depth — explain your reasoning briefly, without walking through full processes unless it genuinely matters.",
-  thorough: "DEPTH: thorough pass. Spell out your reasoning, including likely effects on other processes/components and non-obvious dependencies. A longer answer is fine here.",
-};
+/** The default readiness prompt, used when the caller doesn't pick a tier. */
+const DEFAULT_ASSESS_PROMPT_KEY = "assess.readiness.standard";
 
-async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; depth?: "quick" | "standard" | "thorough"; model?: string }): Promise<AssessResult> {
-  pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
+/**
+ * Builds the actual prompt for one readiness-check tier — shared by the
+ * real run and the no-op preview (so "what will be sent" is never a lie).
+ * `promptHe` is the hand-authored Hebrew translation for the preview
+ * modal only; it is never sent to Claude.
+ */
+async function buildAssessPrompt(input: {
+  clientId: string; workitemId: string; promptKey: string; customEmphasis?: string; model?: string;
+}): Promise<{ prompt: string; promptHe: string | null; model: string | undefined; cwd: string | null; repoName: string | null; templateTitle: string }> {
   const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
   const cwd = r ? await ensureCheckout(r) : null;
-  pushLine(input.runId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo — מעריך מהטקסט בלבד");
-
   const reqText = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
-  const tmpl = await getPromptByKey("assess.readiness");
-  const depth = input.depth ?? "standard";
-  const vars = {
-    DEPTH_INSTRUCTION: DEPTH_INSTRUCTION[depth],
+  const tmpl = await getPromptByKey(input.promptKey);
+
+  const varsEn: Record<string, string> = {
     REPO_CONTEXT: cwd
       ? `You are in the repository this work would touch (${r?.name}). Read whatever code you need to judge feasibility.`
       : "There is no code checkout available; judge from the text alone.",
     REQUIREMENT: reqText,
   };
-  const prompt = tmpl ? renderPrompt(tmpl.body, vars) : [
+  const varsHe: Record<string, string> = {
+    REPO_CONTEXT: cwd
+      ? `אתה בתוך ה-repository שהעבודה הזו נוגעת בו (${r?.name}). קרא כל קוד שדרוש כדי לשפוט ישימות.`
+      : "אין עותק קוד זמין; שפוט מהטקסט בלבד.",
+    REQUIREMENT: reqText,
+  };
+  if (input.promptKey === "assess.readiness.custom") {
+    const emphasis = input.customEmphasis?.trim() || "(none specified)";
+    varsEn.CUSTOM_EMPHASIS = emphasis;
+    varsHe.CUSTOM_EMPHASIS = input.customEmphasis?.trim() || "(לא צוין)";
+  }
+
+  const prompt = tmpl ? renderPrompt(tmpl.body, varsEn) : [
     // fallback if the template row is somehow missing — never hard-fail the flow over it
     "You are assessing a software requirement for a delivery team. The requirement text is in Hebrew.",
-    vars.REPO_CONTEXT, "", "REQUIREMENT:", vars.REQUIREMENT, "",
+    varsEn.REPO_CONTEXT, "", "REQUIREMENT:", varsEn.REQUIREMENT, "",
     'Respond with ONLY this JSON, no prose, no markdown fence:',
     '{"title": string, "summary": string, "baked": boolean, "rationale": string, "gaps": [{"description": string, "blocking": boolean, "confidence": number}]}',
   ].join("\n");
+  const promptHe = tmpl?.bodyHe ? renderPrompt(tmpl.bodyHe, varsHe) : null;
   const model = input.model || tmpl?.defaultModel || undefined;
 
-  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(cwd ?? process.cwd(), prompt, { timeoutMs: 600000, runId: input.runId, model });
+  return { prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
+}
+
+/** Render (never run) the prompt for one tier — powers the preview modal. */
+export async function previewAssessPrompt(input: { clientId: string; workitemId: string; promptKey: string; customEmphasis?: string }) {
+  const built = await buildAssessPrompt(input);
+  return { prompt: built.prompt, promptHe: built.promptHe, model: built.model ?? null, templateTitle: built.templateTitle };
+}
+
+async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; promptKey?: string; customEmphasis?: string; model?: string }): Promise<AssessResult> {
+  pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
+  const built = await buildAssessPrompt({
+    clientId: input.clientId, workitemId: input.workitemId,
+    promptKey: input.promptKey ?? DEFAULT_ASSESS_PROMPT_KEY, customEmphasis: input.customEmphasis, model: input.model,
+  });
+  pushLine(input.runId, built.cwd ? `קורא את ה-repo ${built.repoName} · ${built.templateTitle}` : `אין עותק repo — מעריך מהטקסט בלבד · ${built.templateTitle}`);
+
+  const res = await runClaudeJson<Omit<AssessResult, "repoUsed">>(built.cwd ?? process.cwd(), built.prompt, { timeoutMs: 600000, runId: input.runId, model: built.model });
   pushLine(input.runId, "כותב סיכום ופערים…");
 
   await appendEvent({
@@ -357,7 +388,7 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   );
   await regenerateBrief(input.clientId, input.workitemId);
 
-  return { ...res, gaps, repoUsed: r?.name ?? null };
+  return { ...res, gaps, repoUsed: built.repoName };
 }
 
 /* ── 2. breakdown: propose tasks + dependencies ────────────────────── */

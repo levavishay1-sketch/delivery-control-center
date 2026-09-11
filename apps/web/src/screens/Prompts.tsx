@@ -22,14 +22,15 @@ function PromptCard({ p, onSaved }: { p: PromptTemplate; onSaved: () => void }) 
   const [title, setTitle] = useState(p.title);
   const [description, setDescription] = useState(p.description ?? "");
   const [body, setBody] = useState(p.body);
+  const [bodyHe, setBodyHe] = useState(p.bodyHe ?? "");
   const [model, setModel] = useState(p.defaultModel ?? "");
   const [saving, setSaving] = useState(false);
 
-  const open = () => { setTitle(p.title); setDescription(p.description ?? ""); setBody(p.body); setModel(p.defaultModel ?? ""); setEditing(true); };
+  const open = () => { setTitle(p.title); setDescription(p.description ?? ""); setBody(p.body); setBodyHe(p.bodyHe ?? ""); setModel(p.defaultModel ?? ""); setEditing(true); };
   const save = async () => {
     setSaving(true);
     try {
-      await updatePromptTemplate(p.id, { title, description: description || null, body, defaultModel: model || null });
+      await updatePromptTemplate(p.id, { title, description: description || null, body, bodyHe: bodyHe || null, defaultModel: model || null });
       setEditing(false);
       onSaved();
     } finally { setSaving(false); }
@@ -70,8 +71,16 @@ function PromptCard({ p, onSaved }: { p: PromptTemplate; onSaved: () => void }) 
               style={{ fontFamily: "var(--mono)", fontSize: 12, lineHeight: 1.6, direction: "ltr", textAlign: "left" }}
             />
             <span className="hint" style={{ fontSize: 11, color: "var(--ink-400)" }}>
-              {"{{PLACEHOLDER}}"} מוחלף אוטומטית בזמן ריצה — אל תמחק את השמות בלי לוודא שהקוד עדיין ממלא אותם.
+              {"{{PLACEHOLDER}}"} מוחלף אוטומטית בזמן ריצה — אל תמחק את השמות בלי לוודא שהקוד עדיין ממלא אותם. זה מה שבאמת נשלח ל-Claude.
             </span>
+          </div>
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>תרגום לעברית (לתצוגה מקדימה בלבד — לא נשלח ל-Claude)</label>
+            <textarea
+              value={bodyHe} onChange={(e) => setBodyHe(e.target.value)} rows={22}
+              style={{ fontSize: 12, lineHeight: 1.6 }}
+              placeholder="ריק = התצוגה המקדימה תציג רק את הגרסה באנגלית"
+            />
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-primary" disabled={saving} onClick={save}>{saving ? "שומר…" : "שמור"}</button>

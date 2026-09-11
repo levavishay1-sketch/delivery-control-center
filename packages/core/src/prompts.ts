@@ -13,7 +13,7 @@ import { promptTemplate } from "@dcc/db/schema";
 export type PromptTemplateRow = typeof promptTemplate.$inferSelect;
 
 export async function listPrompts(): Promise<PromptTemplateRow[]> {
-  return db.select().from(promptTemplate).orderBy(promptTemplate.title);
+  return db.select().from(promptTemplate).orderBy(promptTemplate.sortOrder, promptTemplate.title);
 }
 
 export async function getPromptByKey(key: string): Promise<PromptTemplateRow | null> {
@@ -21,11 +21,15 @@ export async function getPromptByKey(key: string): Promise<PromptTemplateRow | n
   return row ?? null;
 }
 
-export async function updatePrompt(input: { id: string; title?: string; description?: string | null; body?: string; defaultModel?: string | null; by: { userId: string } }): Promise<{ updated: boolean }> {
+export async function updatePrompt(input: {
+  id: string; title?: string; description?: string | null; body?: string; bodyHe?: string | null;
+  defaultModel?: string | null; by: { userId: string };
+}): Promise<{ updated: boolean }> {
   const set: Record<string, unknown> = { updatedAt: new Date(), updatedBy: input.by.userId };
   if (input.title !== undefined) set.title = input.title;
   if (input.description !== undefined) set.description = input.description;
   if (input.body !== undefined) set.body = input.body;
+  if (input.bodyHe !== undefined) set.bodyHe = input.bodyHe;
   if (input.defaultModel !== undefined) set.defaultModel = input.defaultModel;
   await db.update(promptTemplate).set(set).where(eq(promptTemplate.id, input.id));
   return { updated: true };

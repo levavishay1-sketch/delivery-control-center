@@ -189,17 +189,20 @@ export type MaterializeResult = { created: number; skipped: number; links: numbe
 export const materializeTasks = (id: string) => post<MaterializeResult>(`/workitems/${id}/materialize`, {});
 /** Agile ladder — the breakdown depth picks the rungs, leaves are always Task. */
 export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
-export type AssessDepth = "quick" | "standard" | "thorough";
-export const startAssess = (id: string, opts?: { depth?: AssessDepth; model?: string }) =>
+export const startAssess = (id: string, opts?: { promptKey?: string; customEmphasis?: string; model?: string }) =>
   post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, opts ?? {});
+export const previewAssess = (id: string, promptKey: string, customEmphasis?: string) =>
+  get<{ prompt: string; promptHe: string | null; model: string | null; templateTitle: string }>(
+    `/workitems/${id}/assess-preview?${new URLSearchParams({ promptKey, ...(customEmphasis ? { customEmphasis } : {}) })}`,
+  );
 
 /* ── prompt library ───────────────────────────────────────────────── */
 export type PromptTemplate = {
-  id: string; key: string; title: string; description: string | null; body: string;
-  defaultModel: string | null; updatedAt: string; updatedBy: string | null;
+  id: string; key: string; title: string; description: string | null; body: string; bodyHe: string | null;
+  defaultModel: string | null; sortOrder: number; updatedAt: string; updatedBy: string | null;
 };
 export const getPrompts = () => get<{ items: PromptTemplate[] }>("/prompts");
-export const updatePromptTemplate = (id: string, patchBody: Partial<{ title: string; description: string | null; body: string; defaultModel: string | null }>) =>
+export const updatePromptTemplate = (id: string, patchBody: Partial<{ title: string; description: string | null; body: string; bodyHe: string | null; defaultModel: string | null }>) =>
   patch<{ updated: boolean }>(`/prompts/${id}`, patchBody);
 export const startBreakdown = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/breakdown`, {});
 export type FlowRun = {
