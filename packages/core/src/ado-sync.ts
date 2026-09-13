@@ -73,6 +73,9 @@ export async function syncRequirementToAdo(input: { clientId: string; workitemId
     }
     const links = res.body._links as { html?: { href?: string } } | undefined;
     const url = links?.html?.href || adoWorkItemUrl(orgUrl, project, wi.linkedAdoId);
+    await withTenant(input.clientId, (tx) =>
+      tx.update(workitem).set({ adoUrl: url }).where(eq(workitem.id, input.workitemId)),
+    );
     await appendEvent({
       clientId: input.clientId, workitemId: input.workitemId, source: "ado", type: "ado.synced",
       actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
@@ -106,7 +109,7 @@ export async function syncRequirementToAdo(input: { clientId: string; workitemId
   const url = links?.html?.href || adoWorkItemUrl(orgUrl, project, adoId);
 
   await withTenant(input.clientId, (tx) =>
-    tx.update(workitem).set({ linkedAdoId: adoId, adoAreaPath: areaPath, updatedAt: new Date() }).where(eq(workitem.id, input.workitemId)),
+    tx.update(workitem).set({ linkedAdoId: adoId, adoUrl: url, adoAreaPath: areaPath, updatedAt: new Date() }).where(eq(workitem.id, input.workitemId)),
   );
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "ado", type: "ado.synced",

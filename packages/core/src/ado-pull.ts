@@ -31,6 +31,7 @@ async function wiqlIds(base: string, pat: string): Promise<number[]> {
         method: "POST",
         headers: { authorization: `Basic ${Buffer.from(`:${pat}`).toString("base64")}`, "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify(q),
+        signal: AbortSignal.timeout(20_000),
       });
       if (res.ok) {
         const b = (await res.json()) as { workItems?: { id: number }[] };
@@ -74,7 +75,7 @@ async function reconcileOne(
     wiId = existing.id;
     if (existing.title !== title || existing.type !== type || existing.phase !== phase) {
       await withTenant(clientId, (tx) =>
-        tx.update(workitem).set({ title, type, phase, adoAreaPath: area, updatedAt: new Date() }).where(eq(workitem.id, existing.id)),
+        tx.update(workitem).set({ title, type, phase, adoUrl: url, adoAreaPath: area, updatedAt: new Date() }).where(eq(workitem.id, existing.id)),
       );
       await appendEvent({
         clientId, workitemId: existing.id, source: "ado", type: "ado.synced",
@@ -88,7 +89,7 @@ async function reconcileOne(
     const [ins] = await withTenant(clientId, (tx) =>
       tx.insert(workitem).values({
         clientId, ownerId: by.userId, title, type, phase,
-        key: `ADO-${w.id}`, linkedAdoId: w.id, adoAreaPath: area,
+        key: `ADO-${w.id}`, linkedAdoId: w.id, adoUrl: url, adoAreaPath: area,
       }).returning(),
     );
     wiId = ins!.id;

@@ -85,8 +85,25 @@ import {
   updatePrompt,
   previewAssessPrompt,
   composeClientLetter,
+  stopFlowRun,
+  sendRunMessage,
+  previewBreakdownPrompt,
+  requirementCostSummary,
+  requirementCostDetail,
+  getRetroRunView,
+  getRecentClientLetters,
+  recordDecision,
+  linkBugToTask,
+  unlinkBugFromTask,
+  bugLinkedTasks,
+  startResearchWork,
+  finishResearchWork,
+  previewImplementPrompt,
+  ChecksNotPassed,
+  setTaskActive,
+  checkAdoRemovedState,
 } from "@dcc/core";
-import { blocker, gap } from "@dcc/db/schema";
+import { blocker, gap, task } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" }, bodyLimit: 40 * 1024 * 1024 });
@@ -345,6 +362,15 @@ app.get("/workitems/:id/brief", async (req, reply) => {
   return briefFor(wi.clientId, wi.id);
 });
 
+// The requirement's cumulative Claude cost — every claude.session event
+// ever recorded against it, summed (never reset by re-breakdowns or
+// dropped/deactivated work — see requirementCostSummary's own notes).
+app.get("/workitems/:id/cost", async (req) => {
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return requirementCostSummary(wi.clientId, wi.id);
+});
+
 /** Hook helper: which WorkItem does this client + branch map to? */
 app.get("/resolve", async (req, reply) => {
   const q = z.object({ clientId: z.string().uuid(), branch: z.string().optional(), key: z.string().optional() }).parse(req.query);
@@ -389,6 +415,7 @@ app.patch("/workitems/:id", async (req) => {
   const b = z.object({
     title: z.string().min(1).optional(),
     type: WITYPE.optional(),
+    requirementType: z.enum(["development", "research", "testing"]).optional(),
     priority: z.enum(["low", "medium", "high", "critical"]).optional(),
     risk: z.enum(["low", "medium", "high"]).optional(),
     executor: z.enum(["human", "ai", "mixed"]).optional(),
@@ -398,10 +425,12 @@ app.patch("/workitems/:id", async (req) => {
     parentId: z.string().uuid().nullable().optional(),
     adoAreaPath: z.string().nullable().optional(),
     key: z.string().nullable().optional(),
+    reopenReason: z.string().optional(),
   }).parse(req.body);
+  const { reopenReason, ...patch } = b;
   const wi = await locateWorkItem({ id });
   // requirements are DCC-only — nothing to mirror into TFS
-  return updateRequirement({ clientId: wi.clientId, id, by: { userId: dev.id }, patch: b });
+  return updateRequirement({ clientId: wi.clientId, id, by: { userId: dev.id }, patch, reopenReason });
 });
 
 app.post("/workitems/:id/repos", async (req, reply) => {
@@ -479,8 +508,92 @@ app.get("/workitems/:id/assess-preview", async (req) => {
 app.post("/workitems/:id/breakdown", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
+  const b = z.object({ reason: z.string().optional() }).parse(req.body ?? {});
   const wi = await locateWorkItem({ id });
+  // a RE-breakdown (existing tasks about to be replaced) records why —
+  // a first-ever breakdown has nothing to explain away yet.
+  if (b.reason?.trim()) {
+    await recordDecision({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, trigger: "rebreakdown", reason: b.reason });
+  }
   return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "breakdown", by: { userId: dev.id } });
+});
+
+// render (never run) the breakdown prompt — same "what will be sent"
+// preview pattern as assess.
+app.get("/workitems/:id/breakdown-preview", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return previewBreakdownPrompt({ clientId: wi.clientId, workitemId: id });
+});
+
+// end-of-requirement improvement recommendations ("המלצות לשיפור") — its
+// own kick-off + polling routes, deliberately separate from the generic
+// flow-run ones below so a retro run is never mistaken for the latest
+// assess/breakdown/implement run by a screen still polling that one
+// (design notes, `requirement-retro-recommendations`).
+app.post("/workitems/:id/retro", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "retro", by: { userId: dev.id } });
+});
+app.get("/workitems/:id/retro", async (req) => {
+  const { id } = req.params as { id: string };
+  await locateWorkItem({ id }); // tenant check
+  return (await getRetroRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
+});
+
+/* ── Bug ↔ Task links (bug-change-request-lifecycle) ─────────────── */
+app.get("/workitems/:id/bug-links", async (req) => {
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return { tasks: await bugLinkedTasks(wi.clientId, id) };
+});
+app.post("/workitems/:id/bug-links", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const { taskId } = z.object({ taskId: z.string().uuid() }).parse(req.body);
+  const wi = await locateWorkItem({ id });
+  return linkBugToTask({ clientId: wi.clientId, bugId: id, taskId });
+});
+app.delete("/workitems/:id/bug-links/:taskId", async (req) => {
+  await actingUser(req);
+  const { id, taskId } = req.params as { id: string; taskId: string };
+  const wi = await locateWorkItem({ id });
+  return unlinkBugFromTask({ clientId: wi.clientId, bugId: id, taskId });
+});
+// search tasks across a client — powers the Bug-link picker (title +
+// requirement it belongs to, so a task can be found without knowing
+// which requirement it's under).
+app.get("/clients/:id/tasks", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const q = z.object({ q: z.string().optional() }).parse(req.query ?? {});
+  const term = (q.q ?? "").trim();
+  const rows = await withTenant(id, (tx) =>
+    tx.select({ id: task.id, intent: task.intent, requirementId: task.workitemId, requirementTitle: workitem.title })
+      .from(task)
+      .innerJoin(workitem, sql`${workitem.id} = ${task.workitemId}`)
+      .where(term ? sql`${task.intent} ilike ${"%" + term + "%"} or ${workitem.title} ilike ${"%" + term + "%"}` : sql`true`)
+      .limit(25),
+  );
+  return { tasks: rows };
+});
+
+/* ── research/testing requirement work (requirement-types) ───────── */
+app.post("/workitems/:id/research/start", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return startResearchWork({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
+});
+app.post("/workitems/:id/research/finish", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const { conclusion } = z.object({ conclusion: z.string() }).parse(req.body);
+  const wi = await locateWorkItem({ id });
+  return finishResearchWork({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, conclusion });
 });
 
 // the latest flow run for a requirement — full transcript, live or finished
@@ -488,6 +601,29 @@ app.get("/workitems/:id/flow-run", async (req) => {
   const { id } = req.params as { id: string };
   await locateWorkItem({ id }); // tenant check
   return (await getFlowRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
+});
+
+// stop / steer the run currently live for a requirement. Looked up by
+// workitem (not a client-supplied runId) so a caller can only ever touch
+// the run that actually belongs to a workitem it has tenant access to.
+app.post("/workitems/:id/flow-run/stop", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  await locateWorkItem({ id });
+  const view = await getFlowRunView(id);
+  if (!view || view.state !== "running") return { stopped: false };
+  return { stopped: stopFlowRun(view.id!) };
+});
+
+app.post("/workitems/:id/flow-run/message", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const { text } = (req.body ?? {}) as { text?: string };
+  if (!text?.trim()) throw new Error("missing text");
+  await locateWorkItem({ id });
+  const view = await getFlowRunView(id);
+  if (!view || view.state !== "running") return { sent: false };
+  return { sent: sendRunMessage(view.id!, text.trim()) };
 });
 
 // org-wide TFS mirror: every client's task hierarchy (Azure DevOps nav screen)
@@ -534,13 +670,29 @@ app.get("/tasks/:id", async (req) => {
   return taskDetail(await taskClient(id), id);
 });
 
+// render (never run) the implementation prompt — same "what will be sent"
+// preview pattern as assess/breakdown. Also reports whether the task is
+// approved yet, so the UI can gate the send action on it.
+app.get("/tasks/:id/implement-preview", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const clientId = await taskClient(id);
+  const d = await taskDetail(clientId, id);
+  return previewImplementPrompt({ clientId, workitemId: d.requirement.id, taskId: id });
+});
+
 // hand the task to Claude. Writes on an ISOLATED clone (never the user's
 // own checkout), commits locally on a task branch, never pushes.
+// Approval is a hard gate: a task that hasn't been approved doesn't reach
+// TFS (materializeTasksToAdo already enforces that) and must not reach
+// Claude either — approval is the point where a human actually read the
+// prompt and the scope, not just where TFS bookkeeping happens to occur.
 app.post("/tasks/:id/implement", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   const clientId = await taskClient(id);
   const d = await taskDetail(clientId, id);
+  if (!d.task.approvedAt) throw new Error("המשימה טרם אושרה — יש לאשר אותה בשלב הפירוק לפני שאפשר לתת ל-Claude לפתח.");
   return startFlowRun({
     clientId, workitemId: d.requirement.id, taskId: id, kind: "implement", by: { userId: dev.id },
   });
@@ -633,10 +785,29 @@ app.post("/workitems/:id/gaps", async (req, reply) => {
 // compose (never send) a business-language message to the requirement's
 // requester, listing the open questions. Cheap model — this is rephrasing.
 app.post("/workitems/:id/gap-letter", async (req) => {
-  await actingUser(req);
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const { gapIds } = (req.body ?? {}) as { gapIds?: string[] };
+  const wi = await locateWorkItem({ id });
+  return composeClientLetter({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...(gapIds ? { gapIds } : {}) });
+});
+
+// every letter ever composed for this requirement, newest first — read
+// back, never re-runs the AI (a real gap a user hit live: losing an
+// unsaved letter by navigating away meant paying for a re-run just to
+// get the same text back).
+app.get("/workitems/:id/gap-letters", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
-  return composeClientLetter({ clientId: wi.clientId, workitemId: id });
+  return { letters: await getRecentClientLetters(wi.clientId, id) };
+});
+
+// per-run cost detail behind the requirement's total — what each AI
+// call was, which model, how long, how many tokens, how much.
+app.get("/workitems/:id/cost-detail", async (req) => {
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return { rows: await requirementCostDetail(wi.clientId, id) };
 });
 
 app.post("/gaps/:id/verify", async (req) => {
@@ -858,17 +1029,46 @@ app.post("/workitems/:id/tasks", async (req, reply) => {
   return reply.code(201).send(out);
 });
 
-app.post("/tasks/:id/progress", async (req) => {
+app.post("/tasks/:id/progress", async (req, reply) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   const b = z
     .object({
-      to: z.enum(["pending", "in_progress", "blocked", "done", "dropped"]),
+      to: z.enum(["pending", "in_progress", "blocked", "failed_checks", "done", "dropped"]),
       mode: z.enum(["delegated", "interactive"]).default("interactive"),
       clientId: z.string().uuid(),
+      overrideChecks: z.boolean().optional(),
+      overrideReason: z.string().optional(),
+      reopenReason: z.string().optional(),
     })
     .parse(req.body);
-  return progressTask({ taskId: id, by: { userId: dev.id }, to: b.to, mode: b.mode, clientId: b.clientId });
+  try {
+    return await progressTask({ taskId: id, by: { userId: dev.id }, to: b.to, mode: b.mode, clientId: b.clientId, overrideChecks: b.overrideChecks, overrideReason: b.overrideReason, reopenReason: b.reopenReason });
+  } catch (e) {
+    if (e instanceof ChecksNotPassed) return reply.code(409).send({ error: e.message, unresolved: e.unresolved });
+    throw e;
+  }
+});
+
+// Toggle a task or check in/out of play — drops it from (or returns it
+// to) the Flow graph, dependency computation, a parent's prompt and the
+// completion gate, without losing history. Deactivating a TFS-linked
+// task also mirrors "Removed" to the real work item (best-effort).
+app.post("/tasks/:id/active", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ active: z.boolean(), clientId: z.string().uuid() }).parse(req.body);
+  return setTaskActive(b.clientId, id, b.active, { userId: dev.id });
+});
+
+// On-demand TFS → DCC check: is the linked work item's System.State now
+// "Removed"? If so, mirror that down into DCC. No poller/webhook exists
+// in this codebase — this is the "someone looked" trigger.
+app.post("/tasks/:id/ado-recheck", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ clientId: z.string().uuid() }).parse(req.body);
+  return checkAdoRemovedState(b.clientId, id, { userId: dev.id });
 });
 
 /* ── blockers ─────────────────────────────────────────────────────── */
@@ -929,6 +1129,7 @@ app.post("/workitems", async (req, reply) => {
       key: z.string().optional(),
       title: z.string(),
       type: WITYPE.optional(),
+      requirementType: z.enum(["development", "research", "testing"]).optional(),
       priority: z.enum(["low", "medium", "high", "critical"]).optional(),
       risk: z.enum(["low", "medium", "high"]).optional(),
       executor: z.enum(["human", "ai", "mixed"]).optional(),
@@ -957,6 +1158,7 @@ app.post("/workitems", async (req, reply) => {
         key: b.key ?? null,
         title: b.title,
         type: b.type ?? "story",
+        requirementType: b.requirementType ?? "development",
         priority: b.priority ?? "medium",
         risk: b.risk ?? "low",
         executor: b.executor ?? "human",

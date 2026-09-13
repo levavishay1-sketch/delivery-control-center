@@ -56,6 +56,7 @@ export type FlowNode = {
   openBlockingGaps: number;
   openBlockers: number;
   linkedAdoId: number | null;
+  adoUrl: string | null;
 };
 export type FlowEdge = {
   from: string;
@@ -145,9 +146,13 @@ export type TaskFlowNode = {
   level: number;
   parentTaskId: string | null;
   approved: boolean;
+  /** false = deactivated (see setTaskActive) — still rendered (greyed),
+   *  but excluded from edges/dependency computation below. */
+  active: boolean;
   linkedAdoId: number | null;
   adoUrl: string | null;
   affectedPaths: string[];
+  compiledComponents: string[];
   prompt: string | null;
   origin: string;
   approvedAt: string | null;
@@ -168,6 +173,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
         id: task.id, seq: task.seq, kind: task.kind, intent: task.intent, appetite: task.appetite, state: task.state,
         adoType: task.adoType, parentTaskId: task.parentTaskId, approvedAt: task.approvedAt,
         linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, affectedPaths: task.affectedPaths,
+        compiledComponents: task.compiledComponents, active: task.active,
         prompt: task.prompt, origin: task.origin, adoSyncedAt: task.adoSyncedAt,
       })
       .from(task)
@@ -199,19 +205,22 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
     const nodes: TaskFlowNode[] = rows.filter((r) => r.kind !== "check").map((r) => ({
       id: r.id, seq: r.seq, kind: r.kind, intent: r.intent, appetite: r.appetite, state: r.state,
       adoType: r.adoType, level: level(r.id), parentTaskId: r.parentTaskId,
-      approved: r.approvedAt != null, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
-      affectedPaths: (r.affectedPaths ?? []) as string[], prompt: r.prompt, origin: r.origin,
+      approved: r.approvedAt != null, active: r.active, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
+      affectedPaths: (r.affectedPaths ?? []) as string[], compiledComponents: (r.compiledComponents ?? []) as string[], prompt: r.prompt, origin: r.origin,
       approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null,
       adoSyncedAt: r.adoSyncedAt ? r.adoSyncedAt.toISOString() : null,
       checks: (checksByParent.get(r.id) ?? []).sort((a, b) => a.seq - b.seq),
     }));
 
-    const idSet = new Set(nodes.map((n) => n.id)); // exposed (non-check) nodes only
+    // an inactive node still gets a (greyed) card, but never participates
+    // in an edge — neither as source nor target — so it can't block or be
+    // blocked by anything, and doesn't push a sibling to a later stage.
+    const activeIdSet = new Set(nodes.filter((n) => n.active).map((n) => n.id)); // exposed, active nodes only
     const ids = rows.map((r) => r.id);
     const deps = await tx.select().from(taskDependency).where(sql`${taskDependency.taskId} in ${ids}`);
     const edges: TaskFlowEdge[] = [
-      ...nodes.filter((n) => n.parentTaskId && idSet.has(n.parentTaskId)).map((n) => ({ from: n.parentTaskId!, to: n.id, kind: "parent" as const, reason: null })),
-      ...deps.filter((d) => idSet.has(d.dependsOnTaskId) && idSet.has(d.taskId))
+      ...nodes.filter((n) => n.parentTaskId && activeIdSet.has(n.parentTaskId) && activeIdSet.has(n.id)).map((n) => ({ from: n.parentTaskId!, to: n.id, kind: "parent" as const, reason: null })),
+      ...deps.filter((d) => activeIdSet.has(d.dependsOnTaskId) && activeIdSet.has(d.taskId))
         .map((d) => ({ from: d.dependsOnTaskId, to: d.taskId, kind: "depends" as const, reason: d.reason })),
     ];
     return { depth, nodes, edges };
@@ -234,6 +243,7 @@ export type AdoTaskRow = {
   adoUrl: string | null;
   adoSyncedAt: string | null;
   approved: boolean;
+  active: boolean;
   parentTaskId: string | null;
   level: number;
   /** approved verification/regression/doc children folded into this task's
@@ -254,7 +264,7 @@ export async function clientTaskTree(clientId: string): Promise<{ rows: AdoTaskR
         id: task.id, requirementId: task.workitemId, seq: task.seq, kind: task.kind, intent: task.intent,
         appetite: task.appetite, state: task.state, adoType: task.adoType,
         linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, adoSyncedAt: task.adoSyncedAt,
-        approvedAt: task.approvedAt, parentTaskId: task.parentTaskId,
+        approvedAt: task.approvedAt, parentTaskId: task.parentTaskId, active: task.active,
         requirementKey: workitem.key, requirementTitle: workitem.title,
       })
       .from(task)
@@ -284,7 +294,7 @@ export async function clientTaskTree(clientId: string): Promise<{ rows: AdoTaskR
       seq: r.seq, intent: r.intent, appetite: r.appetite, state: r.state,
       adoType: r.adoType, linkedAdoId: r.linkedAdoId, adoUrl: r.adoUrl,
       adoSyncedAt: r.adoSyncedAt ? new Date(r.adoSyncedAt).toISOString() : null,
-      approved: r.approvedAt != null, parentTaskId: r.parentTaskId, level: level(r.id),
+      approved: r.approvedAt != null, active: r.active, parentTaskId: r.parentTaskId, level: level(r.id),
       checksCount: checksCount.get(r.id) ?? 0, checksPosted: checksPosted.get(r.id) ?? 0,
     }));
 
@@ -311,7 +321,7 @@ export async function clientTaskTree(clientId: string): Promise<{ rows: AdoTaskR
     return {
       rows,
       inTfs: rows.filter((r) => r.linkedAdoId).length,
-      pending: rows.filter((r) => !r.linkedAdoId).length,
+      pending: rows.filter((r) => !r.linkedAdoId && r.active).length,
     };
   });
 }
@@ -342,7 +352,7 @@ export async function allAdoTasks(): Promise<{
 }
 
 function wims2nodes(
-  witems: { id: string; key: string | null; title: string; phase: string; type: string; parentId: string | null; linkedAdoId: number | null }[],
+  witems: { id: string; key: string | null; title: string; phase: string; type: string; parentId: string | null; linkedAdoId: number | null; adoUrl: string | null }[],
   gapMap: Map<string, number>,
   blkMap: Map<string, number>,
 ): FlowNode[] {
@@ -356,5 +366,6 @@ function wims2nodes(
     openBlockingGaps: gapMap.get(w.id) ?? 0,
     openBlockers: blkMap.get(w.id) ?? 0,
     linkedAdoId: w.linkedAdoId,
+    adoUrl: w.adoUrl,
   }));
 }

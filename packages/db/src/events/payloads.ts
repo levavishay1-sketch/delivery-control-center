@@ -36,6 +36,12 @@ const claudeSession = z.object({
   tokensIn: z.number().int().nonnegative().optional(),
   tokensOut: z.number().int().nonnegative().optional(),
   costUsd: z.number().nonnegative().optional(),
+  /** Wall-clock time the `claude -p` call itself took, and how many
+   *  agentic turns it used — pulled from the CLI's own result line
+   *  alongside cost/tokens (design notes, cost-visibility). Optional so
+   *  rows written before this field existed still validate. */
+  durationMs: z.number().int().nonnegative().optional(),
+  numTurns: z.number().int().nonnegative().optional(),
 });
 
 const gitActivity = z.object({
@@ -133,6 +139,38 @@ const repoUnlinked = z.object({
   repoName: z.string(),
 });
 
+/** A course-changing decision, with its reason — re-breakdown, a task
+ *  closed/reopened despite something unresolved, a requirement
+ *  reopened, or a direction change that doesn't fit those. Distinct
+ *  from `note.added` on purpose: this is the one event type meant to
+ *  be highlighted in history/final-summary views as "why", not just
+ *  "what" (design notes, `decision-history`). */
+const decisionMade = z.object({
+  trigger: z.enum(["rebreakdown", "task_closed_override", "task_reopened", "requirement_reopened", "direction_changed"]),
+  reason: z.string(),
+});
+
+/** A composed (never sent) message to the requirement's requester,
+ *  listing open gaps in business language — `composeClientLetter`. Saved
+ *  so it survives navigating away before copying it (a real gap a user
+ *  hit live: losing an unsaved letter meant re-running the AI call just
+ *  to get the same text back). `gapIds` are the gaps it was composed
+ *  from, for context — not itself a source of truth for gap state. */
+const clientLetterComposed = z.object({
+  subject: z.string(),
+  body: z.string(),
+  gapCount: z.number().int().nonnegative(),
+  gapIds: z.array(z.string()).optional(),
+  /** This letter's own cost, duplicated here (alongside the separate
+   *  `claude.session` event every run also gets) so the letter-history
+   *  view can show each past letter's cost without correlating two
+   *  event streams (design notes, cost-visibility). */
+  costUsd: z.number().nonnegative().optional(),
+  inputTokens: z.number().int().nonnegative().optional(),
+  outputTokens: z.number().int().nonnegative().optional(),
+  model: z.string().optional(),
+});
+
 const matchConfirmed = z.object({
   eventId: z.string().uuid(),
   workitemId: z.string().uuid(),
@@ -160,6 +198,8 @@ export const payloadSchemas: Registry = {
   "requirement.updated": { 1: requirementUpdated },
   "repo.linked": { 1: repoLinked },
   "repo.unlinked": { 1: repoUnlinked },
+  "decision.made": { 1: decisionMade },
+  "client_letter.composed": { 1: clientLetterComposed },
 };
 
 export const CURRENT_VERSION = 1;

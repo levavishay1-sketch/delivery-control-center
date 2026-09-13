@@ -296,7 +296,73 @@ a { color: var(--color-accent); }
 .stat-line .l { color: var(--ink-500); }
 
 .empty { padding: 40px; text-align: center; color: var(--ink-400); font-size: 13px; }
+/* `.spin` (a "טוען…"/"מכין…" loading block) and `.spinner` (a small
+ * inline "still working" icon next to text) were both silently NOT
+ * animating — `.spin` had no `::before` glyph and no keyframes existed
+ * at all, so every "Claude is working" spinner in the app rendered as
+ * an invisible empty box. Fixed 2026-09-12: a real spinning ring for
+ * both, `.spinner` sized by whatever inline width/height the caller
+ * sets (e.g. 10px/16px next to a "בעבודה…" label). */
+@keyframes dcc-spin { to { transform: rotate(360deg); } }
 .spin { padding: 40px; text-align: center; color: var(--ink-400); }
+.spin::before {
+  content: ""; display: block; width: 22px; height: 22px; margin: 0 auto 10px;
+  border: 2.5px solid var(--border-hairline); border-top-color: var(--color-accent);
+  border-radius: 50%; animation: dcc-spin 0.7s linear infinite;
+}
+.spinner {
+  display: inline-block; box-sizing: border-box;
+  border: 2px solid var(--border-hairline); border-top-color: var(--color-accent);
+  border-radius: 50%; animation: dcc-spin 0.7s linear infinite;
+}
+
+/* ---------- task flow — exact design-system spec (2026-09-12) ----------
+   Fixed hex values throughout, deliberately NOT the app's own --status-*
+   tokens: this screen was handed a precise, standalone palette to match
+   pixel-for-pixel, distinct from (if close to) the rest of DCC. */
+.flow-shell { background: #fff; border: 1px solid #e5e8ef; border-radius: 16px; overflow: hidden; }
+.flow-shell-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; flex-wrap: wrap; }
+.flow-shell-header .title { font-size: 13px; font-weight: 700; color: var(--ink-900); }
+.flow-shell-header .subtitle { font-size: 11px; color: var(--ink-500); margin-top: 2px; }
+.flow-shell-header .chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.flow-shell-divider { border-top: 1px solid #e5e8ef; }
+.flow-chip { display: inline-flex; align-items: center; background: #f8f9fc; border: 1px solid #e5e8ef; color: #475467; font-size: 11px; font-weight: 600; border-radius: 999px; padding: 5px 10px; white-space: nowrap; }
+
+.flow-canvas { background: #fff; background-image: linear-gradient(#f1f3f8 1px, transparent 1px), linear-gradient(90deg, #f1f3f8 1px, transparent 1px); background-size: 24px 24px; }
+/* invisible, not display:none — React Flow measures the handle's DOM
+   rect to compute edge endpoints, so display:none collapses every edge
+   to a degenerate zero-length point instead of hiding the connection dot. */
+.flow-canvas .react-flow__handle { opacity: 0; pointer-events: none; }
+
+.flow-layer-label { text-align: center; color: var(--ink-400); font-size: 10px; font-weight: 800; letter-spacing: 0.07em; }
+
+.flow-legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: #667085; font-size: 10.5px; }
+.flow-legend span { display: flex; align-items: center; gap: 5px; }
+.flow-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.flow-legend .done i { background: #13835b; }
+.flow-legend .progress i { background: #246fce; }
+.flow-legend .blocked i { background: #c93b3b; }
+.flow-legend .decision i { background: #ba7208; }
+.flow-legend .ready i { background: #5556e8; }
+
+.flow-node { width: 100%; background: #fff; border: 1px solid #e5e8ef; border-inline-start: 5px solid #98a2b3; border-radius: 12px; padding: 11px 13px; text-align: start; box-shadow: 0 5px 14px rgba(16,24,40,.07); transition: transform 150ms, box-shadow 150ms; cursor: pointer; }
+.flow-node:hover:not(.static) { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(16,24,40,.14); }
+.flow-node.static { cursor: default; }
+.flow-node.done { border-inline-start-color: #13835b; background: #f8fdfa; }
+.flow-node.in_progress { border-inline-start-color: #246fce; background: #fff; }
+.flow-node.ready { border-inline-start-color: #5556e8; background: #fff; }
+.flow-node.blocked { border-inline-start-color: #c93b3b; background: #fff8f8; }
+.flow-node.decision { border-inline-start-color: #ba7208; background: #fffaf0; }
+.flow-node.waiting { border-inline-start-color: #98a2b3; background: #fff; }
+
+.flow-badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 8px 3px 7px; font-size: 10.5px; font-weight: 700; }
+.flow-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; flex-shrink: 0; }
+.flow-badge.done { background: #eaf8f1; color: #13835b; }
+.flow-badge.in_progress { background: #eaf3ff; color: #246fce; }
+.flow-badge.ready { background: #eff0ff; color: #4344c9; }
+.flow-badge.blocked { background: #fff0f0; color: #c93b3b; }
+.flow-badge.decision { background: #fff6df; color: #ba7208; }
+.flow-badge.waiting { background: #f2f4f7; color: #667085; }
 
 /* ---------- image-accurate: dashboard grid with right rail ---------- */
 .dash { display: grid; grid-template-columns: minmax(0,1fr) 288px; gap: 22px; align-items: start; }

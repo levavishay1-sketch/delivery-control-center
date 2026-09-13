@@ -1,0 +1,6 @@
+{
+  "env": {
+    "DCC_DEV_EMAIL": "lev.avishay.1@gmail.com",
+    "DCC_HOOK_TOKEN": "dev-secret"
+  }
+}

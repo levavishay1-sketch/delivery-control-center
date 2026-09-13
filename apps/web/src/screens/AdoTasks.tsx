@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getAllAdoTasks, ADO_LADDER, type AllAdoTasks, type AdoTaskRow } from "../api.ts";
+import { getAllAdoTasks, approveTask, ADO_LADDER, type AllAdoTasks, type AdoTaskRow } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 
 /**
@@ -10,17 +10,26 @@ import { PageHead, Pill } from "../ui.tsx";
 
 const TYPE_TONE = (t: string | null) => (t && t !== "Task" ? "ai" : "inactive");
 
-function TaskRows({ rows, nav }: { rows: AdoTaskRow[]; nav: (h: string) => void }) {
+function TaskRows({ rows, clientId, nav, onChanged }: {
+  rows: AdoTaskRow[]; clientId: string; nav: (h: string) => void; onChanged: () => void;
+}) {
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const doApprove = async (id: string) => {
+    setApprovingId(id);
+    try { await approveTask(id, { clientId }); onChanged(); }
+    finally { setApprovingId(null); }
+  };
   return (
     <>
       {rows.map((t, i) => {
         const prev = rows[i - 1];
         const newReq = !prev || prev.requirementId !== t.requirementId;
         return (
-          <tr key={t.id} style={newReq && i > 0 ? { borderTop: "2px solid var(--border-hairline)" } : undefined}>
+          <tr key={t.id} style={{ opacity: t.active ? 1 : 0.55, ...(newReq && i > 0 ? { borderTop: "2px solid var(--border-hairline)" } : {}) }}>
             <td style={{ paddingInlineStart: 14 + t.level * 22 }}>
               {t.level > 0 && <span style={{ color: "var(--ink-300)" }}>↳ </span>}
               <span className="w-title" onClick={() => nav(`#/task/${t.id}`)} title={t.intent}>{t.intent.length > 100 ? `${t.intent.slice(0, 100)}…` : t.intent}</span>
+              {!t.active && <span style={{ fontSize: 10.5, color: "var(--ink-400)", marginInlineStart: 6 }}>⚪ לא פעיל</span>}
               {t.checksCount > 0 && (
                 <span title={`${t.checksCount} בדיקות — לא work items בפני עצמן, מתועדות ב-Discussion של המשימה הזו`} style={{ fontSize: 10.5, color: "var(--ink-400)", marginInlineStart: 6 }}>
                   +{t.checksCount} בדיקות{t.checksPosted < t.checksCount ? "" : " ✓"}
@@ -31,14 +40,18 @@ function TaskRows({ rows, nav }: { rows: AdoTaskRow[]; nav: (h: string) => void 
             <td>
               {t.linkedAdoId
                 ? <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer">#{t.linkedAdoId} ↗</a>
-                : <span style={{ color: "var(--ink-400)", fontSize: 11.5 }}>{t.approved ? "מאושר, טרם הוקם" : "ממתין לאישור"}</span>}
+                : t.approved
+                  ? <span style={{ color: "var(--ink-400)", fontSize: 11.5 }}>מאושר, ממתין להקמה</span>
+                  : <button className="btn btn-primary btn-sm" disabled={approvingId === t.id} onClick={() => doApprove(t.id)}>
+                      {approvingId === t.id ? "מאשר…" : "✓ אישור הקמת משימה ב-TFS"}
+                    </button>}
             </td>
             <td style={{ fontSize: 11.5 }}>{t.state.replace(/_/g, " ")}</td>
             <td style={{ fontSize: 11.5 }}>{t.appetite}</td>
             <td>
-              <span className="w-title" onClick={() => nav(`#/wi/${t.requirementId}`)} title={t.requirementTitle}>
-                {t.requirementKey ?? (t.requirementTitle.length > 30 ? `${t.requirementTitle.slice(0, 30)}…` : t.requirementTitle)}
-              </span>
+              <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/wi/${t.requirementId}`)} title={t.requirementTitle}>
+                ⬅ {t.requirementKey ?? (t.requirementTitle.length > 24 ? `${t.requirementTitle.slice(0, 24)}…` : t.requirementTitle)}
+              </button>
             </td>
           </tr>
         );
@@ -51,8 +64,9 @@ export function AdoTasks({ nav }: { nav: (h: string) => void }) {
   const [d, setD] = useState<AllAdoTasks | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [onlyTfs, setOnlyTfs] = useState(false);
+  const load = () => { getAllAdoTasks().then(setD).catch((e) => setErr(String(e))); };
 
-  useEffect(() => { getAllAdoTasks().then(setD).catch((e) => setErr(String(e))); }, []);
+  useEffect(() => { load(); }, []);
 
   if (err) return <div className="empty">{err}</div>;
   if (!d) return <div className="spin">טוען…</div>;
@@ -98,7 +112,7 @@ export function AdoTasks({ nav }: { nav: (h: string) => void }) {
           <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <table className="wtable">
               <thead><tr><th>משימה</th><th>סוג</th><th>TFS</th><th>מצב</th><th>גודל</th><th>מתוך דרישה</th></tr></thead>
-              <tbody><TaskRows rows={c.rows} nav={nav} /></tbody>
+              <tbody><TaskRows rows={c.rows} clientId={c.clientId} nav={nav} onChanged={load} /></tbody>
             </table>
           </div>
         </div>

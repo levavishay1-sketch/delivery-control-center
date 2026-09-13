@@ -1,5 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { getAdoProjects, getClients, getConnections, getRepos, importAdoCsv, linkRepoToReq, updateClient, updateRepo, updateRequirement, type ImportResult, type ReqType, type WorkItem } from "./api.ts";
+import {
+  getAdoProjects, getBugLinks, getClients, getConnections, getRepos, importAdoCsv, linkBugTask, linkRepoToReq,
+  searchClientTasks, unlinkBugTask, updateClient, updateRepo, updateRequirement,
+  type ImportResult, type LinkedTaskRow, type ReqType, type RequirementType, type WorkItem,
+} from "./api.ts";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -76,7 +80,7 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
   fixedClientId?: string; fixedParentId?: string; parentTitle?: string;
 }) {
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [f, setF] = useState({ clientId: fixedClientId ?? "", title: "", type: "story", priority: "medium", body: "" });
+  const [f, setF] = useState({ clientId: fixedClientId ?? "", title: "", type: "story", requirementType: "development" as RequirementType, priority: "medium", body: "" });
   const [fileName, setFileName] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -102,7 +106,7 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
     if (!f.title.trim()) return setErr("כותרת היא שדה חובה");
     setBusy(true); setErr(null);
     try {
-      const body: Record<string, string> = { title: f.title.trim(), type: f.type, priority: f.priority };
+      const body: Record<string, string> = { title: f.title.trim(), type: f.type, requirementType: f.requirementType, priority: f.priority };
       if (fixedParentId) body.parentId = fixedParentId;
       else body.clientId = f.clientId;
       const wi = await api("/workitems", body);
@@ -143,6 +147,13 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
             <option value="low">נמוכה</option><option value="medium">בינונית</option><option value="high">גבוהה</option><option value="critical">קריטית</option>
           </select>
         </div>
+      </div>
+      <div className="field" style={{ marginBottom: 12 }}>
+        <label>אופי הדרישה</label>
+        <select value={f.requirementType} onChange={(e) => setF({ ...f, requirementType: e.target.value as RequirementType })}>
+          <option value="development">פיתוח</option><option value="research">תחקור</option><option value="testing">בדיקות</option>
+        </select>
+        <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 4 }}>נקבע בהקמה, ניתן לשינוי בהמשך מעריכת הדרישה.</p>
       </div>
       <div className="field" style={{ marginBottom: 4 }}>
         <label>הדרישה הגולמית (כפי שהתקבלה — מייל / סלאק / שיחה)</label>
@@ -414,22 +425,83 @@ export function EditRepo({ repo, onClose, onDone }: {
 }
 
 /** Edit an existing requirement's fields. */
+/** A Bug's link to the task(s) it's actually about — its structure, or
+ *  standalone with none at all (decided 2026-09-12,
+ *  `bug-change-request-lifecycle`). Linking here is what its own
+ *  breakdown later inherits existing checks from. Takes effect
+ *  immediately (its own endpoints, not part of the field patch this
+ *  modal otherwise batches into one "שמור"). */
+function BugLinksSection({ bugId, clientId }: { bugId: string; clientId: string }) {
+  const [linked, setLinked] = useState<LinkedTaskRow[]>([]);
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<LinkedTaskRow[]>([]);
+  const [busy, setBusy] = useState(false);
+  const load = () => getBugLinks(bugId).then((r) => setLinked(r.tasks)).catch(() => {});
+  useEffect(() => { load(); }, [bugId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!q.trim()) { setResults([]); return; }
+    const t = setTimeout(() => { searchClientTasks(clientId, q.trim()).then((r) => setResults(r.tasks)).catch(() => {}); }, 250);
+    return () => clearTimeout(t);
+  }, [q, clientId]);
+  const link = async (taskId: string) => {
+    setBusy(true);
+    try { await linkBugTask(bugId, taskId); setQ(""); setResults([]); load(); } finally { setBusy(false); }
+  };
+  const unlink = async (taskId: string) => {
+    setBusy(true);
+    try { await unlinkBugTask(bugId, taskId); load(); } finally { setBusy(false); }
+  };
+  return (
+    <div className="field" style={{ marginBottom: 12 }}>
+      <label>המשימה שהבאג הוא עליה (אופציונלי)</label>
+      <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: -2, marginBottom: 6 }}>
+        אפשר לקשר לכמה משימות, או להשאיר לא מקושר (באג עצמאי). משימות מקושרות — הבדיקות הקיימות שלהן יורשות לפירוק של הבאג הזה.
+      </p>
+      {linked.length > 0 && (
+        <div style={{ display: "grid", gap: 6, marginBottom: 8 }}>
+          {linked.map((t) => (
+            <div key={t.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: 12.5, border: "1px solid var(--border-hairline)", borderRadius: 8, padding: "6px 10px" }}>
+              <span>{t.intent} <span style={{ color: "var(--ink-400)", fontSize: 11 }}>({t.requirementTitle})</span></span>
+              <a style={{ cursor: "pointer", color: "var(--status-critical)", fontSize: 11 }} onClick={() => unlink(t.id)}>הסר</a>
+            </div>
+          ))}
+        </div>
+      )}
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="חפש משימה לפי שם…" style={{ width: "100%" }} disabled={busy} />
+      {results.length > 0 && (
+        <div style={{ marginTop: 4, border: "1px solid var(--border-hairline)", borderRadius: 8, overflow: "hidden" }}>
+          {results.filter((r) => !linked.some((l) => l.id === r.id)).map((t) => (
+            <a key={t.id} onClick={() => link(t.id)} style={{ display: "block", padding: "7px 10px", fontSize: 12.5, cursor: "pointer", borderBottom: "1px solid var(--border-hairline)" }}>
+              {t.intent} <span style={{ color: "var(--ink-400)", fontSize: 11 }}>({t.requirementTitle})</span>
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function EditRequirement({ wi, onClose, onDone }: { wi: WorkItem; onClose: () => void; onDone: () => void }) {
   const [f, setF] = useState({
-    title: wi.title, type: wi.type as string, priority: wi.priority as string, risk: wi.risk as string,
+    title: wi.title, type: wi.type as string, requirementType: wi.requirementType as string, priority: wi.priority as string, risk: wi.risk as string,
     executor: wi.executor as string, phase: wi.phase, budgetUsd: wi.budgetUsd ?? "",
     dueDate: wi.dueDate ? wi.dueDate.slice(0, 10) : "", adoAreaPath: wi.adoAreaPath ?? "", key: wi.key ?? "",
   });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [reopenReason, setReopenReason] = useState("");
+  const wasClosed = wi.phase === "done" || wi.phase === "archived";
+  const reopening = wasClosed && f.phase !== "done" && f.phase !== "archived";
   const submit = async () => {
     if (!f.title.trim()) return setErr("כותרת היא שדה חובה");
+    if (reopening && !reopenReason.trim()) return setErr("צריך לציין למה פותחים מחדש");
     setBusy(true); setErr(null);
     try {
       await updateRequirement(wi.id, {
-        title: f.title.trim(), type: f.type as ReqType, priority: f.priority, risk: f.risk, executor: f.executor,
+        title: f.title.trim(), type: f.type as ReqType, requirementType: f.requirementType as RequirementType, priority: f.priority, risk: f.risk, executor: f.executor,
         phase: f.phase, budgetUsd: f.budgetUsd === "" ? null : f.budgetUsd,
         dueDate: f.dueDate || null, adoAreaPath: f.adoAreaPath.trim() || null, key: f.key.trim() || null,
+        ...(reopening ? { reopenReason: reopenReason.trim() } : {}),
       });
       onDone();
     } catch (e) { setErr(String(e)); setBusy(false); }
@@ -447,6 +519,12 @@ export function EditRequirement({ wi, onClose, onDone }: { wi: WorkItem; onClose
           <select value={f.phase} onChange={(e) => setF({ ...f, phase: e.target.value })}>{PHASES.map(([v, he]) => <option key={v} value={v}>{he}</option>)}</select>
         </div>
       </div>
+      <div className="field" style={{ marginBottom: 12 }}><label>אופי הדרישה</label>
+        <select value={f.requirementType} onChange={(e) => setF({ ...f, requirementType: e.target.value })}>
+          <option value="development">פיתוח</option><option value="research">תחקור</option><option value="testing">בדיקות</option>
+        </select>
+        <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 4 }}>תחקור/בדיקות עדיין עוברים באותו תהליך פירוק כמו פיתוח — הבחנה חזותית ותהליך ייעודי בפלואו הם המשך מתוכנן, לא בנוי עדיין.</p>
+      </div>
       <div className="form-grid" style={{ marginBottom: 12 }}>
         <div className="field"><label>עדיפות</label>
           <select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}>
@@ -459,6 +537,7 @@ export function EditRequirement({ wi, onClose, onDone }: { wi: WorkItem; onClose
           </select>
         </div>
       </div>
+      {wi.type === "bug" && <BugLinksSection bugId={wi.id} clientId={wi.clientId} />}
       <div className="form-grid" style={{ marginBottom: 12 }}>
         <div className="field"><label>מבצע</label>
           <select value={f.executor} onChange={(e) => setF({ ...f, executor: e.target.value })}>
@@ -480,9 +559,18 @@ export function EditRequirement({ wi, onClose, onDone }: { wi: WorkItem; onClose
       <div className="field" style={{ marginBottom: 12 }}><label>ADO area path</label>
         <input value={f.adoAreaPath} onChange={(e) => setF({ ...f, adoAreaPath: e.target.value })} placeholder="Altshuler Trade\Trading Platform" style={{ width: "100%" }} dir="ltr" />
       </div>
+      {reopening && (
+        <div className="field" style={{ marginBottom: 12 }}><label>למה פותחים מחדש? (יישמר בהיסטוריית הדרישה)</label>
+          <textarea
+            value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2}
+            placeholder="מה השתנה? למה הדרישה חוזרת לפעילות?"
+            style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }}
+          />
+        </div>
+      )}
       <Err e={err} />
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "שומר…" : "שמור"}</button>
+        <button className="btn btn-primary" disabled={busy || (reopening && !reopenReason.trim())} onClick={submit}>{busy ? "שומר…" : "שמור"}</button>
         <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
       </div>
     </Modal>

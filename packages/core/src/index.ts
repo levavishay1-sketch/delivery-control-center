@@ -1,7 +1,10 @@
 export { resolveWorkItem, keyFromBranch, type ResolvedWorkItem } from "./resolve.ts";
+export { recordDecision, type DecisionTrigger } from "./decisions.ts";
+export { linkBugToTask, unlinkBugFromTask, bugLinkedTasks, type LinkedTaskRow } from "./bugs.ts";
+export { startResearchWork, finishResearchWork, type ResearchWorkResult } from "./research-work.ts";
 export { recordSession, recordGitActivity, recordNote } from "./capture.ts";
 export { proposeGap, verifyGap } from "./gaps.ts";
-export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, type TaskInput, type TaskDetail } from "./tasks.ts";
+export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksNotPassed, setTaskActive, checkAdoRemovedState, syncTaskStateAfterCheckChange, type TaskInput, type TaskDetail } from "./tasks.ts";
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
@@ -19,8 +22,10 @@ export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, composeClientLetter,
+  stopFlowRun, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, requirementCostSummary, requirementCostDetail,
+  getRetroRunView, getRecentClientLetters,
   type AssessResult, type AssessGap, type ClientLetter, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
-  type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions,
+  type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow, type RetroResult, type ClientLetterHistoryItem,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {

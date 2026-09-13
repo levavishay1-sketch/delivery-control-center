@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   answerBlocker, composeGapLetter, correctNote, deleteBlocker, deleteGap, deleteRequirement,
-  getBrief, getDetail, unlinkRepoFromReq, uploadAttachment, verifyGap,
-  type Blocker, type EventRow, type Gap, type WorkItemDetail,
+  getBrief, getCostDetail, getDetail, getFlowRun, getCostSummary, getGapLetters, getRetro, startRetro, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  type Blocker, type ClientLetter, type ClientLetterHistoryItem, type CostDetailRow, type EventRow, type Gap, type RequirementCostSummary, type RetroRun, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
@@ -24,8 +24,25 @@ type Tab = (typeof TABS)[number];
 const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "model.routed", "review.completed"]);
 const isAi = (e: EventRow) => e.actor.kind !== "user" || AI_TYPES.has(e.type);
 const fmt = (t: string) => new Date(t).toISOString().slice(0, 16).replace("T", " ");
+/** decision.made trigger → Hebrew label, for the Timeline's highlighted
+ *  "why" rows (design notes, `decision-history`). */
+const DECISION_LABELS: Record<string, string> = {
+  rebreakdown: "פירוק מחדש", task_closed_override: "אישור משימה חרף כישלון בדיקות",
+  task_reopened: "פתיחת משימה מחדש", requirement_reopened: "פתיחת דרישה מחדש", direction_changed: "שינוי כיוון",
+};
+/** Turn a bare URL inside freeform text (a gap answer, say "ראה WI-1284")
+ *  into a real link — the only structured "link to another item" a
+ *  resolution reliably carries, since the answer itself is freeform. */
+const linkify = (text: string) => {
+  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
+  return parts.map((p, i) => /^https?:\/\//.test(p)
+    ? <a key={i} href={p} target="_blank" rel="noreferrer" style={{ color: "var(--color-accent)" }}>{p}</a>
+    : <span key={i}>{p}</span>);
+};
 const gist = (e: EventRow) => {
   const p = e.payload;
+  if (e.type === "decision.made") return String(p.reason ?? "");
+  if (e.type === "client_letter.composed") return `✉ ${p.subject ?? ""} (${p.gapCount ?? 0} שאלות)`;
   return (p.summary || p.body || p.answer || p.description || p.question ||
     (p.model ? `${p.capability} → ${p.model} · ${p.rationale ?? ""}` : "") ||
     (p.verdict ? `${p.verdict}${p.blockingCount ? ` — ${p.blockingCount} blocking` : ""} (${p.findingCount ?? 0} findings)` : "") ||
@@ -44,13 +61,40 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [repoOpen, setRepoOpen] = useState(false);
   const [correcting, setCorrecting] = useState<EventRow | null>(null);
   const [newGap, setNewGap] = useState({ description: "", blocking: false });
+  const [expandedClosed, setExpandedClosed] = useState<Set<string>>(new Set());
   const [answering, setAnswering] = useState<{ id: string; text: string } | null>(null);
   const [gapHelp, setGapHelp] = useState(false);
-  const [letter, setLetter] = useState<{ subject: string; body: string; gapCount: number } | null>(null);
+  const [letterDetail, setLetterDetail] = useState<ClientLetterHistoryItem | null>(null);
   const [letterBusy, setLetterBusy] = useState(false);
   const [letterCopied, setLetterCopied] = useState(false);
+  const [letterPicker, setLetterPicker] = useState<Set<string> | null>(null);
+  // Every letter ever composed for this requirement (read back, not
+  // re-run) — so navigating away from the detail view before copying
+  // one never costs another AI call to get the same text back, and past
+  // letters are never simply lost.
+  const [letterHistory, setLetterHistory] = useState<ClientLetterHistoryItem[]>([]);
+  const [lettersListOpen, setLettersListOpen] = useState(false);
+  const refreshLetters = useCallback(() => { getGapLetters(id).then((r) => setLetterHistory(r.letters)).catch(() => {}); }, [id]);
+  useEffect(() => { refreshLetters(); }, [refreshLetters]);
+
+  // Per-run cost detail — what the requirement's total AI cost is
+  // actually made of (model, duration, tokens, cost per run). Re-fetched
+  // fresh every time the breakdown is opened — a stale-once-fetched
+  // cache here would silently hide any run that happened after the
+  // first open (a real bug a user hit live: a second composed letter
+  // never appeared because the list had already been cached from
+  // before it existed).
+  const [costDetailOpen, setCostDetailOpen] = useState(false);
+  const [costDetail, setCostDetail] = useState<CostDetailRow[] | null>(null);
+  const [costDetailLoading, setCostDetailLoading] = useState(false);
+  const openCostDetail = () => {
+    setCostDetailOpen(true);
+    setCostDetailLoading(true);
+    getCostDetail(id).then((r) => setCostDetail(r.rows)).catch(() => {}).finally(() => setCostDetailLoading(false));
+  };
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
   const [uploading, setUploading] = useState(false);
+  const [retroOpen, setRetroOpen] = useState(false);
 
   // go back to wherever the user came from; fall back to the requirements list
   const back = useCallback(() => {
@@ -66,6 +110,38 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     } catch (e) { setErr(String(e)); }
   }, [id]);
   useEffect(() => { reload(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The requirement's cumulative Claude cost — every claude.session
+  // event ever recorded against it. Refetched whenever a run finishes
+  // (piggybacks on the same `runningElsewhere` transition below), not
+  // polled continuously — it only changes when a run just completed.
+  const [cost, setCost] = useState<RequirementCostSummary | null>(null);
+  useEffect(() => { getCostSummary(id).then(setCost).catch(() => {}); }, [id]);
+
+  // A Claude run's own "בעבודה…" indicator lives inside WorkflowTab
+  // (under the Overview tab) — but switching to Timeline/Dependencies
+  // unmounts it, hiding the one visible sign that anything is still
+  // running. This independent, lightweight poll keeps a badge on the
+  // Overview tab itself visible from any tab, so leaving Overview never
+  // reads as "it stopped."
+  const [runningElsewhere, setRunningElsewhere] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const check = () => {
+      getFlowRun(id).then((r) => {
+        if (!alive) return;
+        const nowRunning = r.state === "running";
+        setRunningElsewhere((was) => {
+          // a run just finished — its cost record is now written; refresh.
+          if (was && !nowRunning) getCostSummary(id).then(setCost).catch(() => {});
+          return nowRunning;
+        });
+      }).catch(() => {});
+    };
+    check();
+    const iv = setInterval(check, 2000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [id]);
 
   if (err) return (
     <div className="empty" style={{ textAlign: "center" }}>
@@ -125,14 +201,14 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות</p>
         <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
           {openGaps.length > 0 && (
-            <a style={{ fontSize: 11.5, cursor: letterBusy ? "default" : "pointer", color: "var(--color-accent)", fontWeight: 600 }}
-               onClick={async () => {
-                 if (letterBusy) return;
-                 setLetterBusy(true); setLetterCopied(false);
-                 try { setLetter(await composeGapLetter(wi.id)); } catch (e) { alert(String(e)); }
-                 finally { setLetterBusy(false); }
-               }}>
-              {letterBusy ? "מנסח…" : "✉ נסח פערים ללקוח"}
+            <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)", fontWeight: 600 }}
+               onClick={() => setLetterPicker(new Set(openGaps.filter((g) => g.whoAnswers === "client").map((g) => g.id)))}>
+              ✉ נסח פערים ללקוח
+            </a>
+          )}
+          {letterHistory.length > 0 && (
+            <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--ink-500)" }} onClick={() => setLettersListOpen(true)}>
+              📄 מכתבים אחרונים ({letterHistory.length})
             </a>
           )}
           <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
@@ -141,8 +217,82 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </div>
       </div>
 
-      {letter && (
-        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLetter(null)}>
+      {letterPicker && (
+        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLetterPicker(null)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: "min(560px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
+            border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl",
+            boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700 }}>אילו פערים בהודעה?</h3>
+              <a onClick={() => setLetterPicker(null)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
+              מסומנות מראש השאלות שרק מבקש הדרישה יכול להכריע בהן. אפשר לשנות בחירה — לא כל פער צריך להגיע אליו.
+            </p>
+            <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+              {openGaps.map((g) => {
+                const checked = letterPicker.has(g.id);
+                const toggle = () => setLetterPicker((s) => { const n = new Set(s); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; });
+                return (
+                  <label key={g.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, cursor: "pointer", border: "1px solid var(--border-hairline)", borderRadius: 10, padding: "9px 11px" }}>
+                    <input type="checkbox" style={{ marginTop: 2, minWidth: 0 }} checked={checked} onChange={toggle} />
+                    <span style={{ flex: 1 }}>
+                      {g.description}
+                      <span style={{ display: "block", marginTop: 2 }}>
+                        {g.whoAnswers === "client" ? <Pill tone="warning">👤 מבקש הדרישה</Pill> : <Pill tone="neutral">🛠 החלטה שלנו</Pill>}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" disabled={letterPicker.size === 0 || letterBusy} onClick={async () => {
+                setLetterBusy(true); setLetterCopied(false);
+                try {
+                  const l = await composeGapLetter(wi.id, Array.from(letterPicker));
+                  setLetterDetail({ id: "just-now", subject: l.subject, body: l.body, gapCount: l.gapCount, composedAt: new Date().toISOString(), costUsd: l.costUsd, inputTokens: l.inputTokens, outputTokens: l.outputTokens, model: null });
+                  setLetterPicker(null);
+                  refreshLetters();
+                  getCostSummary(id).then(setCost).catch(() => {}); // this was a real AI call — reflect it in the total right away
+                } catch (e) { alert(String(e)); }
+                finally { setLetterBusy(false); }
+              }}>{letterBusy ? "מנסח…" : `נסח מכתב (${letterPicker.size})`}</button>
+              <button className="btn btn-secondary" onClick={() => setLetterPicker(null)}>ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {lettersListOpen && (
+        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLettersListOpen(false)}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: "min(560px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
+            border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl",
+            boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700 }}>מכתבים אחרונים</h3>
+              <a onClick={() => setLettersListOpen(false)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
+            </div>
+            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>לפי סדר ההפקה. לחיצה על מכתב פותחת אותו מלא, כולל העלות המפורטת.</p>
+            <div style={{ display: "grid", gap: 8 }}>
+              {letterHistory.map((l) => (
+                <a key={l.id} onClick={() => { setLetterDetail(l); setLettersListOpen(false); }}
+                   style={{ display: "block", border: "1px solid var(--border-hairline)", borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>{l.subject}</div>
+                  <div style={{ fontSize: 11, color: "var(--ink-400)" }}>{fmt(l.composedAt)} · {l.gapCount} שאלות{l.costUsd != null ? ` · $${l.costUsd.toFixed(4)}` : ""}</div>
+                </a>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {letterDetail && (
+        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLetterDetail(null)}>
           <div onClick={(e) => e.stopPropagation()} style={{
             width: "min(680px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
             border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl",
@@ -150,24 +300,29 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
               <h3 style={{ fontSize: 15, fontWeight: 700 }}>הודעה למבקש הדרישה</h3>
-              <a onClick={() => setLetter(null)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
+              <a onClick={() => setLetterDetail(null)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
             </div>
-            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
-              {letter.gapCount} שאלות פתוחות, מנוסחות בשפה עסקית. DCC לא שולח — העתק ושלח בעצמך.
+            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 4 }}>
+              {letterDetail.gapCount} שאלות פתוחות, מנוסחות בשפה עסקית · {fmt(letterDetail.composedAt)}. DCC לא שולח — העתק ושלח בעצמך.
+            </p>
+            <p style={{ fontSize: 11, color: "var(--ink-400)", marginBottom: 14 }}>
+              {letterDetail.costUsd != null
+                ? `עלות ההרצה: $${letterDetail.costUsd.toFixed(4)}${letterDetail.model ? ` · מודל ${letterDetail.model}` : ""}${letterDetail.inputTokens != null ? ` · ${letterDetail.inputTokens} טוקני קלט / ${letterDetail.outputTokens ?? 0} פלט` : ""} — נכלל בעלות ה-AI הכוללת של הדרישה.`
+                : "לא ידוע פירוט עלות עבור מכתב זה."}
             </p>
             <div className="field" style={{ marginBottom: 10 }}>
               <label>נושא</label>
-              <div style={{ fontSize: 13.5, fontWeight: 600, background: "var(--surface-muted)", borderRadius: 8, padding: "8px 10px" }}>{letter.subject}</div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, background: "var(--surface-muted)", borderRadius: 8, padding: "8px 10px" }}>{letterDetail.subject}</div>
             </div>
             <div className="field" style={{ marginBottom: 14 }}>
               <label>גוף ההודעה</label>
-              <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: 0, fontFamily: "inherit" }}>{letter.body}</pre>
+              <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: 0, fontFamily: "inherit" }}>{letterDetail.body}</pre>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-primary" onClick={() => { navigator.clipboard?.writeText(`${letter.subject}\n\n${letter.body}`); setLetterCopied(true); setTimeout(() => setLetterCopied(false), 1800); }}>
+              <button className="btn btn-primary" onClick={() => { navigator.clipboard?.writeText(`${letterDetail.subject}\n\n${letterDetail.body}`); setLetterCopied(true); setTimeout(() => setLetterCopied(false), 1800); }}>
                 {letterCopied ? "✓ הועתק" : "העתק הכל"}
               </button>
-              <button className="btn btn-secondary" onClick={() => setLetter(null)}>סגור</button>
+              <button className="btn btn-secondary" onClick={() => setLetterDetail(null)}>סגור</button>
             </div>
           </div>
         </div>
@@ -176,14 +331,17 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       {gapHelp && (
         <div className="callout" style={{ marginTop: 10, marginBottom: 14, fontSize: 12.5, lineHeight: 1.7 }}>
           <div className="body">
-            <p><b>פער</b> = שאלה פתוחה שצריך לענות עליה לפני שמתחילים. <b>אי אפשר להתקדם לפירוק משימות עד שכל הפערים סגורים</b> — זו הנקודה שבה מונעים בנייה של הדבר הלא נכון.</p>
+            <p><b>פער</b> = שאלה פתוחה על הדרישה עצמה שצריך לענות עליה לפני שמתחילים. <b>אי אפשר להתקדם לפירוק משימות עד שכל הפערים סגורים</b> — זו הנקודה שבה מונעים בנייה של הדבר הלא נכון. כל פער עוצר את הפירוק באותה מידה, בלי קשר לסימון "דחוף" — הסימון הזה רק עוזר לדעת באיזה לטפל קודם כשיש כמה.</p>
             <p style={{ marginTop: 6 }}>לכל פער מסומן <b>מי יכול לענות</b>: החלטה שלנו (טכנית — אפשר להכריע כאן) או החלטה של מבקש הדרישה (עסקית — צריך לשאול אותו).</p>
             <ul style={{ margin: "6px 0", paddingInlineStart: 18 }}>
               <li><b>ענה</b> — כותב את ההכרעה, או לוחץ על אחת התשובות המוצעות. נשמרת כהערה ונכנסת אוטומטית לפרומפט של הפירוק.</li>
               <li><b>לא פער אמיתי</b> — חובה לכתוב למה. הסיבה נשמרת כדי שהשאלה לא תעלה שוב בהרצה הבאה.</li>
               <li><b>פתח דרישה נפרדת</b> — שאלה אמיתית אבל של סקופ אחר; נפתחת דרישה נפרדת והעבודה כאן ממשיכה.</li>
-              <li><b>✉ נסח פערים ללקוח</b> — הופך את כל השאלות הפתוחות למייל בשפה עסקית, בלי קוד. DCC לא שולח — אתה מעתיק ושולח.</li>
+              <li><b>✉ נסח פערים ללקוח</b> — בוחרים אילו מהשאלות הפתוחות (לא חייב את כולן) והופך אותן למייל בשפה עסקית, בלי קוד. DCC לא שולח — אתה מעתיק ושולח.</li>
             </ul>
+            <p style={{ marginTop: 10, paddingTop: 8, borderTop: "1px solid var(--border-hairline)" }}>
+              <b>פער לעומת חוסם (Blocker), למטה בעמוד:</b> פער הוא על <b>הדרישה</b> — עמימות שצריך להכריע בה לפני שמתחילים לבנות. חוסם הוא על <b>העבודה עצמה</b> — משהו שעוצר התקדמות שכבר בעיצומה, למשל גישה חסרה למערכת או חריגת תקציב. ברוב המקרים תשתמשו רק בפערים; חוסם רלוונטי בעיקר כש-Claude נתקע באמצע פיתוח בפועל.
+            </p>
           </div>
         </div>
       )}
@@ -192,8 +350,8 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         <div className="field" style={{ flex: 1 }}><label>הוסף פער שזיהית בעצמך</label>
           <input value={newGap.description} onChange={(e) => setNewGap({ ...newGap, description: e.target.value })} placeholder="למשל: לא מוגדר מה קורה כשלקוח עובר דרגה באמצע חודש" style={{ minWidth: 260 }} />
         </div>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }}>
-          <input type="checkbox" style={{ minWidth: 0 }} checked={newGap.blocking} onChange={(e) => setNewGap({ ...newGap, blocking: e.target.checked })} /> חוסם
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }} title="כל פער עוצר את הפירוק בין כה וכה — זה רק מסמן שכדאי לטפל בו קודם">
+          <input type="checkbox" style={{ minWidth: 0 }} checked={newGap.blocking} onChange={(e) => setNewGap({ ...newGap, blocking: e.target.checked })} /> דחוף
         </label>
         <button className="btn btn-primary btn-sm" onClick={async () => { if (!newGap.description.trim()) return; await post(`/workitems/${wi.id}/gaps`, { description: newGap.description.trim(), blocking: newGap.blocking, confidence: 1, mode: "interactive" }); setNewGap({ description: "", blocking: false }); reload(); }}>הוסף</button>
       </div>
@@ -209,7 +367,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
               {g.whoAnswers === "client"
                 ? <Pill tone="warning">👤 החלטה של מבקש הדרישה</Pill>
                 : <Pill tone="neutral">🛠 החלטה שלנו</Pill>}
-              {g.blocking && <Pill tone="critical">🔴 חוסם</Pill>}
+              {g.blocking && <Pill tone="critical">🔴 דחוף</Pill>}
               {g.state === "verified" && <Pill tone="warning">✓ נבדק — ממתין להכרעה</Pill>}
               <span className="stage">ביטחון {Math.round(Number(g.confidence) * 100)}%</span>
             </div>
@@ -269,25 +427,40 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       </div>
 
       {d.gaps.filter((g) => !isOpenGap(g)).length > 0 && (
-        <details style={{ marginBottom: 22 }}>
-          <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--ink-500)" }}>
-            טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})
-          </summary>
-          <div className="rowlist" style={{ marginTop: 8 }}>
-            {d.gaps.filter((g) => !isOpenGap(g)).map((g) => (
-              <div className="row" key={g.id} style={{ alignItems: "flex-start" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, color: "var(--ink-600)" }}>{g.description}</div>
+        <div style={{ marginBottom: 22 }}>
+          <p className="section-lbl" style={{ marginBottom: 8 }}>טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})</p>
+          <div className="rowlist">
+            {d.gaps.filter((g) => !isOpenGap(g)).map((g) => {
+              const open = expandedClosed.has(g.id);
+              const toggle = () => setExpandedClosed((s) => { const n = new Set(s); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; });
+              return (
+                <div className="row" key={g.id} style={{ alignItems: "flex-start", flexDirection: "column", cursor: "pointer" }} onClick={toggle}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, width: "100%" }}>
+                    <span style={{ fontSize: 10, color: "var(--ink-400)", marginTop: 2, flexShrink: 0 }}>{open ? "▾" : "▸"}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 12.5, color: "var(--ink-600)" }}>{g.description}</div>
+                    </div>
+                    {g.state === "resolved" && <Pill tone="healthy">נענה</Pill>}
+                    {g.state === "dismissed" && <Pill tone="inactive">לא פער</Pill>}
+                    {g.state === "spun_off" && <Pill tone="inactive">דרישה נפרדת</Pill>}
+                    <a className="link" style={{ fontSize: 11 }} onClick={(e) => { e.stopPropagation(); onGap(g, "verified"); }}>החזר לפתוח</a>
+                    <a style={{ fontSize: 11, cursor: "pointer", color: "var(--ink-400)" }} onClick={async (e) => { e.stopPropagation(); if (confirm("למחוק את הפער לגמרי?")) { await deleteGap(g.id, wi.clientId); reload(); } }}>מחק</a>
+                  </div>
+                  {open && (
+                    <div style={{ marginInlineStart: 18, marginTop: 6, paddingInlineStart: 10, borderInlineStart: "2px solid var(--border-hairline)" }}>
+                      {g.why && <div style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 4 }}>{g.why}</div>}
+                      {g.answer ? (
+                        <div style={{ fontSize: 12.5, color: "var(--status-healthy)" }}>← {g.answer}</div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "var(--ink-400)" }}>אין תשובה שמורה (נסגר לפני שהתכונה הזו נוספה, או נפתח כדרישה נפרדת).</div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                {g.state === "resolved" && <Pill tone="healthy">נענה</Pill>}
-                {g.state === "dismissed" && <Pill tone="inactive">לא פער</Pill>}
-                {g.state === "spun_off" && <Pill tone="inactive">דרישה נפרדת</Pill>}
-                <a className="link" style={{ fontSize: 11 }} onClick={() => onGap(g, "verified")}>החזר לפתוח</a>
-                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--ink-400)" }} onClick={async () => { if (confirm("למחוק את הפער לגמרי?")) { await deleteGap(g.id, wi.clientId); reload(); } }}>מחק</a>
-              </div>
-            ))}
+              );
+            })}
           </div>
-        </details>
+        </div>
       )}
 
       <p className="section-lbl">חוסמים (Blockers)</p>
@@ -316,6 +489,8 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       {editOpen && <EditRequirement wi={wi} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); reload(); }} />}
       {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
       {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
+      {retroOpen && <RetroModal workitemId={wi.id} onClose={() => setRetroOpen(false)} />}
+      {costDetailOpen && <CostDetailModal rows={costDetail} loading={costDetailLoading} summary={cost} onClose={() => setCostDetailOpen(false)} />}
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
@@ -325,6 +500,9 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          {wi.phase === "done" && (
+            <button className="btn btn-secondary btn-sm" onClick={() => setRetroOpen(true)}>✦ המלצות לשיפור</button>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ אירוע</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setEditOpen(true)}>עריכה</button>
           <button className="btn btn-secondary btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחיקה</button>
@@ -333,7 +511,14 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
       <div className="tabs" role="tablist">
         {TABS.map((t) => (
-          <button key={t} className="tab" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t}</button>
+          <button key={t} className="tab" role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>
+            {t}
+            {t === "Overview" && runningElsewhere && (
+              <span title="Claude עדיין עובד" style={{ display: "inline-flex", marginInlineStart: 6, verticalAlign: "middle" }}>
+                <span className="spinner" style={{ width: 10, height: 10 }} />
+              </span>
+            )}
+          </button>
         ))}
       </div>
 
@@ -358,6 +543,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                 <div className="ov-metric"><div className="lbl">Risk</div><div className="val">{wi.risk}</div></div>
                 <div className="ov-metric"><div className="lbl">Executor</div><div className="val">{wi.executor}</div></div>
                 <div className="ov-metric"><div className="lbl">AI budget</div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
+                <div className="ov-metric" style={{ cursor: "pointer" }}
+                     title={cost ? `${cost.runCount} הרצות · ${cost.totalInputTokens + cost.totalOutputTokens} tokens — לחץ לפירוט` : undefined}
+                     onClick={openCostDetail}>
+                  <div className="lbl">עלות AI בפועל 🔍</div>
+                  <div className="val">{cost ? `$${cost.totalUsd.toFixed(2)}` : "—"}</div>
+                </div>
                 <div className="ov-metric"><div className="lbl">TFS</div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -411,6 +602,24 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             <p style={{ fontSize: 13, lineHeight: 1.8, color: "var(--ov-body)", fontWeight: 500 }}>{wi.title}</p>
           </div>
 
+          {/* every closed gap's resolution, permanently visible right here —
+              not three clicks away in the gaps tab. This is exactly what
+              explains "why this requirement is basically done" when that's
+              what a gap's answer said (e.g. already built elsewhere). */}
+          {d.gaps.filter((g) => (g.state === "resolved" || g.state === "dismissed") && g.answer).length > 0 && (
+            <div className="ov-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
+              <p style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)", marginBottom: 10 }}>תיעוד — החלטות שנסגרו על הדרישה</p>
+              <div style={{ display: "grid", gap: 12 }}>
+                {d.gaps.filter((g) => (g.state === "resolved" || g.state === "dismissed") && g.answer).map((g) => (
+                  <div key={g.id} style={{ borderInlineStart: `3px solid ${g.state === "resolved" ? "var(--status-healthy)" : "var(--ink-300)"}`, paddingInlineStart: 10 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-700)", marginBottom: 2 }}>{g.description}</div>
+                    <div style={{ fontSize: 12.5, color: "var(--ov-body)", lineHeight: 1.6 }}>{linkify(g.answer!)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* the guided workflow: stepper + step content, one unit */}
           <div style={{ marginBottom: 20 }}>
             <WorkflowTab d={d} reload={reload} nav={nav} gapsPanel={gapsPanel} />
@@ -431,17 +640,20 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           <div className="rowlist">
             {d.events.map((e) => {
               const superseded = supersededIds.has(e.id);
+              const isDecision = e.type === "decision.made";
               return (
-                <div className="row" key={e.id} style={{ alignItems: "flex-start", background: isAi(e) ? "var(--status-ai-bg)" : undefined, opacity: superseded ? 0.55 : 1 }}>
+                <div className="row" key={e.id} style={{ alignItems: "flex-start", background: isDecision ? "var(--status-warning-bg)" : isAi(e) ? "var(--status-ai-bg)" : undefined, borderInlineStart: isDecision ? "3px solid var(--status-warning)" : undefined, opacity: superseded ? 0.55 : 1 }}>
                   <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-400)", minWidth: 96 }}>{fmt(e.occurredAt)}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-                      {isAi(e) ? <Pill tone="ai">AI proposal</Pill> : <Pill tone="active">{e.actor.kind === "user" ? "Person" : "System"}</Pill>}
-                      <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-500)" }}>{e.type}</span>
+                      {isDecision
+                        ? <Pill tone="warning">למה: {DECISION_LABELS[String(e.payload.trigger)] ?? String(e.payload.trigger)}</Pill>
+                        : isAi(e) ? <Pill tone="ai">AI proposal</Pill> : <Pill tone="active">{e.actor.kind === "user" ? "Person" : "System"}</Pill>}
+                      {!isDecision && <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 11, color: "var(--ink-500)" }}>{e.type}</span>}
                       {superseded && <Pill tone="inactive">תוקן</Pill>}
                       {e.supersedes && <Pill tone="healthy">תיקון</Pill>}
                     </div>
-                    <div style={{ fontSize: 12.5, color: "var(--ink-700)", marginTop: 3, textDecoration: superseded ? "line-through" : "none" }}>{String(gist(e)).slice(0, 220)}</div>
+                    <div style={{ fontSize: isDecision ? 13 : 12.5, fontWeight: isDecision ? 600 : 400, color: "var(--ink-700)", marginTop: 3, textDecoration: superseded ? "line-through" : "none" }}>{String(gist(e)).slice(0, 220)}</div>
                   </div>
                   {e.type === "note.added" && !superseded && e.actor.kind === "user" && (
                     <a style={{ fontSize: 11, cursor: "pointer" }} onClick={() => setCorrecting(e)}>תקן</a>
@@ -460,6 +672,157 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </div>
       )}
     </>
+  );
+}
+
+const RETRO_CATEGORIES: { key: "tokenSavings" | "timeSavings" | "unnecessaryActions" | "reworkCausingDecisions" | "breakdownFeedback" | "emphasize"; label: string; tone: "warning" | "healthy" }[] = [
+  { key: "reworkCausingDecisions", label: "החלטות שגרמו לעבודה חוזרת", tone: "warning" },
+  { key: "unnecessaryActions", label: "פעולות שלא היה צריך", tone: "warning" },
+  { key: "tokenSavings", label: "חיסכון בטוקנים", tone: "warning" },
+  { key: "timeSavings", label: "חיסכון בזמן", tone: "warning" },
+  { key: "breakdownFeedback", label: "משוב על אופן הפירוק", tone: "warning" },
+  { key: "emphasize", label: "מה כדאי להמשיך לעשות", tone: "healthy" },
+];
+
+/** End-of-requirement retro — its own kick-off + poll, deliberately
+ *  against the dedicated `/retro` routes rather than the generic
+ *  flow-run ones (design notes, `requirement-retro-recommendations`). */
+function RetroModal({ workitemId, onClose }: { workitemId: string; onClose: () => void }) {
+  const [run, setRun] = useState<RetroRun | null>(null);
+  const [starting, setStarting] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    const check = () => getRetro(workitemId).then((r) => { if (alive) setRun(r); }).catch(() => {});
+    check();
+    const iv = setInterval(() => { if (run?.state === "running" || run === null) check(); }, 2000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [workitemId, run?.state]);
+  const start = async () => {
+    setStarting(true);
+    try { await startRetro(workitemId); const r = await getRetro(workitemId); setRun(r); }
+    catch (e) { alert(String(e)); }
+    setStarting(false);
+  };
+  const result = run?.result;
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px", zIndex: 100 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(640px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 650 }}>✦ המלצות לשיפור</h2>
+          <a onClick={onClose} style={{ cursor: "pointer", fontSize: 15, color: "var(--ink-500)" }}>✕</a>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>ניתוח מבוסס על ה-timeline, ההיסטוריה והעלות בפועל של הדרישה הזו — לא עצות כלליות.</p>
+
+        {(!run || run.state === "idle") && (
+          <button className="btn btn-primary" disabled={starting} onClick={start}>{starting ? "מתחיל…" : "הרץ ניתוח"}</button>
+        )}
+
+        {run?.state === "running" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 0" }}>
+            <span className="spinner" style={{ width: 16, height: 16 }} />
+            <span style={{ fontSize: 13, color: "var(--ink-500)" }}>Claude מנתח את הדרישה…</span>
+          </div>
+        )}
+
+        {run?.state === "error" && (
+          <div className="callout crit" style={{ marginTop: 6 }}>
+            <div className="body"><p className="r">{run.error}</p></div>
+          </div>
+        )}
+        {run?.state === "error" && <button className="btn btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={start}>נסה שוב</button>}
+
+        {result && (run?.state === "done" || run?.state === "stopped") && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 6 }}>
+            {result.summary && <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--ink-700)" }}>{result.summary}</p>}
+            {RETRO_CATEGORIES.map(({ key, label, tone }) => {
+              const items = result[key];
+              if (!items || items.length === 0) return null;
+              return (
+                <div key={key}>
+                  <div style={{ marginBottom: 6 }}><Pill tone={tone}>{label}</Pill></div>
+                  <ul style={{ margin: 0, paddingInlineStart: 18, display: "flex", flexDirection: "column", gap: 4 }}>
+                    {items.map((it, i) => <li key={i} style={{ fontSize: 12.5, color: "var(--ink-700)" }}>{it}</li>)}
+                  </ul>
+                </div>
+              );
+            })}
+            <button className="btn btn-secondary btn-sm" style={{ alignSelf: "flex-start" }} onClick={start} disabled={starting}>{starting ? "מריץ מחדש…" : "↻ הרץ ניתוח מחדש"}</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const COST_KIND_LABELS: Record<string, string> = {
+  assess: "בחינת בשלות", breakdown: "פירוק למשימות", implement: "פיתוח משימה",
+  check: "בדיקה", gap_letter: "ניסוח מכתב ללקוח", retro: "המלצות לשיפור", other: "אחר",
+};
+const fmtDuration = (ms: number | null) => {
+  if (ms == null) return "—";
+  const s = ms / 1000;
+  return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+};
+
+/** What a requirement's "עלות AI בפועל" total is actually made of — one
+ *  row per AI run, newest first (design notes, cost-visibility: a user
+ *  could see the total but nothing behind it). */
+function CostDetailModal({ rows, loading, summary, onClose }: {
+  rows: CostDetailRow[] | null; loading: boolean; summary: RequirementCostSummary | null; onClose: () => void;
+}) {
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px", zIndex: 100 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(760px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 650 }}>פירוט עלות AI</h2>
+          <a onClick={onClose} style={{ cursor: "pointer", fontSize: 15, color: "var(--ink-500)" }}>✕</a>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>כל הרצת AI שהשתתפה בעלות הכוללת של הדרישה הזו, לפי הפרמטרים בפועל שקבעו את החישוב.</p>
+
+        {summary && (
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 16, padding: "10px 14px", background: "var(--surface-muted)", borderRadius: 10 }}>
+            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>סה"כ</div><div style={{ fontSize: 15, fontWeight: 700 }}>${summary.totalUsd.toFixed(4)}</div></div>
+            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>הרצות</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.runCount}</div></div>
+            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>טוקני קלט</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.totalInputTokens.toLocaleString()}</div></div>
+            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>טוקני פלט</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.totalOutputTokens.toLocaleString()}</div></div>
+            {Object.entries(summary.byKind).map(([kind, b]) => (
+              <div key={kind}><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>{COST_KIND_LABELS[kind] ?? kind}</div><div style={{ fontSize: 13, fontWeight: 600 }}>${b.usd.toFixed(4)} <span style={{ fontWeight: 400, color: "var(--ink-400)" }}>({b.count})</span></div></div>
+            ))}
+          </div>
+        )}
+
+        {loading && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 0" }}><span className="spinner" style={{ width: 16, height: 16 }} /><span style={{ fontSize: 13, color: "var(--ink-500)" }}>טוען…</span></div>}
+
+        {rows && rows.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid var(--border-hairline)", textAlign: "right" }}>
+                  {["מתי", "מה", "מודל", "משך", "צעדים", "טוקני קלט", "טוקני פלט", "עלות"].map((h) => (
+                    <th key={h} style={{ padding: "6px 8px", fontWeight: 600, color: "var(--ink-500)", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} style={{ borderBottom: "1px solid var(--border-hairline)" }}>
+                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap", color: "var(--ink-400)", fontFamily: "ui-monospace, monospace", fontSize: 11 }}>{fmt(r.occurredAt)}</td>
+                    <td style={{ padding: "6px 8px" }}>{r.label || (COST_KIND_LABELS[r.kind] ?? r.kind)}</td>
+                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{r.model ?? "—"}</td>
+                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{fmtDuration(r.durationMs)}</td>
+                    <td style={{ padding: "6px 8px" }}>{r.numTurns ?? "—"}</td>
+                    <td style={{ padding: "6px 8px" }}>{r.inputTokens.toLocaleString()}</td>
+                    <td style={{ padding: "6px 8px" }}>{r.outputTokens.toLocaleString()}</td>
+                    <td style={{ padding: "6px 8px", fontWeight: 600, whiteSpace: "nowrap" }}>${r.costUsd.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {rows && rows.length === 0 && !loading && <div className="empty">עדיין לא נרשמה אף הרצת AI על הדרישה הזו.</div>}
+      </div>
+    </div>
   );
 }
 

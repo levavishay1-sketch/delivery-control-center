@@ -20,6 +20,7 @@ import {
   executor,
   gapState,
   priority,
+  requirementType,
   riskLevel,
   taskAppetite,
   taskState,
@@ -70,6 +71,12 @@ export const workitem = pgTable(
     key: text("key").unique(),
     /** ADO/TFS work item type — one field (was kind × level). */
     type: workitemType("type").notNull().default("story"),
+    /** DCC-internal flow-control axis, orthogonal to `type` (`requirement-types`).
+     *  `research`/`testing` requirements are not yet given a different flow in the
+     *  UI — the field exists and is settable, but `WorkflowTab`/Flow-card-size
+     *  consequences described in that proposal are still open design questions
+     *  (0.2/0.3 in its tasks.md), deliberately not guessed at here. */
+    requirementType: requirementType("requirement_type").notNull().default("development"),
     phase: workitemPhase("phase").notNull().default("intake"),
     priority: priority("priority").notNull().default("medium"),
     risk: riskLevel("risk").notNull().default("low"),
@@ -82,6 +89,8 @@ export const workitem = pgTable(
     title: text("title").notNull(),
     /** Null until an ADO work item is linked. ADO is SoT once linked (architecture §8). */
     linkedAdoId: integer("linked_ado_id"),
+    /** The ADO work item's own URL — stored once at link time (same pattern as `task.adoUrl`) so every place that shows this requirement's TFS reference can link straight to it, not just display the number. */
+    adoUrl: text("ado_url"),
     /** ADO area path this requirement syncs under. NULL = inherit from parent / client. */
     adoAreaPath: text("ado_area_path"),
     /** True once someone chose to start building with gaps still open. Surfaced loudly. */
@@ -163,6 +172,8 @@ export const gap = pgTable(
     state: gapState("state").notNull().default("proposed"),
     /** Set when verified/dismissed — who made the human call. */
     resolvedBy: uuid("resolved_by").references(() => users.id),
+    /** The decision itself (resolved) or the reason it isn't a real gap (dismissed) — also mirrored into a timeline note, but kept here so the closed-gap list can show it without a timeline search. */
+    answer: text("answer"),
     /**
      * When spun off, the WorkItem it became. SET NULL, not the default
      * (NO ACTION/restrict): deleting the spun-off requirement should never
@@ -219,6 +230,18 @@ export const task = pgTable(
       .default(sql`'[]'::jsonb`),
     appetite: taskAppetite("appetite").notNull().default("standard"),
     state: taskState("state").notNull().default("pending"),
+    /**
+     * Check-kind rows only. Set from Claude's own structured report when a
+     * check ran (bundled with its parent task, or on its own) — this is
+     * the FACTUAL result, never a human decision. `checkResolvedBy` is the
+     * separate signal for "a person looked at this and decided" (approved
+     * despite failure, or otherwise overrode the reported result) — a
+     * null `checkResolvedBy` means the current result is exactly what
+     * Claude reported, unmodified.
+     */
+    checkResult: text("check_result"),
+    checkResolvedBy: uuid("check_resolved_by").references(() => users.id),
+    checkResolvedAt: timestamp("check_resolved_at", { withTimezone: true }),
     /** How this task was created: 'ai' (a breakdown proposal) or 'human'. */
     origin: text("origin").notNull().default("human"),
     /** Set when a person has approved this task + its content (AI proposals need this). */
@@ -232,6 +255,26 @@ export const task = pgTable(
     prompt: text("prompt"),
     /** Files the breakdown expects this task to touch. */
     affectedPaths: jsonb("affected_paths").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** For each expected file, the compiled projects/plugins that
+     *  reference it — "what do I actually need to build and deploy" once
+     *  this task ships, distinct from `affectedPaths` (what changes) and
+     *  a run's `affectedConsumers` (other code that calls into it). Set
+     *  by the breakdown prompt, since only reading the real repo can
+     *  answer this. */
+    compiledComponents: jsonb("compiled_components").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /**
+     * Check-kind rows only: whether this check is currently in play.
+     * Toggling it off drops it from the next preview/run of its parent's
+     * prompt and from the completion gate, without losing its history —
+     * toggling it back on clears any stale prior result, since it needs
+     * fresh verification.
+     */
+    active: boolean("active").notNull().default(true),
+    /** Set when a check-driven state change moves this task OUT of
+     *  `done` (a check got reactivated, or started failing again) — so
+     *  once its checks are all resolved again, the task returns to
+     *  `done` on its own instead of sitting in `failed_checks` forever. */
+    wasDone: boolean("was_done").notNull().default(false),
     /**
      * Task hierarchy. The DEPTH of this tree picks the TFS work-item type
      * off the Agile ladder Epic > Feature > User Story > Task, anchored at
@@ -290,6 +333,42 @@ export const taskDependency = pgTable(
   (t) => [
     primaryKey({ columns: [t.taskId, t.dependsOnTaskId] }),
     tenantPolicy("task_dependency_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
+ * A Bug requirement (`workitem.type = "bug"`) linked to the task(s) it's
+ * actually about — decided 2026-09-12 (`bug-change-request-lifecycle`):
+ * a Bug can be linked to a task as its structure (a bug ON that task's
+ * work), OR stand alone with no link at all. Many-to-many on purpose:
+ * live verification against the connected Azure DevOps server
+ * (`wit/workitemrelationtypes`) found `System.LinkTypes.Related` marked
+ * `singleTarget: true`, but that field describes whether the SAME pair
+ * of work items can carry the link twice, not how many DIFFERENT work
+ * items one item can relate to — day-to-day ADO usage (and its own
+ * product UI) allows a work item many distinct "Related" links, which
+ * is the behavior this table is modeling. A Bug's own linked tasks are
+ * what its breakdown inherits existing check tasks from (a Change
+ * Request does NOT inherit — decided the same day, it's a fresh
+ * category like a task, not a Bug).
+ */
+export const bugTaskLink = pgTable(
+  "bug_task_link",
+  {
+    clientId: uuid("client_id")
+      .notNull()
+      .references(() => client.id, { onDelete: "cascade" }),
+    bugId: uuid("bug_id")
+      .notNull()
+      .references(() => workitem.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id")
+      .notNull()
+      .references(() => task.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.bugId, t.taskId] }),
+    tenantPolicy("bug_task_link_tenant_isolation"),
   ],
 ).enableRLS();
 

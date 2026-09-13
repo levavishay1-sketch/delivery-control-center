@@ -38,20 +38,34 @@ export type GapKind = "business" | "technical" | "missing_info" | "new_scope";
 export type Gap = {
   id: string; description: string; blocking: boolean; confidence: string; state: GapState; spunOffTo: string | null;
   why: string | null; kind: GapKind; whoAnswers: "client" | "team"; options: string[]; impactIfWrong: string | null;
+  answer: string | null;
 };
 export type Blocker = { id: string; workitemId: string; questionType: string; question: string; answer: string | null; state: "open" | "answered" | "abandoned" };
 export type TaskKind = "task" | "check";
 export type Task = {
   id: string; seq: number; kind: TaskKind; intent: string; appetite: string;
-  state: "pending" | "in_progress" | "blocked" | "done" | "dropped";
-  origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[];
+  state: "pending" | "in_progress" | "blocked" | "failed_checks" | "done" | "dropped";
+  /** Check-kind rows only — the FACTUAL result Claude reported. */
+  checkResult: "passed" | "failed" | null;
+  /** Set only when a human overrode/decided on the result directly — a
+   *  null here with a checkResult present means "Claude's report, as-is". */
+  checkResolvedBy: string | null;
+  origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[]; compiledComponents: string[];
   parentTaskId: string | null; adoType: string | null; linkedAdoId: number | null; adoUrl: string | null;
   prompt: string | null;
+  /** Check-kind rows only — false when toggled out of play (see
+   *  `setCheckActive`): dropped from its parent's prompt and the
+   *  completion gate, but its row and history stay. */
+  active: boolean;
 };
 
+/** DCC-internal flow-control axis, orthogonal to `type` (`requirement-types`,
+ *  decided 2026-09-12). `research`/`testing` don't yet get a different
+ *  WorkflowTab/Flow-card treatment — that's still an open design question. */
+export type RequirementType = "development" | "research" | "testing";
 export type WorkItem = {
   id: string; key: string | null; title: string; clientId: string; parentId: string | null;
-  type: ReqType; phase: string;
+  type: ReqType; requirementType: RequirementType; phase: string;
   priority: "low" | "medium" | "high" | "critical"; risk: "low" | "medium" | "high";
   executor: "human" | "ai" | "mixed"; budgetUsd: string | null; dueDate: string | null;
   progressPct: number; linkedAdoId: number | null; adoAreaPath: string | null; startedWithOpenBlocker: boolean;
@@ -98,7 +112,7 @@ export type AuditPage = {
 };
 
 export type FlowData = {
-  nodes: { id: string; key: string | null; title: string; phase: string; type: ReqType; parentId: string | null; openBlockingGaps: number; openBlockers: number; linkedAdoId: number | null }[];
+  nodes: { id: string; key: string | null; title: string; phase: string; type: ReqType; parentId: string | null; openBlockingGaps: number; openBlockers: number; linkedAdoId: number | null; adoUrl: string | null }[];
   edges: { from: string; to: string; kind: string; reason: string | null; adoSynced: boolean }[];
 };
 
@@ -141,6 +155,11 @@ export const checkConnection = (clientId: string, id: string) => post<{ ok: bool
 export const getConnections = () => get<{ connections: { id: string; kind: string; displayName: string; config: Record<string, string>; clientName: string; clientId: string; lastCheckOk: string | null }[] }>("/connections");
 export const getDetail = (id: string) => get<WorkItemDetail>(`/workitems/${id}`);
 export const getBrief = (id: string) => getText(`/workitems/${id}/brief`);
+export type RequirementCostSummary = {
+  totalUsd: number; totalInputTokens: number; totalOutputTokens: number; runCount: number;
+  byKind: Record<string, { count: number; usd: number }>;
+};
+export const getCostSummary = (id: string) => get<RequirementCostSummary>(`/workitems/${id}/cost`);
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
 
@@ -165,19 +184,34 @@ export type AssessResult = {
   title: string; summary: string; whatChanges: string[]; baked: boolean; rationale: string[];
   gaps: AssessGap[]; repoUsed: string | null;
 };
-export const composeGapLetter = (id: string) =>
-  post<{ subject: string; body: string; gapCount: number }>(`/workitems/${id}/gap-letter`, {});
+export type ClientLetter = {
+  subject: string; body: string; gapCount: number;
+  costUsd: number | null; inputTokens: number | null; outputTokens: number | null;
+};
+export const composeGapLetter = (id: string, gapIds: string[]) =>
+  post<ClientLetter>(`/workitems/${id}/gap-letter`, { gapIds });
+export type ClientLetterHistoryItem = {
+  id: string; subject: string; body: string; gapCount: number; composedAt: string;
+  costUsd: number | null; inputTokens: number | null; outputTokens: number | null; model: string | null;
+};
+/** Every letter ever composed for this requirement, newest first — read back, never re-runs the AI. */
+export const getGapLetters = (id: string) => get<{ letters: ClientLetterHistoryItem[] }>(`/workitems/${id}/gap-letters`);
+export type CostDetailRow = {
+  id: string; occurredAt: string; kind: string; label: string; model: string | null;
+  costUsd: number; inputTokens: number; outputTokens: number; durationMs: number | null; numTurns: number | null;
+};
+export const getCostDetail = (id: string) => get<{ rows: CostDetailRow[] }>(`/workitems/${id}/cost-detail`);
 export type BreakdownResult = {
   depth: number;
   tasks: {
-    id: string; seq: number; kind: TaskKind; intent: string; appetite: string; affectedPaths: string[];
+    id: string; seq: number; kind: TaskKind; intent: string; appetite: string; affectedPaths: string[]; compiledComponents: string[];
     dependsOnSeq: number[]; parentSeq: number | null; level: number; adoType: string | null; prompt: string | null;
   }[];
 };
 export type TaskFlowNode = {
   id: string; seq: number; kind: TaskKind; intent: string; appetite: string; state: string;
   adoType: string | null; level: number; parentTaskId: string | null;
-  approved: boolean; linkedAdoId: number | null; adoUrl: string | null; affectedPaths: string[];
+  approved: boolean; active: boolean; linkedAdoId: number | null; adoUrl: string | null; affectedPaths: string[]; compiledComponents: string[];
   prompt: string | null; origin: "ai" | "human"; approvedAt: string | null; adoSyncedAt: string | null;
   checks: { id: string; seq: number; intent: string; state: string }[];
 };
@@ -188,7 +222,7 @@ export type AdoTaskRow = {
   id: string; requirementId: string; requirementKey: string | null; requirementTitle: string;
   seq: number; intent: string; appetite: string; state: string;
   adoType: string | null; linkedAdoId: number | null; adoUrl: string | null; adoSyncedAt: string | null;
-  approved: boolean; parentTaskId: string | null; level: number;
+  approved: boolean; active: boolean; parentTaskId: string | null; level: number;
   checksCount: number; checksPosted: number;
 };
 export type AdoTasks = { rows: AdoTaskRow[]; inTfs: number; pending: number };
@@ -204,6 +238,18 @@ export const materializeTasks = (id: string) => post<MaterializeResult>(`/workit
 export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
 export const startAssess = (id: string, opts?: { promptKey?: string; customEmphasis?: string; model?: string }) =>
   post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, opts ?? {});
+export type RetroResult = {
+  summary: string; tokenSavings: string[]; timeSavings: string[]; unnecessaryActions: string[];
+  reworkCausingDecisions: string[]; breakdownFeedback: string[]; emphasize: string[];
+};
+export type RetroRun = {
+  id: string | null; kind: string | null;
+  state: "running" | "done" | "error" | "idle" | "rolled_back" | "stopped";
+  lines: string[]; result: RetroResult | null; error: string | null;
+  startedAt?: string | null; finishedAt?: string | null;
+};
+export const startRetro = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/retro`, {});
+export const getRetro = (id: string) => get<RetroRun>(`/workitems/${id}/retro`);
 export const previewAssess = (id: string, promptKey: string, customEmphasis?: string) =>
   get<{ prompt: string; promptHe: string | null; model: string | null; templateTitle: string }>(
     `/workitems/${id}/assess-preview?${new URLSearchParams({ promptKey, ...(customEmphasis ? { customEmphasis } : {}) })}`,
@@ -217,21 +263,33 @@ export type PromptTemplate = {
 export const getPrompts = () => get<{ items: PromptTemplate[] }>("/prompts");
 export const updatePromptTemplate = (id: string, patchBody: Partial<{ title: string; description: string | null; body: string; bodyHe: string | null; defaultModel: string | null }>) =>
   patch<{ updated: boolean }>(`/prompts/${id}`, patchBody);
-export const startBreakdown = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/breakdown`, {});
+export const startBreakdown = (id: string, reason?: string) =>
+  post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/breakdown`, reason ? { reason } : {});
+export const previewBreakdown = (id: string) =>
+  get<{ prompt: string; promptHe: string; repoName: string | null }>(`/workitems/${id}/breakdown-preview`);
+export const previewImplement = (taskId: string) =>
+  get<{ prompt: string; promptHe: string; approved: boolean }>(`/tasks/${taskId}/implement-preview`);
 export type FlowRun = {
   id: string | null; kind: "assess" | "breakdown" | "implement" | null;
   /** "rolled_back" — a past implement run whose code was undone; the
-   *  transcript/result stay for history, but it's no longer the live state. */
-  state: "running" | "done" | "error" | "idle" | "rolled_back";
+   *  transcript/result stay for history, but it's no longer the live state.
+   *  "stopped" — the user killed it mid-run; not a failure. */
+  state: "running" | "done" | "error" | "idle" | "rolled_back" | "stopped";
   lines: string[]; result: AssessResult | BreakdownResult | ImplementResult | null; error: string | null;
   startedAt?: string | null; finishedAt?: string | null;
 };
 export const getFlowRun = (id: string) => get<FlowRun>(`/workitems/${id}/flow-run`);
-export const approveTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string }) => post<{ approved: boolean }>(`/tasks/${id}/approve`, body);
+export const stopFlowRun = (id: string) => post<{ stopped: boolean }>(`/workitems/${id}/flow-run/stop`, {});
+export const sendRunMessage = (id: string, text: string) => post<{ sent: boolean }>(`/workitems/${id}/flow-run/message`, { text });
+export const approveTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string }) =>
+  post<{ approved: boolean; materialized: MaterializeResult | null; materializeError?: string }>(`/tasks/${id}/approve`, body);
 export const rejectTask = (id: string, clientId: string) => post<{ rejected: boolean }>(`/tasks/${id}/reject`, { clientId });
 export const updateRequirement = (id: string, body: Partial<{
-  title: string; type: ReqType; priority: string; risk: string; executor: string; phase: string;
+  title: string; type: ReqType; requirementType: RequirementType; priority: string; risk: string; executor: string; phase: string;
   budgetUsd: string | number | null; dueDate: string | null; parentId: string | null; adoAreaPath: string | null; key: string | null;
+  /** Why — required in spirit whenever this patch reopens a done/archived
+   *  requirement's phase; recorded to decision history. */
+  reopenReason: string;
 }>) => patch<WorkItem>(`/workitems/${id}`, body);
 export const deleteRequirement = (id: string) => del<{ deleted: boolean; ado?: { ok: boolean; detail: string } }>(`/workitems/${id}`);
 
@@ -299,11 +357,27 @@ export const verifyGap = (gapId: string, body: { outcome: GapState; clientId: st
   post(`/gaps/${gapId}/verify`, body);
 export const answerBlocker = (blockerId: string, body: { answer: string; clientId: string }) =>
   post(`/blockers/${blockerId}/answer`, body);
-export const progressTask = (taskId: string, body: { to: Task["state"]; clientId: string }) =>
-  post(`/tasks/${taskId}/progress`, { ...body, mode: "interactive" });
+export class ChecksNotPassed extends Error {
+  constructor(message: string, public unresolved: { id: string; seq: number; intent: string }[]) { super(message); }
+}
+export async function progressTask(taskId: string, body: { to: Task["state"]; clientId: string; overrideChecks?: boolean; overrideReason?: string; reopenReason?: string }) {
+  const r = await fetch(`/api/tasks/${taskId}/progress`, { method: "POST", headers: H, body: JSON.stringify({ ...body, mode: "interactive" }) });
+  if (r.status === 409) {
+    const b409 = await r.json() as { error: string; unresolved: { id: string; seq: number; intent: string }[] };
+    throw new ChecksNotPassed(b409.error, b409.unresolved);
+  }
+  return j<{ taskId: string; from: string; to: string }>(r);
+}
+export const setTaskActive = (taskId: string, active: boolean, clientId: string) =>
+  post<{ active: boolean }>(`/tasks/${taskId}/active`, { active, clientId });
+export const checkAdoRecheck = (taskId: string, clientId: string) =>
+  post<{ checked: boolean; changed: boolean; adoState?: string }>(`/tasks/${taskId}/ado-recheck`, { clientId });
 
 /* ── one task ─────────────────────────────────────────────────────── */
-type TaskSlim = { id: string; seq: number; intent: string; state: string; kind?: TaskKind; linkedAdoId?: number | null; adoType?: string | null };
+type TaskSlim = {
+  id: string; seq: number; intent: string; state: string; kind?: TaskKind; linkedAdoId?: number | null; adoType?: string | null;
+  checkResult?: "passed" | "failed" | null; checkResolvedBy?: string | null; active?: boolean; approvedAt?: string | null;
+};
 export type TaskDetail = {
   task: Task & { workitemId: string; clientId: string; acceptance: { given: string; when: string; then: string }[]; adoSyncedAt: string | null };
   requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
@@ -320,4 +394,21 @@ export type ImplementResult = {
   branch: string; dir: string; repoName: string | null; summary: string;
   filesChanged: string[]; commit: string | null; testsRun: string | null; followUps: string[];
   affectedConsumers: { path: string; usedBy: string[]; reason: string }[];
+  /** Present when the run's task had checks bundled into its prompt —
+   *  the routed-back, per-check verdict. */
+  checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | null }[];
 };
+
+/* ── Bug ↔ Task links (bug-change-request-lifecycle) ─────────────── */
+export type LinkedTaskRow = { id: string; intent: string; requirementId: string; requirementTitle: string };
+export const getBugLinks = (id: string) => get<{ tasks: LinkedTaskRow[] }>(`/workitems/${id}/bug-links`);
+export const linkBugTask = (id: string, taskId: string) => post<{ linked: boolean }>(`/workitems/${id}/bug-links`, { taskId });
+export const unlinkBugTask = (id: string, taskId: string) => del<{ unlinked: boolean }>(`/workitems/${id}/bug-links/${taskId}`);
+export const searchClientTasks = (clientId: string, q: string) =>
+  get<{ tasks: LinkedTaskRow[] }>(`/clients/${clientId}/tasks?${new URLSearchParams({ q })}`);
+
+/* ── research/testing requirement work (requirement-types) ───────── */
+export const startResearchWork = (id: string) =>
+  post<{ taskId: string; materialized: boolean; materializeError?: string }>(`/workitems/${id}/research/start`, {});
+export const finishResearchWork = (id: string, conclusion: string) =>
+  post<{ finished: boolean }>(`/workitems/${id}/research/finish`, { conclusion });

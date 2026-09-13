@@ -127,6 +127,7 @@ export async function verifyGap(input: {
         resolvedBy: input.by.userId,
         resolvedAt: new Date(),
         spunOffTo,
+        ...(input.answer?.trim() ? { answer: input.answer.trim() } : {}),
       })
       .where(sql`${gap.id} = ${input.gapId}`);
 

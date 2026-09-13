@@ -61,6 +61,24 @@ export const workitemPhase = pgEnum("workitem_phase", [
   "archived",
 ]);
 
+/**
+ * Requirement type — a DCC-internal flow-control axis, deliberately
+ * separate from `workitemType` (which only picks a TFS work-item shape
+ * for materialization and has no bearing here, since a requirement
+ * itself never syncs to ADO — only its tasks do). Decided 2026-09-12
+ * (`requirement-types`): orthogonal to `workitemType`, not a reuse of it.
+ *   development — the default today: assessed, broken into tasks, built
+ *   research    — investigates behavior; no development tasks, findings
+ *                 recorded directly under the requirement
+ *   testing     — verifies something already works; same shape as
+ *                 research, the outcome is the verification result
+ */
+export const requirementType = pgEnum("requirement_type", [
+  "development",
+  "research",
+  "testing",
+]);
+
 /** A Gap is a proposal until a human verifies it (architecture §4). */
 export const gapState = pgEnum("gap_state", [
   "proposed",
@@ -87,6 +105,10 @@ export const taskState = pgEnum("task_state", [
   "pending",
   "in_progress",
   "blocked",
+  /** development finished, but at least one of its checks did not pass —
+   *  distinct from "blocked" (waiting on something else) and from "done"
+   *  (a human still has to look at the failure and decide). */
+  "failed_checks",
   "done",
   "dropped",
 ]);

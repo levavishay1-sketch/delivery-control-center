@@ -11,6 +11,7 @@ import { RequirementList } from "./screens/RequirementList.tsx";
 import { ClientList } from "./screens/ClientList.tsx";
 import { ClientDetail } from "./screens/ClientDetail.tsx";
 import { AdoTasks } from "./screens/AdoTasks.tsx";
+import { FlowFullPage } from "./screens/FlowFullPage.tsx";
 import { Alerts } from "./screens/Alerts.tsx";
 import { Budgets } from "./screens/Budgets.tsx";
 import { Settings } from "./screens/Settings.tsx";
@@ -53,6 +54,7 @@ export function App() {
   const path = hash.replace(/^#/, "").split("?")[0]!;
   let screen: React.ReactNode;
   if (path.startsWith("/wi/")) screen = <Record id={path.slice(4)} nav={nav} />;
+  else if (path.startsWith("/flow/")) screen = <FlowFullPage id={path.slice(6)} nav={nav} />;
   else if (path.startsWith("/task/")) screen = <TaskDetail id={path.slice(6)} nav={nav} />;
   else if (path.startsWith("/client/")) screen = <ClientDetail id={path.slice(8)} nav={nav} />;
   else if (path.startsWith("/project/")) screen = <Record id={path.slice(9)} nav={nav} />;

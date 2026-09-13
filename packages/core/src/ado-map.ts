@@ -60,6 +60,20 @@ export const PHASE_TO_ADO_STATE: Record<Phase, string> = {
   archived: "Removed",
 };
 
+/** DCC task `state` → an ADO state to try (Agile). Best-effort — a plain
+ *  "Task" work item only has New/Active/Closed/Removed (no "Resolved"),
+ *  while User Story/Feature/Epic also have "Resolved"; a rejected
+ *  transition on the narrower Task type is caught and ignored by the
+ *  caller, same as every other ADO write in this codebase. */
+export const TASK_STATE_TO_ADO_STATE: Record<string, string> = {
+  pending: "New",
+  in_progress: "Active",
+  failed_checks: "Active",
+  blocked: "Active",
+  done: "Closed",
+  dropped: "Removed",
+};
+
 /**
  * The Agile process hierarchy, top down. A requirement never reaches TFS
  * — the TASKS it breaks into do, and the DEPTH of the task tree picks the

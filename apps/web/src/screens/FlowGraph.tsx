@@ -44,7 +44,12 @@ export function FlowGraph({ requirementId }: { requirementId: string }) {
           label: (
             <div style={{ padding: "8px 10px", textAlign: "left" }}>
               <div style={{ fontFamily: "ui-monospace, monospace", fontSize: 10, color: "#9698b3" }}>
-                {n.key ?? "—"} · {n.type} · {n.phase}{n.linkedAdoId ? ` · ADO #${n.linkedAdoId}` : ""}
+                {n.key ?? "—"} · {n.type} · {n.phase}
+                {n.linkedAdoId ? (
+                  n.adoUrl
+                    ? <> · <a href={n.adoUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ color: "#059669" }}>ADO #{n.linkedAdoId} ↗</a></>
+                    : ` · ADO #${n.linkedAdoId}`
+                ) : ""}
               </div>
               <div style={{ fontWeight: 500, marginTop: 2, fontSize: 12 }}>{n.title}</div>
               {blocked && <div style={{ fontSize: 10, color: "#dc2626", marginTop: 3 }}>{n.openBlockingGaps ? `${n.openBlockingGaps} blocking gap ` : ""}{n.openBlockers ? `${n.openBlockers} blocker` : ""}</div>}

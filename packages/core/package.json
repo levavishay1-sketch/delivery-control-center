@@ -6,8 +6,8 @@
   "main": "./src/index.ts",
   "exports": { ".": "./src/index.ts" },
   "scripts": {
-    "demo": "node src/demo.ts",
-    "prove:routing": "node src/routing.prove.ts"
+    "demo": "tsx src/demo.ts",
+    "prove:routing": "tsx src/routing.prove.ts"
   },
   "dependencies": {
     "@dcc/db": "*",

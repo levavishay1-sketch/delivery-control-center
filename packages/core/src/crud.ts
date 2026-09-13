@@ -15,6 +15,7 @@ import {
 } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 import { normaliseAdoUrl } from "./ado-url.ts";
+import { recordDecision } from "./decisions.ts";
 
 /**
  * Edit + delete for every first-class entity. The one thing that is
@@ -64,7 +65,7 @@ export async function archiveClient(clientId: string, archived: boolean) {
 
 /* ── requirement (workitem) ─────────────────────────────────────────── */
 
-const REQ_FIELDS = ["title", "type", "priority", "risk", "executor", "budgetUsd", "dueDate", "parentId", "adoAreaPath", "phase", "key"] as const;
+const REQ_FIELDS = ["title", "type", "requirementType", "priority", "risk", "executor", "budgetUsd", "dueDate", "parentId", "adoAreaPath", "phase", "key"] as const;
 type ReqField = (typeof REQ_FIELDS)[number];
 
 export async function updateRequirement(input: {
@@ -72,6 +73,10 @@ export async function updateRequirement(input: {
   id: string;
   by: By;
   patch: Partial<Record<ReqField, unknown>>;
+  /** Why — required in spirit whenever this patch reopens a
+   *  done/archived requirement (design notes, `decision-history`); the
+   *  route enforces it, this just records it when given. */
+  reopenReason?: string;
 }) {
   return withTenant(input.clientId, async (tx) => {
     const [before] = await tx.select().from(workitem).where(eq(workitem.id, input.id)).limit(1);
@@ -106,6 +111,14 @@ export async function updateRequirement(input: {
       actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
       payload: { summary: `עודכנו שדות: ${changed.join(", ")}`, fields: changed },
     });
+    const wasClosed = before.phase === "done" || before.phase === "archived";
+    const reopened = wasClosed && changed.includes("phase") && after!.phase !== "done" && after!.phase !== "archived";
+    if (reopened && input.reopenReason?.trim()) {
+      await recordDecision({
+        clientId: input.clientId, workitemId: input.id, by: input.by,
+        trigger: "requirement_reopened", reason: input.reopenReason,
+      });
+    }
     await regenerateBrief(input.clientId, input.id);
     return after!;
   });

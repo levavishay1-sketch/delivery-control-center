@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --watch src/server.ts",
-    "start": "node src/server.ts",
-    "smoke": "node src/smoke.ts"
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "smoke": "tsx src/smoke.ts"
   },
   "dependencies": {
     "@dcc/core": "*",

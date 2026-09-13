@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 export const initials = (s: string) =>
   s.split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
@@ -58,6 +58,110 @@ export function PageHead({ title, sub, crumb, actions }: { title: ReactNode; sub
       </div>
       {actions && <div className="head-actions">{actions}</div>}
     </div>
+  );
+}
+
+/**
+ * The one mandatory checkpoint before anything reaches Claude: the user
+ * sees the exact prompt — Hebrew for reading, English because that's what
+ * actually runs — and sending only happens from the confirm button here.
+ * There is deliberately no other way to fire the underlying action; every
+ * screen that talks to Claude opens this first (architecture decision,
+ * 2026-09-12).
+ */
+export function PromptPreviewModal({
+  title, data, loading, error, onClose, onConfirm, confirming, confirmLabel, disabledReason, reasonField,
+}: {
+  title: string;
+  data: { prompt: string; promptHe: string } | null;
+  loading: boolean;
+  error?: string | null;
+  onClose: () => void;
+  onConfirm: () => void;
+  confirming: boolean;
+  confirmLabel: string;
+  /** set = confirm is disabled and this explains why (e.g. not approved yet) */
+  disabledReason?: string | null;
+  /** A course-changing action (e.g. re-breakdown) asks for a reason
+   *  right here, before confirm — the decision-history capture point
+   *  (design notes, `decision-history`). Confirm stays disabled until
+   *  it's filled. */
+  reasonField?: { label: string; value: string; onChange: (v: string) => void };
+}) {
+  const [lang, setLang] = useState<"he" | "en">("he");
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        width: "min(760px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
+        border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl", textAlign: "start",
+        boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700 }}>{title}</h3>
+          <a onClick={onClose} style={{
+            fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex",
+            alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)",
+          }}>✕</a>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
+          זה בדיוק מה שיישלח ל-Claude (הפרומפט האמיתי תמיד רץ באנגלית — התצוגה בעברית היא לנוחות הקריאה בלבד).
+        </p>
+        {loading ? (
+          <div className="spin">טוען…</div>
+        ) : data ? (
+          <>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
+              <button className={`btn btn-sm ${lang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("he")}>עברית</button>
+              <CopyBtn text={data.promptHe} />
+              <span style={{ width: 1, height: 16, background: "var(--border-hairline)", margin: "0 4px" }} />
+              <button className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("en")}>English</button>
+              <CopyBtn text={data.prompt} />
+            </div>
+            <pre style={{
+              whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, fontFamily: lang === "en" ? "var(--mono)" : "inherit",
+              direction: lang === "en" ? "ltr" : "rtl", textAlign: lang === "en" ? "left" : "start",
+              background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: "0 0 16px",
+              maxHeight: "40vh", overflowY: "auto",
+            }}>
+              {lang === "he" ? data.promptHe : data.prompt}
+            </pre>
+          </>
+        ) : null}
+        {error && <p style={{ fontSize: 12.5, color: "var(--status-critical)", marginBottom: 12 }}>{error}</p>}
+        {disabledReason && <p style={{ fontSize: 12.5, color: "var(--status-warning)", marginBottom: 12 }}>{disabledReason}</p>}
+        {reasonField && (
+          <div className="field" style={{ marginBottom: 12 }}>
+            <label>{reasonField.label}</label>
+            <textarea
+              value={reasonField.value} onChange={(e) => reasonField.onChange(e.target.value)} rows={2}
+              placeholder="למה עכשיו? מה השתנה מאז הפעם הקודמת?"
+              style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }}
+            />
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-primary" disabled={!data || confirming || !!disabledReason || (!!reasonField && !reasonField.value.trim())} onClick={onConfirm}>
+            {confirming ? "שולח…" : confirmLabel}
+          </button>
+          <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** A copy-to-clipboard link, used everywhere a prompt (or any long text
+ *  block) is shown — next to the language it copies, so it stays correct
+ *  even when that language isn't the one currently displayed. */
+export function CopyBtn({ text, label = "העתק" }: { text: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <a
+      onClick={(e) => { e.stopPropagation(); navigator.clipboard?.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
+      style={{ fontSize: 11, color: copied ? "var(--status-healthy)" : "var(--ink-500)", cursor: "pointer", fontWeight: 600, whiteSpace: "nowrap" }}
+    >
+      {copied ? "✓ הועתק" : `⧉ ${label}`}
+    </a>
   );
 }
 

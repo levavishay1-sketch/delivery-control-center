@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, getClientAdoTasks, unlinkClientRepo, REQ_TYPE_HE, type AdoTasks, type ClientDetail as CD, type Requirement } from "../api.ts";
+import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, getClientAdoTasks, unlinkClientRepo, approveTask, REQ_TYPE_HE, type AdoTasks, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
 
@@ -31,9 +31,15 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
   const [modal, setModal] = useState<"req" | "repo" | "ado" | "editClient" | "import" | null>(null);
   const [editRepo, setEditRepo] = useState<{ id: string; name: string; adoRepoRef: string | null } | null>(null);
   const [ado, setAdo] = useState<AdoTasks | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
   const reload = () => {
     getClient(id).then(setD).catch((e) => setErr(String(e)));
     getClientAdoTasks(id).then(setAdo).catch(() => {});
+  };
+  const doApprove = async (taskId: string) => {
+    setApprovingId(taskId);
+    try { await approveTask(taskId, { clientId: id }); reload(); }
+    finally { setApprovingId(null); }
   };
   useEffect(() => { reload(); }, [id]);
 
@@ -122,9 +128,10 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
               const prev = ado!.rows[i - 1];
               const newReq = !prev || prev.requirementId !== t.requirementId;
               return (
-                <tr key={t.id} style={newReq && i > 0 ? { borderTop: "2px solid var(--border-hairline)" } : undefined}>
+                <tr key={t.id} style={{ opacity: t.active ? 1 : 0.55, ...(newReq && i > 0 ? { borderTop: "2px solid var(--border-hairline)" } : {}) }}>
                   <td style={{ paddingInlineStart: 14 + t.level * 22 }}>
                     {t.level > 0 && <span style={{ color: "var(--ink-300)" }}>↳ </span>}
+                    {!t.active && <span style={{ fontSize: 10.5, color: "var(--ink-400)", marginInlineStart: 6 }}>⚪ לא פעיל</span>}
                     <span className="w-title" onClick={() => nav(`#/task/${t.id}`)} title={t.intent}>{t.intent.length > 90 ? `${t.intent.slice(0, 90)}…` : t.intent}</span>
                     {t.checksCount > 0 && (
                       <span title={`${t.checksCount} בדיקות — לא work items בפני עצמן, מתועדות ב-Discussion של המשימה הזו`} style={{ fontSize: 10.5, color: "var(--ink-400)", marginInlineStart: 6 }}>
@@ -136,13 +143,17 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
                   <td>
                     {t.linkedAdoId
                       ? <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer">#{t.linkedAdoId} ↗</a>
-                      : <span style={{ color: "var(--ink-400)", fontSize: 11.5 }}>{t.approved ? "מאושר, טרם הוקם" : "ממתין לאישור"}</span>}
+                      : t.approved
+                        ? <span style={{ color: "var(--ink-400)", fontSize: 11.5 }}>מאושר, ממתין להקמה</span>
+                        : <button className="btn btn-primary btn-sm" disabled={approvingId === t.id} onClick={() => doApprove(t.id)}>
+                            {approvingId === t.id ? "מאשר…" : "✓ אישור הקמת משימה ב-TFS"}
+                          </button>}
                   </td>
                   <td style={{ fontSize: 11.5 }}>{t.state.replace(/_/g, " ")}</td>
                   <td>
-                    <span className="w-title" onClick={() => nav(`#/wi/${t.requirementId}`)} title={t.requirementTitle}>
-                      {t.requirementKey ?? (t.requirementTitle.length > 34 ? `${t.requirementTitle.slice(0, 34)}…` : t.requirementTitle)}
-                    </span>
+                    <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/wi/${t.requirementId}`)} title={t.requirementTitle}>
+                      ⬅ {t.requirementKey ?? (t.requirementTitle.length > 24 ? `${t.requirementTitle.slice(0, 24)}…` : t.requirementTitle)}
+                    </button>
                   </td>
                 </tr>
               );

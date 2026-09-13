@@ -19,7 +19,8 @@
     "spec": "openspec"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "tsx": "^4.23.13"
   },
   "allowScripts": {
     "esbuild@0.18.20": true,

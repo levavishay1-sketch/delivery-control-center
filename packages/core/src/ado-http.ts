@@ -8,6 +8,12 @@
  */
 const ALL_VERSIONS = ["7.1", "7.0", "6.0", "5.1", "5.0", "4.1"];
 
+/** Every ADO call below is user-triggered (approve, materialize, pull)
+ *  and must never hang a request indefinitely — a misconfigured host or
+ *  an unreachable network previously hung `fetch` with no OS-level
+ *  timeout, blocking the caller (e.g. approving a task) forever. */
+const ADO_TIMEOUT_MS = 20_000;
+
 /**
  * Per-host cache of the api-version that worked. Old on-prem servers
  * 404 the versions they don't know, so without this every call walks
@@ -46,7 +52,7 @@ export async function adoGet(base: string, path: string, pat: string): Promise<G
   for (const v of versionsFor(clean)) {
     try {
       const res = await fetch(`${clean}/_apis/${path}${path.includes("?") ? "&" : "?"}api-version=${v}`, {
-        headers: adoAuthHeader(pat),
+        headers: adoAuthHeader(pat), signal: AbortSignal.timeout(ADO_TIMEOUT_MS),
       });
       if (res.ok) { rememberVersion(clean, v); return { ok: true, apiVersion: v, body: await res.json().catch(() => null) }; }
       if (res.status === 401) return { ok: false, status: 401, detail: "401 — ה-PAT נדחה. בדוק שהוא בתוקף ושיש לו Work Items + Code (Read)." };
@@ -89,7 +95,7 @@ export async function adoDelete(base: string, apiPath: string, pat: string): Pro
   for (const v of versionsFor(clean)) {
     try {
       const sep = apiPath.includes("?") ? "&" : "?";
-      const res = await fetch(`${clean}/_apis/${apiPath}${sep}api-version=${v}`, { method: "DELETE", headers: adoAuthHeader(pat) });
+      const res = await fetch(`${clean}/_apis/${apiPath}${sep}api-version=${v}`, { method: "DELETE", headers: adoAuthHeader(pat), signal: AbortSignal.timeout(ADO_TIMEOUT_MS) });
       if (res.ok) { rememberVersion(clean, v); return { ok: true, status: res.status }; }
       if (res.status === 401) return { ok: false, status: 401, detail: "PAT rejected" };
       if (res.status !== 404) sawOnly404 = false;
@@ -115,6 +121,7 @@ export async function adoUpload(input: {
         method: "POST",
         headers: { ...adoAuthHeader(input.pat), "content-type": "application/octet-stream" },
         body: input.bytes as unknown as ArrayBuffer,
+        signal: AbortSignal.timeout(ADO_TIMEOUT_MS),
       });
       if (res.ok) {
         rememberVersion(clean, v);
@@ -148,6 +155,7 @@ export async function adoSend(input: {
         method: input.method,
         headers: { ...adoAuthHeader(input.pat), "content-type": ct },
         body: JSON.stringify(input.body),
+        signal: AbortSignal.timeout(ADO_TIMEOUT_MS),
       });
       if (res.ok) { rememberVersion(clean, v); return { ok: true, apiVersion: v, body: (await res.json().catch(() => ({}))) as Record<string, unknown> }; }
       const text = await res.text().catch(() => "");
