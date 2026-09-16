@@ -1,0 +1,51 @@
+{
+  "$comment": "Repository AI Enablement — security profile catalog (spec §11 Stage 04). Config-as-code, same pattern as model-policy.json: this is the DCC-owned GLOBAL layer, resolved per repo as Organization Policy + Repository-specific Delta = Effective Policy (see security-profiles.ts's resolveEffectivePolicy). Each axis is \"allow\" | \"ask\" | \"deny\". DCC owns this catalog — reviewed and versioned here, not editable per client.",
+  "version": 1,
+  "profiles": {
+    "STANDARD_DEVELOPMENT": {
+      "label": "פיתוח סטנדרטי",
+      "description": "ברירת המחדל לרוב מאגרי הפיתוח: קריאה/כתיבה חופשית בתוך הריפו, build/test/lint אוטומטיים, פעולות הרסניות ו-push דורשים אישור.",
+      "read": "allow",
+      "write": "allow",
+      "commands": { "build": "allow", "test": "allow", "lint": "allow", "git_read": "allow", "git_push": "ask", "deployment": "ask", "destructive": "deny" },
+      "network": "deny",
+      "mcp": "ask"
+    },
+    "RESTRICTED": {
+      "label": "מוגבל",
+      "description": "למאגרים עם לוגיקה רגישה (למשל תאימות רגולטורית/פיננסית): כתיבה דורשת אישור, git push ופריסה דורשים אישור מפורש.",
+      "read": "allow",
+      "write": "ask",
+      "commands": { "build": "allow", "test": "allow", "lint": "allow", "git_read": "allow", "git_push": "ask", "deployment": "ask", "destructive": "deny" },
+      "network": "deny",
+      "mcp": "deny"
+    },
+    "READ_ONLY": {
+      "label": "קריאה בלבד",
+      "description": "חקירה/ניתוח בלבד — אין כתיבה, אין הרצת פקודות בנייה, אין push.",
+      "read": "allow",
+      "write": "deny",
+      "commands": { "build": "deny", "test": "deny", "lint": "deny", "git_read": "allow", "git_push": "deny", "deployment": "deny", "destructive": "deny" },
+      "network": "deny",
+      "mcp": "deny"
+    },
+    "SANDBOX": {
+      "label": "ארגז חול",
+      "description": "למאגרי הדגמה/ניסוי בסיכון נמוך: הכי מתירני, אך עדיין ללא פריסה או פעולות הרסניות אוטומטיות.",
+      "read": "allow",
+      "write": "allow",
+      "commands": { "build": "allow", "test": "allow", "lint": "allow", "git_read": "allow", "git_push": "allow", "deployment": "ask", "destructive": "ask" },
+      "network": "ask",
+      "mcp": "ask"
+    },
+    "INFRASTRUCTURE": {
+      "label": "תשתית",
+      "description": "למאגרי תשתית/פריסה: כתיבה מותרת בקוד אך לא בהגדרות תשתית, פריסה ופעולות הרסניות דורשות אישור תמיד.",
+      "read": "allow",
+      "write": "ask",
+      "commands": { "build": "allow", "test": "allow", "lint": "allow", "git_read": "allow", "git_push": "ask", "deployment": "ask", "destructive": "deny" },
+      "network": "deny",
+      "mcp": "deny"
+    }
+  }
+}

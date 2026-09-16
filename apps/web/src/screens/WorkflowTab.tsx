@@ -845,7 +845,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
 /* ── the step rail ─────────────────────────────────────────────────── */
 
 export function StepRail({ steps, done, unlocked, active, onPick, busy }: {
-  steps: readonly { key: string; label: string }[];
+  steps: readonly { key: string; label: string; description?: string }[];
   done: boolean[]; unlocked: boolean[]; active: number;
   onPick: (i: number) => void; busy?: boolean;
 }) {
@@ -862,7 +862,7 @@ export function StepRail({ steps, done, unlocked, active, onPick, busy }: {
               className={`ov-step${isActive ? " active" : ""}`}
               onClick={() => onPick(i)}
               disabled={!open || busy}
-              title={open ? undefined : "נעול עד שהשלב הקודם יסתיים"}
+              title={!open ? "נעול עד שהשלב הקודם יסתיים" : s.description}
             >
               <div className="n">{isDone && <span className="ok">✓</span>}<span>שלב {i + 1}</span></div>
               <div className="lbl">{s.label}</div>

@@ -1,10 +1,11 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, withTenant } from "@dcc/db";
-import { eventLog, flowRun, gap, repo, task, taskDependency, workitem } from "@dcc/db/schema";
+import { eventLog, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
 import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
 import { adoSend } from "./ado-http.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
@@ -14,6 +15,7 @@ import { inheritedChecksForBug } from "./bugs.ts";
 import { getPromptByKey, renderPrompt } from "./prompts.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
+import { resolveRepoAiProfile, renderRepoAiProfileBlock } from "./repo-ai/resolve.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -27,7 +29,18 @@ import { proposeGap } from "./gaps.ts";
 // keep every arg space-free (comma-separated --allowed-tools) to avoid quoting.
 const CLAUDE_BIN = process.env.DCC_CLAUDE_BIN || (process.platform === "win32" ? "claude.cmd" : "claude");
 const CLAUDE_VIA_SHELL = process.platform === "win32";
-const REPO_CACHE = path.join(os.tmpdir(), "dcc-repos");
+// `os.homedir()`, not `os.tmpdir()` — found live: on this machine (and
+// plausibly others), the `TEMP`/`TMP` env vars Windows hands Node resolve
+// to the 8.3 short-name form of the profile directory (`C:\Users\
+// AVISHA~1\...`), not the real long name (`C:\Users\AvishayLev\...`).
+// Claude Code's own write-permission check treats a short-name path
+// segment as suspicious and refuses to write even under `acceptEdits`
+// (headless, so nothing can answer the resulting approval prompt) — a
+// write-mode call silently "succeeds" (exit 0, Completed) while
+// producing zero file changes, explaining in its text response that it
+// couldn't get approval. `os.homedir()` reliably resolves to the long
+// form on this same machine (confirmed live) and needs no other change.
+const REPO_CACHE = path.join(os.homedir(), ".dcc-repos");
 
 /* ── flow runs: durable background jobs for the local `claude` CLI ──
  *
@@ -230,17 +243,47 @@ export type RunMeta = {
   numTurns: number | null;
 };
 
-/** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back. */
-async function runClaudeJson<T>(
-  cwd: string,
-  prompt: string,
-  opts: { timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string; onMeta?: (meta: RunMeta) => void } = {},
-): Promise<T> {
+type RunClaudeOpts = {
+  timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string; onMeta?: (meta: RunMeta) => void;
+  /** `Read(...)` deny patterns — passed as `--settings {"permissions":{"deny":[...]}}`.
+   *  Used by `repo-ai/*` to enforce onboarding step 2 (approved before any
+   *  exploration of a repo runs) — see `repo-ai/permissions.ts`. */
+  denyRules?: string[];
+};
+
+/** Run `claude -p` in `cwd` (prompt via stdin) and return the assistant's
+ *  final text plus usage/cost metadata — no JSON parsing. This is the one
+ *  place that actually spawns the CLI ("Runtime Adapter" in the
+ *  `repository-ai-management` design); `runClaudeJson` below is a thin
+ *  JSON-parsing wrapper on top for every caller that wants structured
+ *  output. Exported for `repo-ai/*` callers whose response is plain text
+ *  (the `/init` bootstrap — see `repo-ai/bootstrap.ts`) rather than JSON. */
+export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts = {}): Promise<{ text: string; meta: RunMeta }> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain.
-  // Read-only by default (plan mode). `write` is only for implementation runs,
-  // and those work on an isolated clone — never the user's own checkout.
+  // Read-only by default. `write` is only for implementation runs, and those
+  // work on an isolated clone — never the user's own checkout.
   // A run tracked by runId also opens for INPUT as stream-json: that is what
   // lets stopFlowRun()/sendRunMessage() reach it while it's still working.
+  //
+  // The read-only branch's actual safety comes entirely from `--allowed-
+  // tools "Read,Grep,Glob"` — Write/Edit/Bash simply aren't callable,
+  // regardless of `--permission-mode`. It used to also pass
+  // `--permission-mode plan`, Claude Code's real INTERACTIVE plan-then-
+  // approve workflow, which expects the model to eventually call an
+  // `ExitPlanMode` tool to present its plan for human approval — a tool
+  // that doesn't exist in headless `-p` mode. Found live (repo-onboarding
+  // Phase 6, `skills_evaluation`): a `read_only_plan` call spun to 29
+  // turns and its final text was just "`ExitPlanMode` isn't available...
+  // so here is the finished analysis directly" — except that time it
+  // DIDN'T re-emit the actual analysis, only a claim that it already had,
+  // silently defeating `extractFencedBlock`'s JSON/fence extraction. Every
+  // prior phase's `read_only_plan` calls hit the same latent confusion —
+  // most self-corrected by working around the missing tool (wasting turns
+  // in the process), one finally didn't. Since `--allowed-tools` already
+  // provides the real restriction, `acceptEdits` — the same mode already
+  // proven safe for the write branch — replaces `plan` here too; there is
+  // nothing for it to "accept" since Write/Edit aren't in the allowed-tools
+  // list, but it carries none of `plan` mode's ExitPlanMode expectation.
   const steerable = !!opts.runId;
   const args = opts.write
     ? [
@@ -249,12 +292,29 @@ async function runClaudeJson<T>(
         "--max-turns", String(opts.maxTurns ?? 80),
       ]
     : [
-        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "plan",
+        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
         "--allowed-tools", "Read,Grep,Glob",
         "--max-turns", String(opts.maxTurns ?? 40),
       ];
   if (steerable) args.push("--input-format", "stream-json");
   if (opts.model) args.push("--model", opts.model);
+  // `--settings` accepts either inline JSON or a file path (`claude --help`
+  // confirms both) — a temp FILE is used here, not the inline JSON string
+  // directly. Found live: on Windows, `claude.cmd` can only be spawned with
+  // `shell: true` (see CLAUDE_VIA_SHELL below), which routes the whole
+  // command through cmd.exe; cmd.exe's own argument-splitting mangles a
+  // JSON string containing `{`/`}`/`"` badly enough that the CLI received
+  // corrupted text and failed with "Invalid JSON provided to --settings" —
+  // reproduced in isolation (a bare `runClaudeRaw` call with one deny rule,
+  // no pipeline code involved) and confirmed the SAME JSON works perfectly
+  // when the `claude` binary is invoked directly (no shell mangling). A
+  // plain file path has no shell-special characters to mangle.
+  let settingsFile: string | null = null;
+  if (opts.denyRules?.length) {
+    settingsFile = path.join(os.tmpdir(), `dcc-claude-settings-${randomUUID()}.json`);
+    writeFileSync(settingsFile, JSON.stringify({ permissions: { deny: opts.denyRules } }));
+    args.push("--settings", settingsFile);
+  }
   const raw = await new Promise<string>((resolve, reject) => {
     const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     const proc: SteerableProc | null = steerable ? { child, stdinOpen: true, stoppedByUser: false } : null;
@@ -284,6 +344,7 @@ async function runClaudeJson<T>(
     child.on("close", (code) => {
       clearTimeout(killer);
       if (proc) runningProcs.delete(opts.runId!);
+      if (settingsFile) { try { unlinkSync(settingsFile); } catch { /* best-effort cleanup */ } }
       if (proc?.stoppedByUser) return reject(new Error("STOPPED_BY_USER"));
       if (code !== 0) return reject(new Error(`claude exited ${code}: ${(err || out).slice(0, 400)}`));
       resolve(out);
@@ -296,22 +357,30 @@ async function runClaudeJson<T>(
   // {"type":"result","result":"…"} line — which also carries cost/usage.
   let text = raw.trim();
   const resultLine = raw.split("\n").reverse().find((l) => l.includes('"type":"result"'));
+  let meta: RunMeta = { model: opts.model ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null };
   try {
     const env = JSON.parse((resultLine ?? text).trim()) as {
       result?: string; total_cost_usd?: number; duration_ms?: number; num_turns?: number;
       usage?: { input_tokens?: number; output_tokens?: number };
     };
     if (typeof env.result === "string") text = env.result;
-    opts.onMeta?.({
+    meta = {
       model: opts.model ?? null,
       costUsd: typeof env.total_cost_usd === "number" ? env.total_cost_usd : null,
       inputTokens: env.usage?.input_tokens ?? null,
       outputTokens: env.usage?.output_tokens ?? null,
       durationMs: typeof env.duration_ms === "number" ? env.duration_ms : null,
       numTurns: typeof env.num_turns === "number" ? env.num_turns : null,
-    });
-  } catch { /* fall back to raw */ }
+    };
+  } catch { /* fall back to raw text, meta stays all-null */ }
+  opts.onMeta?.(meta);
+  return { text, meta };
+}
 
+/** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back.
+ *  Exported for `repo-ai/*` (P2 knowledge baseline, P3 recommendations). */
+export async function runClaudeJson<T>(cwd: string, prompt: string, opts: RunClaudeOpts = {}): Promise<T> {
+  const { text } = await runClaudeRaw(cwd, prompt, opts);
   // pull the JSON object/array out of whatever the model wrapped it in
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, text];
   const jsonText = (m[1] ?? text).trim();
@@ -562,22 +631,40 @@ export async function getRetroRunView(workitemId: string): Promise<FlowRunView |
   return row ? viewOf(row) : null;
 }
 
-/** Local working copy for the repo — clone or pull. Returns null if we can't get one. */
-async function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+/** Local working copy for the repo — clone or pull. Returns null if we can't get one.
+ *  Exported for `repo-ai/*` (inventory scan, knowledge baseline, init, recommendations) —
+ *  same cache-clone mechanism `runImplement` uses, not a second checkout system.
+ *
+ *  Real bug found live (2026-09-16): reusing an existing cache clone used
+ *  to just `git pull --ff-only` on WHATEVER branch happened to be checked
+ *  out — but `runRepoInit` leaves the clone on its own throwaway
+ *  `dcc-ai/init-*` branch (no upstream), even when that run failed. Every
+ *  subsequent sync then silently pulled nothing (no upstream to compare
+ *  against) and kept re-scanning a snapshot frozen at whenever that
+ *  branch was cut — confirmed against the real Altshuler Trade cache,
+ *  still sitting on a dead branch from an earlier failed `/init` test.
+ *  Fix: always reset to the actual default branch before pulling, not
+ *  just pull blindly — same correctness as a fresh clone, without paying
+ *  its full download cost every time. */
+export async function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
   if (r.localPath && existsSync(r.localPath)) return r.localPath;
   const gitUrl = r.adoRepoRef && /^(https?:\/\/|git@)/.test(r.adoRepoRef) ? r.adoRepoRef : null;
   if (!gitUrl) return r.localPath ?? null;
   mkdirSync(REPO_CACHE, { recursive: true });
   const dir = path.join(REPO_CACHE, r.id);
-  const run = (args: string[], c?: string) =>
-    new Promise<number>((res) => {
-      const p = spawn("git", args, { cwd: c, windowsHide: true, shell: process.platform === "win32" });
-      p.on("close", (code) => res(code ?? 1));
-      p.on("error", () => res(1));
-    });
   if (existsSync(path.join(dir, ".git"))) {
-    await run(["pull", "--ff-only"], dir);
+    await git(["reset", "--hard"], dir);
+    await git(["clean", "-fd"], dir);
+    const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
+    await git(["checkout", base], dir);
+    await git(["pull", "--ff-only"], dir);
   } else {
+    const run = (args: string[], c?: string) =>
+      new Promise<number>((res) => {
+        const p = spawn("git", args, { cwd: c, windowsHide: true, shell: process.platform === "win32" });
+        p.on("close", (code) => res(code ?? 1));
+        p.on("error", () => res(1));
+      });
     const code = await run(["clone", "--depth", "80", gitUrl, dir]);
     if (code !== 0) return null;
   }
@@ -585,6 +672,18 @@ async function ensureCheckout(r: { id: string; name: string; localPath: string |
 }
 
 type Dev = { userId: string };
+
+/** Looks up a real name/email for a git commit's `-c user.name=/user.email=`
+ *  identity — replacing the generic `DCC <dcc@local>` constant that used to
+ *  be hardcoded regardless of who actually triggered the run. Identity
+ *  non-negotiable #2 ("always a real person behind every AI action")
+ *  applies to the commit record itself, not just the DB's actor column.
+ *  Falls back to the generic identity only if the user row is somehow gone
+ *  by the time the commit runs — never throws, a commit must still succeed. */
+export async function resolveCommitIdentity(userId: string): Promise<{ name: string; email: string }> {
+  const [u] = await db.select({ displayName: users.displayName, email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+  return u ? { name: u.displayName, email: u.email } : { name: "DCC", email: "dcc@local" };
+}
 
 async function loadRequirementText(clientId: string, workitemId: string) {
   return withTenant(clientId, async (tx) => {
@@ -696,8 +795,9 @@ async function buildAssessPrompt(input: {
   );
   const promptHe = tmpl?.bodyHe ? join(renderPrompt(tmpl.bodyHe, varsHe), contract?.bodyHe) : null;
   const model = input.model || tmpl?.defaultModel || undefined;
+  const repoAiBlock = r ? renderRepoAiProfileBlock(await resolveRepoAiProfile(input.clientId, r.id)) : "";
 
-  return { prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
+  return { prompt: repoAiBlock ? `${repoAiBlock}\n${prompt}` : prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
 }
 
 /** Render (never run) the prompt for one tier — powers the preview modal. */
@@ -990,7 +1090,8 @@ async function buildBreakdownPrompt(input: { clientId: string; workitemId: strin
     "",
     "(ההוראות המדויקות ל-Claude — פורמט, סיווג task/check, כללי כתיבה — תמיד רצות באנגלית; זה תוכן הדרישה עצמו, לנוחות קריאה.)",
   ].join("\n");
-  return { prompt, promptHe, cwd, repoName: r?.name ?? null };
+  const repoAiBlock = r ? renderRepoAiProfileBlock(await resolveRepoAiProfile(input.clientId, r.id)) : "";
+  return { prompt: repoAiBlock ? `${repoAiBlock}\n${prompt}` : prompt, promptHe, cwd, repoName: r?.name ?? null };
 }
 
 export async function previewBreakdownPrompt(input: { clientId: string; workitemId: string }): Promise<{ prompt: string; promptHe: string; repoName: string | null }> {
@@ -1145,7 +1246,8 @@ export type ImplementResult = {
  *  must run WITHOUT shell:true — Windows' cmd.exe re-splits a quoted
  *  argument at every space, which silently breaks any commit message
  *  with spaces (e.g. "t1: ..." becomes three separate pathspec args). */
-function git(args: string[], cwd: string, opts?: { timeoutMs?: number }): Promise<{ code: number; out: string }> {
+/** Exported for `repo-ai/*` — same reasoning as `ensureCheckout`. */
+export function git(args: string[], cwd: string, opts?: { timeoutMs?: number }): Promise<{ code: number; out: string }> {
   return new Promise((res) => {
     // GIT_TERMINAL_PROMPT=0 stops git's own credential prompt from hanging
     // a headless spawn — but a credential HELPER (e.g. Git Credential
@@ -1299,7 +1401,9 @@ async function buildImplementPrompt(input: { clientId: string; workitemId: strin
     "(ההוראות הטכניות ל-Claude — מבנה git, פורמט התשובה — תמיד רצות באנגלית; זה התוכן בפועל, לנוחות קריאה.)",
   ].join("\n");
 
-  return { prompt, promptHe, instruction, t, wi, hasChecks: checks.length > 0 };
+  const implR = await firstRepo(input.clientId, input.workitemId);
+  const repoAiBlock = implR ? renderRepoAiProfileBlock(await resolveRepoAiProfile(input.clientId, implR.id)) : "";
+  return { prompt: repoAiBlock ? `${repoAiBlock}\n${prompt}` : prompt, promptHe, instruction, t, wi, hasChecks: checks.length > 0 };
 }
 
 export async function previewImplementPrompt(input: { clientId: string; workitemId: string; taskId: string }): Promise<{ prompt: string; promptHe: string; approved: boolean }> {
@@ -1378,7 +1482,8 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     changed = stat.out.split("\n").map((s) => s.trim()).filter(Boolean);
     if (changed.length > 0) {
       const msg = `${wi?.key ?? "REQ"} t${t.seq}: ${t.intent.slice(0, 90)}\n\nDCC task ${t.id}\n\nCo-Authored-By: Claude <noreply@anthropic.com>`;
-      const c = await git(["-c", "user.name=DCC", "-c", "user.email=dcc@local", "commit", "-m", msg], dir);
+      const identity = await resolveCommitIdentity(input.by.userId);
+      const c = await git(["-c", `user.name=${identity.name}`, "-c", `user.email=${identity.email}`, "commit", "-m", msg], dir);
       if (c.code === 0) commit = (await git(["rev-parse", "--short", "HEAD"], dir)).out;
       pushLine(input.runId, commit ? `✓ commit ${commit} · ${changed.length} קבצים` : `commit נכשל: ${c.out.slice(0, 200)}`);
     } else {
@@ -1518,7 +1623,7 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
 }
 
 /** git@github.com:owner/repo.git or https://github.com/owner/repo.git → https://github.com/owner/repo */
-function httpsRepoUrl(remote: string): string | null {
+export function httpsRepoUrl(remote: string): string | null {
   const ssh = remote.match(/^git@([^:]+):(.+?)(\.git)?$/);
   if (ssh) return `https://${ssh[1]}/${ssh[2]}`;
   const https = remote.match(/^https?:\/\/([^/]+)\/(.+?)(\.git)?$/);

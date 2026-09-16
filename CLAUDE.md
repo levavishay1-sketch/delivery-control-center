@@ -20,7 +20,19 @@
   server is already running, stop it (or restart it right after) before
   running `dev:migrate`/`dev:setup` in a separate shell, or the running
   server keeps querying against its stale, pre-migration schema and every
-  query touching the new column 500s until it's restarted.
+  query touching the new column 500s until it's restarted. This is worse
+  than staleness with `npm run -w @dcc/api dev` (`tsx watch`): editing a
+  source file while a migration/script is mid-write races `tsx watch`'s
+  own kill-and-respawn against that write and can leave `.pgdata` genuinely
+  corrupted — confirmed live (2026-09-16): the DB stopped starting
+  entirely (`RuntimeError: Aborted()` inside Postgres's own WASM
+  crash-recovery), reproduced identically via `dev:migrate` itself, with
+  no fix short of `dev:reset` (no `pg_resetwal`/`pg_waldump` ships with
+  PGlite's embedded build). **Prefer `npm run -w @dcc/api start` (plain
+  `tsx`, no watch) whenever a migration or one-off script might run
+  concurrently**, and always stop the API process before `dev:migrate`/
+  `dev:setup`/`dev:reset` rather than relying on watch-mode to restart
+  around it.
 - Only `appendEvent()` writes to `event_log` — never a raw INSERT.
 - Every tenant-scoped table carries `client_id` and an RLS policy.
 - Don't change the five foundational decisions (see `openspec/project.md`)

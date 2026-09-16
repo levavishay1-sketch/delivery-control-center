@@ -299,6 +299,8 @@ export const deleteClient = (id: string, archive = false) => del<{ deleted?: boo
 export const updateRepo = (id: string, body: Partial<{ name: string; adoRepoRef: string | null; defaultBranch: string }>) => patch<{ updated: boolean }>(`/repos/${id}`, body);
 export const deleteRepo = (id: string) => del<{ deleted: boolean }>(`/repos/${id}`);
 export const unlinkClientRepo = (clientId: string, repoId: string) => del<{ unlinked: boolean }>(`/clients/${clientId}/repos/${repoId}`);
+export const linkRepoToClient = (clientId: string, body: { repoId?: string; name?: string; gitUrl?: string; adoRepoRef?: string }) =>
+  post<{ id: string; name: string; adoRepoRef: string | null }>(`/clients/${clientId}/repos`, body);
 export const updateConnection = (clientId: string, id: string, body: Partial<{ orgUrl: string; project: string; pat: string }>) => patch<{ updated: boolean }>(`/clients/${clientId}/connections/${id}`, body);
 export const linkRepoToReq = (wiId: string, body: { repoId?: string; name?: string; gitUrl?: string; linkKind?: "declared" | "auto" }) => post<{ linked: boolean }>(`/workitems/${wiId}/repos`, body);
 export const unlinkRepoFromReq = (wiId: string, repoId: string) => del<{ unlinked: boolean }>(`/workitems/${wiId}/repos/${repoId}`);
@@ -412,3 +414,44 @@ export const startResearchWork = (id: string) =>
   post<{ taskId: string; materialized: boolean; materializeError?: string }>(`/workitems/${id}/research/start`, {});
 export const finishResearchWork = (id: string, conclusion: string) =>
   post<{ finished: boolean }>(`/workitems/${id}/research/finish`, { conclusion });
+
+/* ── repository AI enablement — the 16-stage onboarding pipeline
+ * (`repository-ai-enablement`). Replaces the old 3-step
+ * `repository-ai-management` flow entirely (2026-09-16) — its UI
+ * (`RepoAiPanel.tsx`) and this client's `repo-ai/*` functions were
+ * deleted; the backend `repo-ai/*` module and its data are left alone
+ * for now, per the earlier decision to defer old-data cleanup. ────── */
+export type OnboardingStatus = "Pending" | "Running" | "WaitingForUser" | "Completed" | "CompletedWithWarnings" | "Failed" | "Skipped" | "Cancelled";
+export type OnboardingRun = {
+  id: string; repoId: string; clientId: string; status: OnboardingStatus; currentStageKey: string | null;
+  onboardingVersion: string; workspaceKind: string | null; workspacePath: string | null; defaultBranch: string | null;
+  baselineSha: string | null; branchName: string | null; triggeredBy: string;
+  startedAt: string; completedAt: string | null; cancelledAt: string | null; cancelledBy: string | null;
+};
+export type OnboardingStage = {
+  id: string; runId: string; stageKey: string; stageOrder: number; status: OnboardingStatus; attempt: number;
+  startedAt: string | null; completedAt: string | null; result: unknown; warnings: string[]; errors: string[];
+  claudeExecutionId: string | null; sourceCommitSha: string | null; updatedAt: string;
+};
+export type OnboardingRunView = { run: OnboardingRun; stages: OnboardingStage[]; profile: unknown };
+export const startOnboardingRun = (repoId: string) => post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, {});
+export const getLatestOnboardingRun = (repoId: string) =>
+  get<{ runId: string; status: OnboardingStatus; currentStageKey: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
+export const getOnboardingRun = (repoId: string, runId: string) => get<OnboardingRunView>(`/repos/${repoId}/onboarding/runs/${runId}`);
+export const advanceOnboardingRun = (repoId: string, runId: string) =>
+  post<{ runStatus: string; stageKey: string | null }>(`/repos/${repoId}/onboarding/runs/${runId}/advance`, {});
+export const cancelOnboardingRun = (repoId: string, runId: string) =>
+  post<{ cancelled: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/cancel`, {});
+export const submitOnboardingStageInput = (repoId: string, runId: string, stageKey: string, input: unknown) =>
+  post<{ runStatus: string; stageKey: string | null }>(`/repos/${repoId}/onboarding/runs/${runId}/stages/${stageKey}/input`, { input });
+export type OnboardingRunCostSummary = { totalCostUsd: number; totalInputTokens: number; totalOutputTokens: number; totalDurationMs: number; executionCount: number };
+export const getOnboardingRunCostSummary = (repoId: string, runId: string) =>
+  get<OnboardingRunCostSummary>(`/repos/${repoId}/onboarding/runs/${runId}/cost-summary`);
+
+/* ── global AI component catalog ──────────────────────────────────── */
+export type AiComponentRow = { id: string; type: string; title: string; description: string | null; firstSeenAt: string; lastSeenAt: string; activeRepoCount: number };
+export const getAiComponents = () => get<{ components: AiComponentRow[] }>("/ai-components");
+export const getAiComponentRepos = (id: string) =>
+  get<{ repos: { repoId: string; repoName: string; clientName: string | null; detectedPath: string; active: boolean; firstSeenAt: string; lastSeenAt: string; removedAt: string | null }[] }>(`/ai-components/${id}/repos`);
+export const updateAiComponent = (id: string, body: { title?: string; description?: string | null }) =>
+  patch<{ updated: boolean }>(`/ai-components/${id}`, body);

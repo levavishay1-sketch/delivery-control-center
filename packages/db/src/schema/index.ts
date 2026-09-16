@@ -4,3 +4,5 @@ export * from "./tenancy.ts";
 export * from "./workitem.ts";
 export * from "./events.ts";
 export * from "./prompts.ts";
+export * from "./repo-ai.ts";
+export * from "./repo-onboarding.ts";

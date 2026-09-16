@@ -3,6 +3,100 @@ import { useState, type ReactNode } from "react";
 export const initials = (s: string) =>
   s.split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 
+/** Inline `code`/**bold** spans within one line of RichText. */
+function inlineSpans(line: string, keyBase: string): ReactNode[] {
+  const parts = line.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).filter(Boolean);
+  return parts.map((p, i) => {
+    if (p.startsWith("`") && p.endsWith("`")) return <code key={`${keyBase}-${i}`} style={{ background: "var(--surface-muted)", padding: "1px 5px", borderRadius: 4, fontSize: "0.92em", direction: "ltr", unicodeBidi: "isolate" }}>{p.slice(1, -1)}</code>;
+    if (p.startsWith("**") && p.endsWith("**")) return <strong key={`${keyBase}-${i}`}>{p.slice(2, -2)}</strong>;
+    return <span key={`${keyBase}-${i}`}>{p}</span>;
+  });
+}
+
+type RichLine = { kind: "h" | "p" | "ul" | "ol"; text: string; indent: number };
+
+/** One list item, with its (at most one level of) nested sub-items. */
+type ListItem = { text: string; sub: string[] };
+
+/**
+ * Renders AI-generated / hand-formatted free text (knowledge baseline
+ * sections etc.) with real structure instead of one raw pre-wrap blob:
+ *   `## Heading`        — a sub-heading within the section
+ *   `- item` / `* item` — a bullet; a further-indented `- `/`* ` right
+ *                         after it nests as that bullet's sub-list
+ *   `1. item`           — an ordered list (numbering from the text itself)
+ *   blank line          — paragraph break
+ *   `` `code` ``, `**bold**` — inline, everywhere
+ * Deliberately lightweight — not a full Markdown parser, just what these
+ * prompts (and hand-authored corrections) actually use.
+ */
+export function RichText({ text }: { text: string }) {
+  if (!text?.trim()) return null;
+  const raw = text.replace(/\r\n/g, "\n").split("\n");
+  const lines: RichLine[] = [];
+  for (const l of raw) {
+    if (!l.trim()) { lines.push({ kind: "p", text: "", indent: 0 }); continue; }
+    const indent = (l.match(/^\s*/)?.[0].length ?? 0) >= 2 ? 1 : 0;
+    const trimmed = l.trim();
+    const h = trimmed.match(/^#{1,3}\s+(.*)$/);
+    const ol = trimmed.match(/^\d+[.)]\s+(.*)$/);
+    const ul = trimmed.match(/^[-*•]\s+(.*)$/);
+    if (h) lines.push({ kind: "h", text: h[1]!, indent: 0 });
+    else if (ol) lines.push({ kind: "ol", text: ol[1]!, indent });
+    else if (ul) lines.push({ kind: "ul", text: ul[1]!, indent });
+    else lines.push({ kind: "p", text: trimmed, indent: 0 });
+  }
+
+  type Block = { kind: "h" | "p" | "ul" | "ol"; items: ListItem[] };
+  const blocks: Block[] = [];
+  for (const ln of lines) {
+    const last = blocks[blocks.length - 1];
+    if (ln.kind === "p" && !ln.text) { if (last?.kind === "p") blocks.push({ kind: "p", items: [] }); continue; }
+    if (ln.kind === "h") { blocks.push({ kind: "h", items: [{ text: ln.text, sub: [] }] }); continue; }
+    if (ln.kind === "p") {
+      if (last?.kind === "p" && last.items.length) last.items[last.items.length - 1]!.text += ` ${ln.text}`;
+      else blocks.push({ kind: "p", items: [{ text: ln.text, sub: [] }] });
+      continue;
+    }
+    // ul / ol
+    if (ln.indent === 1 && (last?.kind === "ul" || last?.kind === "ol") && last.items.length) {
+      last.items[last.items.length - 1]!.sub.push(ln.text);
+    } else if (last?.kind === ln.kind) {
+      last.items.push({ text: ln.text, sub: [] });
+    } else {
+      blocks.push({ kind: ln.kind, items: [{ text: ln.text, sub: [] }] });
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      {blocks.filter((b) => b.items.length > 0).map((b, bi) => {
+        if (b.kind === "h") return <p key={bi} style={{ margin: "4px 0 -4px", fontSize: 13, fontWeight: 700, color: "var(--ink-700)" }}>{inlineSpans(b.items[0]!.text, `${bi}`)}</p>;
+        if (b.kind === "p") return (
+          <div key={bi} style={{ display: "grid", gap: 6 }}>
+            {b.items.map((it, li) => <p key={li} style={{ margin: 0, fontSize: 12.5, lineHeight: 1.7 }}>{inlineSpans(it.text, `${bi}-${li}`)}</p>)}
+          </div>
+        );
+        const Tag = b.kind === "ol" ? "ol" : "ul";
+        return (
+          <Tag key={bi} style={{ margin: 0, paddingInlineStart: 20, display: "grid", gap: 6 }}>
+            {b.items.map((it, li) => (
+              <li key={li} style={{ fontSize: 12.5, lineHeight: 1.7 }}>
+                {inlineSpans(it.text, `${bi}-${li}`)}
+                {it.sub.length > 0 && (
+                  <ul style={{ margin: "4px 0 0", paddingInlineStart: 18, display: "grid", gap: 4 }}>
+                    {it.sub.map((s, si) => <li key={si} style={{ fontSize: 12, color: "var(--ink-500)" }}>{inlineSpans(s, `${bi}-${li}-${si}`)}</li>)}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </Tag>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Icon({ d, size = 17 }: { d: ReactNode; size?: number }) {
   return (
     <svg className="ic" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -26,6 +120,8 @@ export const ICONS = {
   calendar: <><rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" /></>,
   export: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></>,
   message: <><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></>,
+  layers: <><path d="m12 2 9 5-9 5-9-5z" /><path d="m3 12 9 5 9-5" /><path d="m3 17 9 5 9-5" /></>,
+  repo: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></>,
 };
 
 export function Pill({ tone, children }: { tone: "warning" | "critical" | "active" | "healthy" | "ai" | "inactive" | "neutral"; children: ReactNode }) {

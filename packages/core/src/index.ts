@@ -36,3 +36,16 @@ export {
   updateGap, deleteGap, updateBlocker, deleteBlocker, updateTask, deleteDependency,
   updateConnection,
 } from "./crud.ts";
+export { startRepoAiManagement, getRepoAiProfileView, type RepoAiProfileView, type RepoAiState } from "./repo-ai/profile.ts";
+export { syncRepoInventory, repoInventoryView, scanRepoDir, type DetectedComponent } from "./repo-ai/inventory.ts";
+export { runRepoInit, type BootstrapResult } from "./repo-ai/bootstrap.ts";
+export { suggestDenyRules, approveDenyRules } from "./repo-ai/permissions.ts";
+export { generateRepoKnowledge, getRepoKnowledge, type KnowledgeSections } from "./repo-ai/knowledge.ts";
+export { createRecommendation, decideRecommendation } from "./repo-ai/recommendations.ts";
+export { listAiComponents, aiComponentRepos, renameAiComponent } from "./repo-ai/catalog.ts";
+export {
+  startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, submitStageInput,
+  checkRepositoryRefresh, repositoryRefreshMetrics, onboardingRunCostSummary,
+  type OnboardingStatus, type RepositoryProfile as OnboardingRepositoryProfile,
+  type RefreshResult, type RefreshMetrics, type OnboardingRunCostSummary,
+} from "./repo-onboarding/index.ts";

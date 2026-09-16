@@ -102,6 +102,27 @@ import {
   ChecksNotPassed,
   setTaskActive,
   checkAdoRemovedState,
+  startRepoAiManagement,
+  getRepoAiProfileView,
+  syncRepoInventory,
+  runRepoInit,
+  suggestDenyRules,
+  approveDenyRules,
+  generateRepoKnowledge,
+  createRecommendation,
+  decideRecommendation,
+  listAiComponents,
+  aiComponentRepos,
+  renameAiComponent,
+  startOnboardingRun,
+  advanceRun,
+  cancelRun,
+  getOnboardingRunView,
+  getLatestOnboardingRun,
+  submitStageInput,
+  checkRepositoryRefresh,
+  repositoryRefreshMetrics,
+  onboardingRunCostSummary,
 } from "@dcc/core";
 import { blocker, gap, task } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -174,6 +195,153 @@ app.get("/users", async () => {
 app.delete("/repos/:id", async (req) => {
   await actingUser(req);
   return deleteRepo((req.params as { id: string }).id);
+});
+
+/* ── repository AI management (`repository-ai-management`) ─────────── */
+
+app.get("/repos/:id/ai", async (req) => {
+  const { id } = req.params as { id: string };
+  const [r] = await db.select({ clientId: repo.clientId, name: repo.name, adoRepoRef: repo.adoRepoRef, defaultBranch: repo.defaultBranch }).from(repo).where(sql`${repo.id} = ${id}`).limit(1);
+  if (!r) throw new Error("repo not found");
+  const repoInfo = { name: r.name, adoRepoRef: r.adoRepoRef, defaultBranch: r.defaultBranch };
+  if (!r.clientId) return { repo: repoInfo, managed: false, profile: { repoId: id, state: "NOT_MANAGED" }, inventory: [], latestKnowledge: null, knowledgeHistory: [], recommendations: [] };
+  return { repo: repoInfo, ...(await getRepoAiProfileView(r.clientId, id)) };
+});
+
+app.post("/repos/:id/ai/start", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  return startRepoAiManagement(id, { userId: dev.id });
+});
+
+app.post("/repos/:id/ai/sync-inventory", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  return syncRepoInventory(id, { userId: dev.id });
+});
+
+app.get("/repos/:id/ai/suggested-deny-rules", async (req) => {
+  const { id } = req.params as { id: string };
+  return { rules: await suggestDenyRules(id) };
+});
+
+app.post("/repos/:id/ai/deny-rules", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ rules: z.array(z.string()) }).parse(req.body ?? {});
+  return approveDenyRules({ repoId: id, rules: b.rules, by: { userId: dev.id } });
+});
+
+app.post("/repos/:id/ai/init", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ force: z.boolean().optional() }).parse(req.body ?? {});
+  return runRepoInit(id, { userId: dev.id }, { force: b.force });
+});
+
+app.post("/repos/:id/ai/knowledge", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ mode: z.enum(["CREATE_BASELINE", "UPDATE_BASELINE", "REASSESS_EXISTING"]).optional() }).parse(req.body ?? {});
+  return generateRepoKnowledge(id, { userId: dev.id }, { mode: b.mode });
+});
+
+app.post("/repos/:id/ai/recommendations", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const [r] = await db.select({ clientId: repo.clientId }).from(repo).where(sql`${repo.id} = ${id}`).limit(1);
+  if (!r?.clientId) throw new Error("repo has no single owning client");
+  const b = z.object({
+    action: z.enum(["ADD", "KEEP", "UPGRADE", "RECONFIGURE", "REPLACE", "REMOVE", "INVESTIGATE", "NO_ACTION"]),
+    componentId: z.string().uuid().optional(),
+    need: z.string().min(1),
+    rationale: z.string().optional(),
+  }).parse(req.body);
+  return createRecommendation({ clientId: r.clientId, repoId: id, by: { userId: dev.id }, ...b });
+});
+
+app.post("/repos/:id/ai/recommendations/:recId/decide", async (req) => {
+  const dev = await actingUser(req);
+  const { id, recId } = req.params as { id: string; recId: string };
+  const [r] = await db.select({ clientId: repo.clientId }).from(repo).where(sql`${repo.id} = ${id}`).limit(1);
+  if (!r?.clientId) throw new Error("repo has no single owning client");
+  const b = z.object({
+    decision: z.enum(["ACCEPTED", "REJECTED", "MODIFIED_AND_ACCEPTED", "POSTPONED"]),
+    reason: z.string().min(1),
+  }).parse(req.body);
+  return decideRecommendation({ clientId: r.clientId, repoId: id, recommendationId: recId, by: { userId: dev.id }, ...b });
+});
+
+/* ── repository AI enablement — Phase 1 (`repository-ai-enablement`) ──
+ * Full replace of the 3-step flow above (kept running unmodified for
+ * repos already onboarded under it — migration explicitly deferred).
+ * Debug-level routes for now: exercised directly, not yet wired into a
+ * screen (only 2 of 16 stages exist). */
+
+app.post("/repos/:id/onboarding/runs", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  return startOnboardingRun(id, { userId: dev.id });
+});
+
+app.get("/repos/:id/onboarding/latest-run", async (req) => {
+  const { id } = req.params as { id: string };
+  return getLatestOnboardingRun(id);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/advance", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as { id: string; runId: string };
+  return advanceRun(id, runId);
+});
+
+app.get("/repos/:id/onboarding/runs/:runId", async (req) => {
+  const { id, runId } = req.params as { id: string; runId: string };
+  return getOnboardingRunView(id, runId);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/cancel", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as { id: string; runId: string };
+  await cancelRun(id, runId, { userId: dev.id });
+  return { cancelled: true };
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/stages/:stageKey/input", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId, stageKey } = req.params as { id: string; runId: string; stageKey: string };
+  const b = z.object({ input: z.unknown() }).parse(req.body);
+  return submitStageInput(id, runId, stageKey, b.input, { userId: dev.id });
+});
+
+app.get("/repos/:id/onboarding/runs/:runId/cost-summary", async (req) => {
+  const { runId } = req.params as { id: string; runId: string };
+  return onboardingRunCostSummary(runId);
+});
+
+// Phase 6 — Incremental Refresh (spec §24), debug-route-only maturity
+// for now (no dedicated UI), same level Phase 1 shipped its own first
+// two stages at.
+app.post("/repos/:id/onboarding/refresh-check", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  return checkRepositoryRefresh(id, dev.id);
+});
+
+app.get("/repos/:id/onboarding/refresh-metrics", async (req) => {
+  const { id } = req.params as { id: string };
+  return repositoryRefreshMetrics(id);
+});
+
+/* ── global AI component catalog ─────────────────────────────────── */
+
+app.get("/ai-components", async () => ({ components: await listAiComponents() }));
+app.get("/ai-components/:id/repos", async (req) => ({ repos: await aiComponentRepos((req.params as { id: string }).id) }));
+app.patch("/ai-components/:id", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ title: z.string().min(1).optional(), description: z.string().nullable().optional() }).parse(req.body);
+  return renameAiComponent(id, b);
 });
 
 app.post("/clients/:id/repos", async (req, reply) => {

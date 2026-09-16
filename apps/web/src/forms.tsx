@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
-  getAdoProjects, getBugLinks, getClients, getConnections, getRepos, importAdoCsv, linkBugTask, linkRepoToReq,
+  getAdoProjects, getBugLinks, getClients, getConnections, getRepos, importAdoCsv, linkBugTask, linkRepoToClient, linkRepoToReq,
   searchClientTasks, unlinkBugTask, updateClient, updateRepo, updateRequirement,
   type ImportResult, type LinkedTaskRow, type ReqType, type RequirementType, type WorkItem,
 } from "./api.ts";
@@ -58,6 +58,62 @@ export function NewClient({ onClose, onDone }: { onClose: () => void; onDone: (i
       <Err e={err} />
       <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
         <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור לקוח"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Add a repository (spec's own DCC data model — a repo is always
+ *  per-client, `linkRepoToClient` creates it if `name` doesn't already
+ *  exist, or links an existing one to another client). Found live: no
+ *  screen exposed this at all — only ever reachable via a backend
+ *  script (`scenario-altshuler.ts`) for the pilot data. */
+export function NewRepo({ onClose, onDone, fixedClientId }: { onClose: () => void; onDone: (id?: string) => void; fixedClientId?: string }) {
+  const [clients, setClients] = useState<{ id: string; name: string }[] | null>(null);
+  const [clientId, setClientId] = useState(fixedClientId ?? "");
+  const [name, setName] = useState("");
+  const [gitUrl, setGitUrl] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (fixedClientId) return;
+    getClients().then((r) => { setClients(r.clients); if (r.clients.length === 1) setClientId(r.clients[0]!.id); });
+  }, [fixedClientId]);
+
+  const submit = async () => {
+    if (!clientId) return setErr("יש לבחור לקוח");
+    if (!name.trim()) return setErr("שם ה-repository הוא שדה חובה");
+    setBusy(true); setErr(null);
+    try {
+      const r = await linkRepoToClient(clientId, { name: name.trim(), gitUrl: gitUrl.trim() || undefined });
+      onDone(r.id);
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+
+  return (
+    <Modal title="Repository חדש" onClose={onClose}>
+      {!fixedClientId && (
+        <div className="field">
+          <label>לקוח</label>
+          <select value={clientId} onChange={(e) => setClientId(e.target.value)} style={{ width: "100%" }}>
+            <option value="">בחר לקוח…</option>
+            {(clients ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+      )}
+      <div className="field">
+        <label>שם ה-repository</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="למשל: ALTSHULER_TRADE" style={{ width: "100%" }} autoFocus />
+      </div>
+      <div className="field">
+        <label>Git URL (אופציונלי)</label>
+        <input value={gitUrl} onChange={(e) => setGitUrl(e.target.value)} placeholder="https://github.com/org/repo.git" style={{ width: "100%", direction: "ltr" }} />
+      </div>
+      <Err e={err} />
+      <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "הוסף Repository"}</button>
         <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
       </div>
     </Modal>
