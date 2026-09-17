@@ -46,6 +46,7 @@ export { listAiComponents, aiComponentRepos, renameAiComponent } from "./repo-ai
 export {
   startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, submitStageInput,
   checkRepositoryRefresh, repositoryRefreshMetrics, onboardingRunCostSummary,
+  getOnboardingExecution, updateOnboardingPromptBody,
   type OnboardingStatus, type RepositoryProfile as OnboardingRepositoryProfile,
   type RefreshResult, type RefreshMetrics, type OnboardingRunCostSummary,
 } from "./repo-onboarding/index.ts";

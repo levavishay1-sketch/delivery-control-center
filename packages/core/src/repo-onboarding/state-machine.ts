@@ -1,6 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db, withTenant } from "@dcc/db";
-import { repo, repositoryOnboardingRun, repositoryOnboardingStage, repositoryProfile } from "@dcc/db/schema";
+import {
+  onboardingPromptTemplate, repo, repositoryOnboardingClaudeExecution,
+  repositoryOnboardingRun, repositoryOnboardingStage, repositoryProfile,
+} from "@dcc/db/schema";
 import { appendRepoAiEvent } from "../repo-ai/events.ts";
 import { STAGE_ORDER } from "./types.ts";
 import type { StageContext, StageHandler, StageOutcome } from "./types.ts";
@@ -321,5 +324,42 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
     const stages = await tx.select().from(repositoryOnboardingStage).where(eq(repositoryOnboardingStage.runId, runId)).orderBy(repositoryOnboardingStage.stageOrder);
     const [profile] = await tx.select().from(repositoryProfile).where(eq(repositoryProfile.runId, runId)).limit(1);
     return { run, stages, profile: profile ?? null };
+  });
+}
+
+/** A stage's Claude call, joined with the exact immutable prompt version
+ *  it actually sent — lets the UI show "what was asked" next to "what
+ *  came back" (the stage row's own `result`), not just the output alone.
+ *  `{{PLACEHOLDER}}` tokens in `promptBody` are shown unresolved (the
+ *  template, not the rendered call) — `promptVars` themselves are never
+ *  persisted (see `runner.ts`), only the template body is. */
+export async function getOnboardingExecution(repoId: string, executionId: string) {
+  const r = await loadOnboardableRepo(repoId);
+  return withTenant(r.clientId, async (tx) => {
+    const [row] = await tx
+      .select({
+        id: repositoryOnboardingClaudeExecution.id,
+        stageKey: repositoryOnboardingClaudeExecution.stageKey,
+        model: repositoryOnboardingClaudeExecution.model,
+        permissionProfile: repositoryOnboardingClaudeExecution.permissionProfile,
+        status: repositoryOnboardingClaudeExecution.status,
+        resultText: repositoryOnboardingClaudeExecution.resultText,
+        costUsd: repositoryOnboardingClaudeExecution.costUsd,
+        inputTokens: repositoryOnboardingClaudeExecution.inputTokens,
+        outputTokens: repositoryOnboardingClaudeExecution.outputTokens,
+        durationMs: repositoryOnboardingClaudeExecution.durationMs,
+        numTurns: repositoryOnboardingClaudeExecution.numTurns,
+        errorMessage: repositoryOnboardingClaudeExecution.errorMessage,
+        promptKey: onboardingPromptTemplate.promptKey,
+        promptVersion: onboardingPromptTemplate.version,
+        promptTitle: onboardingPromptTemplate.title,
+        promptBody: onboardingPromptTemplate.body,
+      })
+      .from(repositoryOnboardingClaudeExecution)
+      .innerJoin(onboardingPromptTemplate, eq(onboardingPromptTemplate.id, repositoryOnboardingClaudeExecution.promptTemplateId))
+      .where(and(eq(repositoryOnboardingClaudeExecution.id, executionId), eq(repositoryOnboardingClaudeExecution.repoId, repoId)))
+      .limit(1);
+    if (!row) throw new Error("execution not found");
+    return row;
   });
 }

@@ -844,10 +844,16 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
 
 /* ── the step rail ─────────────────────────────────────────────────── */
 
-export function StepRail({ steps, done, unlocked, active, onPick, busy }: {
+export function StepRail({ steps, done, unlocked, active, onPick, busy, liveIndex }: {
   steps: readonly { key: string; label: string; description?: string }[];
   done: boolean[]; unlocked: boolean[]; active: number;
   onPick: (i: number) => void; busy?: boolean;
+  /** Index of the step that's genuinely executing/waiting right now —
+   *  distinct from `active` (whichever step the person is currently
+   *  LOOKING at, which they can freely change by clicking around). When
+   *  they differ, a small dot marks the live one so it's never lost while
+   *  browsing other steps. */
+  liveIndex?: number;
 }) {
   return (
     <div className="ov-steps">
@@ -855,6 +861,7 @@ export function StepRail({ steps, done, unlocked, active, onPick, busy }: {
         const isDone = done[i] === true;
         const open = unlocked[i] === true;
         const isActive = i === active;
+        const isLive = liveIndex !== undefined && i === liveIndex;
         return (
           <Fragment key={s.key}>
             {i > 0 && <span className="ov-arrow">←</span>}
@@ -864,7 +871,11 @@ export function StepRail({ steps, done, unlocked, active, onPick, busy }: {
               disabled={!open || busy}
               title={!open ? "נעול עד שהשלב הקודם יסתיים" : s.description}
             >
-              <div className="n">{isDone && <span className="ok">✓</span>}<span>שלב {i + 1}</span></div>
+              <div className="n">
+                {isDone && <span className="ok">✓</span>}
+                {isLive && !isActive && <span title="השלב הפעיל כרגע" style={{ color: "var(--color-accent)" }}>●</span>}
+                <span>שלב {i + 1}</span>
+              </div>
               <div className="lbl">{s.label}</div>
             </button>
           </Fragment>

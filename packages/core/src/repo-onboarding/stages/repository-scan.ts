@@ -11,7 +11,7 @@ import type { StageOutcome } from "../types.ts";
 registerStage("repository_scan", async (ctx): Promise<StageOutcome> => {
   if (!ctx.workspaceDir) return { status: "Failed", errors: ["workspace_setup did not produce a workspace directory"] };
 
-  const profile = scanRepository(ctx.workspaceDir, ctx.baselineSha);
+  const profile = await scanRepository(ctx.workspaceDir, ctx.baselineSha);
   const [row] = await withTenant(ctx.clientId, (tx) =>
     tx.insert(repositoryProfile).values({
       runId: ctx.runId,

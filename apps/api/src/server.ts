@@ -123,6 +123,8 @@ import {
   checkRepositoryRefresh,
   repositoryRefreshMetrics,
   onboardingRunCostSummary,
+  getOnboardingExecution,
+  updateOnboardingPromptBody,
 } from "@dcc/core";
 import { blocker, gap, task } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -317,6 +319,18 @@ app.post("/repos/:id/onboarding/runs/:runId/stages/:stageKey/input", async (req)
 app.get("/repos/:id/onboarding/runs/:runId/cost-summary", async (req) => {
   const { runId } = req.params as { id: string; runId: string };
   return onboardingRunCostSummary(runId);
+});
+
+app.get("/repos/:id/onboarding/executions/:executionId", async (req) => {
+  const { id, executionId } = req.params as { id: string; executionId: string };
+  return getOnboardingExecution(id, executionId);
+});
+
+app.patch("/onboarding/prompts/:promptKey", async (req) => {
+  const dev = await actingUser(req);
+  const { promptKey } = req.params as { promptKey: string };
+  const b = z.object({ body: z.string().min(1) }).parse(req.body);
+  return updateOnboardingPromptBody({ promptKey, body: b.body, by: { userId: dev.id } });
 });
 
 // Phase 6 — Incremental Refresh (spec §24), debug-route-only maturity

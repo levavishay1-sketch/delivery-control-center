@@ -447,6 +447,16 @@ export const submitOnboardingStageInput = (repoId: string, runId: string, stageK
 export type OnboardingRunCostSummary = { totalCostUsd: number; totalInputTokens: number; totalOutputTokens: number; totalDurationMs: number; executionCount: number };
 export const getOnboardingRunCostSummary = (repoId: string, runId: string) =>
   get<OnboardingRunCostSummary>(`/repos/${repoId}/onboarding/runs/${runId}/cost-summary`);
+export type OnboardingExecution = {
+  id: string; stageKey: string; model: string | null; permissionProfile: string; status: string;
+  resultText: string | null; costUsd: string | null; inputTokens: number | null; outputTokens: number | null;
+  durationMs: number | null; numTurns: number | null; errorMessage: string | null;
+  promptKey: string; promptVersion: number; promptTitle: string; promptBody: string;
+};
+export const getOnboardingExecution = (repoId: string, executionId: string) =>
+  get<OnboardingExecution>(`/repos/${repoId}/onboarding/executions/${executionId}`);
+export const updateOnboardingPrompt = (promptKey: string, body: string) =>
+  patch<{ id: string; version: number }>(`/onboarding/prompts/${promptKey}`, { body });
 
 /* ── global AI component catalog ──────────────────────────────────── */
 export type AiComponentRow = { id: string; type: string; title: string; description: string | null; firstSeenAt: string; lastSeenAt: string; activeRepoCount: number };

@@ -19,12 +19,12 @@ import "./stages/github-pull-request.ts";
 import "./stages/ai-ready.ts";
 import "./stages/skills-evaluation.ts";
 
-export { startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, submitStageInput, registerStage } from "./state-machine.ts";
+export { startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, submitStageInput, registerStage, getOnboardingExecution } from "./state-machine.ts";
 export { commitWorkspaceChanges } from "./commit.ts";
 export { ensureOnboardingWorkspace, releaseOnboardingWorkspace } from "./workspace.ts";
 export { scanRepository } from "./scanner.ts";
 export { createClaudeCodeRunner, type ClaudeCodeRunner, type ClaudeExecutionRequest, type ClaudeExecutionResult, type PermissionProfile } from "./runner.ts";
-export { getActiveOnboardingPrompt, registerPromptVersion, type OnboardingPromptTemplateRow } from "./prompts.ts";
+export { getActiveOnboardingPrompt, registerPromptVersion, updateOnboardingPromptBody, type OnboardingPromptTemplateRow } from "./prompts.ts";
 export { extractClaudeJson } from "./json.ts";
 export { loadProfileCatalog, type SecurityProfile } from "./security-profiles.ts";
 export { GUARDRAIL_CATALOG, type GuardrailDefinition } from "./guardrails.ts";

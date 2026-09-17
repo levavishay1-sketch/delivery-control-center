@@ -49,3 +49,20 @@ export async function registerPromptVersion(input: {
     return row!;
   });
 }
+
+/** Edits a prompt's live text — registers a new version carrying over the
+ *  existing `stage`/`title`/`defaultModel`, so the caller only has to know
+ *  the `promptKey` and the new `body`. The already-completed executions
+ *  that used the OLD version keep resolving to it (immutable, per the
+ *  schema's own design) — this only changes what the NEXT run of that
+ *  stage will send. */
+export async function updateOnboardingPromptBody(input: {
+  promptKey: string; body: string; by: { userId: string };
+}): Promise<OnboardingPromptTemplateRow> {
+  const current = await getActiveOnboardingPrompt(input.promptKey);
+  if (!current) throw new Error(`no active prompt for ${input.promptKey}`);
+  return registerPromptVersion({
+    promptKey: input.promptKey, stage: current.stage, title: current.title,
+    body: input.body, defaultModel: current.defaultModel ?? undefined, by: input.by,
+  });
+}

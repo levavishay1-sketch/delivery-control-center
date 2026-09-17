@@ -82,7 +82,15 @@ export type BuildSystemSignal = { kind: string; path: string };
 export type TestSignal = { path: string; framework?: string };
 export type CiSignal = { provider: string; path: string };
 export type FrameworkSignal = { name: string; evidence: string };
-export type LanguageSignal = { name: string; fileCount: number };
+/** `lines`/`code`/`comment`/`blank`/`complexity` come from `scc` (see
+ *  `scc.ts`) and are optional — absent when `scc` wasn't available and
+ *  the scan fell back to plain extension counting, and absent on any
+ *  profile persisted before this field existed (jsonb, no migration
+ *  needed, but older rows genuinely don't have it). */
+export type LanguageSignal = {
+  name: string; fileCount: number;
+  lines?: number; code?: number; comment?: number; blank?: number; complexity?: number;
+};
 export type DocsSignal = { path: string };
 /** Why a path is excluded from anything Claude reads — the same
  *  dir-name/extension deny-rule logic `repo-ai/permissions.ts` uses for
@@ -102,7 +110,7 @@ export type RepositoryProfile = {
   frameworkSignals: FrameworkSignal[];
   docsSignals: DocsSignal[];
   ignoredPaths: IgnoredPathSignal[];
-  stats: { fileCount: number; dirCount: number; maxDepthHit: boolean };
+  stats: { fileCount: number; dirCount: number; maxDepthHit: boolean; sccUsed: boolean };
   warnings: string[];
 };
 
