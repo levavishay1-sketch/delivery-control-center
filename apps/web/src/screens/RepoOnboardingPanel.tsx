@@ -83,9 +83,9 @@ const STAGE_DETAILS: Record<string, StageDetail> = {
     next: "הסיווג קובע איזה עומק של discovery נדרש ואילו חלקים ב־Repository חשוב לנתח בשלבים הבאים.",
   },
   security_permissions: {
-    now: "DCC קובע באילו הרשאות ובאילו מגבלות מותר לבצע את תהליך ה־Onboarding על ה־Repository.",
-    how: "השלב מנוהל על־ידי DCC ואינו דורש ניתוח AI כדי לקבוע את מדיניות האבטחה.\n\nDCC בוחר Security Profile בהתאם למדיניות הארגונית ולמאפייני ה־Repository. הפרופיל קובע אילו פעולות מותר לבצע ואילו אזורים או פעולות צריכים להיות מוגנים.\n\nבהתאם לפרופיל, DCC מכין את הגדרות Claude Code ואת ה־guardrails המתאימים, כולל הגנות מפני פעולות Git מסוכנות, גישה ל־secrets, שינוי קבצים מוגנים ושינוי נתיבים שאינם מורשים.",
-    why: "האבטחה חייבת להיקבע לפני ש־Claude מקבל גישה משמעותית יותר ל־Repository.",
+    now: "DCC קובע אילו נתיבים וסוגי קבצים אסור ל-Claude לקרוא במהלך ה־Onboarding על ה־Repository. פרופיל האבטחה עצמו קבוע וזהה לכל הריפואים.",
+    how: "כללי חסימת הקריאה המוצעים מגיעים משני מקורות: סריקה דטרמיניסטית (חינמית, תמיד מדויקת) שמזהה תיקיות/סיומות ידועות מראש כ-build output או תלויות (bin, obj, node_modules, .dll וכו'), ועליה קריאת Claude אחת שחוקרת את עץ הקבצים האמיתי של הריפו ומחפשת תוספות ספציפיות לו — למשל תלויות שמוטמעות בשם תיקייה לא סטנדרטי — שהרשימה הקבועה לא הייתה תופסת.\n\nכל הרשימה ניתנת לעריכה/הסרה לפני האישור.",
+    why: "האבטחה חייבת להיקבע לפני ש־Claude מקבל גישה משמעותית יותר ל־Repository, וריפו ספציפי עלול להכיל דברים שרשימה קבועה מראש לא צופה.",
     next: "השלבים הבאים יכולים לבצע discovery ויצירת artifacts בתוך סביבת עבודה עם גבולות והרשאות מוגדרים מראש.",
   },
   knowledge_coverage: {
@@ -303,10 +303,7 @@ function ClaudeCallPanel({ repoId, executionId }: { repoId: string; executionId:
   );
 }
 
-type SuggestedRules = {
-  suggestedRules: string[]; suggestedProfileId: string;
-  profiles: { id: string; label: string; description: string }[];
-};
+type SuggestedRules = { suggestedRules: string[] };
 type Questions = { questions: { id: string; question_he: string; why_it_matters_he: string; risk_if_unknown: string }[] };
 type GuardrailCandidates = { candidates: { id: string; label: string; description: string; suggested: boolean }[] };
 type UserReview = {
@@ -346,7 +343,6 @@ export function RepoOnboardingPanel({ id: repoId, nav }: { id: string; nav: (h: 
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [editableRules, setEditableRules] = useState<string[] | null>(null);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [selectedGuardrailIds, setSelectedGuardrailIds] = useState<string[] | null>(null);
   const [cost, setCost] = useState<OnboardingRunCostSummary | null>(null);
@@ -521,28 +517,15 @@ export function RepoOnboardingPanel({ id: repoId, nav }: { id: string; nav: (h: 
 
       {waiting && selectedStage.stageKey === "security_permissions" && (
         <div className="panel" style={{ marginBottom: 16 }}>
-          <p className="section-lbl">פרופיל אבטחה</p>
+          <p className="section-lbl">כללי חסימת קריאה מוצעים</p>
           {(() => {
             const result = selectedStage.result as SuggestedRules;
-            const profileId = selectedProfileId ?? result.suggestedProfileId;
             const rules = editableRules ?? result.suggestedRules;
             return (
               <>
                 <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 10 }}>
-                  מגדירים אילו פעולות Claude יכול לבצע אוטומטית ואילו דורשות אישור. המוצע: <b>{result.profiles.find((p) => p.id === result.suggestedProfileId)?.label ?? result.suggestedProfileId}</b>.
+                  נתיבים/סיומות שכדאי לחסום מ-Claude — חלק מהרשימה זוהו בסריקה דטרמיניסטית, חלק הוצעו על ידי Claude שחקר את הריפו בעצמו. ניתן להסיר לפני האישור.
                 </p>
-                <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-                  {result.profiles.map((p) => (
-                    <label key={p.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, cursor: "pointer" }}>
-                      <input type="radio" name="security-profile" checked={profileId === p.id} onChange={() => setSelectedProfileId(p.id)} style={{ marginTop: 3 }} />
-                      <span>
-                        <b>{p.label}</b>{p.id === result.suggestedProfileId && <span style={{ color: "var(--ink-400)" }}> (מוצע)</span>}
-                        <br /><span style={{ color: "var(--ink-500)" }}>{p.description}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <p className="section-lbl">כללי חסימת קריאה מוצעים</p>
                 <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
                   {rules.map((rule, i) => (
                     <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
@@ -553,8 +536,8 @@ export function RepoOnboardingPanel({ id: repoId, nav }: { id: string; nav: (h: 
                   {rules.length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>אין כללי חסימה — בחירה תקפה.</p>}
                 </div>
                 <button className="btn btn-primary btn-sm" disabled={busy === "approve"} onClick={() => run("approve", async () => {
-                  await submitOnboardingStageInput(repoId, r.id, "security_permissions", { approvedRules: rules, approvedProfileId: profileId });
-                  setEditableRules(null); setSelectedProfileId(null);
+                  await submitOnboardingStageInput(repoId, r.id, "security_permissions", { approvedRules: rules });
+                  setEditableRules(null);
                 })}>
                   {busy === "approve" ? "שומר…" : "✓ אשר הרשאות"}
                 </button>

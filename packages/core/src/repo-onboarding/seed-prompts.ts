@@ -50,6 +50,47 @@ The objective is to determine what deserves deeper discovery and what can safely
 Return machine-readable structured output only, as a single JSON object with exactly these keys.`,
   },
   {
+    promptKey: "onboarding.security_deny_rules_suggest",
+    stage: "security_permissions",
+    title: "Adaptive deny-rule discovery",
+    body: `A deterministic scan of this repository already found the
+following directories/extensions and blocked them from being read (build
+output, dependency caches, vendored binaries):
+
+{{BASELINE_RULES}}
+
+Repository scan summary:
+
+{{REPOSITORY_SCAN}}
+
+Repository classification:
+
+{{CLASSIFICATION}}
+
+Your job: explore this repository's real file tree (you have read access)
+and find ADDITIONAL directories or file patterns worth blocking from
+future reads that the baseline above does NOT already cover — the kind of
+thing a human reviewing this specific repository would flag, not generic
+software-development advice. Examples of what counts: vendored/third-party
+code checked in under a non-standard folder name, generated code specific
+to this repository's own toolchain, large data/fixture files that are
+never source code, anything else that would waste turns or leak
+irrelevant content if read later in this pipeline.
+
+Do not repeat anything already in the baseline list above.
+Do not suggest a rule unless you found real evidence for it in this
+repository (a real path, a real file) — do not guess.
+It is valid, and expected on many repositories, for this list to be
+empty.
+Do not modify any file. Do not run destructive or write commands.
+
+Return machine-readable structured output only, as a single JSON object:
+{"additional_rules": [{"pattern": string, "reason": string}]}.
+Each "pattern" must be a Claude Code Read deny-rule glob in the form
+"Read(./**/<name>/**/*)" for a directory or "Read(./**/*.<ext>)" for an
+extension.`,
+  },
+  {
     promptKey: "onboarding.knowledge_coverage",
     stage: "knowledge_coverage",
     title: "Existing documentation coverage",

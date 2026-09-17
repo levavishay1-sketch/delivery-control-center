@@ -1,52 +1,57 @@
 import { and, eq } from "drizzle-orm";
 import { db } from "@dcc/db";
 import { repositoryOnboardingStage, repositoryProfile } from "@dcc/db/schema";
-import { loadProfileCatalog, resolveEffectivePolicy, suggestSecurityProfile, type EffectivePolicy } from "../security-profiles.ts";
+import { extractClaudeJson } from "../json.ts";
+import { getActiveOnboardingPrompt } from "../prompts.ts";
+import { createClaudeCodeRunner } from "../runner.ts";
+import { resolveEffectivePolicy, type EffectivePolicy } from "../security-profiles.ts";
 import { registerStage } from "../state-machine.ts";
 import type { StageOutcome } from "../types.ts";
 
+/** The org no longer offers a per-repo profile choice (2026-09-17,
+ *  confirmed with the user: the picker was unwanted complexity — every
+ *  repo gets the same profile in practice). `config/security-profiles.json`
+ *  and `resolveEffectivePolicy` stay: stage 11 (`guardrails`) still needs
+ *  one resolved profile to build `.claude/settings.json` from. */
+const FIXED_SECURITY_PROFILE_ID = "STANDARD_DEVELOPMENT";
+
 /**
- * Stage 04 — Security & Permissions (spec §11). Deterministic, no Claude
- * call — reuses stage 02's own `ignoredPaths` (same dir-name/extension
- * deny-rule detection the old flow's step 2 used) as the starting
- * suggestion, human reviews/edits/approves. The approved rules become
- * every later Claude-calling stage's `denyRules` — this is the gate that
- * kept an earlier real run from burning cost reading `bin`/`obj`/vendored
- * DLLs (the exact failure this whole mechanism exists to prevent).
- *
- * Phase 4 addition: also suggests/approves a named security profile from
- * `config/security-profiles.json` (spec's "Organization Policy" layer) —
- * the resolved `EffectivePolicy` (profile + approved deny rules as the
- * "repository-specific Delta") is stage 11 (`guardrails`)'s input for the
- * one real `.claude/settings.json` write; this stage itself still never
- * touches the filesystem.
+ * Stage 04 — Security & Permissions (spec §11). Two sources for the
+ * suggested `Read` deny rules, both free-form human-editable before
+ * approval:
+ *   1. stage 02's own `ignoredPaths` — a deterministic scan against a
+ *      fixed, always-correct junk-dir/extension list. Free, no Claude
+ *      call, but only catches what that fixed list already knows about.
+ *   2. one Claude call (2026-09-17 addition) against the real workspace
+ *      checkout, asked to find repo-specific additions the fixed list
+ *      can't — e.g. vendored dependencies under a non-standard folder
+ *      name (the real gap that made #1 miss Altshuler Trade's `packages/`
+ *      DLLs until someone found it live and hardcoded the fix). Seeded
+ *      with #1's own rules as its `denyRules`, so the exploration itself
+ *      never falls into the trap it exists to find more of.
+ * The approved rules become every later Claude-calling stage's
+ * `denyRules` — this is the gate that kept an earlier real run from
+ * burning cost reading `bin`/`obj`/vendored DLLs.
  */
 type SecurityPermissionsResult = {
-  suggestedRules: string[]; ignoredPathCount: number; suggestedProfileId: string;
-  /** Full catalog, embedded so the UI can render all 5 options with
-   *  their Hebrew label/description without a second round-trip. */
-  profiles: { id: string; label: string; description: string }[];
+  suggestedRules: string[]; ignoredPathCount: number;
   approvedRules?: string[]; approvedProfileId?: string; approvedAt?: string;
 };
 
 registerStage("security_permissions", async (ctx): Promise<StageOutcome> => {
   if (ctx.resumeInput !== undefined) {
-    const input = ctx.resumeInput as { approvedRules?: unknown; approvedProfileId?: unknown };
+    const input = ctx.resumeInput as { approvedRules?: unknown };
     if (!Array.isArray(input.approvedRules) || !input.approvedRules.every((r) => typeof r === "string")) {
       return { status: "Failed", errors: ["approvedRules must be a string[]"] };
     }
-    if (typeof input.approvedProfileId !== "string" || !loadProfileCatalog().profiles[input.approvedProfileId]) {
-      return { status: "Failed", errors: [`approvedProfileId must be one of: ${Object.keys(loadProfileCatalog().profiles).join(", ")}`] };
-    }
     const [ownRow] = await db.select().from(repositoryOnboardingStage)
       .where(and(eq(repositoryOnboardingStage.runId, ctx.runId), eq(repositoryOnboardingStage.stageKey, "security_permissions"))).limit(1);
-    const prior = (ownRow?.result as SecurityPermissionsResult | null) ?? { suggestedRules: [], ignoredPathCount: 0, suggestedProfileId: "STANDARD_DEVELOPMENT", profiles: [] };
+    const prior = (ownRow?.result as SecurityPermissionsResult | null) ?? { suggestedRules: [], ignoredPathCount: 0 };
     const approvedRules = input.approvedRules as string[];
-    const approvedProfileId = input.approvedProfileId;
-    const effectivePolicy: EffectivePolicy = resolveEffectivePolicy(approvedProfileId, approvedRules);
+    const effectivePolicy: EffectivePolicy = resolveEffectivePolicy(FIXED_SECURITY_PROFILE_ID, approvedRules);
     const result: SecurityPermissionsResult & { effectivePolicy: EffectivePolicy } = {
-      suggestedRules: prior.suggestedRules, ignoredPathCount: prior.ignoredPathCount, suggestedProfileId: prior.suggestedProfileId, profiles: prior.profiles,
-      approvedRules, approvedProfileId, approvedAt: new Date().toISOString(), effectivePolicy,
+      suggestedRules: prior.suggestedRules, ignoredPathCount: prior.ignoredPathCount,
+      approvedRules, approvedProfileId: FIXED_SECURITY_PROFILE_ID, approvedAt: new Date().toISOString(), effectivePolicy,
     };
     return { status: "Completed", result };
   }
@@ -55,12 +60,48 @@ registerStage("security_permissions", async (ctx): Promise<StageOutcome> => {
   if (!scanResult?.profileId) return { status: "Failed", errors: ["repository_scan did not produce a profile"] };
   const [profile] = await db.select().from(repositoryProfile).where(eq(repositoryProfile.id, scanResult.profileId)).limit(1);
   if (!profile) return { status: "Failed", errors: [`repository_profile ${scanResult.profileId} not found`] };
-  const classification = ctx.priorResults.classification as { classification?: Parameters<typeof suggestSecurityProfile>[0] } | undefined;
+  const classification = ctx.priorResults.classification as { classification?: unknown } | undefined;
 
   const ignoredPaths = profile.ignoredPaths as { pattern: string; reason: string }[];
-  const suggestedRules = ignoredPaths.map((p) => p.pattern);
-  const suggestedProfileId = suggestSecurityProfile(classification?.classification);
-  const profiles = Object.entries(loadProfileCatalog().profiles).map(([id, p]) => ({ id, label: p.label, description: p.description }));
-  const result: SecurityPermissionsResult = { suggestedRules, ignoredPathCount: ignoredPaths.length, suggestedProfileId, profiles };
-  return { status: "WaitingForUser", result };
+  const baselineRules = ignoredPaths.map((p) => p.pattern);
+
+  const prompt = await getActiveOnboardingPrompt("onboarding.security_deny_rules_suggest");
+  if (!prompt) return { status: "Failed", errors: ["no active prompt for onboarding.security_deny_rules_suggest — run seed-prompts.ts"] };
+
+  const scanForPrompt = {
+    languages: profile.languages, buildSystems: profile.buildSystems, testSignals: profile.testSignals,
+    ciSignals: profile.ciSignals, frameworkSignals: profile.frameworkSignals, docsSignals: profile.docsSignals,
+    stats: profile.stats,
+  };
+
+  const runner = createClaudeCodeRunner();
+  const result = await runner.run({
+    runId: ctx.runId, stageKey: "security_permissions", repoId: ctx.repoId, clientId: ctx.clientId,
+    cwd: ctx.workspaceDir, promptId: prompt.id,
+    promptVars: {
+      BASELINE_RULES: JSON.stringify(baselineRules),
+      REPOSITORY_SCAN: JSON.stringify(scanForPrompt),
+      CLASSIFICATION: JSON.stringify(classification?.classification ?? {}),
+    },
+    // Light exploratory call — seeded with the baseline rules as its own
+    // denyRules so it never wastes turns re-reading what #1 already found.
+    permissionProfile: "read_only_plan", denyRules: baselineRules, maxTurns: 20, timeoutMs: 180_000,
+  });
+
+  let additionalRules: string[] = [];
+  if (result.status === "Completed" && result.text) {
+    try {
+      const parsed = extractClaudeJson<{ additional_rules: { pattern: string; reason: string }[] }>(result.text);
+      additionalRules = (parsed.additional_rules ?? []).map((r) => r.pattern);
+    } catch {
+      // Adaptive discovery is a bonus on top of the always-correct
+      // deterministic baseline — a parse failure here degrades to
+      // "no additional suggestions found", never blocks the stage.
+      additionalRules = [];
+    }
+  }
+
+  const suggestedRules = Array.from(new Set([...baselineRules, ...additionalRules]));
+  const resultOut: SecurityPermissionsResult = { suggestedRules, ignoredPathCount: ignoredPaths.length };
+  return { status: "WaitingForUser", claudeExecutionId: result.executionId, result: resultOut };
 });

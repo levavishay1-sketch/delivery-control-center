@@ -51,18 +51,3 @@ export function resolveEffectivePolicy(profileId: string, deniedReadPaths: strin
   if (!profile) throw new Error(`unknown security profile "${profileId}"`);
   return { profileId, profile, deniedReadPaths };
 }
-
-/** Deterministic profile suggestion off `classification`'s own signals —
- *  a starting point for human review/approval, never applied unapproved.
- *  Simple, explainable rules only (spec §11: "Claude must not invent the
- *  organization's security policy" — this heuristic picks among DCC's
- *  own pre-reviewed profiles, it never invents a new one). */
-export function suggestSecurityProfile(classification: { repository_type?: string; detected_domains?: string[]; complexity?: string; legacy_indicator?: boolean } | undefined): string {
-  const domains = (classification?.detected_domains ?? []).map((d) => d.toLowerCase()).join(" ");
-  const repoType = (classification?.repository_type ?? "").toLowerCase();
-  const SENSITIVE = /compliance|kyc|aml|blacklist|payment|financ|regulat|pii|privacy/;
-  if (SENSITIVE.test(domains)) return "RESTRICTED";
-  if (/infrastructure|deploy|devops|terraform|pipeline/.test(repoType) || /infrastructure|deploy|devops/.test(domains)) return "INFRASTRUCTURE";
-  if (/demo|sample|sandbox|experiment/.test(repoType)) return "SANDBOX";
-  return "STANDARD_DEVELOPMENT";
-}
