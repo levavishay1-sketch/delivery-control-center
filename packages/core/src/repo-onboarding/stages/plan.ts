@@ -31,6 +31,7 @@ type AiPlanItem = {
 };
 type AiPlan = { artifacts: AiPlanItem[]; not_created: { kind: string; reason_he: string }[]; rationale_he?: string };
 
+export type StaleArtifactWarning = { path: string; verdict: "outdated" | "conflicting"; reason?: string };
 export type PlanResult = {
   artifacts: PlannedArtifact[];
   notCreated: { kind: string; reason_he: string }[];
@@ -39,6 +40,10 @@ export type PlanResult = {
   claudeExecutionId?: string;
   approved?: PlannedArtifact[];
   approvedAt?: string;
+  /** Existing AI artifacts Discovery found outdated/conflicting — never
+   *  silently dropped: every one must be acknowledged (or addressed by an
+   *  artifact in the plan) before the plan can be approved. */
+  staleArtifactWarnings: StaleArtifactWarning[];
 };
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "item";
@@ -152,8 +157,13 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
   if (ctx.resumeInput !== undefined) {
     const prior = ctx.ownResult as PlanResult | undefined;
     if (!prior) return { status: "Failed", errors: ["no plan to approve"] };
-    const input = ctx.resumeInput as { approvedKeys?: unknown };
+    const input = ctx.resumeInput as { approvedKeys?: unknown; acknowledgedStaleWarnings?: unknown };
     if (!Array.isArray(input.approvedKeys) || !input.approvedKeys.every((k) => typeof k === "string")) return { status: "Failed", errors: ["approvedKeys must be a string[]"] };
+    const acknowledged = new Set(Array.isArray(input.acknowledgedStaleWarnings) ? (input.acknowledgedStaleWarnings as unknown[]).filter((x): x is string => typeof x === "string") : []);
+    const unacknowledged = (prior.staleArtifactWarnings ?? []).filter((w) => !acknowledged.has(w.path));
+    if (unacknowledged.length) {
+      return { status: "Failed", errors: [`Discovery found ${unacknowledged.length} existing AI artifact(s) outdated or conflicting with the code — acknowledge each one before approving: ${unacknowledged.map((w) => w.path).join(", ")}`] };
+    }
     const approvedSet = new Set(input.approvedKeys as string[]);
     const approved: PlannedArtifact[] = prior.artifacts.map((a) => ({ ...a, action: approvedSet.has(a.key) ? (a.action === "skip" ? "create" : a.action) : "skip" }));
     if (!approved.some((a) => a.kind === "claude_md" && a.action !== "skip") && !scan.inventory.summary.hasClaudeMd) {
@@ -193,8 +203,18 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
   const aiPlan = exec.json as AiPlan;
   const norm = normalizeAiItems(aiPlan.artifacts ?? [], scan, boundaries, ctx.workspaceDir);
   const artifacts = [...norm.artifacts, ...det.artifacts];
+  const staleArtifactWarnings: StaleArtifactWarning[] = (discovery.discovery.existing_instructions_assessment ?? [])
+    .filter((a): a is typeof a & { verdict: "outdated" | "conflicting" } => a.verdict === "outdated" || a.verdict === "conflicting")
+    .map((a) => ({ path: a.path, verdict: a.verdict, reason: a.reason }));
   const result: PlanResult = {
     artifacts, notCreated: [...(aiPlan.not_created ?? []), ...det.notCreated], rationale_he: aiPlan.rationale_he, protectedGlobs: det.protectedGlobs, claudeExecutionId: exec.executionId,
+    staleArtifactWarnings,
   };
   return { status: "WaitingForUser", warnings: norm.notes, claudeExecutionId: exec.executionId, result };
-}, (waiting) => ({ approvedKeys: (waiting as PlanResult).artifacts.filter((a) => a.action !== "skip").map((a) => a.key) }));
+}, (waiting) => ({
+  approvedKeys: (waiting as PlanResult).artifacts.filter((a) => a.action !== "skip").map((a) => a.key),
+  // Automation only reaches here with explicit prior consent (the "automatic"
+  // preset requires `consent: true`) — auto-acknowledging is that same consent
+  // applied to this gate, not a new silent skip.
+  acknowledgedStaleWarnings: (waiting as PlanResult).staleArtifactWarnings.map((w) => w.path),
+}));

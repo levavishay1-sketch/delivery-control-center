@@ -489,14 +489,36 @@ function ArtifactTable({ artifacts, selected, onToggle }: { artifacts: PlannedAr
   );
 }
 
+const STALE_VERDICT_HE: Record<string, string> = { outdated: "לא מעודכן", conflicting: "סותר את הקוד" };
+
 export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(r.artifacts.filter((a) => a.action !== "skip").map((a) => a.key)));
+  const [acked, setAcked] = useState<Set<string>>(new Set());
   const toggle = (k: string) => setSelected((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const toggleAck = (p: string) => setAcked((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
   const always = r.artifacts.filter((a) => selected.has(a.key) && a.loading === "always").length;
   const claudeMdOff = !r.artifacts.some((a) => a.kind === "claude_md" && selected.has(a.key));
+  const warnings = r.staleArtifactWarnings ?? [];
+  const unacked = warnings.filter((w) => !acked.has(w.path));
   return (
     <div>
       {r.rationale_he && <Note tone="ai">{r.rationale_he}</Note>}
+      {warnings.length > 0 && (
+        <Section title={`תיעוד AI קיים שנמצא לא מדויק (${warnings.length})`} aside={<span className="ob-sub">{unacked.length ? `${unacked.length} טרם סומנו` : "הכל סומן"}</span>}>
+          <p className="ob-sub" style={{ marginBottom: 8 }}>Discovery מצא artifacts קיימים (settings, rules, skills, docs וכו') שנתוניהם כבר לא תואמים את הקוד — לא רק חדש שמוצע. סמנו שראיתם כל אחד לפני האישור; זה לא נעלם בשקט.</p>
+          <ul className="ob-list" style={{ display: "grid", gap: 8 }}>
+            {warnings.map((w) => (
+              <li key={w.path} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                <input type="checkbox" checked={acked.has(w.path)} onChange={() => toggleAck(w.path)} style={{ marginTop: 3 }} />
+                <span>
+                  <Code>{w.path}</Code> · <b>{STALE_VERDICT_HE[w.verdict] ?? w.verdict}</b>
+                  {w.reason && <div className="ob-sub" style={{ marginTop: 2 }}>{w.reason}</div>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
       <Section title={`הצעה: ${r.artifacts.length} artifacts — סמנו מה ייווצר`} aside={<span className="ob-sub">{selected.size} נבחרו · {always} נטענים בכל session</span>}>
         <ArtifactTable artifacts={r.artifacts} selected={selected} onToggle={toggle} />
       </Section>
@@ -506,8 +528,8 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
       </Section>
       {r.protectedGlobs.length > 0 && <Section title="אזורים מוגנים (ל-guardrails)"><div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{r.protectedGlobs.map((g) => <Code key={g}>{g}</Code>)}</div></Section>}
       <div className="ob-actions" style={{ marginTop: 14 }}>
-        <button className="btn btn-primary" disabled={busy} onClick={() => onSubmit({ approvedKeys: Array.from(selected) })}>{busy ? "שומר…" : `✓ אשר תוכנית (${selected.size} פריטים) והמשך ליצירה`}</button>
-        <span className="ob-sub">פריטים שלא סומנו לא ייווצרו ולא יעלו טוקנים.</span>
+        <button className="btn btn-primary" disabled={busy || unacked.length > 0} onClick={() => onSubmit({ approvedKeys: Array.from(selected), acknowledgedStaleWarnings: Array.from(acked) })}>{busy ? "שומר…" : `✓ אשר תוכנית (${selected.size} פריטים) והמשך ליצירה`}</button>
+        <span className="ob-sub">{unacked.length > 0 ? "סמנו את כל התיעוד הלא-מדויק לפני האישור." : "פריטים שלא סומנו לא ייווצרו ולא יעלו טוקנים."}</span>
       </div>
     </div>
   );
@@ -515,9 +537,15 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
 
 export function PlanView({ r }: { r: PlanResult }) {
   const list = r.approved ?? r.artifacts;
+  const warnings = r.staleArtifactWarnings ?? [];
   return (
     <div>
       {r.rationale_he && <Note tone="ai">{r.rationale_he}</Note>}
+      {warnings.length > 0 && (
+        <Section title={`תיעוד AI קיים שסומן כלא מדויק (${warnings.length}) — אושר בכל זאת`}>
+          <ul className="ob-list">{warnings.map((w) => <li key={w.path}><Code>{w.path}</Code> · <b>{STALE_VERDICT_HE[w.verdict] ?? w.verdict}</b>{w.reason ? ` — ${w.reason}` : ""}</li>)}</ul>
+        </Section>
+      )}
       <Section title={r.approved ? `התוכנית המאושרת (${list.filter((a) => a.action !== "skip").length} ייווצרו, ${list.filter((a) => a.action === "skip").length} לא)` : "התוכנית המוצעת"} aside={r.approvedAt ? <span className="ob-sub">אושר {fmtDate(r.approvedAt)}</span> : undefined}>
         <ArtifactTable artifacts={list} />
       </Section>

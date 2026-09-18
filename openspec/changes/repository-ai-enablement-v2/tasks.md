@@ -66,7 +66,45 @@ never rewrites a file whose hash moved without a run a person reviews.
 - Fixed while validating: directory artifact hashing (EISDIR), deliver reading git stderr as a remote/base, model skipping CLAUDE.md "because AGENTS.md", blank 500s on user-facing errors, the `.env.*` deny hiding `.env.example` (now conventional variants + files actually present), orphaned claude processes on shutdown.
 - `npx tsc -b` clean; `apps/web` tsc clean except the pre-existing `WorkflowTab.tsx:253` error (untouched).
 
-## 6. Open questions / not verified here
+## 6. Follow-on fix (2026-09-18, discovered dogfooding a real client repo)
+
+Real run on an internal .NET/CRM repository surfaced a gap: `validate`'s AI
+review caught CLAUDE.md citing a pre-existing `docs/ai/architecture.md` (a
+leftover from a prior, different onboarding pass) whose "secrets are never
+hardcoded" claim was contradicted by two real leaked secrets found in the
+code — but only after a paid `generate` retry had already written the bad
+citation. Root cause: `discovery`'s `existing_instructions_assessment` (the
+field that judges keep/merge/outdated/conflicting for existing AI artifacts)
+was scoped only to CLAUDE.md/AGENTS.md/rules and its output was never read
+by `plan` — computed and discarded. A pre-existing artifact that merely
+*existed and was topically relevant* was treated as "already covered",
+regardless of whether its content was still accurate — the same blind spot
+for any repository carrying AI configuration from a previous process.
+
+Fix (no new stage, no new gate, no DB schema change):
+- `discovery`'s prompt now spot-checks concrete claims in EVERY existing
+  AI-facing artifact from the inventory (settings, rules, skills, agents,
+  and any doc a CLAUDE.md/rule/skill already cites), not just
+  CLAUDE.md/AGENTS.md/rules — `outdated`/`conflicting` require the actual
+  mismatched evidence, not a guess from the filename.
+- `plan.ts` now reads that assessment and carries every `outdated`/
+  `conflicting` entry forward as `PlanResult.staleArtifactWarnings` —
+  computed deterministically, not by AI judgement, so it can't be silently
+  dropped by a model choosing not to mention it.
+- The plan gate's "approve" is refused server-side until every warning is
+  acknowledged (a plain per-item checkbox in the UI) — mirrors the existing
+  CLAUDE.md-must-be-checked guard, same enforcement point, same pattern.
+  `automatic` policy auto-acknowledges, consistent with the explicit
+  `consent: true` it already requires for every other auto-resolved gate.
+- Verified end-to-end against a fabricated `WaitingForUser` plan stage
+  (bypassing the paid AI call, since the guard sits in the resume path):
+  approve without acknowledging → rejected naming the unacknowledged
+  path(s); partial acknowledgment → rejected naming what's left; full
+  acknowledgment → succeeds and advances to `generate`. `npx tsc -b` clean.
+- Requires `SEED_REPLACE=onboarding.v2.discover` on rollout to register the
+  broadened prompt as a new version.
+
+## 7. Open questions / not verified here
 
 - A repository with a real remote and `gh`: push + PR creation code path not exercised in this sandbox (no remote, no `gh`).
 - The legacy-v1 live-run notice on the pre-start screen: no v1 rows existed to exercise it.

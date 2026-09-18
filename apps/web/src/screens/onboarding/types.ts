@@ -104,6 +104,7 @@ export type PlannedArtifact = {
   skill?: { name: string; description: string; paths?: string[]; disableModelInvocation?: boolean };
   rulePaths?: string[]; catalogId?: string; notes?: string[];
 };
+export type StaleArtifactWarning = { path: string; verdict: "outdated" | "conflicting"; reason?: string };
 export type PlanResult = {
   artifacts: PlannedArtifact[];
   notCreated: { kind: string; reason_he: string }[];
@@ -112,6 +113,7 @@ export type PlanResult = {
   claudeExecutionId?: string;
   approved?: PlannedArtifact[];
   approvedAt?: string;
+  staleArtifactWarnings: StaleArtifactWarning[];
 };
 
 export type GeneratedArtifact = { key: string; kind: string; path: string; action: string; writer: "ai" | "dcc"; lines: number; estimatedTokens: number; hash: string | null };

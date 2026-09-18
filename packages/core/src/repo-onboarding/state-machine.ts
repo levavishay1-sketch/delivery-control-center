@@ -385,7 +385,7 @@ function summarizeInput(stageKey: string, input: unknown): unknown {
   const i = (input ?? {}) as Record<string, unknown>;
   if (stageKey === "boundaries") return { rules: Array.isArray(i.rules) ? i.rules.length : 0, profileId: i.profileId, existingConfig: i.existingConfig, classificationOverride: i.classificationOverride ?? null, notes: i.notes ?? null };
   if (stageKey === "confirm") return { answered: Array.isArray(i.answers) ? (i.answers as { answer_he?: string }[]).filter((a) => a.answer_he?.trim()).length : 0, total: Array.isArray(i.answers) ? i.answers.length : 0, corrections: i.corrections ?? null };
-  if (stageKey === "plan") return { approvedKeys: i.approvedKeys };
+  if (stageKey === "plan") return { approvedKeys: i.approvedKeys, acknowledgedStaleWarnings: Array.isArray(i.acknowledgedStaleWarnings) ? i.acknowledgedStaleWarnings.length : 0 };
   if (stageKey === "review") return { decision: i.decision, note: i.note ?? null, dropPaths: i.dropPaths ?? [] };
   return i;
 }
