@@ -1,674 +1,631 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  advanceOnboardingRun, cancelOnboardingRun, getLatestOnboardingRun, getOnboardingExecution, getOnboardingRun, getOnboardingRunCostSummary,
-  startOnboardingRun, submitOnboardingStageInput, updateOnboardingPrompt,
-  type OnboardingExecution, type OnboardingRunCostSummary, type OnboardingRunView, type OnboardingStage,
+  advanceOnboardingRun, cancelOnboardingRun, checkOnboardingRefresh, getLatestOnboardingRun, getOnboardingRefreshMetrics, getOnboardingRun, getOnboardingRunCostSummary, getOnboardingStages, getRepos,
+  listOnboardingRuns, resetOnboardingRunTo, startOnboardingRun, stopOnboardingExecution, submitOnboardingStageInput, updateOnboardingAutomation,
+  type AutomationPolicy, type OnboardingRunCostSummary, type OnboardingRunView, type OnboardingStage, type OnboardingStatus, type RefreshResult, type StageDefinition,
 } from "../api.ts";
 import { PageHead } from "../ui.tsx";
-import { StepRail } from "./WorkflowTab.tsx";
+import {
+  AutomationEditor, ClaudeCallPanel, Code, KV, Note, RawResult, STATUS_HE, StageExplainer, StageMetaChips, StatusPill, describePolicy, elapsedSince, errText, eventLabel, fmtDate, fmtDuration, fmtInt, fmtTime, fmtUsd, policyNeedsConsent, presetPolicy, shortSha,
+} from "./onboarding/shared.tsx";
+import { StageFindings } from "./onboarding/stageViews.tsx";
+import type { ConfirmResult, DeliverResult, DiscoveryResult } from "./onboarding/types.ts";
 
 /**
- * Repository AI Enablement — the 16-stage onboarding pipeline
- * (`repository-ai-enablement`). The sole "AI management" screen for a
- * repo — mounted at both `#/repo/<id>` and `#/repo-onboarding/<id>`;
- * the old 3-step flow's screen (`RepoAiPanel.tsx`) was fully deleted
- * (2026-09-16), not just unlinked. Deliberately minimal per the earlier
- * design discussion: a real approval block only for the `WaitingForUser`
- * stages that genuinely need a human to decide something — most other
- * stages show a step rail plus a single "advance" button.
+ * Repository AI Enablement — the 9-stage onboarding pipeline
+ * (`repository-ai-enablement-v2`). Mounted at `#/repo/<id>` (and the
+ * older `#/repo-onboarding/<id>`).
+ *
+ * Two screens. Before a run: what the process will do, stage by stage
+ * (why / what / value / what it supports / output / impact — readable
+ * before anything runs), how much of it should happen on its own, and
+ * the explicit consent an automatic gate needs. During and after a run:
+ * a nine-node stepper, the selected stage's explanation and real
+ * findings, the gate form when the stage is waiting on a person, the
+ * Claude call behind the stage, and a rail with the automation policy,
+ * cost, the decision log, open warnings/UNKNOWNs and the knowledge
+ * lifecycle (staleness check → refresh run). The run advances on its own
+ * only as far as its policy allows; everything here is a person's lever.
  */
-// Title/description text below is the user's own exact per-stage
-// write-up (supplied verbatim, 2026-09-16, after the source "36-section"
-// spec text itself turned out not to be preserved anywhere in the repo
-// or this project's history — only a condensed one-liner per stage had
-// survived from an earlier pass). The user was explicit: to build trust,
-// the person running onboarding has to see all four of these fields —
-// what happens now, how it's actually done, why it happens at this point
-// in the order, and what it unlocks next — for every stage, not just the
-// interactive ones, and BEFORE that stage runs, not only after.
-// Titles only — no leading number baked in. The spec's own numbering
-// (§8–§23) doesn't match actual run order for two stages (`guardrails`
-// is spec stage 12 but runs 11th; `skills_evaluation` is spec stage 11
-// but runs last, per Phase 6/4's own rollout-order decisions) — labeling
-// by real position (computed from `ONBOARDING_STAGE_ORDER`/`d.stages`,
-// see below) avoids showing "12" before "11" in a list that also claims
-// to be "exactly this order."
-const STAGE_LABELS: Record<string, string> = {
-  workspace_setup: "חיבור Repository",
-  repository_scan: "סריקה דטרמיניסטית",
-  classification: "סיווג Repository",
-  security_permissions: "אבטחה והרשאות",
-  knowledge_coverage: "בדיקת ידע קיים",
-  targeted_discovery: "Discovery ממוקד",
-  human_enrichment: "העשרת ידע אנושית",
-  knowledge_generation: "יצירת ידע Repository",
-  claude_md_generation: "יצירת CLAUDE.md",
-  scoped_rules: "בדיקת Scoped Rules",
-  skills_evaluation: "בדיקת Skills",
-  guardrails: "Guardrails",
-  ai_doctor: "AI Doctor / Validation",
-  user_review: "בדיקת משתמש",
-  github_pull_request: "GitHub Pull Request",
-  ai_ready: "AI Ready",
-};
-const stageLabelWithPos = (key: string, pos: number) => `${String(pos).padStart(2, "0")} — ${STAGE_LABELS[key] ?? key}`;
-type StageDetail = {
-  now: string; how: string; why: string; next: string;
-  /** External references for a stage that names a specific third-party
-   *  mechanism (e.g. `scc` for `repository_scan`) — shown as real links
-   *  under "how", not just prose naming the tool. */
-  links?: { label: string; url: string }[];
-};
-const STAGE_DETAILS: Record<string, StageDetail> = {
-  workspace_setup: {
-    now: "DCC מתחבר ל־Repository ומכין סביבת עבודה מבודדת ובטוחה שבה ניתן לבצע את תהליך ה־AI Onboarding.",
-    how: "השלב הזה מתבצע על־ידי DCC ואינו משתמש ב־Claude.\n\nDCC מזהה את ה־Repository ומכין סביבת עבודה מבודדת המבוססת על Git. DCC מזהה את ה־default branch ואת ה־commit הנוכחי שעליו מתחיל ה־Onboarding, ושומר את ה־baseline לצורך מעקב והשוואה בהמשך.\n\nהעבודה מתבצעת ב־workspace מבודד ובענף ייעודי ל־Onboarding ולא ישירות על ה־default branch.\n\nבשלב הזה עדיין לא מתבצע ניתוח AI ולא מתבצעים שינויים בקוד של ה־Repository.",
-    why: "לפני ש־DCC יכול לנתח או לשנות משהו ב־Repository, הוא חייב לדעת בדיוק על איזה Repository ועל איזה commit הוא עובד ולהבטיח שהעבודה מבודדת.",
-    next: "כל שלבי ה־Onboarding הבאים עובדים מול אותה סביבת עבודה ואותו baseline, ולכן ניתן לדעת בדיוק מה היה מצב ה־Repository בתחילת התהליך ומה השתנה במהלכו.",
-  },
-  repository_scan: {
-    now: "DCC ממפה את המבנה של ה־Repository כדי להבין מה קיים בו לפני שמבקשים מ־Claude לבצע ניתוח.",
-    how: "השלב הזה אינו משתמש ב־Claude כלל — זהו קוד DCC רגיל (Node.js) שעובר על מערכת הקבצים של ה־Repository, לא מודל שפה. יש לו שני חלקים.\n\nהחלק הראשון הוא ה'הליכה' של DCC על עץ התיקיות (עד עומק 6 רמות — אם נחצית, מתקבלת אזהרה על תיקיות עמוקות שלא נסרקו, אבל השלב לא נכשל). ההליכה הזו מדלגת על תיקיות רעש ידועות (bin, obj, dist, build, node_modules, vendor וכו') ומזהה קבצי manifest של build לפי שם/סיומת (package.json→npm, *.csproj→dotnet וכו'), קבצי CI (.github/workflows, azure-pipelines.yml וכו'), קבצי תיעוד (README*, תיקיות docs), תיקיות בדיקות, וגם 'מציצה' לתוך package.json/*.csproj (עד 200KB לקובץ) כדי לזהות frameworks כמו React או Dynamics 365.\n\nהחלק השני — וזה השינוי המרכזי — הוא ספירת השפות עצמה. במקום לספור קבצים לפי סיומת (מה שהיה כאן קודם, ולא נתן תמונה מדויקת), DCC מפעיל כתהליך חיצוני כלי בשם scc (ראו הקישורים למטה) — כלי קוד-פתוח ייעודי לספירת קוד, שכבר מותקן על מכונת ה-deployment (בדיוק כמו שה-pipeline מניח ש-gh של GitHub כבר מותקן, DCC לא מוריד או מנהל את הבינארי בעצמו). scc סופר במדויק שורות קוד/הערות/רווח לכל שפה בנפרד, ומחשב גם אומדן מורכבות (complexity) — נתון אמיתי שמבוסס על הקוד עצמו, לא ניחוש. scc גם מכבד אוטומטית את קובץ .gitignore של הריפו, אבל בדיקה חיה על Altshuler Trade גילתה שזה לא מספיק לבד: הריפו הזה כן שומר תיקיית packages/ (חבילות NuGet ישנות) בתוך ה-git עצמו — לכן DCC מוסיף באופן מפורש את אותה רשימת תיקיות-רעש שהחלק הראשון כבר משתמש בה, כדי ש-scc לא יספור קוד של ספריות צד-שלישי כאילו הוא קוד הריפו.\n\nאם scc לא מותקן על המכונה, DCC נופל בחזרה לספירה הישנה (לפי סיומת קובץ בלבד, בלי שורות קוד או מורכבות) ומוסיף אזהרה על כך — השלב לא נכשל, פשוט מקבל פחות מידע.\n\nהתוצאה — לא הבנה סמנטית של הקוד עצמו, אלא אותות מבניים מדויקים — נשמרת ב־DCC כ־Repository Profile.",
-    why: "לפני ניתוח AI צריך מידע מבני בסיסי ומדויק על ה־Repository — כדי שהסיווג בשלב הבא יתבסס על נתונים אמיתיים (למשל: כמה שורות קוד יש בכל שפה, ומה רמת המורכבות שלה), במקום שClaude יצטרך לנחש 'complexity: high' משום מקום.",
-    next: "ה־Repository Profile — כולל שורות הקוד והמורכבות לכל שפה — משמש את שלב הסיווג כדי להבין איזה סוג Repository זה, אילו טכנולוגיות קיימות בו ומה עומק הניתוח שנדרש.",
-    links: [
-      { label: "scc — איך זה עובד (README)", url: "https://github.com/boyter/scc#readme" },
-      { label: "scc — קוד פתוח (MIT), GitHub", url: "https://github.com/boyter/scc" },
-    ],
-  },
-  classification: {
-    now: "DCC משתמש במידע המבני שנאסף כדי להבין איזה סוג Repository זה, באילו טכנולוגיות הוא משתמש ומה מאפיין את הארכיטקטורה שלו.",
-    how: "בשלב הזה Claude Code כן מעורב.\n\nDCC מעביר ל־Claude Code את המידע המבני שנאסף בשלב הסריקה יחד עם בקשת סיווג מוגדרת מראש. Claude מקבל הקשר ממוקד ולא נדרש להבין את כל ה־Repository.\n\nClaude מחזיר סיווג מובנה הכולל מאפיינים כגון סוג ה־Repository, stack טכנולוגי, ארכיטקטורה, מורכבות, legacy, תחומים מרכזיים, בשלות התיעוד והבדיקות, והאם נדרש discovery נוסף.\n\nהתוצאה נשמרת ב־DCC כחלק מתוצאות ה־Onboarding ואינה מהווה שינוי בקוד.",
-    why: "עכשיו כבר קיים מידע מבני בסיסי שמאפשר ל־Claude לבצע סיווג ממוקד במקום להתחיל מניחוש או מסריקה מלאה.",
-    next: "הסיווג קובע איזה עומק של discovery נדרש ואילו חלקים ב־Repository חשוב לנתח בשלבים הבאים.",
-  },
-  security_permissions: {
-    now: "DCC קובע באילו הרשאות ובאילו מגבלות מותר לבצע את תהליך ה־Onboarding על ה־Repository.",
-    how: "השלב מנוהל על־ידי DCC ואינו דורש ניתוח AI כדי לקבוע את מדיניות האבטחה.\n\nDCC בוחר Security Profile בהתאם למדיניות הארגונית ולמאפייני ה־Repository. הפרופיל קובע אילו פעולות מותר לבצע ואילו אזורים או פעולות צריכים להיות מוגנים.\n\nבהתאם לפרופיל, DCC מכין את הגדרות Claude Code ואת ה־guardrails המתאימים, כולל הגנות מפני פעולות Git מסוכנות, גישה ל־secrets, שינוי קבצים מוגנים ושינוי נתיבים שאינם מורשים.",
-    why: "האבטחה חייבת להיקבע לפני ש־Claude מקבל גישה משמעותית יותר ל־Repository.",
-    next: "השלבים הבאים יכולים לבצע discovery ויצירת artifacts בתוך סביבת עבודה עם גבולות והרשאות מוגדרים מראש.",
-  },
-  knowledge_coverage: {
-    now: "DCC בודק איזה ידע חשוב על ה־Repository כבר מתועד ואיפה קיימים פערים.",
-    how: "בשלב הזה Claude Code קורא את התיעוד הקיים והרלוונטי ב־Repository.\n\nClaude בודק נושאים כמו מטרת המערכת, ארכיטקטורה, גבולות בין רכיבים, build, testing, integrations, deployment, generated code ו־critical constraints.\n\nעבור כל תחום Claude קובע האם המידע קיים ומספיק, קיים באופן חלקי, או חסר.\n\nהמטרה היא להשתמש בתיעוד שכבר קיים במקום ליצור תיעוד כפול.",
-    why: "לפני שמתחילים ליצור ידע חדש צריך לדעת איזה ידע כבר קיים.",
-    next: "התוצאה מאפשרת ל־DCC ול־Claude להתמקד רק בפערים ובמידע שבאמת חסר במקום לייצר מחדש תיעוד שכבר קיים.",
-  },
-  targeted_discovery: {
-    now: "DCC מבצע ניתוח ממוקד של חלקים חשובים ב־Repository כדי להבין איך המערכת באמת בנויה ומתנהגת.",
-    how: "בשלב הזה Claude Code כן מעורב.\n\nClaude מקבל את תוצאות הסריקה, הסיווג ופערי הידע שכבר נמצאו. במקום לסרוק את כל ה־Repository ללא מטרה, הוא מבצע discovery ממוקד של רכיבים, entry points, גבולות בין מערכות, flows, integrations, build/test structure ואזורים מוגנים או generated.\n\nClaude מתעד גם את הנתיבים שבהם נמצא המידע ואת השאלות שלא ניתן היה לפתור מהקוד או מהתיעוד.\n\nהתוצאה נשמרת ב־DCC כ־Targeted Discovery.",
-    why: "רק עכשיו קיימים מספיק נתונים כדי לדעת אילו חלקים של ה־Repository באמת דורשים בדיקה מעמיקה.",
-    next: "ה־Discovery מספק את הראיות שעל בסיסן ניתן ליצור knowledge קבוע, CLAUDE.md, rules ו־Skills בלי להמציא מידע.",
-  },
-  human_enrichment: {
-    now: "DCC מציג למשתמש שאלות שהמערכת לא יכולה לענות עליהן בצורה אמינה רק מתוך ה־Repository.",
-    how: "השלב הזה אינו מבקש מ־Claude לנחש את התשובות.\n\nDCC מציג עד 10 שאלות בעלות ערך גבוה שנוצרו מתוך פערי הידע שהתגלו בשלבים הקודמים. המשתמש יכול לספק את המידע שחסר.\n\nהתשובות נשמרות ב־DCC כידע מאומת שסופק על־ידי המשתמש.\n\nאם לא נמצאו שאלות בעלות ערך, השלב יכול להיסגר ללא צורך בפעולת משתמש.",
-    why: "רק לאחר שהמערכת ביצעה את הסריקה וה־discovery ניתן לדעת איזה מידע באמת חסר ולא כדאי לדרוש מהמשתמש מידע שכבר קיים בקוד או בתיעוד.",
-    next: "התשובות מספקות ידע מאומת שיכול לשמש ביצירת הידע הקבוע של ה־Repository ובהכנת Claude לעבודה עתידית.",
-  },
-  knowledge_generation: {
-    now: "DCC יוצר ידע קבוע ושימושי על ה־Repository מתוך המידע שכבר נאסף.",
-    how: "בשלב הזה Claude Code משתמש בתוצאות ה־Discovery, בתיעוד הקיים ובידע המאומת שהתקבל מהמשתמש.\n\nClaude יוצר רק artifacts שהמערכת זקוקה להם בפועל. בהתאם ל־Repository ולמידע שנמצא, אלה יכולים לכלול מפת Repository, מידע ארכיטקטוני, integrations או critical context.\n\nהידע נשמר בתוך ה־Repository כדי שיהיה זמין גם לסשנים עתידיים ולא רק לסשן ה־Onboarding הנוכחי.",
-    why: "כעת כבר נאסף מספיק מידע אמין כדי ליצור ידע קבוע במקום ליצור מסמכים על בסיס ניחושים.",
-    next: "הידע הקבוע משמש כבסיס ל־CLAUDE.md, rules ו־Skills ומקטין את הצורך של Claude לבצע rediscovery בעתיד.",
-  },
-  claude_md_generation: {
-    now: "DCC מכין את הקשר הקבוע והמצומצם ש־Claude צריך לקבל בכל עבודה עתידית על ה־Repository.",
-    how: "Claude Code יוצר את CLAUDE.md בהתאם למידע שנאסף בשלבים הקודמים ולתבנית ה־Onboarding של DCC.\n\nהקובץ מכיל רק מידע שחשוב להיות זמין באופן קבוע, כגון אופן העבודה עם ה־Repository, מבנה בסיסי, מגבלות חשובות והפניות לידע מפורט יותר.\n\nהקובץ אינו אמור להיות inventory מלא של ה־Repository ואינו אמור להכיל task state או מידע זמני.",
-    why: "רק לאחר שה־Repository נחקר ונוצר knowledge אמין ניתן להחליט מה באמת צריך להיות context קבוע עבור Claude.",
-    next: "Claude יוכל להתחיל עבודה עתידית עם הקשר בסיסי נכון בלי לבצע בכל פעם מחדש את אותו discovery.",
-  },
-  scoped_rules: {
-    now: "DCC בודק האם קיימים ב־Repository כללי עבודה ספציפיים שצריכים לחול רק על אזורים מסוימים.",
-    how: "Claude Code מנתח את הידע והמבנה שכבר נמצאו ומעריך האם קיימים כללים מקומיים חשובים שאינם מתאימים ל־CLAUDE.md הכללי.\n\nRule נוצר רק כאשר קיימת הצדקה ברורה, כגון התנהגות שאינה מובנת מאליה, מגבלה משמעותית או סיכון הקשור לנתיבים מסוימים.\n\nאם אין צורך אמיתי ב־Scoped Rules, לא נוצר rule רק כדי למלא את השלב.",
-    why: "רק לאחר שהמערכת מכירה את מבנה ה־Repository ניתן לדעת האם קיימים כללים שצריכים להיות scoped לאזורים מסוימים.",
-    next: "Claude יקבל הנחיות ספציפיות רק במקומות שבהם הן באמת נחוצות, בלי להעמיס context גלובלי מיותר.",
-  },
-  skills_evaluation: {
-    now: "DCC בודק האם יש workflow חוזר ושימושי שמצדיק יצירת Skill עבור ה־Repository.",
-    how: "Claude Code מעריך את ה־workflows והצרכים שהתגלו במהלך ה־Onboarding.\n\nSkill נוצר רק כאשר מדובר בתהליך שחוזר על עצמו ושיש ערך ממשי להפוך אותו ליכולת reusable.\n\nלא נוצר Skill רק משום שאפשר ליצור Skill.",
-    why: "רק לאחר שה־Repository וה־workflows שלו מובנים ניתן לדעת האם קיים תהליך שחוזר על עצמו ושווה להפוך אותו ל־Skill.",
-    next: "כאשר קיים Skill מתאים, Claude יכול לבצע workflow חוזר בצורה עקבית ומהירה יותר במקום ללמוד אותו מחדש בכל פעם.",
-  },
-  guardrails: {
-    now: "DCC מתקין ומוודא את מנגנוני ההגנה שמגבילים פעולות מסוכנות של Claude Code.",
-    how: "השלב מתבצע באופן דטרמיניסטי על־ידי DCC.\n\nDCC מגדיר guardrails בהתאם ל־Security Profile שנבחר. ההגנות יכולות לכלול מניעת פעולות Git מסוכנות, הגנה על secrets, הגנה על generated/protected code והגבלת כתיבה לנתיבים מותרים.\n\nה־guardrails אינם מסתמכים על Claude כדי להחליט בזמן אמת האם פעולה מסוכנת.",
-    why: "כעת כבר ידוע איזה Security Profile חל על ה־Repository ואילו אזורים דורשים הגנה.",
-    next: "Claude יכול לעבוד בתוך ה־Repository עם שכבת הגנה נוספת שמונעת פעולות שאינן מורשות.",
-  },
-  ai_doctor: {
-    now: "DCC בודק שה־AI configuration שנוצר עבור ה־Repository תקין ועובד כפי שמצופה.",
-    how: "DCC מבצע בדיקות דטרמיניסטיות על artifacts כגון CLAUDE.md, rules, settings ו־hooks.\n\nבנוסף, Claude Code מבצע review של תוצרי ה־Onboarding ומנסה לזהות מידע שגוי, סתירות או בעיות בתוצרים שנוצרו.\n\nהתוצאה מסווגת כ־PASS, WARN או FAIL בהתאם לממצאים.",
-    why: "כל התוצרים כבר קיימים ולכן ניתן לבדוק אותם לפני שהם הופכים לחלק קבוע מה־Repository.",
-    next: "רק תוצרים שעברו את בדיקות ה־validation יכולים להתקדם ל־User Review ולשלב ה־GitHub Pull Request.",
-  },
-  user_review: {
-    now: "DCC מציג למשתמש את השינויים והתוצרים שהוכנו ומבקש ממנו לאשר אותם לפני שהם נשלחים ל־Repository.",
-    how: "DCC מציג את artifacts שנוצרו ואת תוצאות הבדיקות שבוצעו עליהם.\n\nהמשתמש יכול לאשר את התוצרים, לבקש שינויים או לעצור את התהליך.\n\nבשלב הזה DCC עדיין אינו מבצע merge ל־default branch.",
-    why: "לפני שינוי קבוע ב־Repository המשתמש צריך לקבל הזדמנות לבדוק ולאשר את התוצרים שנוצרו על־ידי ה־Onboarding.",
-    next: "לאחר אישור המשתמש ניתן לבצע commit, push וליצור Pull Request בצורה מבוקרת.",
-  },
-  github_pull_request: {
-    now: "DCC מכין את השינויים שאושרו ומעביר אותם ל־GitHub באמצעות ענף Onboarding ו־Pull Request.",
-    how: "DCC עובד על ענף ה־Onboarding המבודד ולא ישירות על ה־default branch.\n\nלאחר אישור המשתמש, DCC מבצע commit של התוצרים שאושרו, דוחף את הענף ל־GitHub ולאחר מכן מנסה ליצור Pull Request.\n\nPush מוצלח ויצירת Pull Request הם שתי פעולות נפרדות.\n\nאם ה־push הצליח אך יצירת ה־Pull Request נכשלה, DCC מציג זאת כמצב שונה ולא מציג את הפעולה כ־PR מוצלח.\n\nה־PR נשמר ב־DCC כאשר הוא נוצר, כולל המידע הדרוש כדי לעקוב אחריו.",
-    why: "רק לאחר שהמשתמש אישר את התוצרים וה־validation הסתיים ניתן להעביר אותם ל־GitHub.",
-    next: "הארגון יכול לבצע review ו־merge דרך תהליך ה־Git הרגיל, בלי ש־DCC יעקוף את מנגנון הבקרה של ה־Repository.",
-  },
-  ai_ready: {
-    now: "DCC בודק האם תוצרי ה־Onboarding שאושרו אכן נמצאים ב־Repository בצורה שניתן להשתמש בה לעבודה עתידית עם Claude.",
-    how: "DCC בודק שהשינויים שאושרו אכן נמצאים ב־Repository ובענף/commit המתאים, ושניתן לזהות אותם כחלק מתהליך ה־Onboarding שהושלם.\n\nהמערכת שומרת את גרסת ה־Onboarding ואת ה־commit שעליו ה־Repository הפך ל־AI Ready.",
-    why: "זהו השלב האחרון לאחר שה־artifacts עברו validation, user review ותהליך GitHub.",
-    next: "ה־Repository מסומן כ־AI Ready וניתן להשתמש ב־Claude Code עם ה־configuration והידע שנוצרו בתהליך.",
-  },
-};
-// Not a `STAGE_ORDER` stage (it's the separate `checkRepositoryRefresh`
-// analysis run after a repo is already `AI Ready` — see decision 6.0.3),
-// so it has no row in the step rail. Surfaced only as a closing note on
-// the pre-start overview so the user knows the process doesn't end at
-// stage 16 forever — the repo keeps getting rechecked as it changes.
-const REFRESH_INFO: StageDetail & { title: string } = {
-  title: "Repository Refresh (לאחר שה-Repository מוכן)",
-  now: "DCC בודק מה השתנה ב־Repository מאז ה־Onboarding האחרון ומעדכן רק את הידע והתצורה שהושפעו מהשינויים.",
-  how: "DCC משווה בין מצב ה־Repository הנוכחי לבין ה־commit שעליו התבסס ה־Onboarding הקודם.\n\nבמקום לבצע מחדש את כל תהליך ה־Onboarding, DCC מזהה שינויים רלוונטיים ומעביר לניתוח רק את האזורים שהושפעו מהם.\n\nבהתאם לשינויים, ניתן לעדכן את הידע, ה־CLAUDE.md, rules או Skills הרלוונטיים.",
-  why: "Repository שכבר עבר Onboarding לא צריך לעבור בכל פעם מחדש את אותו תהליך מלא.",
-  next: "הידע והתצורה נשארים מעודכנים תוך צמצום משמעותי של rediscovery, קריאת קבצים וצריכת Claude.",
-};
 
-function StageDetailFields({ d }: { d: StageDetail }) {
-  return (
-    <div style={{ display: "grid", gap: 8, fontSize: 12.5, color: "var(--ink-600)" }}>
-      <div><b style={{ color: "var(--ink-700)" }}>מה קורה עכשיו: </b>{d.now}</div>
-      <div>
-        <b style={{ color: "var(--ink-700)" }}>איך זה מתבצע בפועל: </b><span style={{ whiteSpace: "pre-line" }}>{d.how}</span>
-        {d.links && d.links.length > 0 && (
-          <div style={{ marginTop: 6, display: "flex", flexWrap: "wrap", gap: 10 }}>
-            {d.links.map((l) => (
-              <a key={l.url} href={l.url} target="_blank" rel="noreferrer" style={{ fontSize: 11.5 }}>{l.label} ↗</a>
-            ))}
-          </div>
-        )}
-      </div>
-      <div><b style={{ color: "var(--ink-700)" }}>למה עכשיו: </b>{d.why}</div>
-      <div><b style={{ color: "var(--ink-700)" }}>מה זה מאפשר בהמשך: </b>{d.next}</div>
-    </div>
-  );
-}
-const STATUS_HE: Record<string, string> = {
-  Pending: "ממתין להרצה", Running: "רץ עכשיו", WaitingForUser: "ממתין לאדם", Completed: "הושלם",
-  CompletedWithWarnings: "הושלם עם אזהרות", Failed: "נכשל", Skipped: "דולג", Cancelled: "בוטל",
-};
+type RepoLite = { id: string; name: string; adoRepoRef: string | null; clientId: string | null; clientName: string | null };
+type LatestRun = { runId: string; status: OnboardingStatus; currentStageKey: string | null; onboardingVersion: string; mode: string; completedAt: string | null };
+type RunRow = { id: string; status: OnboardingStatus; mode: string; onboardingVersion: string; startedAt: string; completedAt: string | null; baselineSha: string | null };
 
-const humanizeKey = (k: string) => k.replace(/_/g, " ").replace(/([a-z0-9])([A-Z])/g, "$1 $2");
-
-/** Generic, stage-agnostic renderer for a stage's `result` jsonb — every
- *  stage owns its own result shape (16 different ones), so rather than
- *  hand-build bespoke UI per stage this walks whatever came back and
- *  renders it as labeled key/value pairs. Not as polished as a tailored
- *  view, but it means EVERY stage's real output is visible, not just the
- *  few that got custom treatment. */
-function ResultView({ value }: { value: unknown }) {
-  if (value === null || value === undefined) return <span style={{ color: "var(--ink-400)" }}>—</span>;
-  if (typeof value !== "object") return <span style={{ fontSize: 12.5 }}>{String(value)}</span>;
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span style={{ color: "var(--ink-400)" }}>(ריק)</span>;
-    return (
-      <ul style={{ margin: 0, paddingInlineStart: 18, display: "grid", gap: 6 }}>
-        {value.map((v, i) => (
-          <li key={i} style={{ fontSize: 12.5 }}>{typeof v === "object" && v !== null ? <ResultView value={v} /> : String(v)}</li>
-        ))}
-      </ul>
-    );
-  }
-  const entries = Object.entries(value as Record<string, unknown>);
-  if (entries.length === 0) return <span style={{ color: "var(--ink-400)" }}>(ריק)</span>;
-  return (
-    <div style={{ display: "grid", gap: 6 }}>
-      {entries.map(([k, v]) => (
-        <div key={k}>
-          <b style={{ color: "var(--ink-700)", fontSize: 11.5 }}>{humanizeKey(k)}: </b>
-          {v === null || v === undefined || v === "" ? <span style={{ color: "var(--ink-400)" }}>—</span>
-            : typeof v === "object" ? <div style={{ marginTop: 2, marginInlineStart: 10 }}><ResultView value={v} /></div>
-            : <span style={{ fontSize: 12.5 }}>{String(v)}</span>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/** Shown for any stage that made a real Claude call (`claudeExecutionId`
- *  set) — the prompt actually sent (the active template's body; the
- *  resolved `{{PLACEHOLDER}}` values themselves aren't persisted, see
- *  `runner.ts`) alongside the raw text Claude returned. Editing and
- *  saving registers a NEW immutable prompt version (`updateOnboardingPrompt`
- *  → `registerPromptVersion`) — it only affects the next run of this
- *  stage, never rewrites what already happened. */
-function ClaudeCallPanel({ repoId, executionId }: { repoId: string; executionId: string }) {
-  const [exec, setExec] = useState<OnboardingExecution | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
-
-  useEffect(() => {
-    setExec(null); setEditing(false); setSaveState("idle");
-    getOnboardingExecution(repoId, executionId).then((e) => { setExec(e); setDraft(e.promptBody); }).catch(() => {});
-  }, [repoId, executionId]);
-
-  if (!exec) return <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 10 }}>טוען את פרטי הקריאה ל-Claude…</p>;
-
-  return (
-    <div style={{ marginTop: 12, borderTop: "1px solid var(--border-hairline)", paddingTop: 10 }}>
-      <p className="section-lbl">הפרומפט שנשלח ל-Claude · {exec.promptKey} גרסה {exec.promptVersion}</p>
-      {!editing ? (
-        <>
-          <pre style={{ whiteSpace: "pre-wrap", fontSize: 11.5, background: "var(--surface-muted)", padding: 10, borderRadius: 8, maxHeight: 260, overflow: "auto", fontFamily: "var(--mono)" }}>{exec.promptBody}</pre>
-          <button className="btn btn-secondary btn-sm" onClick={() => setEditing(true)}>ערוך פרומפט</button>
-        </>
-      ) : (
-        <>
-          <textarea
-            style={{ width: "100%", minHeight: 220, fontSize: 11.5, fontFamily: "var(--mono)" }}
-            value={draft} onChange={(e) => setDraft(e.target.value)}
-          />
-          <p style={{ fontSize: 11, color: "var(--ink-400)", margin: "4px 0" }}>
-            השמירה תיצור גרסה חדשה לפרומפט הזה — היא תשפיע רק על ההרצה הבאה של השלב הזה, לא על קריאות שכבר בוצעו.
-          </p>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary btn-sm" disabled={saveState === "saving"} onClick={async () => {
-              setSaveState("saving");
-              try { await updateOnboardingPrompt(exec.promptKey, draft); setSaveState("saved"); setEditing(false); }
-              catch { setSaveState("error"); }
-            }}>
-              {saveState === "saving" ? "שומר…" : "שמור גרסה חדשה"}
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => { setEditing(false); setDraft(exec.promptBody); }}>ביטול</button>
-          </div>
-          {saveState === "error" && <p style={{ fontSize: 11, color: "var(--status-critical)", marginTop: 4 }}>שמירת הפרומפט נכשלה.</p>}
-        </>
-      )}
-      {saveState === "saved" && <p style={{ fontSize: 11, color: "var(--status-healthy)", marginTop: 6 }}>נשמרה גרסה חדשה של הפרומפט — היא תחול בהרצה הבאה של השלב הזה.</p>}
-
-      <p className="section-lbl" style={{ marginTop: 12 }}>הפלט שהתקבל מ-Claude</p>
-      {exec.resultText ? (
-        <pre style={{ whiteSpace: "pre-wrap", fontSize: 11.5, background: "var(--surface-muted)", padding: 10, borderRadius: 8, maxHeight: 320, overflow: "auto" }}>{exec.resultText}</pre>
-      ) : (
-        <p style={{ fontSize: 11.5, color: "var(--ink-400)" }}>{exec.errorMessage ?? "אין פלט עדיין."}</p>
-      )}
-      <p style={{ fontSize: 10.5, color: "var(--ink-400)", marginTop: 4 }}>
-        מודל: {exec.model ?? "—"} · הרשאה: {exec.permissionProfile} ·
-        {" "}עלות: {exec.costUsd ? `$${Number(exec.costUsd).toFixed(4)}` : "—"} ·
-        {" "}טוקנים: {((exec.inputTokens ?? 0) + (exec.outputTokens ?? 0)).toLocaleString()} ·
-        {" "}משך: {exec.durationMs ? `${Math.round(exec.durationMs / 1000)}s` : "—"}
-      </p>
-    </div>
-  );
-}
-
-type SuggestedRules = {
-  suggestedRules: string[]; suggestedProfileId: string;
-  profiles: { id: string; label: string; description: string }[];
-};
-type Questions = { questions: { id: string; question_he: string; why_it_matters_he: string; risk_if_unknown: string }[] };
-type GuardrailCandidates = { candidates: { id: string; label: string; description: string; suggested: boolean }[] };
-type UserReview = {
-  readiness?: { status?: string };
-  groups: { group_he: string; items: { label: string }[] }[];
-};
-type PrOrReadyResult = { prUrl?: string; compareUrl?: string; mergedCommitSha?: string; readinessDate?: string };
-
-// Execution order — mirrors `packages/core/src/repo-onboarding/types.ts`'s
-// `STAGE_ORDER` (deliberately duplicated, not imported: the web app has no
-// dependency on `@dcc/core`, same reasoning as every other frontend/backend
-// duplication in this codebase). Always used to build the full 16-entry
-// rail — stage rows only exist in the DB once `advanceRun` actually
-// reaches them (and none exist at all before a run is started), so this
-// is what fills in every not-yet-reached step as a synthetic `Pending`
-// row (see `merged` below), keeping every step visible and clickable
-// from before the run even begins.
-const ONBOARDING_STAGE_ORDER = [
-  "workspace_setup", "repository_scan", "classification", "security_permissions",
-  "knowledge_coverage", "targeted_discovery", "human_enrichment",
-  "knowledge_generation", "claude_md_generation", "scoped_rules",
-  "guardrails", "ai_doctor", "user_review", "github_pull_request", "ai_ready",
-  "skills_evaluation",
-];
-
-const runIdKey = (repoId: string) => `dcc.onboarding.runId.${repoId}`;
+const SETTLED: ReadonlySet<string> = new Set(["Completed", "CompletedWithWarnings", "Skipped"]);
+const RUN_OVER: ReadonlySet<string> = new Set(["Completed", "CompletedWithWarnings", "Cancelled"]);
+const isLiveStatus = (s: OnboardingStatus) => !RUN_OVER.has(s);
+const MODE_HE: Record<string, string> = { initial: "onboarding ראשוני", refresh: "רענון" };
 
 export function RepoOnboardingPanel({ id: repoId, nav }: { id: string; nav: (h: string) => void }) {
-  const [runId, setRunId] = useState<string | null>(() => localStorage.getItem(runIdKey(repoId)));
-  // `localStorage` only knows about a run started in THIS browser — a repo
-  // list, another device, or a cleared browser would otherwise see "no
-  // active run" and offer to start a duplicate one even while a real run
-  // is genuinely in progress. Fall back to asking the backend for the
-  // repo's actual latest run before concluding there isn't one.
-  const [checkedBackend, setCheckedBackend] = useState(false);
-  const [d, setD] = useState<OnboardingRunView | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [editableRules, setEditableRules] = useState<string[] | null>(null);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [selectedGuardrailIds, setSelectedGuardrailIds] = useState<string[] | null>(null);
+  const [repo, setRepo] = useState<RepoLite | null | undefined>(undefined);
+  const [defs, setDefs] = useState<StageDefinition[] | null>(null);
+  const [latest, setLatest] = useState<LatestRun | null | undefined>(undefined);
+  const [runs, setRuns] = useState<RunRow[]>([]);
+  const [runId, setRunId] = useState<string | null>(null);
+  const [showNew, setShowNew] = useState(false);
+  const [view, setView] = useState<OnboardingRunView | null>(null);
   const [cost, setCost] = useState<OnboardingRunCostSummary | null>(null);
-  // Which stage's panel is on screen — separate from `r.currentStageKey`
-  // (the stage actually executing/waiting) so a completed stage can be
-  // clicked and reviewed without losing track of where the run itself
-  // is. `null` means "follow the run" — defaults to the current stage
-  // and re-syncs there automatically after every action that moves the
-  // run forward (start/advance/approve/etc.), so the person always lands
-  // back on what just happened instead of staring at whatever they had
-  // open before.
-  const [selectedStageKey, setSelectedStageKey] = useState<string | null>(null);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const viewRef = useRef<OnboardingRunView | null>(null);
+  useEffect(() => { viewRef.current = view; }, [view]);
 
-  const reload = (rid: string) => getOnboardingRun(repoId, rid).then(setD).catch((e) => setErr(String(e)));
-  useEffect(() => { if (runId) reload(runId); }, [runId]);
-  useEffect(() => { if (runId) getOnboardingRunCostSummary(repoId, runId).then(setCost).catch(() => {}); }, [runId, d?.run.status]);
-  useEffect(() => {
-    if (runId) return;
-    getLatestOnboardingRun(repoId).then((latest) => {
-      if (latest) { localStorage.setItem(runIdKey(repoId), latest.runId); setRunId(latest.runId); }
-    }).finally(() => setCheckedBackend(true));
+  const loadMeta = useCallback(() => {
+    getRepos().then((r) => setRepo(r.repos.find((x) => x.id === repoId) ?? null)).catch(() => setRepo(null));
+    getOnboardingStages().then((s) => setDefs(s.stages)).catch((e) => setLoadErr(errText(e)));
+    getLatestOnboardingRun(repoId).then((l) => { setLatest(l); if (l) setRunId((cur) => cur ?? l.runId); }).catch((e) => { setLatest(null); setLoadErr(errText(e)); });
+    listOnboardingRuns(repoId).then((r) => setRuns(r.runs)).catch(() => {});
+  }, [repoId]);
+  useEffect(() => { loadMeta(); }, [loadMeta]);
+
+  const load = useCallback(async () => {
+    if (!runId) return;
+    try {
+      const v = await getOnboardingRun(repoId, runId);
+      setView(v); setLoadErr(null);
+      getOnboardingRunCostSummary(repoId, runId).then(setCost).catch(() => {});
+    } catch (e) { setLoadErr(errText(e)); }
   }, [repoId, runId]);
 
-  const run = async (key: string, fn: () => Promise<unknown>) => {
+  // Poll fast while something executes, slowly while the run merely waits
+  // on a person or on the PR, never once it is over.
+  useEffect(() => {
+    if (!runId) { setView(null); setCost(null); return; }
+    let alive = true; let n = 0;
+    void load();
+    const iv = setInterval(() => {
+      if (!alive || document.visibilityState !== "visible") return;
+      n++;
+      const v = viewRef.current;
+      if (!v || v.run.id !== runId) { void load(); return; }
+      const executing = v.driving || v.run.status === "Running" || v.run.status === "Pending" || v.stages.some((s) => s.status === "Running");
+      const waiting = v.run.status === "WaitingForUser" || v.run.status === "AwaitingExternal";
+      if (executing || (waiting && n % 4 === 0)) void load();
+    }, 2500);
+    return () => { alive = false; clearInterval(iv); };
+  }, [runId, load]);
+
+  const act = async (key: string, fn: () => Promise<unknown>, opts: { follow?: boolean; fireAndForget?: boolean } = {}) => {
     setBusy(key); setErr(null);
-    try { await fn(); setSelectedStageKey(null); if (runId) reload(runId); }
-    catch (e) { setErr(String(e)); }
+    try {
+      if (opts.fireAndForget) {
+        // A stage run (`advance`) returns only when the stage finishes —
+        // minutes for discovery. Fire it, surface an immediate refusal,
+        // and let polling show the progress.
+        fn().catch((e) => setErr(errText(e)));
+        await new Promise((res) => setTimeout(res, 500));
+      } else await fn();
+      if (opts.follow !== false) setSelectedKey(null);
+      await load();
+    } catch (e) { setErr(errText(e)); }
     finally { setBusy(null); }
   };
 
-  if (!runId && !checkedBackend) return <div className="spin">טוען…</div>;
+  if (repo === undefined || latest === undefined || !defs) return <div className="spin">טוען…</div>;
+  if (repo === null) return <div className="empty">Repository לא נמצא.</div>;
 
-  const r = d?.run ?? null;
-  // Stage rows are created lazily in the DB — only once `advanceRun`
-  // actually reaches them (and before any run exists, there ARE no rows
-  // at all) — so `d.stages` only ever holds rows for stages already
-  // reached. The person needs to see all 16 from the very start (gray,
-  // not yet reached, but still clickable to read their explanation), not
-  // have the rail grow one entry at a time as it runs, so every
-  // not-yet-reached key gets a synthetic `Pending` row here — including
-  // every single one when there's no run yet at all.
-  const byKey = new Map((d?.stages ?? []).map((s) => [s.stageKey, s]));
-  const merged: OnboardingStage[] = ONBOARDING_STAGE_ORDER.map((key, i) => byKey.get(key) ?? {
-    id: `pending-${key}`, runId: r?.id ?? "", stageKey: key, stageOrder: i, status: "Pending", attempt: 0,
-    startedAt: null, completedAt: null, result: null, warnings: [], errors: [],
-    claudeExecutionId: null, sourceCommitSha: null, updatedAt: r?.startedAt ?? "",
+  const crumb = <a onClick={() => nav("#/repositories")}>← Repositories</a>;
+  if (!repo.clientId) {
+    return (
+      <>
+        <PageHead crumb={crumb} title={`הטמעת AI — ${repo.name}`} />
+        <Note tone="warn">הטמעת AI זמינה רק ל-repository ששייך ללקוח יחיד — זה משותף בין כמה לקוחות.</Note>
+      </>
+    );
+  }
+
+  const showRun = !!runId && !showNew;
+  if (!showRun) {
+    return (
+      <PreStart
+        repoId={repoId} repo={repo} defs={defs} latest={latest} runs={runs} crumb={crumb} nav={nav}
+        canReturn={!!runId}
+        onReturn={() => setShowNew(false)}
+        onStarted={(id) => { setShowNew(false); setSelectedKey(null); setView(null); setRunId(id); loadMeta(); }}
+        onLegacyCancelled={() => { setRunId(null); setView(null); loadMeta(); }}
+        onViewRun={(id) => { setShowNew(false); setSelectedKey(null); setView(null); setRunId(id); }}
+      />
+    );
+  }
+
+  if (!view) return <div className="spin">{loadErr ?? "טוען את ההרצה…"}</div>;
+  const run = view.run;
+  const byKey = new Map(view.stages.map((s) => [s.stageKey, s]));
+  const merged: OnboardingStage[] = defs.map((d, i) => byKey.get(d.key) ?? {
+    id: `pending-${d.key}`, runId: run.id, stageKey: d.key, stageOrder: i, status: "Pending", attempt: 0,
+    startedAt: null, completedAt: null, result: null, warnings: [], errors: [], claudeExecutionId: null, sourceCommitSha: null, history: [], updatedAt: run.startedAt,
   });
+  const settledCount = merged.filter((s) => SETTLED.has(s.status)).length;
+  const executing = view.driving || view.stages.some((s) => s.status === "Running");
+  const currentKey = run.currentStageKey;
+  const lastTouched = [...merged].reverse().find((s) => s.status !== "Pending")?.stageKey ?? "scan";
+  const selKey = selectedKey ?? currentKey ?? lastTouched;
+  const selIdx = Math.max(0, merged.findIndex((s) => s.stageKey === selKey));
+  const sel = merged[selIdx]!;
+  const selDef = defs[selIdx]!;
+  const isCurrent = sel.stageKey === currentKey;
+  const waiting = isCurrent && run.status === "WaitingForUser" && sel.status === "WaitingForUser";
+  const runOver = RUN_OVER.has(run.status);
+  const nextUnsettled = merged.find((s) => !SETTLED.has(s.status));
+  const nextDef = nextUnsettled ? defs.find((d) => d.key === nextUnsettled.stageKey) : undefined;
+  const title = (k: string) => defs.find((d) => d.key === k)?.title_he ?? k;
+  const deliver = (byKey.get("deliver")?.result ?? null) as DeliverResult | null;
+  const legacy = run.onboardingVersion !== "v2";
 
-  const steps = merged.map((s, i) => ({ key: s.stageKey, label: stageLabelWithPos(s.stageKey, i + 1), description: STAGE_DETAILS[s.stageKey]?.now }));
-  const done = merged.map((s) => ["Completed", "CompletedWithWarnings", "Skipped"].includes(s.status));
-  // Every step is always clickable to preview its explanation, reached or
-  // not — "locked" only ever meant "can't act on it yet", never "can't
-  // even look at it", and conflating the two hid the very explanations
-  // this screen exists to show.
-  const unlocked = merged.map(() => true);
-  const currentIdx = r?.currentStageKey ? merged.findIndex((s) => s.stageKey === r.currentStageKey) : -1;
+  const stepClass = (s: OnboardingStage) => {
+    const live = s.stageKey === currentKey && !runOver;
+    if (s.status === "Running") return "live";
+    if (s.status === "WaitingForUser") return "wait";
+    if (s.status === "AwaitingExternal") return "ext";
+    if (s.status === "Failed") return "fail";
+    if (s.status === "CompletedWithWarnings") return "warn";
+    if (s.status === "Completed") return "done";
+    if (s.status === "Skipped") return "skip";
+    return live ? "live" : "pend";
+  };
+  const glyph = (s: OnboardingStage) => s.status === "Running" ? <span className="spinner" style={{ width: 10, height: 10 }} />
+    : s.status === "Completed" ? "✓" : s.status === "CompletedWithWarnings" ? "✓" : s.status === "WaitingForUser" ? "✋" : s.status === "AwaitingExternal" ? "⏳" : s.status === "Failed" ? "✕" : s.status === "Skipped" ? "–" : "○";
 
-  const selectedKey = selectedStageKey ?? r?.currentStageKey ?? merged[0]!.stageKey;
-  const selectedIdx = Math.max(0, merged.findIndex((s) => s.stageKey === selectedKey));
-  const selectedStage = merged[selectedIdx]!;
-  const isLive = r !== null && selectedStage.stageKey === r.currentStageKey;
-  const waiting = isLive && r!.status === "WaitingForUser";
+  const submitGate = (input: unknown) => act(`gate:${sel.stageKey}`, () => submitOnboardingStageInput(repoId, run.id, sel.stageKey, input));
 
   return (
     <>
       <PageHead
-        crumb={<a onClick={() => nav("#/repositories")}>← Repositories</a>}
-        title={r ? "הטמעת AI — Repository Onboarding" : "הטמעת AI — תהליך חדש"}
-        sub={r
-          ? `run ${r.id.slice(0, 8)} · ${STATUS_HE[r.status] ?? r.status}` + (cost && cost.executionCount > 0 ? ` · עלות AI: $${cost.totalCostUsd.toFixed(2)} · ${(cost.totalInputTokens + cost.totalOutputTokens).toLocaleString()} טוקנים` : "")
-          : "לא נמצא תהליך onboarding פעיל לריפו הזה — כל 16 השלבים מוצגים למטה, לחיצה על כל אחד מהם מציגה את ההסבר שלו עוד לפני שהתהליך מתחיל."}
-        actions={r && !["Completed", "CompletedWithWarnings", "Cancelled"].includes(r.status) ? (
-          <button className="btn btn-secondary btn-sm" disabled={busy === "cancel"} onClick={() => run("cancel", async () => { await cancelOnboardingRun(repoId, r.id); localStorage.removeItem(runIdKey(repoId)); setRunId(null); })}>
-            בטל תהליך
-          </button>
-        ) : undefined}
+        crumb={crumb}
+        title={`הטמעת AI — ${repo.name}`}
+        sub={`${MODE_HE[run.mode] ?? run.mode} · הרצה ${run.id.slice(0, 8)} · התחילה ${fmtDate(run.startedAt)}${run.baselineSha ? ` · commit ${shortSha(run.baselineSha)}` : ""}${run.branchName ? ` · ענף ${run.branchName}` : ""}`}
+        actions={
+          <>
+            <StatusPill status={run.status} />
+            {runOver || run.status === "Failed" ? <button className="btn btn-secondary btn-sm" onClick={() => setShowNew(true)}>הרצה חדשה…</button> : null}
+            {!runOver && (
+              <button className="btn btn-secondary btn-sm" disabled={busy === "cancel"} onClick={() => { if (confirm("לבטל את ההרצה? ה-worktree והענף המקומי יישארו, שום דבר לא נמחק.")) void act("cancel", () => cancelOnboardingRun(repoId, run.id)); }}>
+                {busy === "cancel" ? "מבטל…" : "בטל הרצה"}
+              </button>
+            )}
+          </>
+        }
       />
 
-      {err && <div className="callout" style={{ marginBottom: 14, fontSize: 12, color: "var(--status-critical)" }}>{err}</div>}
+      {legacy && <div style={{ marginBottom: 14 }}><Note tone="warn">ההרצה הזו נוצרה על ידי גרסה קודמת של התהליך ({run.onboardingVersion}) — ניתן לצפות בה או לבטל אותה, אך לא להמשיך. <button className="ob-toggle" onClick={() => setShowNew(true)}>התחילו הרצה חדשה</button>.</Note></div>}
+      {err && <div style={{ marginBottom: 14 }}><Note tone="crit">{err}</Note></div>}
+      {loadErr && <div style={{ marginBottom: 14 }}><Note tone="warn">{loadErr}</Note></div>}
 
-      {/* Primary action — always above the rail: "התחל תהליך" before a run
-       * exists, "המשך לשלב הבא"/"נסה שוב" once it does. Absent while
-       * `waiting`: the interactive form below (approve/answer/etc.) IS the
-       * action in that state, a second generic button here would just be
-       * confusing. */}
-      {!r && (
-        <div className="panel" style={{ textAlign: "center", padding: "16px", marginBottom: 16 }}>
-          <button className="btn btn-primary" disabled={busy === "start"} onClick={() => run("start", async () => {
-            const { runId: newId } = await startOnboardingRun(repoId);
-            localStorage.setItem(runIdKey(repoId), newId);
-            setRunId(newId);
-          })}>
-            {busy === "start" ? "מתחיל…" : "התחל תהליך"}
-          </button>
-          <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 8 }}>
-            שלב 01 (חיבור Repository) יכול לקחת כמה דקות ברפוזיטורי גדול — המסך ישאר על "מתחיל…" עד שהוא מסתיים.
-          </p>
-        </div>
-      )}
-      {r && !waiting && !["Completed", "CompletedWithWarnings", "Cancelled"].includes(r.status) && (
-        <div className="panel" style={{ textAlign: "center", padding: "16px", marginBottom: 16 }}>
-          <button className="btn btn-primary" disabled={busy === "advance"} onClick={() => run("advance", () => advanceOnboardingRun(repoId, r.id))}>
-            {r.status === "Failed" ? (busy === "advance" ? "מנסה שוב…" : "נסה שוב") : (busy === "advance" ? "מריץ…" : "המשך לשלב הבא")}
-          </button>
-        </div>
-      )}
-      {waiting && (
-        <div className="panel" style={{ textAlign: "center", padding: "10px 16px", marginBottom: 16, fontSize: 12, color: "var(--ink-500)" }}>
-          השלב הנוכחי ממתין לאישור שלך — למטה.
-        </div>
-      )}
-      {r && ["Completed", "CompletedWithWarnings"].includes(r.status) && (
-        <div className="panel" style={{ textAlign: "center", padding: "10px 16px", marginBottom: 16, fontSize: 12, color: "var(--status-healthy)" }}>
-          התהליך הושלם.
-        </div>
-      )}
+      <div className="dash">
+        <div style={{ minWidth: 0 }}>
+          {/* progress + stepper */}
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div className="progress-block" style={{ margin: "0 0 12px" }}>
+              <div className="top"><span className="l">{settledCount} מתוך {merged.length} שלבים הסתיימו</span><span>{Math.round((settledCount / merged.length) * 100)}%</span></div>
+              <div className="progress-track"><div className="progress-fill" style={{ width: `${(settledCount / merged.length) * 100}%` }} /></div>
+            </div>
+            <div className="ob-steps">
+              {merged.map((s, i) => (
+                <button key={s.stageKey} type="button" className={`ob-step ${stepClass(s)}${i === selIdx ? " active" : ""}`} onClick={() => setSelectedKey(s.stageKey)} title={defs[i]!.short_he}>
+                  <span className="n"><span className="g">{glyph(s)}</span><span>שלב {i + 1}</span>{s.stageKey === currentKey && !runOver && <span style={{ color: "var(--color-accent)" }}>●</span>}</span>
+                  <span className="t">{defs[i]!.title_he}</span>
+                  <span className="s">{STATUS_HE[s.status]}</span>
+                </button>
+              ))}
+            </div>
+          </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <StepRail
-          steps={steps} done={done} unlocked={unlocked} active={selectedIdx}
-          liveIndex={currentIdx >= 0 ? currentIdx : undefined}
-          onPick={(i) => setSelectedStageKey(merged[i]!.stageKey)}
-        />
+          {/* run-level action bar */}
+          <div className="panel" style={{ marginBottom: 16 }}>
+            {run.status === "Running" && executing && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span className="spinner" style={{ width: 16, height: 16 }} />
+                <span style={{ fontSize: 13 }}><b>{currentKey ? title(currentKey) : "השלב הבא"}</b> רץ עכשיו · {byKey.get(currentKey ?? "")?.startedAt ? `מזה ${elapsedSince(byKey.get(currentKey ?? "")!.startedAt)}` : ""}</span>
+                <span style={{ flex: 1 }} />
+                {currentKey && (defs.find((d) => d.key === currentKey)?.kind === "ai" || defs.find((d) => d.key === currentKey)?.kind === "mixed") && (
+                  <button className="btn btn-secondary btn-sm" disabled={busy === "stop"} onClick={() => act("stop", () => stopOnboardingExecution(repoId, run.id), { follow: false })}>{busy === "stop" ? "עוצר…" : "עצור את קריאת ה-AI"}</button>
+                )}
+              </div>
+            )}
+            {(run.status === "Running" || run.status === "Pending") && !executing && nextDef && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13 }}>השלב הבא, <b>{nextDef.title_he}</b>, מוגדר להתחלה ידנית.</span>
+                <span style={{ flex: 1 }} />
+                <button className="btn btn-primary" disabled={!!busy || legacy} onClick={() => { setSelectedKey(nextDef.key); void act("advance", () => advanceOnboardingRun(repoId, run.id), { fireAndForget: true }); }}>{busy === "advance" ? "מתחיל…" : `▶ הרץ: ${nextDef.title_he}`}</button>
+              </div>
+            )}
+            {run.status === "WaitingForUser" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13 }}>✋ <b>{currentKey ? title(currentKey) : ""}</b> ממתין להחלטה שלך — הטופס למטה.</span>
+                <span style={{ flex: 1 }} />
+                {!isCurrent && <button className="btn btn-primary btn-sm" onClick={() => setSelectedKey(null)}>עבור לשלב הממתין</button>}
+              </div>
+            )}
+            {run.status === "AwaitingExternal" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13 }}>⏳ {deliver?.localOnly ? "ממתין למיזוג מקומי של הענף" : "ממתין למיזוג ה-Pull Request ב-Git"}{deliver?.prUrl && <> · <a href={deliver.prUrl} target="_blank" rel="noreferrer">PR #{deliver.prNumber ?? ""} ↗</a></>}{!deliver?.prUrl && deliver?.compareUrl && <> · <a href={deliver.compareUrl} target="_blank" rel="noreferrer">פתחו PR ↗</a></>}</span>
+                <span style={{ flex: 1 }} />
+                <button className="btn btn-primary btn-sm" disabled={!!busy} onClick={() => act("advance", () => advanceOnboardingRun(repoId, run.id), { fireAndForget: true })}>{busy === "advance" ? "בודק…" : "בדוק שוב אם מוזג"}</button>
+              </div>
+            )}
+            {run.status === "Failed" && (
+              <div style={{ display: "grid", gap: 10 }}>
+                <Note tone="crit"><b>{currentKey ? title(currentKey) : "השלב"} נכשל.</b> {byKey.get(currentKey ?? "")?.errors.join(" · ")}</Note>
+                <div className="ob-actions">
+                  <button className="btn btn-primary btn-sm" disabled={!!busy || legacy} onClick={() => act("advance", () => advanceOnboardingRun(repoId, run.id), { fireAndForget: true })}>{busy === "advance" ? "מנסה…" : "נסה שוב את השלב"}</button>
+                  <ResetControl defs={defs} merged={merged} disabled={!!busy || legacy} onReset={(k, note) => act("reset", () => resetOnboardingRunTo(repoId, run.id, k, note))} />
+                </div>
+              </div>
+            )}
+            {(run.status === "Completed" || run.status === "CompletedWithWarnings") && (
+              <Note tone="ok"><b>ה-Repository מוכן ל-AI.</b>{deliver?.readinessDate ? ` מאז ${fmtDate(deliver.readinessDate)} · commit ${shortSha(deliver.mergedSha)} · מתודולוגיה ${deliver.onboardingVersion}.` : ""} {run.status === "CompletedWithWarnings" ? "חלק מהשלבים הסתיימו עם אזהרות — ראו את הרשימה בצד." : ""} הידע מתיישן עם הקוד: בדיקת העדכניות בצד מזהה מתי נדרש רענון.</Note>
+            )}
+            {run.status === "Cancelled" && <Note tone="info">ההרצה בוטלה {fmtDate(run.cancelledAt)}. ה-worktree והענף המקומי לא נמחקו.</Note>}
+          </div>
+
+          {/* selected stage */}
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div className="ob-stage-head">
+              <h3>{selIdx + 1}. {selDef.title_he}</h3>
+              <StatusPill status={sel.status} />
+              {isCurrent && !runOver && <span className="ob-chip ai">◀ השלב הפעיל</span>}
+              {sel.attempt > 1 && <span className="ob-chip">ניסיון {sel.attempt}</span>}
+              <span style={{ flex: 1 }} />
+              <span className="ob-sub">
+                {sel.startedAt ? `התחיל ${fmtTime(sel.startedAt)}` : ""}{sel.completedAt ? ` · הסתיים ${fmtTime(sel.completedAt)} (${fmtDuration(new Date(sel.completedAt).getTime() - new Date(sel.startedAt ?? sel.completedAt).getTime())})` : ""}
+              </span>
+            </div>
+            <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 8 }}>{selDef.short_he}</p>
+            <div style={{ marginBottom: 12 }}><StageMetaChips def={selDef} /></div>
+            <Explainer def={selDef} defaultOpen={!SETTLED.has(sel.status)} />
+            {sel.warnings.length > 0 && <div style={{ marginTop: 12 }}><Note tone="warn"><ul className="ob-list">{sel.warnings.map((w, i) => <li key={i}>{w}</li>)}</ul></Note></div>}
+            {sel.errors.length > 0 && <div style={{ marginTop: 12 }}><Note tone="crit"><ul className="ob-list">{sel.errors.map((w, i) => <li key={i}>{w}</li>)}</ul></Note></div>}
+
+            {sel.status === "Pending" && (
+              <p className="ob-sub" style={{ marginTop: 12 }}>השלב עדיין לא רץ — {nextUnsettled?.stageKey === sel.stageKey ? "הוא הבא בתור." : "הוא יגיע אחרי השלבים שלפניו."}</p>
+            )}
+            {sel.status === "Running" && <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}><span className="spinner" style={{ width: 12, height: 12 }} /><span className="ob-sub">רץ עכשיו{sel.startedAt ? ` — מזה ${elapsedSince(sel.startedAt)}` : ""}. התוצאות יופיעו כאן כשיסתיים.</span></div>}
+
+            {sel.result !== null && sel.result !== undefined && (
+              <div style={{ marginTop: 16, borderTop: "1px solid var(--border-hairline)", paddingTop: 12 }}>
+                <p className="section-lbl">{waiting ? "ההחלטה שלך" : "הממצאים והפלט"}</p>
+                <StageFindings repoId={repoId} runId={run.id} stageKey={sel.stageKey} status={sel.status} result={sel.result} waiting={waiting} busy={busy === `gate:${sel.stageKey}`} mode={run.mode} onSubmit={submitGate} />
+                <RawResult value={sel.result} />
+              </div>
+            )}
+
+            {sel.claudeExecutionId && (
+              <details style={{ marginTop: 14, borderTop: "1px solid var(--border-hairline)", paddingTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 650 }}>הקריאה ל-Claude מאחורי השלב הזה (מודל, עלות, הרשאות, הפרומפט)</summary>
+                <div style={{ marginTop: 10 }}><ClaudeCallPanel repoId={repoId} executionId={sel.claudeExecutionId} /></div>
+              </details>
+            )}
+
+            {SETTLED.has(sel.status) && !runOver && !executing && run.status !== "AwaitingExternal" && !legacy && (
+              <div className="action-row">
+                <ResetControl defs={defs} merged={merged} fixed={sel.stageKey} disabled={!!busy} onReset={(k, note) => act("reset", () => resetOnboardingRunTo(repoId, run.id, k, note))} />
+              </div>
+            )}
+            {Array.isArray(sel.history) && sel.history.length > 0 && (
+              <details style={{ marginTop: 10 }}>
+                <summary style={{ cursor: "pointer", fontSize: 11.5, color: "var(--ink-500)" }}>{sel.history.length} ניסיונות קודמים של השלב</summary>
+                <ul className="ob-list" style={{ marginTop: 6 }}>
+                  {(sel.history as { attempt?: number; status?: string; startedAt?: string | null; completedAt?: string | null; errors?: string[]; resetBy?: string }[]).map((h, i) => (
+                    <li key={i}>ניסיון {h.attempt ?? i + 1}: {STATUS_HE[(h.status ?? "Pending") as OnboardingStatus] ?? h.status} · {fmtDate(h.startedAt)}{h.resetBy ? ` · אופס על ידי ${h.resetBy === "person" ? "אדם" : title(h.resetBy)}` : ""}{h.errors?.length ? ` · ${h.errors.join("; ")}` : ""}</li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        </div>
+
+        {/* rail */}
+        <div className="rail">
+          <AutomationPanel view={view} defs={defs} busy={busy === "automation"} disabled={runOver || legacy} onSave={(p, consent) => act("automation", () => updateOnboardingAutomation(repoId, run.id, p, consent), { follow: false })} />
+          <div className="panel">
+            <h4>עלות ההרצה</h4>
+            <KV items={[
+              { l: "עלות AI", v: fmtUsd(cost?.totalCostUsd ?? 0) },
+              { l: "קריאות", v: fmtInt(cost?.executionCount ?? 0) },
+              { l: "טוקנים (קלט / פלט)", v: `${fmtInt(cost?.totalInputTokens ?? 0)} / ${fmtInt(cost?.totalOutputTokens ?? 0)}` },
+              { l: "זמן AI מצטבר", v: fmtDuration(cost?.totalDurationMs ?? 0) },
+            ]} />
+          </div>
+          <WarningsPanel merged={merged} defs={defs} onPick={setSelectedKey} />
+          <div className="panel">
+            <h4>יומן החלטות ואירועים</h4>
+            {view.events.length === 0 ? <p className="ob-sub">עדיין אין אירועים.</p> : (
+              <div className="ob-timeline">
+                {[...view.events].reverse().slice(0, 40).map((e) => {
+                  const l = eventLabel(e, title);
+                  return <div key={e.id}><span className="tm">{fmtTime(e.occurredAt)}</span><span style={{ color: l.tone === "critical" ? "var(--status-critical)" : l.tone === "warning" ? "var(--status-warning)" : l.tone === "ai" ? "var(--status-ai)" : "var(--ink-700)" }}>{l.text}</span></div>;
+                })}
+                {view.events.length > 40 && <p className="ob-sub">ועוד {view.events.length - 40} אירועים ישנים יותר.</p>}
+              </div>
+            )}
+          </div>
+          {(runOver || runs.some((r) => r.onboardingVersion === "v2" && (r.status === "Completed" || r.status === "CompletedWithWarnings"))) && (
+            <LifecyclePanel repoId={repoId} runOver={runOver} disabled={!!busy} onStartRefresh={() => act("refresh-run", async () => {
+              const { runId: id } = await startOnboardingRun(repoId, { mode: "refresh", automation: view.automation, consent: policyNeedsConsent(view.automation) });
+              setShowNew(false); setSelectedKey(null); setView(null); setRunId(id); loadMeta();
+            })} />
+          )}
+          {runs.length > 1 && (
+            <div className="panel">
+              <h4>הרצות קודמות</h4>
+              <div style={{ display: "grid", gap: 6 }}>
+                {runs.map((r) => (
+                  <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12 }}>
+                    <a style={{ cursor: "pointer", fontWeight: r.id === run.id ? 700 : 500 }} onClick={() => { setSelectedKey(null); setView(null); setRunId(r.id); }}>{fmtDate(r.startedAt)}</a>
+                    <span className="ob-sub">{MODE_HE[r.mode] ?? r.mode}{r.onboardingVersion !== "v2" ? ` · ${r.onboardingVersion}` : ""}</span>
+                    <span style={{ flex: 1 }} />
+                    <StatusPill status={r.status} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+    </>
+  );
+}
 
-      <div className="panel" style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>
-          {stageLabelWithPos(selectedStage.stageKey, selectedIdx + 1)}
-        </h3>
-        <p style={{ fontSize: 11.5, color: isLive ? "var(--color-accent)" : "var(--ink-400)", marginBottom: 8, fontWeight: 600 }}>
-          {isLive ? "◀ אתה צופה בשלב הפעיל כרגע" : done[selectedIdx] ? "אתה צופה בשלב שהושלם" : "אתה צופה בשלב שטרם הגיע התור שלו"}
-        </p>
-        {STAGE_DETAILS[selectedStage.stageKey] && (
-          <div style={{ marginBottom: 10 }}><StageDetailFields d={STAGE_DETAILS[selectedStage.stageKey]!} /></div>
-        )}
-        {r && (
-          <>
-            <p style={{ fontSize: 12, color: "var(--ink-500)" }}>סטטוס: {STATUS_HE[selectedStage.status] ?? selectedStage.status}</p>
-            {selectedStage.warnings.length > 0 && <p style={{ fontSize: 11.5, color: "var(--status-warning)", marginTop: 6 }}>{selectedStage.warnings.join(" · ")}</p>}
-            {selectedStage.errors.length > 0 && <p style={{ fontSize: 11.5, color: "var(--status-critical)", marginTop: 6 }}>{selectedStage.errors.join(" · ")}</p>}
-          </>
-        )}
+/* ── pieces ─────────────────────────────────────────────────────────── */
 
-        {/* Output — shown for any stage that has actually run, whether
-         * selected by click or because it's the live one; never for a
-         * stage that hasn't been reached yet (nothing to show), and never
-         * before a run even exists. */}
-        {r && selectedStage.status !== "Pending" && !waiting && (
-          <div style={{ marginTop: 12, borderTop: "1px solid var(--border-hairline)", paddingTop: 10 }}>
-            <p className="section-lbl">הפלט של השלב</p>
-            {["github_pull_request", "ai_ready"].includes(selectedStage.stageKey) && (() => {
-              const pr = selectedStage.result as PrOrReadyResult | null;
-              if (!pr) return null;
-              return (
-                <p style={{ fontSize: 12, marginBottom: 8 }}>
-                  {pr.prUrl && <a href={pr.prUrl} target="_blank" rel="noreferrer">Pull Request ↗</a>}
-                  {!pr.prUrl && pr.compareUrl && <a href={pr.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request ידנית ↗</a>}
-                  {pr.readinessDate && <span style={{ color: "var(--ink-500)" }}> · מוכן מאז {new Date(pr.readinessDate).toLocaleDateString("he-IL")}</span>}
-                </p>
-              );
-            })()}
-            <ResultView value={selectedStage.result} />
-            {selectedStage.claudeExecutionId && <ClaudeCallPanel repoId={repoId} executionId={selectedStage.claudeExecutionId} />}
+function Explainer({ def, defaultOpen }: { def: StageDefinition; defaultOpen: boolean }) {
+  const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => setOpen(defaultOpen), [def.key, defaultOpen]);
+  return (
+    <div>
+      <button type="button" className="ob-toggle" onClick={() => setOpen((v) => !v)}>{open ? "הסתר את ההסבר" : "למה השלב הזה, מה הוא עושה ומה הוא משפיע"}</button>
+      {open && <div style={{ marginTop: 10, background: "var(--surface-tint-2)", border: "1px solid var(--border-soft)", borderRadius: 10, padding: "12px 14px" }}><StageExplainer def={def} /></div>}
+    </div>
+  );
+}
+
+function ResetControl({ defs, merged, fixed, disabled, onReset }: { defs: StageDefinition[]; merged: OnboardingStage[]; fixed?: string; disabled: boolean; onReset: (stageKey: string, note?: string) => void }) {
+  const candidates = defs.filter((d) => merged.find((s) => s.stageKey === d.key)?.status !== "Pending");
+  const [key, setKey] = useState(fixed ?? candidates[0]?.key ?? "scan");
+  useEffect(() => { if (fixed) setKey(fixed); }, [fixed]);
+  const [note, setNote] = useState("");
+  const def = defs.find((d) => d.key === key);
+  if (candidates.length === 0) return null;
+  return (
+    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      {!fixed && (
+        <select value={key} onChange={(e) => setKey(e.target.value)} style={{ fontSize: 12, padding: "6px 8px", borderRadius: 8, border: "1px solid var(--border-hairline)" }}>
+          {candidates.map((d) => <option key={d.key} value={d.key}>{d.order + 1}. {d.title_he}</option>)}
+        </select>
+      )}
+      {(key === "generate" || key === "discovery" || key === "plan") && <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="הערה ל-AI (אופציונלי)" style={{ fontSize: 12, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border-hairline)", minWidth: 220 }} />}
+      <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={() => { if (confirm(`לחזור לשלב "${def?.title_he ?? key}"? השלבים מכאן והלאה יאופסו ויורצו מחדש (התוצאות הקודמות נשמרות בהיסטוריה).`)) onReset(key, note.trim() || undefined); }}>
+        {fixed ? "↺ הרץ מחדש מהשלב הזה" : "↺ חזור לשלב"}
+      </button>
+    </div>
+  );
+}
+
+function AutomationPanel({ view, defs, busy, disabled, onSave }: { view: OnboardingRunView; defs: StageDefinition[]; busy: boolean; disabled: boolean; onSave: (p: AutomationPolicy, consent: boolean) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<AutomationPolicy>(view.automation);
+  const [consent, setConsent] = useState(false);
+  useEffect(() => { if (!editing) setDraft(view.automation); }, [view.automation, editing]);
+  const needs = policyNeedsConsent(draft);
+  return (
+    <div className="panel">
+      <h4>אוטומציה</h4>
+      <p style={{ fontSize: 12.5, marginBottom: 8 }}>{describePolicy(view.automation, defs)}</p>
+      {!editing
+        ? <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={() => { setDraft(view.automation); setConsent(false); setEditing(true); }}>שנה מדיניות</button>
+        : (
+          <div style={{ display: "grid", gap: 10 }}>
+            <AutomationEditor stages={defs} value={draft} onChange={setDraft} consent={consent} onConsent={setConsent} />
+            <p className="ob-sub">השינוי חל מיד: אם ההרצה ממתינה בשער שסומן "אוטומטי", הוא יאושר לפי ההצעות.</p>
+            <div className="ob-actions">
+              <button className="btn btn-primary btn-sm" disabled={busy || (needs && !consent)} onClick={() => { onSave(draft, consent); setEditing(false); }}>{busy ? "שומר…" : "שמור"}</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>ביטול</button>
+            </div>
           </div>
         )}
+    </div>
+  );
+}
+
+function WarningsPanel({ merged, defs, onPick }: { merged: OnboardingStage[]; defs: StageDefinition[]; onPick: (k: string) => void }) {
+  const items: { key: string; text: string; tone: "warn" | "unknown" | "fail" }[] = [];
+  for (const s of merged) {
+    for (const w of s.warnings) items.push({ key: s.stageKey, text: w, tone: "warn" });
+    if (s.status === "Failed") for (const e of s.errors) items.push({ key: s.stageKey, text: e, tone: "fail" });
+    if (s.stageKey === "discovery" && s.result) for (const u of ((s.result as DiscoveryResult).discovery?.unknowns ?? [])) items.push({ key: "discovery", text: `UNKNOWN: ${u}`, tone: "unknown" });
+    if (s.stageKey === "confirm" && s.result) {
+      const c = s.result as ConfirmResult;
+      for (const a of c.answers ?? []) if (a.status === "unknown") items.push({ key: "confirm", text: `UNKNOWN: ${c.questions.find((q) => q.id === a.id)?.question_he ?? a.id}`, tone: "unknown" });
+    }
+  }
+  const title = (k: string) => defs.find((d) => d.key === k)?.title_he ?? k;
+  return (
+    <div className="panel">
+      <h4>אזהרות ו-UNKNOWN ({items.length})</h4>
+      {items.length === 0 ? <p className="ob-sub">אין אזהרות פתוחות.</p> : (
+        <div style={{ display: "grid", gap: 6 }}>
+          {items.slice(0, 30).map((it, i) => (
+            <div key={i} style={{ fontSize: 11.5, display: "grid", gridTemplateColumns: "8px 1fr", gap: 6, alignItems: "start" }}>
+              <span style={{ width: 7, height: 7, borderRadius: 99, marginTop: 5, background: it.tone === "fail" ? "var(--status-critical)" : it.tone === "warn" ? "var(--status-warning)" : "var(--status-ai)" }} />
+              <span><a style={{ cursor: "pointer", fontWeight: 600 }} onClick={() => onPick(it.key)}>{title(it.key)}</a>: {it.text}</span>
+            </div>
+          ))}
+          {items.length > 30 && <p className="ob-sub">ועוד {items.length - 30}.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LifecyclePanel({ repoId, runOver, disabled, onStartRefresh }: { repoId: string; runOver: boolean; disabled: boolean; onStartRefresh: () => void }) {
+  const [metrics, setMetrics] = useState<{ totalChecks: number; noUpdateCount: number; updateRequiredCount: number; lastCheckedAt: string | null; lastResult: RefreshResult | null; avgDaysBetweenChecks: number | null } | null>(null);
+  const [result, setResult] = useState<RefreshResult | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const loadMetrics = useCallback(() => { getOnboardingRefreshMetrics(repoId).then((m) => { setMetrics(m); setResult((r) => r ?? m.lastResult); }).catch(() => {}); }, [repoId]);
+  useEffect(() => { loadMetrics(); }, [loadMetrics]);
+  const check = async () => {
+    setChecking(true); setError(null);
+    try { setResult(await checkOnboardingRefresh(repoId)); loadMetrics(); } catch (e) { setError(errText(e)); } finally { setChecking(false); }
+  };
+  return (
+    <div className="panel">
+      <h4>מחזור חיי הידע</h4>
+      <p className="ob-sub" style={{ marginBottom: 8 }}>הידע מתיישן עם הקוד. הבדיקה דטרמיניסטית קודם (manifests, נתיבים שמעדכנים artifact, עריכות ידניות, אורך CLAUDE.md, נתיבים שנעלמו, גיל) — וקריאת AI אחת רק כשמשהו זז.</p>
+      {metrics && <p className="ob-sub" style={{ marginBottom: 8 }}>{metrics.totalChecks} בדיקות · {metrics.updateRequiredCount} דרשו עדכון · אחרונה {fmtDate(metrics.lastCheckedAt)}</p>}
+      <div className="ob-actions">
+        <button className="btn btn-secondary btn-sm" disabled={checking || !runOver} title={!runOver ? "זמין אחרי שההרצה תסתיים" : undefined} onClick={check}>{checking ? "בודק…" : "בדוק עדכניות עכשיו"}</button>
+        <button className="btn btn-primary btn-sm" disabled={disabled || !runOver} onClick={onStartRefresh}>התחל הרצת רענון</button>
       </div>
-
-      <details className="panel" style={{ padding: "10px 14px", opacity: 0.85, marginBottom: 16 }}>
-        <summary style={{ cursor: "pointer", fontSize: 12.5, fontWeight: 700, listStyle: "revert" }}>{REFRESH_INFO.title}</summary>
-        <div style={{ marginTop: 10 }}><StageDetailFields d={REFRESH_INFO} /></div>
-      </details>
-
-      {waiting && selectedStage.stageKey === "security_permissions" && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <p className="section-lbl">פרופיל אבטחה</p>
-          {(() => {
-            const result = selectedStage.result as SuggestedRules;
-            const profileId = selectedProfileId ?? result.suggestedProfileId;
-            const rules = editableRules ?? result.suggestedRules;
-            return (
-              <>
-                <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 10 }}>
-                  מגדירים אילו פעולות Claude יכול לבצע אוטומטית ואילו דורשות אישור. המוצע: <b>{result.profiles.find((p) => p.id === result.suggestedProfileId)?.label ?? result.suggestedProfileId}</b>.
-                </p>
-                <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-                  {result.profiles.map((p) => (
-                    <label key={p.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, cursor: "pointer" }}>
-                      <input type="radio" name="security-profile" checked={profileId === p.id} onChange={() => setSelectedProfileId(p.id)} style={{ marginTop: 3 }} />
-                      <span>
-                        <b>{p.label}</b>{p.id === result.suggestedProfileId && <span style={{ color: "var(--ink-400)" }}> (מוצע)</span>}
-                        <br /><span style={{ color: "var(--ink-500)" }}>{p.description}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <p className="section-lbl">כללי חסימת קריאה מוצעים</p>
-                <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
-                  {rules.map((rule, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                      <code style={{ direction: "ltr", flex: 1 }}>{rule}</code>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setEditableRules(rules.filter((_, j) => j !== i))}>✕ הסר</button>
-                    </div>
-                  ))}
-                  {rules.length === 0 && <p style={{ fontSize: 12, color: "var(--ink-400)" }}>אין כללי חסימה — בחירה תקפה.</p>}
-                </div>
-                <button className="btn btn-primary btn-sm" disabled={busy === "approve"} onClick={() => run("approve", async () => {
-                  await submitOnboardingStageInput(repoId, r.id, "security_permissions", { approvedRules: rules, approvedProfileId: profileId });
-                  setEditableRules(null); setSelectedProfileId(null);
-                })}>
-                  {busy === "approve" ? "שומר…" : "✓ אשר הרשאות"}
-                </button>
-              </>
-            );
-          })()}
+      {error && <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 8 }}>{error}</p>}
+      {result && (
+        <div style={{ marginTop: 10 }}>
+          <Note tone={result.updateRequired ? "warn" : "ok"}>
+            <b>{result.updateRequired ? "נדרש רענון" : "הידע עדכני"}</b> · {result.reason_he}
+            <div className="ob-sub" style={{ marginTop: 4 }}>נבדק {fmtDate(result.checkedAt)} · {shortSha(result.analyzedCommit)} → {shortSha(result.currentCommit)} · {result.changedPaths.length} קבצים השתנו</div>
+          </Note>
+          {result.signals.length > 0 && (
+            <ul className="ob-list" style={{ marginTop: 8, fontSize: 11.5 }}>
+              {result.signals.map((s, i) => <li key={i}><b>{s.kind}</b>: {s.detail}{s.artifacts.length ? ` (${s.artifacts.join(", ")})` : ""}</li>)}
+            </ul>
+          )}
+          {result.ai && (
+            <div style={{ marginTop: 8, fontSize: 11.5 }}>
+              <b>שיפוט AI</b>{result.ai.reason_he !== result.reason_he ? `: ${result.ai.reason_he}` : ""}
+              {result.ai.impactedArtifacts.length > 0 && <div style={{ marginTop: 4 }}>לעדכן: {result.ai.impactedArtifacts.map((p) => <Code key={p}>{p}</Code>)}</div>}
+              {result.ai.requiredUpdates_he.length > 0 && <ul className="ob-list" style={{ marginTop: 4 }}>{result.ai.requiredUpdates_he.map((u, i) => <li key={i}>{u}</li>)}</ul>}
+            </div>
+          )}
         </div>
       )}
+    </div>
+  );
+}
 
-      {waiting && selectedStage.stageKey === "human_enrichment" && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <p className="section-lbl">שאלות להשלמת ידע</p>
-          {(() => {
-            const result = selectedStage.result as Questions;
-            return (
-              <>
-                <div style={{ display: "grid", gap: 16, marginBottom: 12 }}>
-                  {result.questions.map((q) => (
-                    <div key={q.id}>
-                      <p style={{ fontSize: 13, fontWeight: 600 }}>{q.question_he}</p>
-                      <p style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: 2 }}>{q.why_it_matters_he}</p>
-                      <textarea
-                        style={{ width: "100%", minHeight: 50, marginTop: 6 }}
-                        placeholder="תשובה (אפשר להשאיר ריק)"
-                        value={answers[q.id] ?? ""}
-                        onChange={(e) => setAnswers({ ...answers, [q.id]: e.target.value })}
-                      />
-                    </div>
-                  ))}
-                </div>
-                <button className="btn btn-primary btn-sm" disabled={busy === "answer"} onClick={() => run("answer", async () => {
-                  const payload = result.questions.map((q) => ({ id: q.id, answer_he: answers[q.id] ?? "" }));
-                  await submitOnboardingStageInput(repoId, r.id, "human_enrichment", { answers: payload });
-                  setAnswers({});
-                })}>
-                  {busy === "answer" ? "שולח…" : "✓ שלח תשובות"}
-                </button>
-              </>
-            );
-          })()}
+/* ── before a run ───────────────────────────────────────────────────── */
+
+function PreStart({ repoId, repo, defs, latest, runs, crumb, canReturn, onReturn, onStarted, onLegacyCancelled, onViewRun }: {
+  repoId: string; repo: RepoLite; defs: StageDefinition[]; latest: LatestRun | null; runs: RunRow[]; crumb: React.ReactNode; nav: (h: string) => void;
+  canReturn: boolean; onReturn: () => void; onStarted: (runId: string) => void; onLegacyCancelled: () => void; onViewRun: (runId: string) => void;
+}) {
+  const completedV2 = runs.find((r) => r.onboardingVersion === "v2" && (r.status === "Completed" || r.status === "CompletedWithWarnings"));
+  const [mode, setMode] = useState<"initial" | "refresh">(completedV2 ? "refresh" : "initial");
+  useEffect(() => { if (completedV2) setMode("refresh"); }, [completedV2?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [policy, setPolicy] = useState<AutomationPolicy>(() => presetPolicy(defs, "guided"));
+  const [consent, setConsent] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [allOpen, setAllOpen] = useState(false);
+  const liveLatest = latest && isLiveStatus(latest.status) ? latest : null;
+  const legacyLive = liveLatest && liveLatest.onboardingVersion !== "v2" ? liveLatest : null;
+  const needs = policyNeedsConsent(policy);
+  const gates = defs.filter((d) => d.gate);
+
+  const start = async () => {
+    setBusy("start"); setErr(null);
+    try {
+      const { runId } = await startOnboardingRun(repoId, { automation: policy, consent: needs ? consent : undefined, mode, previousRunId: mode === "refresh" ? completedV2?.id : undefined });
+      onStarted(runId);
+    } catch (e) { setErr(errText(e)); setBusy(null); }
+  };
+
+  return (
+    <>
+      <PageHead
+        crumb={crumb}
+        title={`הטמעת AI — ${repo.name}`}
+        sub={`${repo.clientName ?? ""}${repo.adoRepoRef ? ` · ${repo.adoRepoRef}` : ""}`}
+        actions={canReturn ? <button className="btn btn-secondary btn-sm" onClick={onReturn}>← חזרה להרצה</button> : undefined}
+      />
+      {err && <div style={{ marginBottom: 14 }}><Note tone="crit">{err}</Note></div>}
+      {legacyLive && (
+        <div style={{ marginBottom: 14 }}>
+          <Note tone="warn">
+            יש הרצה פעילה מגרסה קודמת של התהליך ({legacyLive.onboardingVersion}) — היא לא יכולה להמשיך בגרסה הנוכחית, ורק הרצה אחת יכולה להיות פעילה על repository.{" "}
+            <button className="ob-toggle" disabled={busy === "cancel-legacy"} onClick={async () => { setBusy("cancel-legacy"); try { await cancelOnboardingRun(repoId, legacyLive.runId); onLegacyCancelled(); } catch (e) { setErr(errText(e)); } finally { setBusy(null); } }}>בטלו אותה</button>
+            {" "}כדי להתחיל הרצה חדשה, או <button className="ob-toggle" onClick={() => onViewRun(legacyLive.runId)}>צפו בה</button>.
+          </Note>
         </div>
       )}
-
-      {waiting && selectedStage.stageKey === "guardrails" && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <p className="section-lbl">מנגנוני הגנה</p>
-          {(() => {
-            const result = selectedStage.result as GuardrailCandidates;
-            const selected = selectedGuardrailIds ?? result.candidates.filter((c) => c.suggested).map((c) => c.id);
-            const toggle = (id: string) => setSelectedGuardrailIds(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id]);
-            return (
-              <>
-                <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 10 }}>מפעילים הגנות אוטומטיות (דטרמיניסטיות, ללא AI) עבור פעולות שאסור לבצע בטעות.</p>
-                <div style={{ display: "grid", gap: 8, marginBottom: 14 }}>
-                  {result.candidates.map((c) => (
-                    <label key={c.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12, cursor: "pointer" }}>
-                      <input type="checkbox" checked={selected.includes(c.id)} onChange={() => toggle(c.id)} style={{ marginTop: 3 }} />
-                      <span>
-                        <b>{c.label}</b>{c.suggested && <span style={{ color: "var(--ink-400)" }}> (מוצע)</span>}
-                        <br /><span style={{ color: "var(--ink-500)" }}>{c.description}</span>
-                      </span>
-                    </label>
-                  ))}
-                </div>
-                <button className="btn btn-primary btn-sm" disabled={busy === "guardrails"} onClick={() => run("guardrails", async () => {
-                  await submitOnboardingStageInput(repoId, r.id, "guardrails", { approvedGuardrailIds: selected });
-                  setSelectedGuardrailIds(null);
-                })}>
-                  {busy === "guardrails" ? "שומר…" : "✓ אשר מנגנוני הגנה"}
-                </button>
-              </>
-            );
-          })()}
-        </div>
+      {liveLatest && !legacyLive && (
+        <div style={{ marginBottom: 14 }}><Note tone="info">יש הרצה פעילה ({STATUS_HE[liveLatest.status]}). <button className="ob-toggle" onClick={() => onViewRun(liveLatest.runId)}>פתחו אותה</button> — רק הרצה אחת יכולה להיות פעילה על repository.</Note></div>
       )}
 
-      {waiting && selectedStage.stageKey === "user_review" && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <p className="section-lbl">סקירת המשתמש לפני Pull Request</p>
-          {(() => {
-            const result = selectedStage.result as UserReview;
-            return (
-              <>
-                <p style={{ fontSize: 12, marginBottom: 12 }}>
-                  תוצאת בדיקת תקינות: <b>{result.readiness?.status ?? "—"}</b>
-                </p>
-                <div style={{ display: "grid", gap: 14, marginBottom: 14 }}>
-                  {result.groups.filter((g) => g.items.length > 0).map((g) => (
-                    <div key={g.group_he}>
-                      <p style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>{g.group_he}</p>
-                      {g.items.map((it, i) => (
-                        <p key={i} style={{ fontSize: 12, color: "var(--ink-500)" }}>✓ {it.label}</p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button className="btn btn-primary btn-sm" disabled={!!busy} onClick={() => run("approve-review", () =>
-                    submitOnboardingStageInput(repoId, r.id, "user_review", { decision: "approve" }))}>
-                    {busy === "approve-review" ? "שומר…" : "אשר ופתח Pull Request"}
-                  </button>
-                  <button className="btn btn-secondary btn-sm" disabled={!!busy} onClick={() => {
-                    const note = window.prompt("מה נדרש לשנות?") ?? "";
-                    run("request-changes", () => submitOnboardingStageInput(repoId, r.id, "user_review", { decision: "request_changes", note }));
-                  }}>
-                    {busy === "request-changes" ? "שומר…" : "בקש שינויים"}
-                  </button>
-                </div>
-              </>
-            );
-          })()}
-        </div>
-      )}
+      <div className="dash">
+        <div style={{ minWidth: 0 }}>
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 8 }}>מה התהליך עושה</h3>
+            <p style={{ fontSize: 13, lineHeight: 1.7, color: "var(--ink-700)" }}>
+              DCC לומד את ה-Repository פעם אחת, מבוסס ראיות, ומשאיר בו רק את מה שמצדיק את קיומו: CLAUDE.md קצר שנטען בכל session ומפנה הלאה, ידע שנטען לפי דרישה (skills), rules לפי נתיבים כשיש הצדקה, הרשאות ו-guardrails דטרמיניסטיים, ו-hooks שמתעדים כל session ב-DCC.
+              התהליך לא מניח ש-Repository ריק: מה שכבר קיים (CLAUDE.md, AGENTS.md, תיעוד, הנחיות לכלים אחרים) נסרק, נשקל, ולא משוכפל.
+            </p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10, marginTop: 12 }}>
+              <div className="ob-q"><b style={{ fontSize: 12.5 }}>{gates.length} שערים אנושיים</b><p className="ob-sub" style={{ marginTop: 3 }}>{gates.map((g) => g.title_he).join(" · ")}</p></div>
+              <div className="ob-q"><b style={{ fontSize: 12.5 }}>מה לעולם לא קורה לבד</b><p className="ob-sub" style={{ marginTop: 3 }}>מיזוג ל-default branch · הרצת סקריפטים של ה-repository · כתיבה מחוץ ל-worktree המבודד</p></div>
+              <div className="ob-q"><b style={{ fontSize: 12.5 }}>{defs.filter((d) => d.kind === "ai" || d.kind === "mixed").length} קריאות AI מתוקצבות</b><p className="ob-sub" style={{ marginTop: 3 }}>קריאה-בלבד, מבודדות מתצורת ה-repository, נעצרות בחריגת תקציב</p></div>
+            </div>
+          </div>
 
+          <div className="panel" style={{ marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, gap: 10, flexWrap: "wrap" }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700 }}>תשעת השלבים — מה קורה בכל אחד, לפני שהוא רץ</h3>
+              <button type="button" className="ob-toggle" onClick={() => setAllOpen((v) => !v)}>{allOpen ? "כווץ הכל" : "הרחב הכל"}</button>
+            </div>
+            <div className="ob-overview">
+              {defs.map((d) => (
+                <details key={`${d.key}-${allOpen}`} open={allOpen}>
+                  <summary>
+                    <span>{d.order + 1}. {d.title_he}</span>
+                    <span className="s">{d.short_he}</span>
+                    <span style={{ flex: 1 }} />
+                    <StageMetaChips def={d} />
+                  </summary>
+                  <StageExplainer def={d} />
+                </details>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="rail">
+          <div className="panel">
+            <h4>התחלת הרצה</h4>
+            {completedV2 && (
+              <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
+                <label style={{ display: "flex", gap: 8, fontSize: 12.5, cursor: "pointer", alignItems: "flex-start" }}><input type="radio" checked={mode === "refresh"} onChange={() => setMode("refresh")} style={{ marginTop: 3 }} /><span><b>רענון</b><br /><span className="ob-sub">ממשיך מה-onboarding שהושלם {fmtDate(completedV2.completedAt)}: ההחלטות הקודמות מולאות מראש, ה-Discovery ממוקד במה שהשתנה.</span></span></label>
+                <label style={{ display: "flex", gap: 8, fontSize: 12.5, cursor: "pointer", alignItems: "flex-start" }}><input type="radio" checked={mode === "initial"} onChange={() => setMode("initial")} style={{ marginTop: 3 }} /><span><b>onboarding מלא מחדש</b><br /><span className="ob-sub">מתעלם מהריצה הקודמת (הקבצים הקיימים עדיין נסרקים ונשקלים).</span></span></label>
+              </div>
+            )}
+            <p className="section-lbl">כמה מזה יקרה לבד</p>
+            <AutomationEditor stages={defs} value={policy} onChange={setPolicy} consent={consent} onConsent={setConsent} />
+            <div style={{ marginTop: 14 }}>
+              <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} disabled={!!busy || !!liveLatest || (needs && !consent)} onClick={start}>
+                {busy === "start" ? "מתחיל…" : mode === "refresh" ? "▶ התחל רענון" : "▶ התחל onboarding"}
+              </button>
+              {liveLatest && <p className="ob-sub" style={{ marginTop: 6 }}>יש הרצה פעילה — סיימו או בטלו אותה קודם.</p>}
+              {policy.stages.scan?.run === "manual" && !liveLatest && <p className="ob-sub" style={{ marginTop: 6 }}>במצב צעד-אחר-צעד ההרצה נוצרת ומחכה: השלב הראשון יתחיל רק בלחיצה שלכם.</p>}
+            </div>
+          </div>
+          {runs.length > 0 && (
+            <div className="panel">
+              <h4>הרצות קודמות</h4>
+              <div style={{ display: "grid", gap: 6 }}>
+                {runs.map((r) => (
+                  <div key={r.id} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12 }}>
+                    <a style={{ cursor: "pointer" }} onClick={() => onViewRun(r.id)}>{fmtDate(r.startedAt)}</a>
+                    <span className="ob-sub">{MODE_HE[r.mode] ?? r.mode}{r.onboardingVersion !== "v2" ? ` · ${r.onboardingVersion}` : ""}</span>
+                    <span style={{ flex: 1 }} />
+                    <StatusPill status={r.status} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </>
   );
 }

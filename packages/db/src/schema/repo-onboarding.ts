@@ -4,19 +4,20 @@ import { client, repo } from "./tenancy.ts";
 import { users } from "./identity.ts";
 
 /**
- * Repository AI Enablement — Phase 1 (core infrastructure only).
+ * Repository AI Enablement — persisted state for the onboarding pipeline.
  *
- * Full replace (design discussion, 2026-09-16) of `repo-ai.ts`'s 3-step
- * onboarding flow (scan/deny-rules/`/init`), per a 36-section spec the
- * user supplied: a 16-stage, resumable, GitHub-PR-based onboarding
- * pipeline. This file covers only what Phase 1 needs — the persisted
- * state machine, the deterministic scanner's output, and the Claude
- * execution/prompt-versioning infrastructure later stages plug into.
- * Stages 3-16's own tables (if any) are a Phase 2+ concern.
+ * v2 (`repository-ai-enablement-v2`): a 9-stage, resumable state machine
+ * with a per-run automation policy, an artifact ledger (what DCC put in
+ * the repository, why, and how to tell when it goes stale), and the
+ * Claude execution / prompt-versioning infrastructure every stage plugs
+ * into. Runs written by the previous 16-stage pipeline carry
+ * `onboarding_version = 'v1'` and are read-only history — they can be
+ * viewed and cancelled but never advanced by the v2 state machine.
  *
- * The old `repo_ai_*` tables (repo-ai.ts) are deliberately left
- * untouched — migrating/backfilling them is an explicitly deferred
- * decision, not part of this pass.
+ * The old `repo_ai_*` tables (repo-ai.ts) are left in place as inert
+ * history (dropping them is a data-retention decision, not a code one);
+ * only `repo_ai_event` is still written, as the repository-scoped audit
+ * trail.
  */
 
 const tenantPolicy = (name: string) =>
@@ -45,11 +46,21 @@ export const repositoryOnboardingRun = pgTable(
     repoId: uuid("repo_id").notNull().references(() => repo.id, { onDelete: "cascade" }),
     clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "restrict" }),
     status: text("status").notNull().default("Pending"),
-    /** The stage key currently Running/WaitingForUser/Failed; null once the run is terminal. */
+    /** The stage key currently Running/WaitingForUser/AwaitingExternal/Failed; null once the run is terminal. */
     currentStageKey: text("current_stage_key"),
-    /** Pipeline-schema version tag — `'legacy'` is reserved for a future backfill of
-     *  repos onboarded under the old 3-step flow; Phase 1 only ever writes `'v1'`. */
+    /** Pipeline-schema version tag. `'v1'` = the retired 16-stage pipeline
+     *  (read-only history); `'v2'` = the current 9-stage pipeline. */
     onboardingVersion: text("onboarding_version").notNull().default("v1"),
+    /** `'initial'` — first onboarding of this repo; `'refresh'` — an
+     *  incremental re-run seeded from `previous_run_id` after the repo changed. */
+    mode: text("mode").notNull().default("initial"),
+    previousRunId: uuid("previous_run_id"),
+    /** The run's automation policy (`AutomationPolicy` in @dcc/core) — which
+     *  stages run without a click and which gates a person must answer.
+     *  Editable while the run is live; every change is an event. */
+    automation: jsonb("automation").notNull().default(sql`'{}'::jsonb`),
+    /** A reviewer's "request changes" note, carried into the next generate pass. */
+    reviewNote: text("review_note"),
     /** 'worktree' | 'clone' — which isolation strategy `ensureOnboardingWorkspace` actually used. */
     workspaceKind: text("workspace_kind"),
     workspacePath: text("workspace_path"),
@@ -69,7 +80,7 @@ export const repositoryOnboardingRun = pgTable(
      *  on top of, not instead of, the per-run workspace isolation in workspace.ts. */
     uniqueIndex("repository_onboarding_run_live_uq")
       .on(t.repoId)
-      .where(sql`status in ('Pending','Running','WaitingForUser')`),
+      .where(sql`status in ('Pending','Running','WaitingForUser','AwaitingExternal')`),
     tenantPolicy("repository_onboarding_run_tenant_isolation"),
   ],
 ).enableRLS();
@@ -144,6 +155,53 @@ export const repositoryProfile = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("repository_profile_repo_idx").on(t.repoId, t.createdAt), tenantPolicy("repository_profile_tenant_isolation")],
+).enableRLS();
+
+/**
+ * The artifact ledger — one row per artifact an onboarding run planned
+ * for the repository (created, updated, or deliberately skipped). This is
+ * DCC's side of "the repository is the source of truth": the files live
+ * in the repo, the ledger records why each exists, what it costs in
+ * always-loaded context, which paths it depends on (so a later refresh
+ * can tell deterministically whether it MAY be stale), and the content
+ * hash at the time DCC wrote it (so an edit made outside DCC is detected
+ * rather than silently overwritten).
+ */
+export const repositoryAiArtifact = pgTable(
+  "repository_ai_artifact",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    runId: uuid("run_id").notNull().references(() => repositoryOnboardingRun.id, { onDelete: "cascade" }),
+    repoId: uuid("repo_id").notNull().references(() => repo.id, { onDelete: "cascade" }),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "restrict" }),
+    /** Stable id within the run's plan (e.g. "claude_md", "skill:repo-map"). */
+    artifactKey: text("artifact_key").notNull(),
+    /** claude_md | nested_claude_md | rule | knowledge_skill | workflow_skill | agent | settings | guardrail_hook | dcc_hooks */
+    kind: text("kind").notNull(),
+    path: text("path").notNull(),
+    /** create | update | skip | remove */
+    action: text("action").notNull(),
+    /** always | on_demand | never — what the artifact costs Claude's context. */
+    loading: text("loading").notNull(),
+    justification: text("justification").notNull().default(""),
+    /** Lifecycle stages that consume it, e.g. ["planning","implementation"]. */
+    consumers: jsonb("consumers").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /** Repository paths whose change makes this artifact a refresh candidate. */
+    watchedPaths: jsonb("watched_paths").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    sourceOfTruth: text("source_of_truth"),
+    estimatedTokens: integer("estimated_tokens"),
+    lines: integer("lines"),
+    contentHash: text("content_hash"),
+    /** planned | written | dropped | validated */
+    status: text("status").notNull().default("planned"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("repository_ai_artifact_run_key_uq").on(t.runId, t.artifactKey),
+    index("repository_ai_artifact_repo_idx").on(t.repoId, t.createdAt),
+    tenantPolicy("repository_ai_artifact_tenant_isolation"),
+  ],
 ).enableRLS();
 
 /**

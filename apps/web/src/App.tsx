@@ -16,7 +16,6 @@ import { Alerts } from "./screens/Alerts.tsx";
 import { Budgets } from "./screens/Budgets.tsx";
 import { Settings } from "./screens/Settings.tsx";
 import { Prompts } from "./screens/Prompts.tsx";
-import { AiComponents } from "./screens/AiComponents.tsx";
 import { Repositories } from "./screens/Repositories.tsx";
 import { RepoOnboardingPanel } from "./screens/RepoOnboardingPanel.tsx";
 import { Stub } from "./screens/Stub.tsx";
@@ -43,7 +42,6 @@ const NAV: { to: string; label: string; icon: React.ReactNode; badge?: boolean }
   { to: "#/alerts", label: "התראות", icon: ICONS.bell, badge: true },
   { to: "#/budgets", label: "תקציבים", icon: ICONS.slash },
   { to: "#/prompts", label: "פרומפטים", icon: ICONS.message },
-  { to: "#/ai-components", label: "רכיבי AI", icon: ICONS.layers },
   { to: "#/settings", label: "הגדרות", icon: ICONS.gear },
   { to: "#/users", label: "משתמשים", icon: ICONS.inbox },
   { to: "#/audit", label: "יומן פעילויות", icon: ICONS.list },
@@ -75,7 +73,6 @@ export function App() {
   else if (path === "/audit") screen = <AuditTrail nav={nav} />;
   else if (path === "/settings") screen = <Settings nav={nav} />;
   else if (path === "/prompts") screen = <Prompts />;
-  else if (path === "/ai-components") screen = <AiComponents />;
   else if (path === "/users") screen = <Stub title="משתמשים" note="ניהול משתמשים והרשאות (Entra ID). בבנייה." />;
   else screen = <Dashboard nav={nav} />;
 

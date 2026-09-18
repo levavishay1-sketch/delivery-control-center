@@ -415,28 +415,49 @@ export const startResearchWork = (id: string) =>
 export const finishResearchWork = (id: string, conclusion: string) =>
   post<{ finished: boolean }>(`/workitems/${id}/research/finish`, { conclusion });
 
-/* ── repository AI enablement — the 16-stage onboarding pipeline
- * (`repository-ai-enablement`). Replaces the old 3-step
- * `repository-ai-management` flow entirely (2026-09-16) — its UI
- * (`RepoAiPanel.tsx`) and this client's `repo-ai/*` functions were
- * deleted; the backend `repo-ai/*` module and its data are left alone
- * for now, per the earlier decision to defer old-data cleanup. ────── */
-export type OnboardingStatus = "Pending" | "Running" | "WaitingForUser" | "Completed" | "CompletedWithWarnings" | "Failed" | "Skipped" | "Cancelled";
+/* ── repository AI enablement — the 9-stage onboarding pipeline
+ * (`repository-ai-enablement-v2`). The run advances on its own as far as
+ * its automation policy allows; this client is the person's levers. ── */
+export type OnboardingStatus = "Pending" | "Running" | "WaitingForUser" | "AwaitingExternal" | "Completed" | "CompletedWithWarnings" | "Failed" | "Skipped" | "Cancelled";
+export type StageKind = "deterministic" | "ai" | "human" | "mixed";
+export type LifecyclePhase = "requirement" | "understanding" | "planning" | "implementation" | "testing" | "review" | "deployment" | "future_sessions";
+export type StageDefinition = {
+  key: string; order: number; kind: StageKind; gate: boolean; autoApprovable: boolean; writesRepo: boolean; reversible: "yes" | "partial" | "external";
+  title_he: string; short_he: string; why_he: string; what_he: string; value_he: string; supports: LifecyclePhase[]; output_he: string; impact_he: string;
+};
+export type AutomationPreset = "step_by_step" | "guided" | "automatic" | "custom";
+export type StagePolicy = { run: "auto" | "manual"; gate?: "approve" | "auto" };
+export type AutomationPolicy = { preset: AutomationPreset; stages: Record<string, StagePolicy> };
 export type OnboardingRun = {
   id: string; repoId: string; clientId: string; status: OnboardingStatus; currentStageKey: string | null;
-  onboardingVersion: string; workspaceKind: string | null; workspacePath: string | null; defaultBranch: string | null;
+  onboardingVersion: string; mode: "initial" | "refresh"; previousRunId: string | null; automation: unknown; reviewNote: string | null;
+  workspaceKind: string | null; workspacePath: string | null; defaultBranch: string | null;
   baselineSha: string | null; branchName: string | null; triggeredBy: string;
   startedAt: string; completedAt: string | null; cancelledAt: string | null; cancelledBy: string | null;
 };
 export type OnboardingStage = {
   id: string; runId: string; stageKey: string; stageOrder: number; status: OnboardingStatus; attempt: number;
   startedAt: string | null; completedAt: string | null; result: unknown; warnings: string[]; errors: string[];
-  claudeExecutionId: string | null; sourceCommitSha: string | null; updatedAt: string;
+  claudeExecutionId: string | null; sourceCommitSha: string | null; history: unknown[]; updatedAt: string;
 };
-export type OnboardingRunView = { run: OnboardingRun; stages: OnboardingStage[]; profile: unknown };
-export const startOnboardingRun = (repoId: string) => post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, {});
+export type OnboardingArtifact = {
+  id: string; artifactKey: string; kind: string; path: string; action: string; loading: "always" | "on_demand" | "never";
+  justification: string; consumers: string[]; watchedPaths: string[]; sourceOfTruth: string | null;
+  estimatedTokens: number | null; lines: number | null; contentHash: string | null; status: string; createdAt: string; updatedAt: string;
+};
+export type OnboardingEvent = { id: string; type: string; payload: Record<string, unknown>; actorUserId: string | null; occurredAt: string };
+export type OnboardingRunView = {
+  run: OnboardingRun; stages: OnboardingStage[]; profile: unknown; artifacts: OnboardingArtifact[]; events: OnboardingEvent[];
+  automation: AutomationPolicy; driving: boolean; stageDefinitions: StageDefinition[];
+  repo: { id: string; name: string; adoRepoRef: string | null; localPath: string | null; defaultBranch: string };
+};
+export const getOnboardingStages = () => get<{ stages: StageDefinition[] }>("/onboarding/stages");
+export const startOnboardingRun = (repoId: string, body: { automation?: AutomationPolicy | { preset: AutomationPreset }; consent?: boolean; mode?: "initial" | "refresh"; previousRunId?: string } = {}) =>
+  post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, body);
 export const getLatestOnboardingRun = (repoId: string) =>
-  get<{ runId: string; status: OnboardingStatus; currentStageKey: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
+  get<{ runId: string; status: OnboardingStatus; currentStageKey: string | null; onboardingVersion: string; mode: string; completedAt: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
+export const listOnboardingRuns = (repoId: string) =>
+  get<{ runs: { id: string; status: OnboardingStatus; mode: string; onboardingVersion: string; startedAt: string; completedAt: string | null; baselineSha: string | null }[] }>(`/repos/${repoId}/onboarding/runs`);
 export const getOnboardingRun = (repoId: string, runId: string) => get<OnboardingRunView>(`/repos/${repoId}/onboarding/runs/${runId}`);
 export const advanceOnboardingRun = (repoId: string, runId: string) =>
   post<{ runStatus: string; stageKey: string | null }>(`/repos/${repoId}/onboarding/runs/${runId}/advance`, {});
@@ -444,24 +465,32 @@ export const cancelOnboardingRun = (repoId: string, runId: string) =>
   post<{ cancelled: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/cancel`, {});
 export const submitOnboardingStageInput = (repoId: string, runId: string, stageKey: string, input: unknown) =>
   post<{ runStatus: string; stageKey: string | null }>(`/repos/${repoId}/onboarding/runs/${runId}/stages/${stageKey}/input`, { input });
+export const updateOnboardingAutomation = (repoId: string, runId: string, automation: AutomationPolicy | { preset: AutomationPreset }, consent?: boolean) =>
+  patch<AutomationPolicy>(`/repos/${repoId}/onboarding/runs/${runId}/automation`, { automation, consent });
+export const resetOnboardingRunTo = (repoId: string, runId: string, stageKey: string, note?: string) =>
+  post<{ reset: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/reset-to/${stageKey}`, { note });
+export const stopOnboardingExecution = (repoId: string, runId: string) =>
+  post<{ stopped: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/stop-execution`, {});
+export const getOnboardingDiff = (repoId: string, runId: string, path: string) =>
+  get<{ path: string; diff: string; binary: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/diff?${new URLSearchParams({ path })}`);
 export type OnboardingRunCostSummary = { totalCostUsd: number; totalInputTokens: number; totalOutputTokens: number; totalDurationMs: number; executionCount: number };
 export const getOnboardingRunCostSummary = (repoId: string, runId: string) =>
   get<OnboardingRunCostSummary>(`/repos/${repoId}/onboarding/runs/${runId}/cost-summary`);
 export type OnboardingExecution = {
   id: string; stageKey: string; model: string | null; permissionProfile: string; status: string;
-  resultText: string | null; costUsd: string | null; inputTokens: number | null; outputTokens: number | null;
-  durationMs: number | null; numTurns: number | null; errorMessage: string | null;
+  resultText: string | null; resultJson: unknown; costUsd: string | null; inputTokens: number | null; outputTokens: number | null;
+  durationMs: number | null; numTurns: number | null; errorMessage: string | null; denyRulesSnapshot: string[];
   promptKey: string; promptVersion: number; promptTitle: string; promptBody: string;
 };
 export const getOnboardingExecution = (repoId: string, executionId: string) =>
   get<OnboardingExecution>(`/repos/${repoId}/onboarding/executions/${executionId}`);
 export const updateOnboardingPrompt = (promptKey: string, body: string) =>
   patch<{ id: string; version: number }>(`/onboarding/prompts/${promptKey}`, { body });
-
-/* ── global AI component catalog ──────────────────────────────────── */
-export type AiComponentRow = { id: string; type: string; title: string; description: string | null; firstSeenAt: string; lastSeenAt: string; activeRepoCount: number };
-export const getAiComponents = () => get<{ components: AiComponentRow[] }>("/ai-components");
-export const getAiComponentRepos = (id: string) =>
-  get<{ repos: { repoId: string; repoName: string; clientName: string | null; detectedPath: string; active: boolean; firstSeenAt: string; lastSeenAt: string; removedAt: string | null }[] }>(`/ai-components/${id}/repos`);
-export const updateAiComponent = (id: string, body: { title?: string; description?: string | null }) =>
-  patch<{ updated: boolean }>(`/ai-components/${id}`, body);
+export type RefreshSignal = { kind: string; detail: string; artifacts: string[] };
+export type RefreshResult = {
+  checkedAt: string; lastRunId: string; analyzedCommit: string; currentCommit: string; changedPaths: string[]; signals: RefreshSignal[];
+  updateRequired: boolean; ai?: { impactedArtifacts: string[]; requiredUpdates_he: string[]; evidence: string[]; reason_he: string; executionId: string } | null; reason_he: string;
+};
+export const checkOnboardingRefresh = (repoId: string) => post<RefreshResult>(`/repos/${repoId}/onboarding/refresh-check`, {});
+export const getOnboardingRefreshMetrics = (repoId: string) =>
+  get<{ totalChecks: number; noUpdateCount: number; updateRequiredCount: number; lastCheckedAt: string | null; lastResult: RefreshResult | null; avgDaysBetweenChecks: number | null }>(`/repos/${repoId}/onboarding/refresh-metrics`);

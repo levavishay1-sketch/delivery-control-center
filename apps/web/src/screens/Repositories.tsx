@@ -3,38 +3,37 @@ import { getRepos, getLatestOnboardingRun, type OnboardingStatus } from "../api.
 import { PageHead, Pill } from "../ui.tsx";
 import { NewRepo } from "../forms.tsx";
 
-const STATUS_HE: Record<OnboardingStatus, { label: string; tone: "inactive" | "warning" | "healthy" | "critical" }> = {
+const STATUS_HE: Record<OnboardingStatus, { label: string; tone: "inactive" | "warning" | "healthy" | "critical" | "active" | "ai" }> = {
   Pending: { label: "טרם התחיל", tone: "inactive" },
-  Running: { label: "מתבצע", tone: "warning" },
-  WaitingForUser: { label: "ממתין לאדם", tone: "warning" },
-  Completed: { label: "הושלם", tone: "healthy" },
-  CompletedWithWarnings: { label: "הושלם עם אזהרות", tone: "warning" },
+  Running: { label: "מתבצע", tone: "ai" },
+  WaitingForUser: { label: "ממתין להחלטה", tone: "warning" },
+  AwaitingExternal: { label: "ממתין למיזוג PR", tone: "active" },
+  Completed: { label: "מוכן ל-AI", tone: "healthy" },
+  CompletedWithWarnings: { label: "מוכן ל-AI (אזהרות)", tone: "healthy" },
   Failed: { label: "נכשל", tone: "critical" },
   Skipped: { label: "דולג", tone: "inactive" },
   Cancelled: { label: "בוטל", tone: "inactive" },
 };
 
 type RepoRow = { id: string; name: string; adoRepoRef: string | null; clientId: string | null; clientName: string | null; linkedClients: number };
+type Latest = { status: OnboardingStatus; onboardingVersion: string; mode: string } | "NONE";
 
 /**
  * Top-level Repositories screen — every repo across every client, one
- * place to reach AI management from, instead of only via each Client's
- * own detail page (which still also links here — this doesn't replace
- * that, it's the discoverable front door the nav item promised).
+ * place to reach AI enablement from (each Client's detail page links
+ * here too).
  */
 export function Repositories({ nav }: { nav: (h: string) => void }) {
   const [rows, setRows] = useState<RepoRow[] | null>(null);
-  const [states, setStates] = useState<Record<string, OnboardingStatus | "NONE">>({});
+  const [states, setStates] = useState<Record<string, Latest>>({});
   const [modal, setModal] = useState(false);
 
   const reload = () => {
     getRepos().then((r) => {
       setRows(r.repos);
-      // best-effort status fetch per repo, for the list's status column —
-      // org-shared repos (clientId null) are skipped, they can't be managed.
       for (const repo of r.repos) {
         if (!repo.clientId) continue;
-        getLatestOnboardingRun(repo.id).then((v) => setStates((s) => ({ ...s, [repo.id]: v?.status ?? "NONE" }))).catch(() => {});
+        getLatestOnboardingRun(repo.id).then((v) => setStates((s) => ({ ...s, [repo.id]: v ? { status: v.status, onboardingVersion: v.onboardingVersion, mode: v.mode } : "NONE" }))).catch(() => {});
       }
     });
   };
@@ -56,7 +55,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
           <tbody>
             {rows.map((r) => {
               const st = r.clientId ? states[r.id] : undefined;
-              const stInfo = st && st !== "NONE" ? STATUS_HE[st] : null;
+              const info = st && st !== "NONE" ? STATUS_HE[st.status] : null;
               return (
                 <tr key={r.id}>
                   <td>
@@ -72,9 +71,14 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
                   <td>
                     {!r.clientId
                       ? <span style={{ fontSize: 11, color: "var(--ink-400)" }}>לא זמין ל-repo משותף</span>
-                      : stInfo ? <Pill tone={stInfo.tone}>{stInfo.label}</Pill>
-                      : st === "NONE" ? <span style={{ fontSize: 11, color: "var(--ink-400)" }}>לא התחיל</span>
-                      : <span style={{ fontSize: 11, color: "var(--ink-400)" }}>טוען…</span>}
+                      : info && st !== "NONE" && st
+                        ? <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                            <Pill tone={info.tone}>{info.label}</Pill>
+                            {st.onboardingVersion !== "v2" && <span style={{ fontSize: 10.5, color: "var(--ink-400)" }}>גרסה קודמת</span>}
+                            {st.mode === "refresh" && <span style={{ fontSize: 10.5, color: "var(--ink-400)" }}>רענון</span>}
+                          </span>
+                        : st === "NONE" ? <span style={{ fontSize: 11, color: "var(--ink-400)" }}>לא התחיל</span>
+                        : <span style={{ fontSize: 11, color: "var(--ink-400)" }}>טוען…</span>}
                   </td>
                   <td style={{ fontSize: 11.5, color: "var(--ink-400)", direction: "ltr", textAlign: "right" }}>{r.adoRepoRef ?? "—"}</td>
                 </tr>

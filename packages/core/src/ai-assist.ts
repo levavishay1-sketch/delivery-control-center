@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -15,7 +15,6 @@ import { inheritedChecksForBug } from "./bugs.ts";
 import { getPromptByKey, renderPrompt } from "./prompts.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
-import { resolveRepoAiProfile, renderRepoAiProfileBlock } from "./repo-ai/resolve.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -87,6 +86,18 @@ export function stopFlowRun(runId: string): boolean {
   p.stoppedByUser = true;
   killTree(p.child.pid);
   return true;
+}
+
+/** Process shutdown: kill every live claude child, so a restart never
+ *  leaves an orphaned call running (and spending) with nobody to collect
+ *  its result. Returns how many were stopped. */
+export function stopAllFlowRuns(): number {
+  let n = 0;
+  for (const [id, p] of runningProcs) {
+    if (p.child.pid) { p.stoppedByUser = true; killTree(p.child.pid); n++; }
+    runningProcs.delete(id);
+  }
+  return n;
 }
 
 /** Hand a live run more text — it does not interrupt the current step, but
@@ -241,15 +252,66 @@ export type RunMeta = {
   outputTokens: number | null;
   durationMs: number | null;
   numTurns: number | null;
+  cacheReadTokens?: number | null;
+  cacheCreationTokens?: number | null;
+  /** `structured_output` from the CLI's result message when `jsonSchema` was passed. */
+  structuredOutput?: unknown;
+  /** `permission_denials` from the result message — every tool call the
+   *  run wanted to make and nobody could approve (v2.1.259+). */
+  permissionDenials?: unknown[];
+  /** Tool-call counts by tool name, from the stream's assistant events —
+   *  the raw material for "how much exploring did this run do". */
+  toolCalls?: Record<string, number>;
 };
 
-type RunClaudeOpts = {
+export type RunClaudeOpts = {
   timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string; onMeta?: (meta: RunMeta) => void;
-  /** `Read(...)` deny patterns — passed as `--settings {"permissions":{"deny":[...]}}`.
-   *  Used by `repo-ai/*` to enforce onboarding step 2 (approved before any
-   *  exploration of a repo runs) — see `repo-ai/permissions.ts`. */
+  /** `Read(...)` deny patterns — passed as `--settings {"permissions":{"deny":[...]}}`. */
   denyRules?: string[];
+  /** Onboarding-only: run with `--restricted --tools <list>` — the built-in
+   *  tool set is exactly this list (no Bash unless named), file tools are
+   *  confined to `cwd`, and the REPOSITORY's own settings/hooks/`.mcp.json`
+   *  are not loaded (a `-p` run in an untrusted folder otherwise executes
+   *  them — see the permissions docs, "What runs before you trust a folder").
+   *  An empty list means no tools at all. */
+  restrictedTools?: string[];
+  /** Onboarding-only: `--json-schema` structured output (result carries
+   *  `structured_output`). On Windows the CLI is spawned through cmd.exe,
+   *  which mangles inline JSON, so the schema is NOT passed there — the
+   *  caller must also instruct the model in the prompt and fall back to
+   *  parsing text (see `runner.ts`). */
+  jsonSchema?: Record<string, unknown>;
+  /** Hard USD cap for the call, including subagents (`--max-budget-usd`). */
+  budgetUsd?: number;
+  /** `--permission-prompts none`: anything that would need a person is
+   *  denied explicitly and reported, instead of hanging or being silently
+   *  narrated as "I couldn't get approval" in the text. */
+  denyUnattendedPrompts?: boolean;
+  /** `--no-session-persistence` — a one-off analysis leaves no resumable transcript behind. */
+  noSessionPersistence?: boolean;
 };
+
+/** Which CLI flags this machine's `claude` supports — parsed once from
+ *  `claude --version`. Newer flags are only passed when the version says
+ *  so; an unknown version gets the conservative (older) argument set. */
+export type ClaudeCliCaps = { version: string | null; restricted: boolean; permissionPrompts: boolean; jsonSchema: boolean; maxBudget: boolean };
+let cliCaps: ClaudeCliCaps | null = null;
+export function claudeCliCaps(): ClaudeCliCaps {
+  if (cliCaps) return cliCaps;
+  let version: string | null = null;
+  try {
+    const out = execFileSync(CLAUDE_BIN, ["--version"], { encoding: "utf8", shell: CLAUDE_VIA_SHELL, windowsHide: true, timeout: 15_000 });
+    version = out.match(/(\d+)\.(\d+)\.(\d+)/)?.[0] ?? null;
+  } catch { version = null; }
+  const atLeast = (want: string) => {
+    if (!version) return false;
+    const a = version.split(".").map(Number), b = want.split(".").map(Number);
+    for (let i = 0; i < 3; i++) { if (a[i]! !== b[i]!) return a[i]! > b[i]!; }
+    return true;
+  };
+  cliCaps = { version, restricted: atLeast("2.1.248"), permissionPrompts: atLeast("2.1.259"), jsonSchema: atLeast("2.1.205"), maxBudget: atLeast("2.1.217") };
+  return cliCaps;
+}
 
 /** Run `claude -p` in `cwd` (prompt via stdin) and return the assistant's
  *  final text plus usage/cost metadata — no JSON parsing. This is the one
@@ -285,17 +347,31 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   // nothing for it to "accept" since Write/Edit aren't in the allowed-tools
   // list, but it carries none of `plan` mode's ExitPlanMode expectation.
   const steerable = !!opts.runId;
-  const args = opts.write
-    ? [
-        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
-        "--allowed-tools", "Read,Grep,Glob,Edit,Write,Bash",
-        "--max-turns", String(opts.maxTurns ?? 80),
-      ]
-    : [
-        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
-        "--allowed-tools", "Read,Grep,Glob",
-        "--max-turns", String(opts.maxTurns ?? 40),
-      ];
+  const caps = claudeCliCaps();
+  let args: string[];
+  if (opts.restrictedTools) {
+    // The onboarding pipeline's argument set: an explicit tool list, the
+    // repository's own configuration kept out, nothing waiting on a person.
+    args = ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits", "--max-turns", String(opts.maxTurns ?? 40)];
+    if (caps.restricted) args.push("--restricted", "--strict-mcp-config", "--tools", opts.restrictedTools.join(",") || "");
+    else args.push("--allowed-tools", opts.restrictedTools.join(","), "--setting-sources", "user");
+    if (opts.denyUnattendedPrompts && caps.permissionPrompts) args.push("--permission-prompts", "none");
+    if (opts.jsonSchema && caps.jsonSchema && !CLAUDE_VIA_SHELL) args.push("--json-schema", JSON.stringify(opts.jsonSchema));
+    if (typeof opts.budgetUsd === "number" && caps.maxBudget) args.push("--max-budget-usd", String(opts.budgetUsd));
+    if (opts.noSessionPersistence) args.push("--no-session-persistence");
+  } else {
+    args = opts.write
+      ? [
+          "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
+          "--allowed-tools", "Read,Grep,Glob,Edit,Write,Bash",
+          "--max-turns", String(opts.maxTurns ?? 80),
+        ]
+      : [
+          "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
+          "--allowed-tools", "Read,Grep,Glob",
+          "--max-turns", String(opts.maxTurns ?? 40),
+        ];
+  }
   if (steerable) args.push("--input-format", "stream-json");
   if (opts.model) args.push("--model", opts.model);
   // `--settings` accepts either inline JSON or a file path (`claude --help`
@@ -315,6 +391,7 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     writeFileSync(settingsFile, JSON.stringify({ permissions: { deny: opts.denyRules } }));
     args.push("--settings", settingsFile);
   }
+  const toolCalls: Record<string, number> = {};
   const raw = await new Promise<string>((resolve, reject) => {
     const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     const proc: SteerableProc | null = steerable ? { child, stdinOpen: true, stoppedByUser: false } : null;
@@ -326,12 +403,13 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     const killer = setTimeout(() => { child.kill("SIGKILL"); reject(new Error(`claude timed out after ${(opts.timeoutMs ?? 240000) / 1000}s`)); }, opts.timeoutMs ?? 240000);
     child.stdout.on("data", (d) => {
       out += d;
-      if (!opts.runId) return;
       buf += d;
       const parts = buf.split("\n");
       buf = parts.pop() ?? "";
       for (const ln of parts) {
         const trimmed = ln.trim();
+        countToolCalls(trimmed, toolCalls);
+        if (!opts.runId) continue;
         const desc = describeEvent(trimmed);
         if (desc) for (const s of desc.split("\n")) pushLine(opts.runId, s);
         // the agentic run is done once its final result comes through — let
@@ -357,24 +435,49 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   // {"type":"result","result":"…"} line — which also carries cost/usage.
   let text = raw.trim();
   const resultLine = raw.split("\n").reverse().find((l) => l.includes('"type":"result"'));
-  let meta: RunMeta = { model: opts.model ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null };
+  let meta: RunMeta = { model: opts.model ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null, toolCalls };
   try {
     const env = JSON.parse((resultLine ?? text).trim()) as {
-      result?: string; total_cost_usd?: number; duration_ms?: number; num_turns?: number;
-      usage?: { input_tokens?: number; output_tokens?: number };
+      result?: string; total_cost_usd?: number; duration_ms?: number; num_turns?: number; is_error?: boolean; subtype?: string;
+      usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
+      structured_output?: unknown; permission_denials?: unknown[];
+      modelUsage?: Record<string, unknown>;
     };
     if (typeof env.result === "string") text = env.result;
+    // The CLI reports a failed run (auth, budget, structured-output retries
+    // exhausted) as a result line with is_error — the process still exits
+    // 0, so surface it here rather than returning the error text as "the answer".
+    if (env.is_error) throw new Error(`claude run failed (${env.subtype ?? "error"}): ${text.slice(0, 300)}`);
+    const modelFromUsage = env.modelUsage ? Object.keys(env.modelUsage)[0] ?? null : null;
     meta = {
-      model: opts.model ?? null,
+      model: opts.model ?? modelFromUsage,
       costUsd: typeof env.total_cost_usd === "number" ? env.total_cost_usd : null,
       inputTokens: env.usage?.input_tokens ?? null,
       outputTokens: env.usage?.output_tokens ?? null,
+      cacheReadTokens: env.usage?.cache_read_input_tokens ?? null,
+      cacheCreationTokens: env.usage?.cache_creation_input_tokens ?? null,
       durationMs: typeof env.duration_ms === "number" ? env.duration_ms : null,
       numTurns: typeof env.num_turns === "number" ? env.num_turns : null,
+      structuredOutput: env.structured_output,
+      permissionDenials: Array.isArray(env.permission_denials) ? env.permission_denials : undefined,
+      toolCalls,
     };
-  } catch { /* fall back to raw text, meta stays all-null */ }
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("claude run failed")) throw e;
+    /* fall back to raw text, meta stays all-null */
+  }
   opts.onMeta?.(meta);
   return { text, meta };
+}
+
+/** Tallies `tool_use` blocks in one stream-json assistant event. */
+function countToolCalls(line: string, into: Record<string, number>) {
+  if (!line.includes('"tool_use"')) return;
+  try {
+    const e = JSON.parse(line) as { type?: string; message?: { content?: { type?: string; name?: string }[] } };
+    if (e.type !== "assistant") return;
+    for (const c of e.message?.content ?? []) if (c.type === "tool_use" && typeof c.name === "string") into[c.name] = (into[c.name] ?? 0) + 1;
+  } catch { /* not an event line */ }
 }
 
 /** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back.
@@ -795,9 +898,11 @@ async function buildAssessPrompt(input: {
   );
   const promptHe = tmpl?.bodyHe ? join(renderPrompt(tmpl.bodyHe, varsHe), contract?.bodyHe) : null;
   const model = input.model || tmpl?.defaultModel || undefined;
-  const repoAiBlock = r ? renderRepoAiProfileBlock(await resolveRepoAiProfile(input.clientId, r.id)) : "";
 
-  return { prompt: repoAiBlock ? `${repoAiBlock}\n${prompt}` : prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
+  // Repository knowledge is no longer prepended here: an onboarded repo
+  // carries it in its own CLAUDE.md / skills, which the `claude -p` run
+  // loads natively from `cwd` (repository-ai-enablement-v2).
+  return { prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
 }
 
 /** Render (never run) the prompt for one tier — powers the preview modal. */
@@ -1090,8 +1195,7 @@ async function buildBreakdownPrompt(input: { clientId: string; workitemId: strin
     "",
     "(ההוראות המדויקות ל-Claude — פורמט, סיווג task/check, כללי כתיבה — תמיד רצות באנגלית; זה תוכן הדרישה עצמו, לנוחות קריאה.)",
   ].join("\n");
-  const repoAiBlock = r ? renderRepoAiProfileBlock(await resolveRepoAiProfile(input.clientId, r.id)) : "";
-  return { prompt: repoAiBlock ? `${repoAiBlock}\n${prompt}` : prompt, promptHe, cwd, repoName: r?.name ?? null };
+  return { prompt, promptHe, cwd, repoName: r?.name ?? null };
 }
 
 export async function previewBreakdownPrompt(input: { clientId: string; workitemId: string }): Promise<{ prompt: string; promptHe: string; repoName: string | null }> {
@@ -1401,9 +1505,7 @@ async function buildImplementPrompt(input: { clientId: string; workitemId: strin
     "(ההוראות הטכניות ל-Claude — מבנה git, פורמט התשובה — תמיד רצות באנגלית; זה התוכן בפועל, לנוחות קריאה.)",
   ].join("\n");
 
-  const implR = await firstRepo(input.clientId, input.workitemId);
-  const repoAiBlock = implR ? renderRepoAiProfileBlock(await resolveRepoAiProfile(input.clientId, implR.id)) : "";
-  return { prompt: repoAiBlock ? `${repoAiBlock}\n${prompt}` : prompt, promptHe, instruction, t, wi, hasChecks: checks.length > 0 };
+  return { prompt, promptHe, instruction, t, wi, hasChecks: checks.length > 0 };
 }
 
 export async function previewImplementPrompt(input: { clientId: string; workitemId: string; taskId: string }): Promise<{ prompt: string; promptHe: string; approved: boolean }> {

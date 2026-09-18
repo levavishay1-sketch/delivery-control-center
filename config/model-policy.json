@@ -13,7 +13,13 @@
     "gap_detection":{ "default": "sonnet", "escalateOn": [{ "ambiguity": "high" }] },
     "decomposition":{ "default": "sonnet", "escalateOn": [{ "breadth": 4 }, { "openGaps": 3 }, { "novelty": "high" }] },
     "review":       { "default": "sonnet" },
-    "execution":    { "default": "sonnet", "escalateOn": [{ "breadth": 5 }, { "ambiguity": "high" }, { "novelty": "high" }], "downgradeOn": [{ "mechanical": true }] }
+    "execution":    { "default": "sonnet", "escalateOn": [{ "breadth": 5 }, { "ambiguity": "high" }, { "novelty": "high" }], "downgradeOn": [{ "mechanical": true }] },
+    "onboarding_classify": { "default": "sonnet", "maxUsdPerCall": 0.3 },
+    "onboarding_discover": { "default": "sonnet", "escalateOn": [{ "complexity": "high" }], "maxUsdPerCall": 4.0 },
+    "onboarding_plan":     { "default": "sonnet", "maxUsdPerCall": 1.5 },
+    "onboarding_generate": { "default": "sonnet", "maxUsdPerCall": 3.0 },
+    "onboarding_validate": { "default": "sonnet", "maxUsdPerCall": 1.5 },
+    "onboarding_refresh":  { "default": "sonnet", "maxUsdPerCall": 1.0 }
   },
   "guardrails": {
     "killAfterStuckIterations": 3,

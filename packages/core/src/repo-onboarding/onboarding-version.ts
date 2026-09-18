@@ -1,8 +1,9 @@
 /**
- * The onboarding pipeline's own methodology version (spec §27: "Did the
- * repository use onboarding v2 or v4?") — distinct from a per-prompt
- * `onboarding_prompt_template.version`, which already answers "which
- * exact text ran." Bump this when the STAGE_ORDER/pipeline shape itself
- * changes in a way worth distinguishing later, not on every prompt edit.
+ * The onboarding pipeline's methodology version — stamped into every
+ * generated artifact and recorded on the run, so a later refresh can
+ * tell which shape of pipeline produced what's in the repository.
+ * Distinct from a per-prompt `onboarding_prompt_template.version`
+ * ("which exact text ran"). Bump when the stage set or the artifact
+ * model changes, not on a prompt edit.
  */
-export const ONBOARDING_METHODOLOGY_VERSION = "1";
+export const ONBOARDING_METHODOLOGY_VERSION = "v2";

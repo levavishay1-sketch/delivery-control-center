@@ -22,7 +22,7 @@ export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, composeClientLetter,
-  stopFlowRun, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, requirementCostSummary, requirementCostDetail,
+  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, requirementCostSummary, requirementCostDetail,
   getRetroRunView, getRecentClientLetters,
   type AssessResult, type AssessGap, type ClientLetter, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow, type RetroResult, type ClientLetterHistoryItem,
@@ -36,17 +36,11 @@ export {
   updateGap, deleteGap, updateBlocker, deleteBlocker, updateTask, deleteDependency,
   updateConnection,
 } from "./crud.ts";
-export { startRepoAiManagement, getRepoAiProfileView, type RepoAiProfileView, type RepoAiState } from "./repo-ai/profile.ts";
-export { syncRepoInventory, repoInventoryView, scanRepoDir, type DetectedComponent } from "./repo-ai/inventory.ts";
-export { runRepoInit, type BootstrapResult } from "./repo-ai/bootstrap.ts";
-export { suggestDenyRules, approveDenyRules } from "./repo-ai/permissions.ts";
-export { generateRepoKnowledge, getRepoKnowledge, type KnowledgeSections } from "./repo-ai/knowledge.ts";
-export { createRecommendation, decideRecommendation } from "./repo-ai/recommendations.ts";
-export { listAiComponents, aiComponentRepos, renameAiComponent } from "./repo-ai/catalog.ts";
 export {
-  startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, submitStageInput,
+  startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, listOnboardingRuns, submitStageInput,
+  updateRunAutomation, resetRunToStage, stopRunExecution, getRunFileDiff, onboardingStageCatalogue, listRunExecutions,
   checkRepositoryRefresh, repositoryRefreshMetrics, onboardingRunCostSummary,
-  getOnboardingExecution, updateOnboardingPromptBody,
-  type OnboardingStatus, type RepositoryProfile as OnboardingRepositoryProfile,
+  getOnboardingExecution, updateOnboardingPromptBody, presetPolicy, normalizePolicy, STAGES as ONBOARDING_STAGES, recoverInterruptedRuns,
+  type OnboardingStatus, type RepositoryProfile as OnboardingRepositoryProfile, type AutomationPolicy, type AutomationPreset,
   type RefreshResult, type RefreshMetrics, type OnboardingRunCostSummary,
 } from "./repo-onboarding/index.ts";

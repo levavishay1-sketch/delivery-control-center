@@ -1,58 +1,57 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GuardrailHookSpec } from "./settings-adapter.ts";
+import type { HookSpec } from "./settings-adapter.ts";
 
 /**
- * Guardrail catalog (spec §19 Stage 12). A small, DCC-reviewed set of
- * deterministic safety hooks — "DCC should maintain a central catalog of
- * reviewed guardrails," per the spec, as the primary path; Claude
- * generating a repo-specific script is explicitly the spec's fallback
- * ("If Claude Code must generate..."), not the default. These templates
- * are pre-authored and reviewed once here, not regenerated per run.
+ * Guardrail catalog — a small, DCC-reviewed set of deterministic
+ * `PreToolUse` hooks. Enforcement lives in hooks, never in prose
+ * instructions ("an instruction like 'never edit .env' in CLAUDE.md is a
+ * request, not a guarantee. A PreToolUse hook that blocks the edit is
+ * enforcement" — Claude Code docs, Extend Claude Code). Templates are
+ * pre-authored and reviewed once here, not regenerated per run.
  */
 
 const TEMPLATE_DIR = fileURLToPath(new URL("./guardrail-templates/", import.meta.url));
 
 export type GuardrailDefinition = {
   id: string;
-  label: string;
-  description: string;
+  label_he: string;
+  description_he: string;
   event: "PreToolUse";
   matcher: string;
   templateFile: string;
   /** Needs `{{PROTECTED_GLOBS}}` substitution from repo-specific discovery. */
   needsProtectedGlobs: boolean;
-  /** Deterministic applicability heuristic — a suggestion for human
-   *  review, never auto-applied without approval (same principle as
-   *  `security_permissions`'s suggested rules). */
-  isApplicable(ctx: { generatedOrProtectedAreas: unknown[] }): boolean;
+  /** Deterministic applicability — a suggestion for the plan, never
+   *  applied without the plan being approved. */
+  isApplicable(ctx: { protectedGlobs: string[] }): boolean;
 };
 
 export const GUARDRAIL_CATALOG: GuardrailDefinition[] = [
   {
-    id: "protect-secrets", label: "הגנה על סודות", event: "PreToolUse", matcher: "Read",
-    description: "חוסם קריאה של קבצים שנראים כמו סודות/אישורי גישה (.env, מפתחות, credentials) — ללא תלות בכללי הקריאה המאושרים.",
+    id: "protect-secrets", label_he: "הגנה על סודות", event: "PreToolUse", matcher: "Read",
+    description_he: "חוסם קריאה של קבצים שנראים כמו סודות/אישורי גישה (.env, מפתחות, credentials) — ללא תלות בכללי הקריאה המאושרים.",
     templateFile: "protect-secrets.mjs", needsProtectedGlobs: false,
     isApplicable: () => true,
   },
   {
-    id: "prevent-dangerous-git", label: "מניעת פעולות Git מסוכנות", event: "PreToolUse", matcher: "Bash",
-    description: "חוסם force-push, git reset --hard ופעולות Git הרסניות/שמשכתבות היסטוריה אחרות.",
+    id: "prevent-dangerous-git", label_he: "מניעת פעולות Git מסוכנות", event: "PreToolUse", matcher: "Bash",
+    description_he: "חוסם force-push, git reset --hard ופעולות Git הרסניות/שמשכתבות היסטוריה.",
     templateFile: "prevent-dangerous-git.mjs", needsProtectedGlobs: false,
     isApplicable: () => true,
   },
   {
-    id: "protect-generated-code", label: "הגנה על קוד מיוצר", event: "PreToolUse", matcher: "Write|Edit",
-    description: "חוסם כתיבה לתוך אזורים שזוהו כמיוצרים אוטומטית (Generated) — עריכה ידנית שם נדרסת על ידי הגנרטור האמיתי.",
+    id: "protect-generated-code", label_he: "הגנה על קוד מיוצר", event: "PreToolUse", matcher: "Write|Edit",
+    description_he: "חוסם כתיבה לאזורים שזוהו ב-Discovery כמיוצרים אוטומטית — עריכה ידנית שם נדרסת על ידי הגנרטור.",
     templateFile: "protect-generated-code.mjs", needsProtectedGlobs: true,
-    isApplicable: (ctx) => ctx.generatedOrProtectedAreas.length > 0,
+    isApplicable: (ctx) => ctx.protectedGlobs.length > 0,
   },
   {
-    id: "restrict-write-paths", label: "הגבלת נתיבי כתיבה", event: "PreToolUse", matcher: "Write|Edit",
-    description: "חוסם כתיבה לנתיבים רגישים בעלי טווח פגיעה גבוה (CI/CD, תשתית) — שינויים שם צריכים לעבור PR אנושי.",
+    id: "restrict-write-paths", label_he: "הגבלת נתיבי כתיבה", event: "PreToolUse", matcher: "Write|Edit",
+    description_he: "חוסם כתיבה לנתיבים רגישים בעלי טווח פגיעה גבוה (CI/CD, תשתית) — שינויים שם עוברים PR אנושי.",
     templateFile: "restrict-write-paths.mjs", needsProtectedGlobs: true,
-    isApplicable: (ctx) => ctx.generatedOrProtectedAreas.length > 0,
+    isApplicable: (ctx) => ctx.protectedGlobs.length > 0,
   },
 ];
 
@@ -60,11 +59,6 @@ export function getGuardrailDefinition(id: string): GuardrailDefinition | undefi
   return GUARDRAIL_CATALOG.find((g) => g.id === id);
 }
 
-/** Renders a guardrail's template into its final `.mjs` content, ready to
- *  write to `.claude/hooks/<id>.mjs`. `protectedGlobs` is only used when
- *  the definition needs it (`needsProtectedGlobs`); an empty list is
- *  valid — the resulting hook simply never matches, which is safer than
- *  refusing to generate it. */
 export function renderGuardrailScript(def: GuardrailDefinition, protectedGlobs: string[]): string {
   const raw = readFileSync(path.join(TEMPLATE_DIR, def.templateFile), "utf8");
   if (!def.needsProtectedGlobs) return raw;
@@ -75,6 +69,14 @@ export function guardrailHookPath(def: GuardrailDefinition): string {
   return `.claude/hooks/${def.id}.mjs`;
 }
 
-export function toHookSpec(def: GuardrailDefinition): GuardrailHookSpec {
+export function toHookSpec(def: GuardrailDefinition): HookSpec {
   return { id: def.id, event: def.event, matcher: def.matcher, hookPath: guardrailHookPath(def) };
+}
+
+/** `generated_or_protected_areas` entries can carry commentary after the
+ *  path ("Shared/Entities.cs (98,438 lines, auto-generated)"); a hook
+ *  matching on the whole string would never fire. Keep the path only. */
+export function cleanPathFragment(raw: string): string {
+  const cut = raw.search(/\s+[(—]|\s+-\s+/);
+  return (cut >= 0 ? raw.slice(0, cut) : raw).trim().replace(/^\.?\//, "");
 }
