@@ -81,6 +81,30 @@ _עודכן: 2026-09-18, המשך ישיר לסשן הקודם._
 ### `.mcp.json`, `.claude/agents/`
 עדיין לא נבדק אם יש skills קהילתיים מתאימים — פתוח לסשן הבא.
 
+### `integrations.md`
+- **`architecture-scan`** (toantran292/claude-skills, אומת מהקובץ הגולמי): מייצר architecture summary שכולל "external dependencies (APIs/DB/queues)" + integration points + **cross-repository dependency mapping** (רלוונטי ל-N×X model של DCC). חלקית בלבד — שטחי יותר מהדרישה המקורית (communication direction / implementation location / compatibility constraints).
+- **`repo-scan`** (affaan-m/everything-claude-code) — נבדק, **לא רלוונטי**: dependency/license auditing בלבד, לא נוגע באינטגרציות חיצוניות.
+
+### `critical-context.md` — אין skill מכני, וזה תקין
+לא נמצא (ולא אמור להימצא) skill מכני — הקובץ מטבעו לא נגזר מקוד, רק מבן-אדם. המנגנון הקיים (`human_enrichment` → `knowledge_generation` עם `{{HUMAN_KNOWLEDGE}}`) כבר נכון. תבנית מקבילה שנמצאה: `known-gotchas.md` (בלוג Nick Porter) — קובץ שגדל אורגנית מתקלות, לא נוצר חד-פעמית. **הוצע לשלב עדכון מתמשך ב-refresh stage — המשתמש דחה את זה במפורש ("אולי אפשר לוותר על זה?"). לא נכנס להחלטה.**
+
+## הצעה פתוחה — טרם הוחלטה (לא בעץ המקורי)
+
+### `docs/adr/` (Architecture Decision Records)
+נמצא skill מאומת (affaan-m/everything-claude-code, `architecture-decision-records`):
+- טריגר מפורש/משתמע (בחירת framework/DB/pattern עם נימוק)
+- פורמט Michael Nygard: Title/Date/Status/Deciders → Context → Decision → Alternatives Considered → Consequences
+- `docs/adr/NNNN-decision-title.md` + `docs/adr/README.md` אינדקס
+- טיוטה מוצגת לאישור לפני כתיבה — לא אוטומטי
+
+**למה זה רלוונטי ספציפית ל-DCC**: מתיישר ישירות עם Non-negotiable #3 ("No silent actions... every commit, approval, dependency and why... is recorded") ו-#1 (event log — ADR הוא בעצם append-only log כרונולוגי). בניגוד ל-`critical-context.md` (מצב נוכחי, onboarding חד-פעמי), ADR נכתב **תוך כדי עבודה עתידית** — זה בדיוק מה שהמשתמש ביקש לבדוק ("קבצים... שיעזרו בפיתוח העתידי במשימות").
+
+גרסה חלופית: **AgDR** (me2resh/agent-decision-record) — כמו ADR אבל עם frontmatter חובה `agent`/`model`/`session`/`timestamp`, תואם ל-Non-negotiable #2 ("Identity is always a real person"). ייתכן שמתאים יותר ל-DCC מ-ADR הרגיל.
+
+**מועמדים נוספים שנבדקו ונדחו/לא הוכרעו** (מתוך אותו חיפוש): `decision-log.md` (חופף אולי ל-event_log — לא נבדק לעומק), `agents/` conventions file (חופף ל-CLAUDE.md עצמו), `CONTEXT.md` glossary (חופף ל-repository-map/architecture, לא ברור שצריך קובץ נפרד).
+
+**סטטוס: לא הוכרע. המשתמש ביקש "נבדוק אחר כך" — לחזור לזה.**
+
 ## ולידציה
 
 `claude plugin validate --strict` + `claude plugin eval` + build/test אמיתי + (ניסוי: `protect-mcp` ל-Cedar policy/signed receipts).
