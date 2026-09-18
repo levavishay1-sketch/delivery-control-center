@@ -102,29 +102,26 @@ import {
   ChecksNotPassed,
   setTaskActive,
   checkAdoRemovedState,
-  startRepoAiManagement,
-  getRepoAiProfileView,
-  syncRepoInventory,
-  runRepoInit,
-  suggestDenyRules,
-  approveDenyRules,
-  generateRepoKnowledge,
-  createRecommendation,
-  decideRecommendation,
-  listAiComponents,
-  aiComponentRepos,
-  renameAiComponent,
   startOnboardingRun,
   advanceRun,
   cancelRun,
   getOnboardingRunView,
   getLatestOnboardingRun,
+  listOnboardingRuns,
   submitStageInput,
+  updateRunAutomation,
+  resetRunToStage,
+  stopRunExecution,
+  getRunFileDiff,
+  onboardingStageCatalogue,
+  listRunExecutions,
   checkRepositoryRefresh,
   repositoryRefreshMetrics,
   onboardingRunCostSummary,
   getOnboardingExecution,
   updateOnboardingPromptBody,
+  recoverInterruptedRuns,
+  stopAllFlowRuns,
 } from "@dcc/core";
 import { blocker, gap, task } from "@dcc/db/schema";
 import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
@@ -199,91 +196,41 @@ app.delete("/repos/:id", async (req) => {
   return deleteRepo((req.params as { id: string }).id);
 });
 
-/* ── repository AI management (`repository-ai-management`) ─────────── */
+/* ── repository AI enablement — the 9-stage onboarding pipeline
+ * (`repository-ai-enablement-v2`). The run advances on its own as far
+ * as its automation policy allows; these routes are the person's
+ * levers: start, run the next stage, answer a gate, change automation,
+ * go back, stop the current AI call, cancel, and read everything. */
 
-app.get("/repos/:id/ai", async (req) => {
-  const { id } = req.params as { id: string };
-  const [r] = await db.select({ clientId: repo.clientId, name: repo.name, adoRepoRef: repo.adoRepoRef, defaultBranch: repo.defaultBranch }).from(repo).where(sql`${repo.id} = ${id}`).limit(1);
-  if (!r) throw new Error("repo not found");
-  const repoInfo = { name: r.name, adoRepoRef: r.adoRepoRef, defaultBranch: r.defaultBranch };
-  if (!r.clientId) return { repo: repoInfo, managed: false, profile: { repoId: id, state: "NOT_MANAGED" }, inventory: [], latestKnowledge: null, knowledgeHistory: [], recommendations: [] };
-  return { repo: repoInfo, ...(await getRepoAiProfileView(r.clientId, id)) };
-});
+/** The onboarding core throws actionable, user-facing messages (a live
+ *  run already exists, the stage isn't waiting for input, an input was
+ *  rejected, the run is advancing right now). The client needs to show
+ *  that text, so they leave as 409s rather than a blank 500. */
+async function onboardingCall<T>(p: Promise<T>): Promise<T> {
+  try { return await p; } catch (e) {
+    const err = e as { statusCode?: number } | null;
+    if (err && typeof err === "object" && typeof err.statusCode !== "number") err.statusCode = 409;
+    throw e;
+  }
+}
 
-app.post("/repos/:id/ai/start", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  return startRepoAiManagement(id, { userId: dev.id });
-});
-
-app.post("/repos/:id/ai/sync-inventory", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  return syncRepoInventory(id, { userId: dev.id });
-});
-
-app.get("/repos/:id/ai/suggested-deny-rules", async (req) => {
-  const { id } = req.params as { id: string };
-  return { rules: await suggestDenyRules(id) };
-});
-
-app.post("/repos/:id/ai/deny-rules", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const b = z.object({ rules: z.array(z.string()) }).parse(req.body ?? {});
-  return approveDenyRules({ repoId: id, rules: b.rules, by: { userId: dev.id } });
-});
-
-app.post("/repos/:id/ai/init", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const b = z.object({ force: z.boolean().optional() }).parse(req.body ?? {});
-  return runRepoInit(id, { userId: dev.id }, { force: b.force });
-});
-
-app.post("/repos/:id/ai/knowledge", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const b = z.object({ mode: z.enum(["CREATE_BASELINE", "UPDATE_BASELINE", "REASSESS_EXISTING"]).optional() }).parse(req.body ?? {});
-  return generateRepoKnowledge(id, { userId: dev.id }, { mode: b.mode });
-});
-
-app.post("/repos/:id/ai/recommendations", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const [r] = await db.select({ clientId: repo.clientId }).from(repo).where(sql`${repo.id} = ${id}`).limit(1);
-  if (!r?.clientId) throw new Error("repo has no single owning client");
-  const b = z.object({
-    action: z.enum(["ADD", "KEEP", "UPGRADE", "RECONFIGURE", "REPLACE", "REMOVE", "INVESTIGATE", "NO_ACTION"]),
-    componentId: z.string().uuid().optional(),
-    need: z.string().min(1),
-    rationale: z.string().optional(),
-  }).parse(req.body);
-  return createRecommendation({ clientId: r.clientId, repoId: id, by: { userId: dev.id }, ...b });
-});
-
-app.post("/repos/:id/ai/recommendations/:recId/decide", async (req) => {
-  const dev = await actingUser(req);
-  const { id, recId } = req.params as { id: string; recId: string };
-  const [r] = await db.select({ clientId: repo.clientId }).from(repo).where(sql`${repo.id} = ${id}`).limit(1);
-  if (!r?.clientId) throw new Error("repo has no single owning client");
-  const b = z.object({
-    decision: z.enum(["ACCEPTED", "REJECTED", "MODIFIED_AND_ACCEPTED", "POSTPONED"]),
-    reason: z.string().min(1),
-  }).parse(req.body);
-  return decideRecommendation({ clientId: r.clientId, repoId: id, recommendationId: recId, by: { userId: dev.id }, ...b });
-});
-
-/* ── repository AI enablement — Phase 1 (`repository-ai-enablement`) ──
- * Full replace of the 3-step flow above (kept running unmodified for
- * repos already onboarded under it — migration explicitly deferred).
- * Debug-level routes for now: exercised directly, not yet wired into a
- * screen (only 2 of 16 stages exist). */
+app.get("/onboarding/stages", async () => ({ stages: onboardingStageCatalogue() }));
 
 app.post("/repos/:id/onboarding/runs", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  return startOnboardingRun(id, { userId: dev.id });
+  const b = z.object({
+    automation: z.unknown().optional(),
+    mode: z.enum(["initial", "refresh"]).optional(),
+    previousRunId: z.string().uuid().optional(),
+    /** Required when the policy auto-resolves gates: the person's explicit consent. */
+    consent: z.boolean().optional(),
+  }).parse(req.body ?? {});
+  const preset = (b.automation as { preset?: string } | undefined)?.preset;
+  const stages = (b.automation as { stages?: Record<string, { gate?: string }> } | undefined)?.stages ?? {};
+  const autoGates = preset === "automatic" || Object.values(stages).some((s) => s?.gate === "auto");
+  if (autoGates && !b.consent) throw Object.assign(new Error("הרצה שמאשרת שערים אוטומטית דורשת הסכמה מפורשת (consent: true)"), { statusCode: 400 });
+  return onboardingCall(startOnboardingRun(id, { userId: dev.id }, { automation: b.automation, mode: b.mode, previousRunId: b.previousRunId }));
 });
 
 app.get("/repos/:id/onboarding/latest-run", async (req) => {
@@ -291,21 +238,26 @@ app.get("/repos/:id/onboarding/latest-run", async (req) => {
   return getLatestOnboardingRun(id);
 });
 
+app.get("/repos/:id/onboarding/runs", async (req) => {
+  const { id } = req.params as { id: string };
+  return { runs: await listOnboardingRuns(id) };
+});
+
 app.post("/repos/:id/onboarding/runs/:runId/advance", async (req) => {
   await actingUser(req);
   const { id, runId } = req.params as { id: string; runId: string };
-  return advanceRun(id, runId);
+  return onboardingCall(advanceRun(id, runId));
 });
 
 app.get("/repos/:id/onboarding/runs/:runId", async (req) => {
   const { id, runId } = req.params as { id: string; runId: string };
-  return getOnboardingRunView(id, runId);
+  return onboardingCall(getOnboardingRunView(id, runId));
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/cancel", async (req) => {
   const dev = await actingUser(req);
   const { id, runId } = req.params as { id: string; runId: string };
-  await cancelRun(id, runId, { userId: dev.id });
+  await onboardingCall(cancelRun(id, runId, { userId: dev.id }));
   return { cancelled: true };
 });
 
@@ -313,12 +265,47 @@ app.post("/repos/:id/onboarding/runs/:runId/stages/:stageKey/input", async (req)
   const dev = await actingUser(req);
   const { id, runId, stageKey } = req.params as { id: string; runId: string; stageKey: string };
   const b = z.object({ input: z.unknown() }).parse(req.body);
-  return submitStageInput(id, runId, stageKey, b.input, { userId: dev.id });
+  return onboardingCall(submitStageInput(id, runId, stageKey, b.input, { userId: dev.id }));
+});
+
+app.patch("/repos/:id/onboarding/runs/:runId/automation", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as { id: string; runId: string };
+  const b = z.object({ automation: z.unknown(), consent: z.boolean().optional() }).parse(req.body);
+  const stages = (b.automation as { stages?: Record<string, { gate?: string }>; preset?: string } | undefined);
+  const autoGates = stages?.preset === "automatic" || Object.values(stages?.stages ?? {}).some((s) => s?.gate === "auto");
+  if (autoGates && !b.consent) throw Object.assign(new Error("אישור שערים אוטומטי דורש הסכמה מפורשת (consent: true)"), { statusCode: 400 });
+  return onboardingCall(updateRunAutomation(id, runId, b.automation, { userId: dev.id }));
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/reset-to/:stageKey", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId, stageKey } = req.params as { id: string; runId: string; stageKey: string };
+  const b = z.object({ note: z.string().optional() }).parse(req.body ?? {});
+  await onboardingCall(resetRunToStage(id, runId, stageKey, { userId: dev.id }, b.note));
+  return { reset: true };
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/stop-execution", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as { id: string; runId: string };
+  return onboardingCall(stopRunExecution(id, runId, { userId: dev.id }));
+});
+
+app.get("/repos/:id/onboarding/runs/:runId/diff", async (req) => {
+  const { id, runId } = req.params as { id: string; runId: string };
+  const q = z.object({ path: z.string().min(1) }).parse(req.query);
+  return onboardingCall(getRunFileDiff(id, runId, q.path));
 });
 
 app.get("/repos/:id/onboarding/runs/:runId/cost-summary", async (req) => {
   const { runId } = req.params as { id: string; runId: string };
   return onboardingRunCostSummary(runId);
+});
+
+app.get("/repos/:id/onboarding/runs/:runId/executions", async (req) => {
+  const { id, runId } = req.params as { id: string; runId: string };
+  return { executions: await listRunExecutions(id, runId) };
 });
 
 app.get("/repos/:id/onboarding/executions/:executionId", async (req) => {
@@ -333,29 +320,17 @@ app.patch("/onboarding/prompts/:promptKey", async (req) => {
   return updateOnboardingPromptBody({ promptKey, body: b.body, by: { userId: dev.id } });
 });
 
-// Phase 6 — Incremental Refresh (spec §24), debug-route-only maturity
-// for now (no dedicated UI), same level Phase 1 shipped its own first
-// two stages at.
+// Knowledge lifecycle: deterministic staleness signals first, one AI
+// judgement only when a signal fires; acting on it is a refresh run.
 app.post("/repos/:id/onboarding/refresh-check", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  return checkRepositoryRefresh(id, dev.id);
+  return onboardingCall(checkRepositoryRefresh(id, dev.id));
 });
 
 app.get("/repos/:id/onboarding/refresh-metrics", async (req) => {
   const { id } = req.params as { id: string };
   return repositoryRefreshMetrics(id);
-});
-
-/* ── global AI component catalog ─────────────────────────────────── */
-
-app.get("/ai-components", async () => ({ components: await listAiComponents() }));
-app.get("/ai-components/:id/repos", async (req) => ({ repos: await aiComponentRepos((req.params as { id: string }).id) }));
-app.patch("/ai-components/:id", async (req) => {
-  await actingUser(req);
-  const { id } = req.params as { id: string };
-  const b = z.object({ title: z.string().min(1).optional(), description: z.string().nullable().optional() }).parse(req.body);
-  return renameAiComponent(id, b);
 });
 
 app.post("/clients/:id/repos", async (req, reply) => {
@@ -1385,6 +1360,7 @@ if (dbKind === "pglite") {
   app.post("/admin/shutdown", async (_req, reply) => {
     await reply.send({ stopping: true });
     setTimeout(() => {
+      stopAllFlowRuns();
       app.close().then(() => import("@dcc/db").then((m) => m.closeDb())).finally(() => process.exit(0));
     }, 50);
   });
@@ -1393,6 +1369,9 @@ if (dbKind === "pglite") {
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3001);
   app.listen({ port, host: "0.0.0.0" }).then(() => app.log.info(`dcc-api on :${port}`));
+  // An onboarding stage that was executing when the previous process
+  // died lands as Failed (retryable) instead of spinning forever.
+  recoverInterruptedRuns().then((n) => { if (n) app.log.warn(`onboarding: ${n} run(s) interrupted by the previous shutdown marked Failed`); }).catch((e) => app.log.error(e));
 
   // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
   // un-openable if the process is killed mid-write, so always close it.
@@ -1402,6 +1381,10 @@ if (import.meta.main) {
       if (closing) return;
       closing = true;
       app.log.info(`${sig} — closing`);
+      // Never leave a live claude child behind: it would keep running (and
+      // spending) with no process left to record its result.
+      const stopped = stopAllFlowRuns();
+      if (stopped) app.log.warn(`${stopped} live claude run(s) stopped by shutdown`);
       app
         .close()
         .then(() => import("@dcc/db").then((m) => m.closeDb()))

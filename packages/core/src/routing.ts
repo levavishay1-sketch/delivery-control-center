@@ -26,7 +26,13 @@ export type Capability =
   | "gap_detection"
   | "decomposition"
   | "review"
-  | "execution";
+  | "execution"
+  | "onboarding_classify"
+  | "onboarding_discover"
+  | "onboarding_plan"
+  | "onboarding_generate"
+  | "onboarding_validate"
+  | "onboarding_refresh";
 
 export type Tier = "haiku" | "sonnet" | "opus";
 
@@ -38,6 +44,8 @@ export type RoutingSignals = {
   novelty?: "low" | "medium" | "high";
   recentEvents?: number;
   mechanical?: boolean;
+  /** Repository complexity as classified during onboarding. */
+  complexity?: "low" | "medium" | "high";
 };
 
 export type Policy = {
@@ -45,7 +53,7 @@ export type Policy = {
   tiers: Record<Tier, { model: string; maxUsdPerCall: number }>;
   capabilities: Record<
     string,
-    { default: Tier; escalateOn?: Record<string, unknown>[]; downgradeOn?: Record<string, unknown>[] }
+    { default: Tier; escalateOn?: Record<string, unknown>[]; downgradeOn?: Record<string, unknown>[]; maxUsdPerCall?: number }
   >;
   guardrails: { killAfterStuckIterations: number; budgetWarnAtFraction: number };
 };
@@ -63,7 +71,7 @@ const ORDER: Record<"low" | "medium" | "high", number> = { low: 0, medium: 1, hi
 function meets(signals: RoutingSignals, cond: Record<string, unknown>): boolean {
   for (const [k, v] of Object.entries(cond)) {
     const s = (signals as Record<string, unknown>)[k];
-    if (k === "ambiguity" || k === "novelty") {
+    if (k === "ambiguity" || k === "novelty" || k === "complexity") {
       if (s === undefined) return false;
       if (ORDER[s as "low"] < ORDER[v as "low"]) return false;
     } else if (typeof v === "number") {
@@ -107,7 +115,11 @@ export function route(
   }
 
   const t = policy.tiers[tier];
-  return { capability, tier, model: t.model, budgetUsd: t.maxUsdPerCall, rationale: why.join("; ") };
+  // A capability may carry its own per-call cap (onboarding's discovery
+  // call reads a whole repository and needs more room than the tier's
+  // default); the cap is the larger of the two, never below the tier's.
+  const budgetUsd = Math.max(t.maxUsdPerCall, cap.maxUsdPerCall ?? 0);
+  return { capability, tier, model: t.model, budgetUsd, rationale: why.join("; ") };
 }
 
 /** Write the audit event. Call when a model is actually invoked. */

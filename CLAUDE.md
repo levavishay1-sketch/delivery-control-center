@@ -49,7 +49,13 @@ npm run -w @dcc/db dev:setup   # apply migrations to local PGlite
 npm run -w @dcc/db dev:prove   # 9 checks: RLS wall + append-only + validation
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
+npx tsx packages/core/src/repo-onboarding/seed-prompts.ts   # onboarding.v2.* prompts (SEED_REPLACE=key|all to roll out an edited seed)
 ```
+
+Repository AI enablement (the 9-stage onboarding, `openspec/changes/
+repository-ai-enablement-v2`) needs Claude Code ≥ 2.1.259 on the DCC
+machine for `--restricted`/`--permission-prompts none`; older CLIs run
+with a documented fallback the scan stage warns about.
 
 ## This repo dogfoods itself
 

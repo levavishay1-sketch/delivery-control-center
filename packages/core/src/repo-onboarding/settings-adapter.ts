@@ -1,42 +1,45 @@
 import type { EffectivePolicy } from "./security-profiles.ts";
 
 /**
- * Claude settings adapter (spec §11/§2 "Critical Technical Constraint" —
- * the ONE place besides `ClaudeCodeRunner` allowed to know Claude Code's
- * on-disk config schema). Translates an `EffectivePolicy` + the approved
- * guardrail hooks into the real, persisted `.claude/settings.json` shape
- * — confirmed live against two sources of truth: `ai-assist.ts`'s own
- * `--settings` construction (`{"permissions": {"deny": string[]}}`) and
- * this repo's own dogfooded `.claude/settings.json` (`hooks.<Event>` =
- * array of `{matcher?, hooks: [{type:"command", command:"..."}]}`).
+ * Claude settings adapter — the ONE place besides `ClaudeCodeRunner`
+ * allowed to know Claude Code's on-disk config schema. Translates an
+ * `EffectivePolicy` + the approved hooks into the persisted
+ * `.claude/settings.json` shape (`permissions.allow/deny`, `hooks.<Event>`
+ * = array of `{matcher?, hooks: [{type:"command", command}]}`).
  *
- * `"ask"`-valued policy axes are intentionally NOT emitted as Claude
- * Code `ask` permission rules here — this settings.json is generated for
- * INTERACTIVE developer sessions after onboarding (where an ask-prompt
- * has a human to answer it), but the onboarding pipeline itself has no
- * concept of "ask" (every pipeline stage runs headless). Rather than
- * silently guess how a future interactive session should resolve "ask",
- * this adapter only emits the unambiguous `allow`/`deny` axes; `"ask"`
- * axes are surfaced in the stage result for a human to review, not
- * baked into the committed artifact.
+ * `"ask"`-valued policy axes are intentionally NOT emitted: the generated
+ * file serves interactive developer sessions, where Claude Code's own
+ * modes already prompt for anything not allowed or denied, and an `ask`
+ * rule would only make auto mode prompt where it otherwise wouldn't.
+ * Only the unambiguous `allow`/`deny` axes are baked in.
+ *
+ * When the repository already has a settings file and the boundaries
+ * decision was "merge", `mergeClaudeSettings` keeps everything it had
+ * and unions DCC's deny rules and hook entries in — it never removes a
+ * rule the team wrote.
  */
 
-export type GuardrailHookSpec = {
+export type HookEvent = "PreToolUse" | "PostToolUse" | "SessionStart" | "SessionEnd";
+
+export type HookSpec = {
   id: string;
-  event: "PreToolUse";
-  matcher: string;
+  event: HookEvent;
+  matcher?: string;
   /** Relative to the repo root, e.g. ".claude/hooks/protect-secrets.mjs". */
   hookPath: string;
 };
 
-const VERB_TO_PATHS: Record<string, "allow" | "deny"> = { allow: "allow", deny: "deny" };
-
 export type ClaudeSettingsJson = {
   permissions?: { allow?: string[]; deny?: string[] };
   hooks?: Record<string, { matcher?: string; hooks: { type: "command"; command: string }[] }[]>;
+  [key: string]: unknown;
 };
 
-export function buildClaudeSettings(policy: EffectivePolicy, enabledGuardrails: GuardrailHookSpec[]): ClaudeSettingsJson {
+const VERB_TO_PATHS: Record<string, "allow" | "deny"> = { allow: "allow", deny: "deny" };
+
+export const hookCommand = (hookPath: string) => `node "$CLAUDE_PROJECT_DIR/${hookPath}"`;
+
+export function buildClaudeSettings(policy: EffectivePolicy, enabledHooks: HookSpec[]): ClaudeSettingsJson {
   const allow: string[] = [];
   const deny: string[] = [...policy.deniedReadPaths];
 
@@ -44,7 +47,6 @@ export function buildClaudeSettings(policy: EffectivePolicy, enabledGuardrails: 
     const mapped = VERB_TO_PATHS[verb];
     if (mapped === "allow") allow.push(rule);
     else if (mapped === "deny") deny.push(rule);
-    // "ask" is deliberately omitted — see module doc comment.
   };
 
   applyVerb(policy.profile.write, "Write");
@@ -60,12 +62,34 @@ export function buildClaudeSettings(policy: EffectivePolicy, enabledGuardrails: 
     if (allow.length) settings.permissions.allow = Array.from(new Set(allow));
     if (deny.length) settings.permissions.deny = Array.from(new Set(deny));
   }
-  if (enabledGuardrails.length) {
+  if (enabledHooks.length) {
     settings.hooks = {};
-    for (const g of enabledGuardrails) {
+    for (const g of enabledHooks) {
       settings.hooks[g.event] ??= [];
-      settings.hooks[g.event]!.push({ matcher: g.matcher, hooks: [{ type: "command", command: `node "$CLAUDE_PROJECT_DIR/${g.hookPath}"` }] });
+      settings.hooks[g.event]!.push({ ...(g.matcher ? { matcher: g.matcher } : {}), hooks: [{ type: "command", command: hookCommand(g.hookPath) }] });
     }
   }
   return settings;
+}
+
+/** Existing file wins on every key it has; DCC only adds deny rules and
+ *  hook entries that aren't already there (matched by command text). */
+export function mergeClaudeSettings(existing: ClaudeSettingsJson, generated: ClaudeSettingsJson): ClaudeSettingsJson {
+  const out: ClaudeSettingsJson = { ...existing };
+  const exPerm = existing.permissions ?? {};
+  const genPerm = generated.permissions ?? {};
+  const deny = Array.from(new Set([...(exPerm.deny ?? []), ...(genPerm.deny ?? [])]));
+  const allow = Array.from(new Set([...(exPerm.allow ?? []), ...(genPerm.allow ?? [])]));
+  if (deny.length || allow.length) out.permissions = { ...exPerm, ...(allow.length ? { allow } : {}), ...(deny.length ? { deny } : {}) };
+  if (generated.hooks) {
+    const hooks: NonNullable<ClaudeSettingsJson["hooks"]> = { ...(existing.hooks ?? {}) };
+    for (const [event, entries] of Object.entries(generated.hooks)) {
+      const current = [...(hooks[event] ?? [])];
+      const known = new Set(current.flatMap((e) => e.hooks.map((h) => h.command)));
+      for (const e of entries) if (!e.hooks.every((h) => known.has(h.command))) current.push(e);
+      hooks[event] = current;
+    }
+    out.hooks = hooks;
+  }
+  return out;
 }

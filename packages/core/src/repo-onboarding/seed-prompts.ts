@@ -4,494 +4,195 @@ import { users } from "@dcc/db/schema";
 import { getActiveOnboardingPrompt, registerPromptVersion } from "./prompts.ts";
 
 /**
- * One-time, idempotent seed for the 5 Phase 2 stages' prompt bodies.
- * `onboarding_prompt_template` starts completely empty (Phase 1 never
- * wrote a real row) — an explicit script, not lazy-seeded on module
- * import (that would silently write DB rows as a side effect of
- * `index.ts`'s barrel imports) and not auto-run on server boot (matches
- * `db:migrate` itself being a deliberate, explicit step).
+ * Idempotent seed for the v2 onboarding prompts. An explicit script, not
+ * lazy-seeded on import and not auto-run on server boot (matches
+ * `db:migrate` being a deliberate step). Existing active versions are
+ * left alone — edit them from the onboarding screen (each edit is a new
+ * immutable version) or delete the active row to re-seed.
  *
  *   npx tsx packages/core/src/repo-onboarding/seed-prompts.ts
  *
- * Bodies are adapted near-verbatim from the user's own spec (2026-09-16).
+ * Every prompt states the same discipline the pipeline enforces: ground
+ * every claim in an inspected path, never document what Claude can derive
+ * from the code, mark UNKNOWN instead of guessing, keep always-loaded
+ * context tiny and push detail to on-demand files.
  */
 
 const PROMPTS: { promptKey: string; stage: string; title: string; body: string }[] = [
   {
-    promptKey: "onboarding.classification",
-    stage: "classification",
-    title: "Repository classification",
-    body: `Classify this repository for AI onboarding.
+    promptKey: "onboarding.v2.classify",
+    stage: "scan",
+    title: "Classify the repository from scan signals",
+    body: `Classify this repository for AI onboarding. You have NO tools: work only from the structured scan below. Do not guess file contents.
 
-Do not perform full source-code discovery.
-Do not modify repository files.
-
-Repository scan:
-
+REPOSITORY SCAN (deterministic: languages with lines/complexity, build systems, frameworks, CI, tests, docs, top-level entries):
 {{REPOSITORY_SCAN}}
 
-Determine:
+WHAT ALREADY EXISTS (documentation and AI-tool configuration found in the repository):
+{{INVENTORY}}
 
-- repository_type
-- architecture_shape
-- legacy_indicator
-- detected_technology_stack
-- detected_domains
-- complexity
-- documentation_maturity
-- testing_maturity
-- discovery_areas_required
-- discovery_areas_not_required
-- uncertainties
-- confidence
+Determine: repository_type (what kind of system this is, in one line), architecture_shape, legacy_indicator, detected_technology_stack, detected_domains (business domains visible from names — say "unknown" rather than invent), complexity (low/medium/high, from real size and complexity numbers), documentation_maturity, testing_maturity, discovery_areas_required (which parts deserve a targeted read), discovery_areas_not_required (what can safely be skipped and why), uncertainties, confidence.
+Write summary_he in Hebrew: 2-3 sentences a non-technical stakeholder understands.
 
-The objective is to determine what deserves deeper discovery and what can safely be skipped.
-
-Return machine-readable structured output only, as a single JSON object with exactly these keys.`,
+Return only the JSON object.`,
   },
   {
-    promptKey: "onboarding.knowledge_coverage",
-    stage: "knowledge_coverage",
-    title: "Existing documentation coverage",
-    body: `Assess the repository's existing documentation coverage.
+    promptKey: "onboarding.v2.discover",
+    stage: "discovery",
+    title: "Targeted discovery + coverage + questions (one read-only pass)",
+    body: `Perform targeted repository discovery for AI onboarding. You are read-only (Read/Grep/Glob). Mode: {{MODE}}.
 
-At this stage, prioritize documentation and structural files.
-Do not create or modify files.
-
-Evaluate whether reliable existing documentation already covers:
-
-- purpose
-- architecture
-- component_boundaries
-- build_process
-- testing
-- integrations
-- deployment
-- generated_code_boundaries
-- critical_constraints
-
-For every area return one of: COVERED, PARTIAL, MISSING.
-For COVERED or PARTIAL areas, identify the existing source files (sourceFiles).
-
-Do not recommend creating duplicate documentation.
-
-Return structured output only: a single JSON object keyed by area name, each value shaped
-{"status": "COVERED"|"PARTIAL"|"MISSING", "sourceFiles": [...]}.`,
-  },
-  {
-    promptKey: "onboarding.targeted_discovery",
-    stage: "targeted_discovery",
-    title: "Targeted repository discovery",
-    body: `Perform targeted repository onboarding discovery.
-
-Goal:
-Build a reusable high-level operating model of this repository
-for future Claude Code development work.
-
-Repository classification:
+Classification:
 {{CLASSIFICATION}}
 
-Existing documentation coverage:
-{{KNOWLEDGE_COVERAGE}}
+Scan facts:
+{{REPOSITORY_SCAN}}
 
-Rules:
+What already exists (read these FIRST — never re-describe what a maintained file already says well):
+{{INVENTORY}}
 
-- Do not attempt full-codebase comprehension.
-- Do not document every class, method or file.
-- Do not make implementation recommendations.
-- Do not modify source code.
-- Prefer reliable existing documentation where available.
-- Inspect representative and structurally important source files only.
-- Expand into additional files only when necessary.
-- Every repository-specific conclusion must be grounded in inspected repository evidence.
-- Mark anything that cannot be determined safely as UNKNOWN.
+From the team:
+{{HUMAN_NOTES}}
 
-Understand only what is necessary to identify:
+On a refresh run only — paths changed since the previous onboarding (focus there; keep unchanged parts of the previous model unless evidence contradicts them):
+{{CHANGED_PATHS}}
 
-1. Major components and logical areas.
-2. Entry points.
-3. Dependency direction.
-4. Important system boundaries.
-5. Representative execution flows.
-6. Important integrations.
-7. Build and test structure when existing documentation is insufficient.
-8. Generated-code or protected areas.
-9. Where future Claude sessions should look for common types of work.
-10. High-value unanswered questions.
+Previous operating model (refresh only):
+{{PREVIOUS_MODEL}}
 
-Return structured output only, a single JSON object with exactly these keys:
-components, boundaries, entry_points, key_flows, integrations, important_paths,
-generated_or_protected_areas, discovered_constraints, unresolved_questions, evidence_paths.
+Do, in this order:
+1. COVERAGE: read the existing README/docs/AGENTS.md/CLAUDE.md/other-agent rules. For each area — purpose, architecture, component_boundaries, build_process, testing, integrations, deployment, generated_code_boundaries, critical_constraints — say COVERED / PARTIAL / MISSING and cite the source files. Existing well-written documentation is a source of truth to point at, not to rewrite.
+2. OPERATING MODEL: inspect representative and structurally important files only (entry points, manifests, the biggest modules, one example per pattern). Never attempt full comprehension; never list every class or file. Identify: components (with paths), entry_points (with how to run), boundaries, key_flows, integrations (system, direction, where implemented, compatibility constraints), generated_or_protected_areas (generated code, vendored code, infrastructure, sensitive), build_test commands (only ones you found in scripts/manifests/CI — set confidence honestly; never invent a command), constraints (repository-specific, non-obvious, with evidence), where_to_look (for common task types: "add an API endpoint", "change a data model", "fix a plugin", … → the paths), and existing_instructions_assessment (for each existing CLAUDE.md/AGENTS.md/rules file: keep / merge / outdated / conflicting, with reason).
+3. UNKNOWNS: anything you could not determine safely goes in unknowns — do not guess.
+4. QUESTIONS: at most 10 high-value questions ONLY a person can answer (external consumers not visible in the repo, business-critical areas, legacy restrictions, backward-compatibility requirements, historical decisions, areas that must not be modified, operational ownership, production constraints). Never ask something answerable by reading more code. question_he and why_it_matters_he in Hebrew; ids q1..q10.
 
-Do not write permanent documentation yet.`,
+Every repository-specific conclusion must cite a path you actually inspected (evidence_paths). Do not modify any file. Return only the JSON object.`,
   },
   {
-    promptKey: "onboarding.human_enrichment_questions",
-    stage: "human_enrichment",
-    title: "Human enrichment questions",
-    body: `Review the completed repository discovery.
+    promptKey: "onboarding.v2.plan",
+    stage: "plan",
+    title: "Propose the artifact plan (justify every file)",
+    body: `Decide which AI-enablement artifacts this repository is justified in having. Mode: {{MODE}}. You may Read/Grep/Glob briefly to check a specific fact; do not re-discover the repository.
 
+Classification:
+{{CLASSIFICATION}}
+
+Operating model from discovery:
 {{DISCOVERY}}
 
-Identify only high-value knowledge gaps that cannot be
-safely resolved from source code or existing documentation.
-
-Focus on:
-
-- external consumers not visible in the repository
-- business-critical components
-- legacy restrictions
-- backward-compatibility requirements
-- historical technical decisions
-- areas that should not be modified
-- external operational ownership
-- production/deployment constraints
-
-Do not ask questions that could be answered by reading more source code.
-
-Return no more than 10 questions.
-
-Return structured output only: a single JSON object {"questions": [...]}, each question shaped
-{"id": string, "question_he": string, "why_it_matters_he": string, "risk_if_unknown": "LOW"|"MEDIUM"|"HIGH", "related_repository_area": string}.
-question_he and why_it_matters_he MUST be written in Hebrew — this is user-facing text a
-non-technical stakeholder will read and answer directly.
-
-If there are no genuinely high-value questions, return {"questions": []}.`,
-  },
-  {
-    promptKey: "onboarding.knowledge_generation",
-    stage: "knowledge_generation",
-    title: "Repository knowledge generation",
-    body: `Create the durable AI repository knowledge artifacts.
-
-Inputs:
-
-Repository discovery:
-{{DISCOVERY}}
-
-Existing documentation coverage:
-{{KNOWLEDGE_COVERAGE}}
-
-Verified human knowledge:
+Verified human knowledge (answers from the team; "UNKNOWN" means nobody knows — never fill it in):
 {{HUMAN_KNOWLEDGE}}
 
-Principles:
+What already exists:
+{{INVENTORY}}
 
-- Do not duplicate reliable repository documentation.
-- Create only files that add durable future value.
-- Do not document the repository exhaustively.
-- Optimize for future retrieval and reduced rediscovery.
-- Every fact must come from repository evidence or verified human knowledge.
-- Mark UNKNOWN where appropriate.
+The team's decision for each existing configuration file (keep = do not touch; merge = add only what is missing; replace = regenerate):
+{{EXISTING_POLICY}}
 
-Possible artifacts:
+Artifacts from the previous onboarding (refresh only — propose "update" only for artifacts the changes actually affect, "skip" for the rest):
+{{PREVIOUS_ARTIFACTS}}
 
-docs/ai/repository-map.md
-docs/ai/architecture.md
-docs/ai/integrations.md
-docs/ai/critical-context.md
+How Claude Code loads things (this is what your plan must optimize for):
+- CLAUDE.md is loaded into EVERY session. Target 40-80 lines, hard maximum 120. Longer files reduce instruction adherence. It is a map, not an encyclopedia: purpose in 2-3 lines, build/test commands Claude cannot guess, hard constraints and gotchas, repository etiquette, and pointers to the on-demand files by name. Never directory trees, dependency lists, file-by-file descriptions, generic advice, or anything derivable by reading the code.
+- .claude/skills/<name>/SKILL.md loads ON DEMAND: only its description (~1 line) is in context every session; the body loads when the task matches. Use knowledge_skill for repository knowledge that is only sometimes needed (a repository map with where-to-look, integrations, verified critical context). Use workflow_skill only for a recurring, error-prone, repository-specific multi-step procedure with evidence it recurs.
+- .claude/rules/<topic>.md with paths: globs loads only when Claude works with matching files. Use for conventions bound to a clear area (generated code, migrations, a plugin folder). A rule without paths loads every session — do not propose one.
+- A nested CLAUDE.md in a subdirectory loads when Claude reads files there. Propose only for a genuinely separate subsystem with its own conventions (monorepo package, separate app).
+- agent (.claude/agents) — almost never justified at onboarding; propose only with a concrete, recurring isolated task.
 
-Create only the artifacts that are justified. It is valid to create none,
-one, or all four — do not create a file just because it is on this list.
+For EVERY candidate answer the ten questions in the justification: what problem it solves, who consumes it and at which lifecycle stages (requirement/understanding/planning/implementation/testing/review/deployment/future_sessions), how often, does it reduce rediscovery, is the information already available elsewhere (then point, don't copy), can it go stale, what is its source of truth, how it is maintained, could the problem be solved more simply. If a candidate cannot justify itself, put it in not_created with the reason in Hebrew — an explicit "not created" is a valid, expected outcome.
 
-repository-map.md should contain:
-- major logical areas
-- purpose
-- relevant paths
-- important entry points
-- where future Claude sessions should look for common work
+Rules for items:
+- exactly one claude_md item (path from the inventory if it exists, else CLAUDE.md), action create or update — skip ONLY when an existing CLAUDE.md itself has the policy keep. AGENTS.md is NOT loaded by Claude Code: when it exists, CLAUDE.md is still required and simply starts with @AGENTS.md, adding only what is Claude-specific;
+- knowledge/workflow skills: skill_name (lowercase-hyphen), skill_description (≤ 200 characters, lead with the words a request would contain, e.g. "Where things live in this repo: ..."), optional skill_paths globs, disable_model_invocation true for workflows with side effects;
+- rules: rule_paths globs that match real files;
+- watched_paths: the repository paths whose change would make this artifact stale (used for refresh detection);
+- title_he in Hebrew; justification in English, concrete, citing paths.
 
-Do not create an exhaustive directory tree.
-
-architecture.md should contain:
-- major architectural layers
-- dependency direction
-- system boundaries
-- representative execution flows
-
-Do not document classes individually.
-
-integrations.md should contain:
-- external or internal systems
-- communication direction
-- implementation location
-- important compatibility constraints
-
-critical-context.md should contain only:
-- verified
-- non-obvious
-- high-value repository constraints
-- useful tribal knowledge
-
-Keep all artifacts concise. Write only the files you create — do not modify
-any other repository file, and do not run any shell command.`,
+Return only the JSON object.`,
   },
   {
-    promptKey: "onboarding.claude_md_generation",
-    stage: "claude_md_generation",
-    title: "CLAUDE.md generation",
-    body: `Generate the repository root CLAUDE.md.
+    promptKey: "onboarding.v2.generate",
+    stage: "generate",
+    title: "Draft the approved artifacts (content only — DCC writes the files)",
+    body: `Draft the content of the approved artifacts below. Mode: {{MODE}}. You are read-only: return the content in the JSON result; DCC writes the files, adds provenance and frontmatter metadata, and commits. Do NOT write, edit, or run anything.
 
-Goal:
-Provide the minimum always-loaded repository context required
-for Claude Code to work safely and efficiently.
+APPROVED ARTIFACTS (key, kind, path, action, justification, skill/rule frontmatter DCC will enforce, max_lines):
+{{ARTIFACTS}}
 
-Repository classification:
-{{CLASSIFICATION}}
-
-Before writing, read any files already present under docs/ai/ in this
-workspace (repository-map.md, architecture.md, integrations.md,
-critical-context.md — not all are guaranteed to exist) and any
-pre-existing repository documentation (README, docs/) — use them as your
-source of deeper detail, do not have their content repeated to you.
-
-Use only verified information from:
-
-- repository classification
-- repository knowledge (docs/ai/, if present)
-- existing documentation
-- confirmed build/test commands
-
-Include only:
-
-1. repository purpose;
-2. key technology/runtime constraints;
-3. non-obvious build/test commands;
-4. critical repository-wide constraints;
-5. pointers to deeper repository knowledge (reference docs/ai/ files by
-   path — do not copy their content into CLAUDE.md).
-
-Do NOT include:
-
-- exhaustive directory trees;
-- class/function inventories;
-- generic coding advice;
-- personality instructions;
-- task-specific information;
-- current task state;
-- temporary investigation results;
-- information already trivial to infer from source;
-- large duplicated sections from docs/ai.
-
-Prefer references to deeper documentation instead of copying it.
-
-Target:
-40-80 lines.
-
-Hard maximum:
-150 lines.
-
-Apply this test to every line:
-
-"Would removing this materially increase the chance that Claude
-works incorrectly or wastes time in this repository?"
-
-If not, omit the line.
-
-Write exactly one file: CLAUDE.md at the repository root. Do not modify
-any other file, and do not run any shell command.`,
-  },
-  {
-    promptKey: "onboarding.scoped_rules_evaluate",
-    stage: "scoped_rules",
-    title: "Scoped rules evaluation",
-    body: `Evaluate whether each detected repository domain needs
-a Claude Code path-scoped rule.
-
-Repository classification:
-{{CLASSIFICATION}}
-
-Repository discovery:
+Operating model (your evidence — cite paths from it; do not re-discover):
 {{DISCOVERY}}
 
-A rule is justified only when:
+Verified human knowledge ("UNKNOWN" = nobody knows; write "unknown — ask the team" rather than inventing):
+{{HUMAN_KNOWLEDGE}}
 
-1. the behavior or convention is repository-specific;
-2. it is not obvious from normal language/framework usage;
-3. omitting it creates a meaningful risk of incorrect work;
-4. it applies to a clearly identifiable path or domain.
-
-Do not create generic software-development rules.
-
-Return structured output only: a single JSON object {"candidates": [...]},
-each candidate shaped {"domain": string, "paths": [string], "rule_needed": boolean,
-"reason": string, "high_value_constraints": [string]}.
-
-It is valid — and expected on many repositories — for every candidate to
-have "rule_needed": false, or for the candidates array to be empty.`,
-  },
-  {
-    promptKey: "onboarding.scoped_rules_generate",
-    stage: "scoped_rules",
-    title: "Scoped rule generation",
-    body: `Draft a concise path-scoped Claude Code rule.
-
-Domain:
-{{DOMAIN}}
-
-Paths:
-{{PATHS}}
-
-Suggested file path (for reference only — see output instructions below):
-{{OUTPUT_RULE_PATH}}
-
-Before drafting the rule, inspect a small number of
-representative existing files in this domain.
-
-Include only repository-specific conventions that future
-Claude sessions should not have to rediscover.
-
-Do not include generic framework or language best practices.
-
-Keep the rule concise.
-
-Do not write, create, or modify any file, and do not run any shell
-command. Instead, return the drafted rule as a single fenced Markdown
-code block containing exactly the file's intended content — nothing
-before or after the fenced block.`,
-  },
-  {
-    promptKey: "onboarding.ai_doctor_review",
-    stage: "ai_doctor",
-    title: "AI Doctor review",
-    body: `Review the completed repository AI onboarding configuration.
-
-Do not modify any file.
-
-Read CLAUDE.md, docs/ai/*.md (if present), and the rule files listed
-below, directly from the repository.
-
-Rule files just materialized:
-{{RULE_FILES}}
-
-Check for:
-
-- contradictions between CLAUDE.md and repository evidence;
-- duplicate context that should not be always-loaded;
-- invalid or unnecessary rules;
-- missing critical durable repository knowledge;
-- references to nonexistent files or paths;
-- unsupported assumptions;
-- excessive generic guidance;
-- repository knowledge that should have remained in existing docs
-  instead of being duplicated.
-
-Return structured output only: a single JSON object
-{"overall_status": "PASS"|"WARN"|"FAIL", "issues": [...]}, each issue
-shaped {"severity": string, "artifact": string, "problem": string,
-"evidence": string, "recommended_correction": string}.
-
-It is valid — and expected on a well-onboarded repository — for
-"issues" to be empty and "overall_status" to be "PASS".`,
-  },
-  {
-    promptKey: "onboarding.skills_evaluate",
-    stage: "skills_evaluation",
-    title: "Skills evaluation",
-    body: `Review the repository discovery and architecture.
-
-Repository classification:
+Classification:
 {{CLASSIFICATION}}
 
-Repository discovery:
-{{DISCOVERY}}
+AGENTS.md:
+{{AGENTS_MD}}
 
-Identify recurring multi-step repository workflows that future Claude
-Code sessions would otherwise have to rediscover.
+Reviewer feedback to apply in this pass (empty on the first pass):
+{{REVIEW_NOTE}}
 
-Propose a Skill only if:
+Writing rules — these are enforced by validation, not suggestions:
+- Facts only from the operating model, the human knowledge, or a file you read now. Every command must be one discovery confirmed; label its confidence when not high. No invented paths.
+- Do not document what Claude can derive by reading code: no directory trees, no dependency lists, no class/function inventories, no framework tutorials, no generic best practices, no personality instructions.
+- Point instead of copy: reference existing docs and the on-demand files by name; do not paste their content.
+- Claude Code strips block-level HTML comments from CLAUDE.md before loading it; DCC adds its own provenance comment — do not add one.
+- claude_md (max_lines applies): "# <repo name>", 2-3 lines of purpose, "## Commands" (build/test/lint/run that Claude cannot guess, with the cwd when it matters), "## Constraints" (hard rules and gotchas, each one line, most important first), "## Where to look" (3-8 lines pointing to paths or to the skills by name), "## Etiquette" (branching, commits, PRs — only if repository-specific). If the repository has AGENTS.md, the very first line must be @AGENTS.md and you must not repeat its content. For action=update, read the existing file first, keep what is correct and specific, remove what is derivable or stale, and fold in what is missing.
+- knowledge_skill: markdown body only (DCC adds the frontmatter). Structure with short headings and bullets; every bullet points at a path. A "repository map" skill lists areas → paths → what lives there, entry points, and where to look for common task types. An "integrations" skill lists system, direction, implementation path, and constraints. A "critical context" skill records the verified human answers and non-obvious constraints, each with its source ("team answer", "path"). Keep within max_lines.
+- workflow_skill: body only; numbered steps a session can follow, each with the exact command or path; the trigger sentence first.
+- rule: body only (DCC adds the paths frontmatter). Conventions specific to those paths, each with the reason; ≤ max_lines.
+- nested_claude_md: same rules as claude_md but only what differs from the root.
+- Write user-facing prose in English (code identifiers stay as-is); notes_he in Hebrew.
 
-1. the workflow is likely to recur;
-2. it has a clear reusable sequence;
-3. storing it creates meaningful future time/context savings;
-4. it is organization-specific or repository-specific.
-
-Do not create Skills for generic programming behavior.
-
-Return structured output only: a single JSON object {"candidates": [...]},
-each candidate shaped {"skill_name": string, "trigger": string,
-"purpose": string, "workflow_steps": [string], "expected_reuse_value":
-string, "recommendation": "CREATE"|"DO_NOT_CREATE"}.
-
-It is valid — and expected on many repositories — for every candidate to
-have "recommendation": "DO_NOT_CREATE", or for the candidates array to
-be empty.`,
+Return only the JSON object: {"files":[{"key","path","content","notes_he"}], "summary_he", "skipped":[{"key","reason_he"}]}. Every approved key must appear in files or in skipped.`,
   },
   {
-    promptKey: "onboarding.skills_generate",
-    stage: "skills_evaluation",
-    title: "Skill generation",
-    body: `Draft a concise Claude Code Skill.
+    promptKey: "onboarding.v2.validate",
+    stage: "validate",
+    title: "Review the generated artifacts against the code",
+    body: `Review the repository's freshly generated AI-enablement artifacts. You are read-only. Do not modify any file.
 
-Skill name:
-{{SKILL_NAME}}
+Artifacts to review (read each one from the repository):
+{{ARTIFACT_PATHS}}
 
-Trigger:
-{{TRIGGER}}
+Deterministic checks DCC already ran (do not repeat them; use them as context):
+{{CHECKS}}
 
-Purpose:
-{{PURPOSE}}
+Read the artifacts, then verify their claims against the code (open the files they point at, check that commands exist in scripts/manifests, that paths exist, that constraints match what the code does). Report:
+- contradiction: a statement the code contradicts (cite the evidence path);
+- unsupported_claim: a statement with no evidence in the repository;
+- duplication: content that repeats another artifact or a maintained README/doc instead of pointing at it;
+- generic_filler: advice that is not repository-specific;
+- missing_critical: a durable, non-obvious fact discovery established that no artifact records;
+- broken_reference: a path or command that does not exist.
+Severity high = a future session would act wrongly; medium = wasted time or confusion; low = polish.
+overall_status: FAIL if any high-severity issue, WARN if medium, else PASS. strengths_he: 2-4 things done well, in Hebrew. problem_he and recommended_correction_he in Hebrew.
 
-Workflow steps:
-{{WORKFLOW_STEPS}}
-
-Suggested file path (for reference only — see output instructions below):
-{{OUTPUT_SKILL_PATH}}
-
-Before drafting, inspect a small number of representative existing files
-relevant to this workflow.
-
-Include only repository-specific steps and conventions that future
-Claude sessions should not have to rediscover.
-
-Do not include generic programming advice.
-
-Keep the SKILL.md concise.
-
-Do not write, create, or modify any file, and do not run any shell
-command. Instead, return the drafted SKILL.md as a single fenced
-Markdown code block containing exactly the file's intended content —
-nothing before or after the fenced block.`,
+Return only the JSON object.`,
   },
   {
-    promptKey: "onboarding.refresh_check",
+    promptKey: "onboarding.v2.refresh",
     stage: "refresh",
-    title: "Incremental repository refresh",
-    body: `Perform incremental repository AI knowledge refresh.
+    title: "Judge whether repository changes make the artifacts stale",
+    body: `Deterministic staleness signals fired for this repository's AI-enablement artifacts. Judge whether the changes MATERIALLY affect them. You are read-only.
 
-Previous analyzed commit:
-{{OLD_COMMIT}}
-
-Current commit:
-{{NEW_COMMIT}}
+Previous analyzed commit: {{OLD_COMMIT}}
+Current commit: {{NEW_COMMIT}}
 
 Changed paths:
 {{CHANGED_PATHS}}
 
-Existing repository knowledge index:
-{{KNOWLEDGE_INDEX}}
+Artifacts DCC maintains (path, kind, watched_paths):
+{{ARTIFACTS}}
 
-Determine whether the changes materially affect:
+Signals:
+{{SIGNALS}}
 
-- architecture;
-- component boundaries;
-- integrations;
-- build/test process;
-- repository-wide constraints;
-- existing Claude rules;
-- security assumptions;
-- existing reusable Skills.
+Read the artifacts and the relevant changed files. Decide update_required (true only if an artifact now states something wrong, misses a new command/constraint/integration/boundary, or references something gone). impacted_artifacts = paths to regenerate; required_updates_he = what must change, in Hebrew, one line each; evidence = paths. Do not propose regenerating an artifact the changes don't touch. reason_he in Hebrew.
 
-Do not rewrite documentation unnecessarily.
-
-Return structured output only: a single JSON object {"update_required":
-boolean, "impacted_artifacts": [string], "required_updates": [string],
-"evidence": [string], "reason": string}. When "update_required" is
-false, the other arrays should be empty and "reason" should explain why
-the changes don't materially affect anything above.
-
-Only affected artifacts should ever be regenerated — do not propose
-regenerating something the changes don't actually touch.`,
+Return only the JSON object.`,
   },
 ];
 
@@ -501,10 +202,14 @@ if (!dev) {
   process.exit(1);
 }
 
+// SEED_REPLACE=key1,key2 (or "all") registers a NEW version for those keys
+// even when one is active — the way to roll out an edited seed prompt
+// without touching the immutable history.
+const replace = new Set((process.env.SEED_REPLACE ?? "").split(",").map((s) => s.trim()).filter(Boolean));
 let created = 0, skipped = 0;
 for (const p of PROMPTS) {
   const existing = await getActiveOnboardingPrompt(p.promptKey);
-  if (existing) {
+  if (existing && !(replace.has("all") || replace.has(p.promptKey))) {
     console.log(`  skip (already active v${existing.version}): ${p.promptKey}`);
     skipped++;
     continue;

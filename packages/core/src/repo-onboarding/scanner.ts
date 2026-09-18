@@ -24,11 +24,8 @@ import type { BuildSystemSignal, CiSignal, FrameworkSignal, IgnoredPathSignal, L
  * for framework signals) is still this file's own lightweight walk — scc
  * only counts code, it has no concept of any of that.
  *
- * The junk-dir/extension detection below is a deliberate DUPLICATE of
- * `repo-ai/permissions.ts`'s `scanForJunk` (same list, same logic), not a
- * shared import — the old `repo-ai/*` flow stays completely untouched
- * per this pass's explicit "defer" decision, so its own file isn't
- * refactored to source this logic from here (or vice versa).
+ * The junk-dir/extension list is the one Read-deny suggestion source for
+ * the pipeline (the retired `repo-ai/permissions.ts` copy is gone).
  */
 
 const KNOWN_JUNK_DIR_NAMES = [
@@ -169,6 +166,15 @@ export async function scanRepository(dir: string, scannedCommitSha: string): Pro
 
   walk(dir, 0);
 
+  let topLevel: string[] = [];
+  try {
+    topLevel = readdirSync(dir)
+      .filter((n) => n !== ".git")
+      .map((n) => { try { return statSync(path.join(dir, n)).isDirectory() ? `${n}/` : n; } catch { return n; } })
+      .sort()
+      .slice(0, 80);
+  } catch { /* unreadable root — leave empty */ }
+
   const ignoredPaths: IgnoredPathSignal[] = [
     ...Array.from(ignoredDirs).sort().map((name): IgnoredPathSignal => ({ pattern: `Read(./**/${name}/**/*)`, reason: "junk_dir" })),
     ...Array.from(ignoredExts).sort().map((ext): IgnoredPathSignal => ({ pattern: `Read(./**/*.${ext})`, reason: "junk_extension" })),
@@ -201,7 +207,7 @@ export async function scanRepository(dir: string, scannedCommitSha: string): Pro
     frameworkSignals,
     docsSignals: Array.from(new Set(docsPaths)).map((p) => ({ path: p })),
     ignoredPaths,
-    stats: { fileCount, dirCount, maxDepthHit, sccUsed },
+    stats: { fileCount, dirCount, maxDepthHit, sccUsed, topLevel },
     warnings,
   };
 }
