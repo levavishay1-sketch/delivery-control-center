@@ -117,6 +117,16 @@ _עודכן: 2026-09-18, המשך ישיר לסשן הקודם._
 - אין עדיין stage/prompt ל-`.claude/agents/<name>.md`.
 - `protect-mcp` כתחליף ל-guardrails — נבדק (12/12 טסטים), לא משולב עדיין.
 
+## ביקורת מלאה על 16 השלבים — ראה `onboarding-pipeline-audit.md`
+
+קריאה מלאה של כל 16 קבצי ה-stage (לא רק תיאור): נמצא באג מאומת
+(`ai_doctor` מריץ build/test בלי `npm install` → NOT_READY שגוי שיטתי),
+פער חמור (`skills_evaluation` אף פעם לא כותב `SKILL.md` בפועל), פער
+תהליכי (`user_review`'s request_changes לא עושה כלום), ומיזוג מוצדק
+אחד (`knowledge_coverage`+`targeted_discovery`). הצעה: 16→14 stages
++ הוצאת `skills_evaluation` מ-`STAGE_ORDER` לחלוטין. פרטים מלאים
+ומקורות במסמך הייעודי.
+
 ## מה עוד פתוח לבדיקה
 
 - לפצל את `onboarding.knowledge_generation` ל-4 prompts נפרדים (אחד לכל קובץ) ולתקן את הנתיב מ-`docs/ai/` ל-`docs/`, תוך שילוב מבני ה-skills הקהילתיים שנמצאו (subagent Explore, מגבלות כמותיות, mermaid).
