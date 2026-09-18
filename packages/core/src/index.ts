@@ -8,7 +8,7 @@ export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksN
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
-export { route, recordRouting, loadPolicy, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
+export { route, recommend, recordRouting, loadPolicy, type Capability, type Effort, type RoutingDecision, type RoutingSignals } from "./routing.ts";
 export { linkWorkItems, flowFor, taskFlowFor, clientTaskTree, allAdoTasks, type FlowNode, type FlowEdge, type TaskFlowNode, type TaskFlowEdge, type AdoTaskRow } from "./flow.ts";
 export { materializeTasksToAdo, pendingMaterializeCount, editTask, type MaterializeResult, type EditTaskResult } from "./task-ado-sync.ts";
 export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";
@@ -38,9 +38,9 @@ export {
 } from "./crud.ts";
 export {
   startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, listOnboardingRuns, submitStageInput,
-  updateRunAutomation, resetRunToStage, stopRunExecution, getRunFileDiff, onboardingStageCatalogue, listRunExecutions,
+  updateRunAutomation, updateRunModelChoices, resetRunToStage, stopRunExecution, getRunFileDiff, onboardingStageCatalogue, listRunExecutions,
   checkRepositoryRefresh, repositoryRefreshMetrics, onboardingRunCostSummary,
-  getOnboardingExecution, updateOnboardingPromptBody, presetPolicy, normalizePolicy, STAGES as ONBOARDING_STAGES, recoverInterruptedRuns,
+  getOnboardingExecution, updateOnboardingPromptBody, presetPolicy, normalizePolicy, normalizeModelPolicy, STAGES as ONBOARDING_STAGES, recoverInterruptedRuns,
   type OnboardingStatus, type RepositoryProfile as OnboardingRepositoryProfile, type AutomationPolicy, type AutomationPreset,
-  type RefreshResult, type RefreshMetrics, type OnboardingRunCostSummary,
+  type RefreshResult, type RefreshMetrics, type OnboardingRunCostSummary, type OnboardingCostByStage, type ModelChoice, type ModelPolicy,
 } from "./repo-onboarding/index.ts";

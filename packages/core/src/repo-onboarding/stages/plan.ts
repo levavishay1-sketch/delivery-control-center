@@ -176,7 +176,7 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
   const runner = createClaudeCodeRunner();
   const exec = await runner.run({
     runId: ctx.runId, stageKey: "plan", repoId: ctx.repoId, clientId: ctx.clientId, cwd: ctx.workspaceDir,
-    promptId: prompt.id, capability: "onboarding_plan", tools: [...READ_ONLY_TOOLS], denyRules: boundaries.approved.rules,
+    promptId: prompt.id, capability: "onboarding_plan", modelOverride: ctx.modelChoices.plan, tools: [...READ_ONLY_TOOLS], denyRules: boundaries.approved.rules,
     jsonSchema: PLAN_SCHEMA as unknown as Record<string, unknown>,
     promptVars: {
       CLASSIFICATION: JSON.stringify(scan.classification ?? {}),

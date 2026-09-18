@@ -9,7 +9,7 @@ import { appendRepoAiEvent } from "./events.ts";
 import { getActiveOnboardingPrompt } from "./prompts.ts";
 import { createClaudeCodeRunner, READ_ONLY_TOOLS } from "./runner.ts";
 import { REFRESH_SCHEMA } from "./schemas.ts";
-import { ONBOARDING_VERSION } from "./types.ts";
+import { ONBOARDING_VERSION, normalizeModelPolicy } from "./types.ts";
 
 /**
  * Knowledge lifecycle — staleness detection. Deterministic signals first
@@ -115,6 +115,7 @@ export async function checkRepositoryRefresh(repoId: string, userId: string): Pr
       const runner = createClaudeCodeRunner();
       const exec = await runner.run({
         runId: last.id, stageKey: "refresh", repoId, clientId: r.clientId, cwd: dir, promptId: prompt.id, capability: "onboarding_refresh",
+        modelOverride: normalizeModelPolicy(last.modelChoices).refresh,
         tools: [...READ_ONLY_TOOLS], jsonSchema: REFRESH_SCHEMA as unknown as Record<string, unknown>,
         promptVars: {
           OLD_COMMIT: analyzedCommit, NEW_COMMIT: currentCommit, CHANGED_PATHS: JSON.stringify(changedPaths.slice(0, 400)),

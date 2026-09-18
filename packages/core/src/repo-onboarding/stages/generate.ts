@@ -115,7 +115,7 @@ registerStage("generate", async (ctx): Promise<StageOutcome> => {
     const runner = createClaudeCodeRunner();
     const exec = await runner.run({
       runId: ctx.runId, stageKey: "generate", repoId: ctx.repoId, clientId: ctx.clientId, cwd: ctx.workspaceDir,
-      promptId: prompt.id, capability: "onboarding_generate", tools: [...READ_ONLY_TOOLS], denyRules: boundaries.approved.rules,
+      promptId: prompt.id, capability: "onboarding_generate", modelOverride: ctx.modelChoices.generate, tools: [...READ_ONLY_TOOLS], denyRules: boundaries.approved.rules,
       jsonSchema: GENERATE_SCHEMA as unknown as Record<string, unknown>,
       promptVars: {
         ARTIFACTS: JSON.stringify(spec),

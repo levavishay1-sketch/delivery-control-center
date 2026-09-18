@@ -58,7 +58,7 @@ registerStage("discovery", async (ctx): Promise<StageOutcome> => {
   const runner = createClaudeCodeRunner();
   const exec = await runner.run({
     runId: ctx.runId, stageKey: "discovery", repoId: ctx.repoId, clientId: ctx.clientId, cwd: ctx.workspaceDir,
-    promptId: prompt.id, capability: "onboarding_discover", signals: { complexity: scan.classification?.complexity },
+    promptId: prompt.id, capability: "onboarding_discover", signals: { complexity: scan.classification?.complexity }, modelOverride: ctx.modelChoices.discovery,
     tools: [...READ_ONLY_TOOLS], denyRules: boundaries.approved.rules, jsonSchema: DISCOVERY_SCHEMA as unknown as Record<string, unknown>,
     promptVars: {
       CLASSIFICATION: classificationText,

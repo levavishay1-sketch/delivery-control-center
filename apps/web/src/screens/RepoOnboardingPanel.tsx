@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   advanceOnboardingRun, cancelOnboardingRun, checkOnboardingRefresh, getLatestOnboardingRun, getOnboardingRefreshMetrics, getOnboardingRun, getOnboardingRunCostSummary, getOnboardingStages, getRepos,
-  listOnboardingRuns, resetOnboardingRunTo, startOnboardingRun, stopOnboardingExecution, submitOnboardingStageInput, updateOnboardingAutomation,
-  type AutomationPolicy, type OnboardingRunCostSummary, type OnboardingRunView, type OnboardingStage, type OnboardingStatus, type RefreshResult, type StageDefinition,
+  listOnboardingRuns, resetOnboardingRunTo, startOnboardingRun, stopOnboardingExecution, submitOnboardingStageInput, updateOnboardingAutomation, updateOnboardingModelChoices,
+  type AutomationPolicy, type ModelPolicy, type OnboardingRunCostSummary, type OnboardingRunView, type OnboardingStage, type OnboardingStatus, type RefreshResult, type StageDefinition,
 } from "../api.ts";
 import { PageHead } from "../ui.tsx";
 import {
-  AutomationEditor, ClaudeCallPanel, Code, KV, Note, RawResult, STATUS_HE, StageExplainer, StageMetaChips, StatusPill, describePolicy, elapsedSince, errText, eventLabel, fmtDate, fmtDuration, fmtInt, fmtTime, fmtUsd, policyNeedsConsent, presetPolicy, shortSha,
+  AutomationEditor, ClaudeCallPanel, Code, KV, ModelChoiceEditor, ModelChoiceHint, Note, RawResult, STATUS_HE, StageExplainer, StageMetaChips, StatusPill, describePolicy, elapsedSince, errText, eventLabel, fmtDate, fmtDuration, fmtInt, fmtTime, fmtUsd, policyNeedsConsent, presetPolicy, shortSha,
 } from "./onboarding/shared.tsx";
 import { StageFindings } from "./onboarding/stageViews.tsx";
 import type { ConfirmResult, DeliverResult, DiscoveryResult } from "./onboarding/types.ts";
@@ -320,6 +320,7 @@ export function RepoOnboardingPanel({ id: repoId, nav }: { id: string; nav: (h: 
         {/* rail */}
         <div className="rail">
           <AutomationPanel view={view} defs={defs} busy={busy === "automation"} disabled={runOver || legacy} onSave={(p, consent) => act("automation", () => updateOnboardingAutomation(repoId, run.id, p, consent), { follow: false })} />
+          <ModelChoicePanel view={view} defs={defs} busy={busy === "model-choices"} disabled={runOver || legacy} onSave={(p) => act("model-choices", () => updateOnboardingModelChoices(repoId, run.id, p), { follow: false })} />
           <div className="panel">
             <h4>עלות ההרצה</h4>
             <KV items={[
@@ -328,6 +329,16 @@ export function RepoOnboardingPanel({ id: repoId, nav }: { id: string; nav: (h: 
               { l: "טוקנים (קלט / פלט)", v: `${fmtInt(cost?.totalInputTokens ?? 0)} / ${fmtInt(cost?.totalOutputTokens ?? 0)}` },
               { l: "זמן AI מצטבר", v: fmtDuration(cost?.totalDurationMs ?? 0) },
             ]} />
+            {!!cost?.byStage.length && (
+              <table className="ob-cost-table" style={{ width: "100%", marginTop: 10, fontSize: 11.5 }}>
+                <thead><tr><th style={{ textAlign: "right" }}>שלב</th><th style={{ textAlign: "right" }}>מודל</th><th style={{ textAlign: "right" }}>effort</th><th style={{ textAlign: "left" }}>עלות</th></tr></thead>
+                <tbody>
+                  {cost.byStage.map((s, i) => (
+                    <tr key={i}><td>{title(s.stageKey)}</td><td>{s.model ?? "—"}</td><td>{s.effort ?? "—"}</td><td style={{ textAlign: "left" }}>{fmtUsd(s.costUsd)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
           <WarningsPanel merged={merged} defs={defs} onPick={setSelectedKey} />
           <div className="panel">
@@ -430,6 +441,31 @@ function AutomationPanel({ view, defs, busy, disabled, onSave }: { view: Onboard
   );
 }
 
+function ModelChoicePanel({ view, defs, busy, disabled, onSave }: { view: OnboardingRunView; defs: StageDefinition[]; busy: boolean; disabled: boolean; onSave: (p: ModelPolicy) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<ModelPolicy>(view.modelChoices);
+  useEffect(() => { if (!editing) setDraft(view.modelChoices); }, [view.modelChoices, editing]);
+  const overridden = Object.keys(view.modelChoices).length;
+  return (
+    <div className="panel">
+      <h4>מודל ומאמץ</h4>
+      <p style={{ fontSize: 12.5, marginBottom: 8 }}>{overridden ? `${overridden} שלבים עם בחירה ידנית` : "כל השלבים על ההמלצה"}</p>
+      {!editing
+        ? <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={() => { setDraft(view.modelChoices); setEditing(true); }}>שנה מודל/מאמץ</button>
+        : (
+          <div style={{ display: "grid", gap: 10 }}>
+            <ModelChoiceEditor stages={defs} value={draft} onChange={setDraft} />
+            <p className="ob-sub">חל על הקריאה הבאה של כל שלב — קריאה שכבר רצה לא משתנה.</p>
+            <div className="ob-actions">
+              <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => { onSave(draft); setEditing(false); }}>{busy ? "שומר…" : "שמור"}</button>
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>ביטול</button>
+            </div>
+          </div>
+        )}
+    </div>
+  );
+}
+
 function WarningsPanel({ merged, defs, onPick }: { merged: OnboardingStage[]; defs: StageDefinition[]; onPick: (k: string) => void }) {
   const items: { key: string; text: string; tone: "warn" | "unknown" | "fail" }[] = [];
   for (const s of merged) {
@@ -515,6 +551,7 @@ function PreStart({ repoId, repo, defs, latest, runs, crumb, canReturn, onReturn
   const [mode, setMode] = useState<"initial" | "refresh">(completedV2 ? "refresh" : "initial");
   useEffect(() => { if (completedV2) setMode("refresh"); }, [completedV2?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [policy, setPolicy] = useState<AutomationPolicy>(() => presetPolicy(defs, "guided"));
+  const [modelChoices, setModelChoices] = useState<ModelPolicy>({});
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -527,7 +564,7 @@ function PreStart({ repoId, repo, defs, latest, runs, crumb, canReturn, onReturn
   const start = async () => {
     setBusy("start"); setErr(null);
     try {
-      const { runId } = await startOnboardingRun(repoId, { automation: policy, consent: needs ? consent : undefined, mode, previousRunId: mode === "refresh" ? completedV2?.id : undefined });
+      const { runId } = await startOnboardingRun(repoId, { automation: policy, modelChoices, consent: needs ? consent : undefined, mode, previousRunId: mode === "refresh" ? completedV2?.id : undefined });
       onStarted(runId);
     } catch (e) { setErr(errText(e)); setBusy(null); }
   };
@@ -584,6 +621,7 @@ function PreStart({ repoId, repo, defs, latest, runs, crumb, canReturn, onReturn
                     <StageMetaChips def={d} />
                   </summary>
                   <StageExplainer def={d} />
+                  {d.recommended && <div style={{ marginTop: 6 }}><ModelChoiceHint def={d} choice={modelChoices[d.key]} /></div>}
                 </details>
               ))}
             </div>
@@ -601,6 +639,8 @@ function PreStart({ repoId, repo, defs, latest, runs, crumb, canReturn, onReturn
             )}
             <p className="section-lbl">כמה מזה יקרה לבד</p>
             <AutomationEditor stages={defs} value={policy} onChange={setPolicy} consent={consent} onConsent={setConsent} />
+            <p className="section-lbl" style={{ marginTop: 14 }}>מודל ומאמץ לכל שלב — המלצה שניתן לשנות</p>
+            <ModelChoiceEditor stages={defs} value={modelChoices} onChange={setModelChoices} />
             <div style={{ marginTop: 14 }}>
               <button className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }} disabled={!!busy || !!liveLatest || (needs && !consent)} onClick={start}>
                 {busy === "start" ? "מתחיל…" : mode === "refresh" ? "▶ התחל רענון" : "▶ התחל onboarding"}

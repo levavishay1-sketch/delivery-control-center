@@ -200,6 +200,49 @@ export function normalizePolicy(raw: unknown): AutomationPolicy {
   return { preset, stages };
 }
 
+/* ── model routing choice ───────────────────────────────────────────── */
+
+/** A person's explicit model/effort choice for one AI stage — either
+ *  field may be left unset, in which case that field falls back to the
+ *  policy's recommendation (`recommend()` in `../routing.ts`). Only the
+ *  five AI-calling stages (`scan`'s classify call, `discovery`, `plan`,
+ *  `generate`, `validate`) plus `refresh` have an entry worth setting;
+ *  every other stage key is simply never read. */
+export type ModelChoice = { model?: string; effort?: string };
+export type ModelPolicy = Record<string, ModelChoice>;
+
+/** Stage key → the routing capability its AI call uses — the join between
+ *  the stage catalogue and `config/model-policy.json`'s `onboarding_*`
+ *  capabilities, kept in one place so the UI's "recommended" column and
+ *  the runner's actual call agree on which capability a stage means. */
+export const STAGE_CAPABILITY: Readonly<Record<string, string>> = {
+  scan: "onboarding_classify",
+  discovery: "onboarding_discover",
+  plan: "onboarding_plan",
+  generate: "onboarding_generate",
+  validate: "onboarding_validate",
+  refresh: "onboarding_refresh",
+};
+
+/** Normalises whatever is stored on the run row — drops anything for a
+ *  key with no AI capability, keeps only the two known fields per entry,
+ *  so a policy written by an older client or hand-edited JSON can't leak
+ *  garbage into a live routing decision. */
+export function normalizeModelPolicy(raw: unknown): ModelPolicy {
+  const p = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const out: ModelPolicy = {};
+  for (const key of Object.keys(STAGE_CAPABILITY)) {
+    const entry = p[key];
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const choice: ModelChoice = {};
+    if (typeof e.model === "string" && e.model.trim()) choice.model = e.model.trim();
+    if (typeof e.effort === "string" && e.effort.trim()) choice.effort = e.effort.trim();
+    if (choice.model || choice.effort) out[key] = choice;
+  }
+  return out;
+}
+
 /* ── stage handler contract ─────────────────────────────────────────── */
 
 export type StageContext = {
@@ -224,6 +267,8 @@ export type StageContext = {
   /** A reviewer's "request changes" note (generate reads it). */
   reviewNote?: string | null;
   automation: AutomationPolicy;
+  /** Per-stage model/effort overrides — see `ModelPolicy` above. */
+  modelChoices: ModelPolicy;
 };
 
 export type StageOutcome = {

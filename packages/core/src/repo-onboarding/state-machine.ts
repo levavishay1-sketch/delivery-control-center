@@ -8,8 +8,9 @@ import { git } from "../ai-assist.ts";
 import { ledgerForRun } from "./artifacts.ts";
 import { appendRepoAiEvent } from "./events.ts";
 import { cancelActiveExecution } from "./runner.ts";
-import { ONBOARDING_VERSION, STAGE_ORDER, STAGES, normalizePolicy, presetPolicy, stageDefinition } from "./types.ts";
-import type { AutomationPolicy, StageAutoResolver, StageContext, StageHandler, StageOutcome } from "./types.ts";
+import { ONBOARDING_VERSION, STAGE_CAPABILITY, STAGE_ORDER, STAGES, normalizeModelPolicy, normalizePolicy, presetPolicy, stageDefinition } from "./types.ts";
+import { recommend, type Capability } from "../routing.ts";
+import type { AutomationPolicy, ModelPolicy, StageAutoResolver, StageContext, StageHandler, StageOutcome } from "./types.ts";
 
 /**
  * The onboarding state machine. Resumability is structural: the next
@@ -71,10 +72,11 @@ async function previousResultsFor(clientId: string, previousRunId: string | null
 export async function startOnboardingRun(
   repoId: string,
   by: { userId: string },
-  opts: { automation?: unknown; mode?: "initial" | "refresh"; previousRunId?: string } = {},
+  opts: { automation?: unknown; modelChoices?: unknown; mode?: "initial" | "refresh"; previousRunId?: string } = {},
 ): Promise<{ runId: string }> {
   const r = await loadOnboardableRepo(repoId);
   const automation = normalizePolicy(opts.automation ?? presetPolicy("guided"));
+  const modelChoices = normalizeModelPolicy(opts.modelChoices ?? {});
   let mode: "initial" | "refresh" = opts.mode ?? "initial";
   let previousRunId = opts.previousRunId ?? null;
   if (mode === "refresh" && !previousRunId) {
@@ -87,7 +89,7 @@ export async function startOnboardingRun(
     const [run] = await withTenant(r.clientId, (tx) =>
       tx.insert(repositoryOnboardingRun).values({
         repoId, clientId: r.clientId, triggeredBy: by.userId, defaultBranch: r.defaultBranch,
-        onboardingVersion: ONBOARDING_VERSION, mode, previousRunId, automation,
+        onboardingVersion: ONBOARDING_VERSION, mode, previousRunId, automation, modelChoices,
       }).returning({ id: repositoryOnboardingRun.id }),
     );
     runId = run!.id;
@@ -246,6 +248,7 @@ async function advanceOnce(repoId: string, runId: string): Promise<{ runStatus: 
         mode: run.mode === "refresh" ? "refresh" as const : "initial" as const,
         priorResults, ownResult: existing?.result ?? undefined, reviewNote: run.reviewNote,
         automation: normalizePolicy(run.automation),
+        modelChoices: normalizeModelPolicy(run.modelChoices),
       },
     };
   });
@@ -354,6 +357,7 @@ async function submitStageInputInternal(repoId: string, runId: string, stageKey:
         mode: run.mode === "refresh" ? "refresh" as const : "initial" as const,
         priorResults, ownResult: stageRow.result ?? undefined, resumeInput: input, reviewNote: run.reviewNote,
         automation: normalizePolicy(run.automation),
+        modelChoices: normalizeModelPolicy(run.modelChoices),
       },
     };
   });
@@ -406,6 +410,23 @@ export async function updateRunAutomation(repoId: string, runId: string, policy:
   });
   await appendRepoAiEvent({ clientId: r.clientId, repoId, type: "onboarding.automation.changed", payload: { runId, preset: normalized.preset, stages: normalized.stages }, actorUserId: by.userId });
   void driveRun(repoId, runId);
+  return normalized;
+}
+
+/** A person's per-stage model/effort override — editable any time the run
+ *  is live, same pattern as `updateRunAutomation`. Takes effect on the
+ *  NEXT call for that stage; a call already running keeps whatever it
+ *  already routed to. */
+export async function updateRunModelChoices(repoId: string, runId: string, choices: unknown, by: { userId: string }): Promise<ModelPolicy> {
+  const r = await loadOnboardableRepo(repoId);
+  const normalized = normalizeModelPolicy(choices);
+  await withTenant(r.clientId, async (tx) => {
+    const [run] = await tx.select().from(repositoryOnboardingRun).where(and(eq(repositoryOnboardingRun.id, runId), eq(repositoryOnboardingRun.repoId, repoId))).limit(1);
+    if (!run) throw new Error("run not found");
+    assertV2(run);
+    await tx.update(repositoryOnboardingRun).set({ modelChoices: normalized }).where(eq(repositoryOnboardingRun.id, runId));
+  });
+  await appendRepoAiEvent({ clientId: r.clientId, repoId, type: "onboarding.model_choices.changed", payload: { runId, choices: normalized }, actorUserId: by.userId });
   return normalized;
 }
 
@@ -507,10 +528,18 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
     return { run, stages, profile: profile ?? null, events };
   });
   const artifacts = await ledgerForRun(r.clientId, runId);
-  return { ...view, artifacts, automation: normalizePolicy(view.run.automation), driving: driving.has(runId), stageDefinitions: STAGES, repo: { id: r.id, name: r.name, adoRepoRef: r.adoRepoRef, localPath: r.localPath, defaultBranch: r.defaultBranch } };
+  return { ...view, artifacts, automation: normalizePolicy(view.run.automation), modelChoices: normalizeModelPolicy(view.run.modelChoices), driving: driving.has(runId), stageDefinitions: STAGES, repo: { id: r.id, name: r.name, adoRepoRef: r.adoRepoRef, localPath: r.localPath, defaultBranch: r.defaultBranch } };
 }
 
-export function onboardingStageCatalogue() { return STAGES; }
+/** The stage catalogue plus, for the five stages with an AI call, the
+ *  policy's model+effort recommendation — what a "before you run this"
+ *  screen shows before any run-specific override applies. */
+export function onboardingStageCatalogue() {
+  return STAGES.map((s) => {
+    const capability = STAGE_CAPABILITY[s.key];
+    return { ...s, capability: capability ?? null, recommended: capability ? recommend(capability as Capability) : null };
+  });
+}
 
 /** The diff of one file between the run's baseline and the onboarding
  *  branch head — what the review gate shows. Read from the worktree,
@@ -533,6 +562,7 @@ export async function getOnboardingExecution(repoId: string, executionId: string
         id: repositoryOnboardingClaudeExecution.id,
         stageKey: repositoryOnboardingClaudeExecution.stageKey,
         model: repositoryOnboardingClaudeExecution.model,
+        effort: repositoryOnboardingClaudeExecution.effort,
         permissionProfile: repositoryOnboardingClaudeExecution.permissionProfile,
         status: repositoryOnboardingClaudeExecution.status,
         resultText: repositoryOnboardingClaudeExecution.resultText,
@@ -562,6 +592,7 @@ export async function listRunExecutions(repoId: string, runId: string) {
   const r = await loadOnboardableRepo(repoId);
   return withTenant(r.clientId, (tx) => tx.select({
     id: repositoryOnboardingClaudeExecution.id, stageKey: repositoryOnboardingClaudeExecution.stageKey, model: repositoryOnboardingClaudeExecution.model,
+    effort: repositoryOnboardingClaudeExecution.effort,
     status: repositoryOnboardingClaudeExecution.status, costUsd: repositoryOnboardingClaudeExecution.costUsd, inputTokens: repositoryOnboardingClaudeExecution.inputTokens,
     outputTokens: repositoryOnboardingClaudeExecution.outputTokens, durationMs: repositoryOnboardingClaudeExecution.durationMs, numTurns: repositoryOnboardingClaudeExecution.numTurns,
     startedAt: repositoryOnboardingClaudeExecution.startedAt, completedAt: repositoryOnboardingClaudeExecution.completedAt, errorMessage: repositoryOnboardingClaudeExecution.errorMessage,

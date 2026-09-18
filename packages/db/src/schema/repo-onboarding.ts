@@ -59,6 +59,11 @@ export const repositoryOnboardingRun = pgTable(
      *  stages run without a click and which gates a person must answer.
      *  Editable while the run is live; every change is an event. */
     automation: jsonb("automation").notNull().default(sql`'{}'::jsonb`),
+    /** Per-stage model/effort overrides (`ModelPolicy` in @dcc/core) — a
+     *  person's explicit choice for an AI stage, keyed by stage key. A stage
+     *  missing here just uses the policy's recommendation. Editable while
+     *  the run is live, same as `automation`. */
+    modelChoices: jsonb("model_choices").notNull().default(sql`'{}'::jsonb`),
     /** A reviewer's "request changes" note, carried into the next generate pass. */
     reviewNote: text("review_note"),
     /** 'worktree' | 'clone' — which isolation strategy `ensureOnboardingWorkspace` actually used. */
@@ -255,6 +260,9 @@ export const repositoryOnboardingClaudeExecution = pgTable(
     /** The exact immutable prompt version that was sent. */
     promptTemplateId: uuid("prompt_template_id").notNull().references(() => onboardingPromptTemplate.id, { onDelete: "restrict" }),
     model: text("model"),
+    /** `--effort` actually used for this call — the policy's recommendation
+     *  unless a person overrode it on the run's `model_choices`. */
+    effort: text("effort"),
     /** 'read_only_plan' | 'accept_edits' — the abstracted profile name; never a raw CLI flag. */
     permissionProfile: text("permission_profile").notNull(),
     denyRulesSnapshot: jsonb("deny_rules_snapshot").$type<string[]>().notNull().default(sql`'[]'::jsonb`),

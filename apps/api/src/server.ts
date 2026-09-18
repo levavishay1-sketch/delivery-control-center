@@ -110,6 +110,7 @@ import {
   listOnboardingRuns,
   submitStageInput,
   updateRunAutomation,
+  updateRunModelChoices,
   resetRunToStage,
   stopRunExecution,
   getRunFileDiff,
@@ -221,6 +222,7 @@ app.post("/repos/:id/onboarding/runs", async (req) => {
   const { id } = req.params as { id: string };
   const b = z.object({
     automation: z.unknown().optional(),
+    modelChoices: z.unknown().optional(),
     mode: z.enum(["initial", "refresh"]).optional(),
     previousRunId: z.string().uuid().optional(),
     /** Required when the policy auto-resolves gates: the person's explicit consent. */
@@ -230,7 +232,7 @@ app.post("/repos/:id/onboarding/runs", async (req) => {
   const stages = (b.automation as { stages?: Record<string, { gate?: string }> } | undefined)?.stages ?? {};
   const autoGates = preset === "automatic" || Object.values(stages).some((s) => s?.gate === "auto");
   if (autoGates && !b.consent) throw Object.assign(new Error("הרצה שמאשרת שערים אוטומטית דורשת הסכמה מפורשת (consent: true)"), { statusCode: 400 });
-  return onboardingCall(startOnboardingRun(id, { userId: dev.id }, { automation: b.automation, mode: b.mode, previousRunId: b.previousRunId }));
+  return onboardingCall(startOnboardingRun(id, { userId: dev.id }, { automation: b.automation, modelChoices: b.modelChoices, mode: b.mode, previousRunId: b.previousRunId }));
 });
 
 app.get("/repos/:id/onboarding/latest-run", async (req) => {
@@ -276,6 +278,13 @@ app.patch("/repos/:id/onboarding/runs/:runId/automation", async (req) => {
   const autoGates = stages?.preset === "automatic" || Object.values(stages?.stages ?? {}).some((s) => s?.gate === "auto");
   if (autoGates && !b.consent) throw Object.assign(new Error("אישור שערים אוטומטי דורש הסכמה מפורשת (consent: true)"), { statusCode: 400 });
   return onboardingCall(updateRunAutomation(id, runId, b.automation, { userId: dev.id }));
+});
+
+app.patch("/repos/:id/onboarding/runs/:runId/model-choices", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as { id: string; runId: string };
+  const b = z.object({ choices: z.unknown() }).parse(req.body);
+  return onboardingCall(updateRunModelChoices(id, runId, b.choices, { userId: dev.id }));
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/reset-to/:stageKey", async (req) => {

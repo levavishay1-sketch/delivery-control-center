@@ -247,6 +247,7 @@ function describeEvent(line: string): string | null {
  *  estimate either way, which is exactly what cost-tracking wants. */
 export type RunMeta = {
   model: string | null;
+  effort: string | null;
   costUsd: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
@@ -265,7 +266,10 @@ export type RunMeta = {
 };
 
 export type RunClaudeOpts = {
-  timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string; onMeta?: (meta: RunMeta) => void;
+  timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string;
+  /** `--effort <level>` — reasoning effort, independent of `--model`. */
+  effort?: string;
+  onMeta?: (meta: RunMeta) => void;
   /** `Read(...)` deny patterns — passed as `--settings {"permissions":{"deny":[...]}}`. */
   denyRules?: string[];
   /** Onboarding-only: run with `--restricted --tools <list>` — the built-in
@@ -374,6 +378,7 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   }
   if (steerable) args.push("--input-format", "stream-json");
   if (opts.model) args.push("--model", opts.model);
+  if (opts.effort) args.push("--effort", opts.effort);
   // `--settings` accepts either inline JSON or a file path (`claude --help`
   // confirms both) — a temp FILE is used here, not the inline JSON string
   // directly. Found live: on Windows, `claude.cmd` can only be spawned with
@@ -435,7 +440,7 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   // {"type":"result","result":"…"} line — which also carries cost/usage.
   let text = raw.trim();
   const resultLine = raw.split("\n").reverse().find((l) => l.includes('"type":"result"'));
-  let meta: RunMeta = { model: opts.model ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null, toolCalls };
+  let meta: RunMeta = { model: opts.model ?? null, effort: opts.effort ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null, toolCalls };
   try {
     const env = JSON.parse((resultLine ?? text).trim()) as {
       result?: string; total_cost_usd?: number; duration_ms?: number; num_turns?: number; is_error?: boolean; subtype?: string;
@@ -451,6 +456,7 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     const modelFromUsage = env.modelUsage ? Object.keys(env.modelUsage)[0] ?? null : null;
     meta = {
       model: opts.model ?? modelFromUsage,
+      effort: opts.effort ?? null,
       costUsd: typeof env.total_cost_usd === "number" ? env.total_cost_usd : null,
       inputTokens: env.usage?.input_tokens ?? null,
       outputTokens: env.usage?.output_tokens ?? null,

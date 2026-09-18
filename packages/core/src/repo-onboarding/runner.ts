@@ -3,7 +3,7 @@ import { db, withTenant } from "@dcc/db";
 import { onboardingPromptTemplate, repositoryOnboardingClaudeExecution } from "@dcc/db/schema";
 import { runClaudeRaw, stopFlowRun, sendRunMessage, claudeCliCaps, type RunMeta } from "../ai-assist.ts";
 import { renderPrompt } from "../prompts.ts";
-import { route, type Capability, type RoutingSignals } from "../routing.ts";
+import { route, type Capability, type Effort, type RoutingSignals } from "../routing.ts";
 import { extractClaudeJson } from "./json.ts";
 
 /**
@@ -43,6 +43,9 @@ export type ClaudeExecutionRequest = {
   /** Model routing capability — picks model + budget from `config/model-policy.json`. */
   capability: Capability;
   signals?: RoutingSignals;
+  /** A person's explicit model/effort choice for this stage, if they set
+   *  one on the run — wins over the policy's recommendation per field. */
+  modelOverride?: { model?: string; effort?: string };
   /** Built-in tools the call may use. Default: read-only trio. `[]` = none. */
   tools?: string[];
   denyRules?: string[];
@@ -61,6 +64,7 @@ export type ClaudeExecutionResult = {
   json: unknown;
   meta: RunMeta;
   model: string;
+  effort: string;
   errorMessage: string | null;
 };
 
@@ -89,7 +93,7 @@ export function createClaudeCodeRunner(): ClaudeCodeRunner {
     async run(req) {
       const [tpl] = await db.select({ body: onboardingPromptTemplate.body }).from(onboardingPromptTemplate).where(eq(onboardingPromptTemplate.id, req.promptId)).limit(1);
       if (!tpl) throw new Error(`prompt template ${req.promptId} not found`);
-      const decision = route(req.capability, req.signals ?? {});
+      const decision = route(req.capability, req.signals ?? {}, undefined, req.modelOverride as { model?: string; effort?: Effort } | undefined);
       const caps = claudeCliCaps();
       // The schema goes through the flag when the CLI can take it; otherwise
       // the same contract is stated in the prompt and parsed from the text.
@@ -105,6 +109,7 @@ export function createClaudeCodeRunner(): ClaudeCodeRunner {
           clientId: req.clientId,
           promptTemplateId: req.promptId,
           model: decision.model,
+          effort: decision.effort,
           permissionProfile: (req.tools ?? [...READ_ONLY_TOOLS]).includes("Write") ? "restricted_write" : "restricted_read",
           denyRulesSnapshot: req.denyRules ?? [],
           status: "Running",
@@ -117,6 +122,7 @@ export function createClaudeCodeRunner(): ClaudeCodeRunner {
         const { text, meta } = await runClaudeRaw(req.cwd, renderedPrompt, {
           runId: executionId,
           model: decision.model,
+          effort: decision.effort,
           maxTurns: req.maxTurns,
           timeoutMs: req.timeoutMs,
           denyRules: req.denyRules,
@@ -148,8 +154,8 @@ export function createClaudeCodeRunner(): ClaudeCodeRunner {
             completedAt: new Date(),
           }).where(eq(repositoryOnboardingClaudeExecution.id, executionId)),
         );
-        if (parseError) return { executionId, status: "Failed", text, json: null, meta, model: decision.model, errorMessage: `structured output missing: ${parseError}` };
-        return { executionId, status: "Completed", text, json, meta, model: decision.model, errorMessage: null };
+        if (parseError) return { executionId, status: "Failed", text, json: null, meta, model: decision.model, effort: decision.effort, errorMessage: `structured output missing: ${parseError}` };
+        return { executionId, status: "Completed", text, json, meta, model: decision.model, effort: decision.effort, errorMessage: null };
       } catch (e) {
         const message = String((e as Error).message ?? e);
         const status = message === "STOPPED_BY_USER" ? "Cancelled" : "Failed";
@@ -158,8 +164,8 @@ export function createClaudeCodeRunner(): ClaudeCodeRunner {
             status, errorMessage: message, completedAt: new Date(),
           }).where(eq(repositoryOnboardingClaudeExecution.id, executionId)),
         );
-        const meta: RunMeta = { model: decision.model, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null };
-        return { executionId, status, text: null, json: null, meta, model: decision.model, errorMessage: message };
+        const meta: RunMeta = { model: decision.model, effort: decision.effort, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null };
+        return { executionId, status, text: null, json: null, meta, model: decision.model, effort: decision.effort, errorMessage: message };
       } finally {
         if (activeByRun.get(req.runId) === executionId) activeByRun.delete(req.runId);
       }

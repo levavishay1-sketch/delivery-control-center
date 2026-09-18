@@ -35,6 +35,7 @@ export type Capability =
   | "onboarding_refresh";
 
 export type Tier = "haiku" | "sonnet" | "opus";
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 
 export type RoutingSignals = {
   ambiguity?: "low" | "medium" | "high";
@@ -53,7 +54,7 @@ export type Policy = {
   tiers: Record<Tier, { model: string; maxUsdPerCall: number }>;
   capabilities: Record<
     string,
-    { default: Tier; escalateOn?: Record<string, unknown>[]; downgradeOn?: Record<string, unknown>[]; maxUsdPerCall?: number }
+    { default: Tier; effort?: Effort; escalateOn?: Record<string, unknown>[]; downgradeOn?: Record<string, unknown>[]; maxUsdPerCall?: number }
   >;
   guardrails: { killAfterStuckIterations: number; budgetWarnAtFraction: number };
 };
@@ -90,14 +91,31 @@ export type RoutingDecision = {
   capability: Capability;
   tier: Tier;
   model: string;
+  effort: Effort;
   budgetUsd: number;
   rationale: string;
 };
+
+const DEFAULT_EFFORT: Effort = "medium";
+
+/** The recommendation a capability carries in the policy — model + effort
+ *  — before any per-call signal or a person's override is applied. This is
+ *  what a "before you run this" screen shows; `route()` below is the same
+ *  computation plus signal-driven escalation. */
+export function recommend(capability: Capability, overrides?: Partial<Policy>): { model: string; tier: Tier; effort: Effort } {
+  const policy = { ...loadPolicy(), ...overrides };
+  const cap = policy.capabilities[capability] ?? { default: "sonnet" as Tier };
+  const tier = cap.default;
+  return { model: policy.tiers[tier].model, tier, effort: cap.effort ?? DEFAULT_EFFORT };
+}
 
 export function route(
   capability: Capability,
   signals: RoutingSignals = {},
   overrides?: Partial<Policy>,
+  /** A person's explicit choice for this one call — wins over both the
+   *  policy default and any signal-driven escalation, per field. */
+  choice?: { model?: string; effort?: Effort },
 ): RoutingDecision {
   const policy = { ...loadPolicy(), ...overrides };
   const cap = policy.capabilities[capability] ?? { default: "sonnet" as Tier };
@@ -119,7 +137,11 @@ export function route(
   // call reads a whole repository and needs more room than the tier's
   // default); the cap is the larger of the two, never below the tier's.
   const budgetUsd = Math.max(t.maxUsdPerCall, cap.maxUsdPerCall ?? 0);
-  return { capability, tier, model: t.model, budgetUsd, rationale: why.join("; ") };
+  let model = t.model;
+  let effort: Effort = cap.effort ?? DEFAULT_EFFORT;
+  if (choice?.model && choice.model !== model) { model = choice.model; why.push(`model overridden by user (${choice.model})`); }
+  if (choice?.effort && choice.effort !== effort) { effort = choice.effort; why.push(`effort overridden by user (${choice.effort})`); }
+  return { capability, tier, model, effort, budgetUsd, rationale: why.join("; ") };
 }
 
 /** Write the audit event. Call when a model is actually invoked. */

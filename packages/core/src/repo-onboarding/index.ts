@@ -14,7 +14,7 @@ import "./stages/deliver.ts";
 
 export {
   startOnboardingRun, advanceRun, cancelRun, driveRun, getOnboardingRunView, getLatestOnboardingRun, listOnboardingRuns, submitStageInput,
-  registerStage, getOnboardingExecution, listRunExecutions, updateRunAutomation, resetRunToStage, stopRunExecution, getRunFileDiff, onboardingStageCatalogue,
+  registerStage, getOnboardingExecution, listRunExecutions, updateRunAutomation, updateRunModelChoices, resetRunToStage, stopRunExecution, getRunFileDiff, onboardingStageCatalogue,
   recoverInterruptedRuns,
 } from "./state-machine.ts";
 export { appendRepoAiEvent } from "./events.ts";
@@ -28,9 +28,9 @@ export { extractClaudeJson } from "./json.ts";
 export { loadProfileCatalog, type SecurityProfile } from "./security-profiles.ts";
 export { GUARDRAIL_CATALOG, type GuardrailDefinition } from "./guardrails.ts";
 export { checkRepositoryRefresh, repositoryRefreshMetrics, type RefreshResult, type RefreshMetrics } from "./refresh.ts";
-export { onboardingRunCostSummary, type OnboardingRunCostSummary } from "./telemetry.ts";
+export { onboardingRunCostSummary, type OnboardingRunCostSummary, type OnboardingCostByStage } from "./telemetry.ts";
 export {
-  STAGES, STAGE_ORDER, ONBOARDING_VERSION, presetPolicy, normalizePolicy,
+  STAGES, STAGE_ORDER, STAGE_CAPABILITY, ONBOARDING_VERSION, presetPolicy, normalizePolicy, normalizeModelPolicy,
   type OnboardingStatus, type RepositoryProfile, type StageContext, type StageHandler, type StageOutcome, type StageDefinition,
-  type AutomationPolicy, type AutomationPreset, type StagePolicy, type PlannedArtifact,
+  type AutomationPolicy, type AutomationPreset, type StagePolicy, type PlannedArtifact, type ModelChoice, type ModelPolicy,
 } from "./types.ts";

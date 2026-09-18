@@ -421,16 +421,22 @@ export const finishResearchWork = (id: string, conclusion: string) =>
 export type OnboardingStatus = "Pending" | "Running" | "WaitingForUser" | "AwaitingExternal" | "Completed" | "CompletedWithWarnings" | "Failed" | "Skipped" | "Cancelled";
 export type StageKind = "deterministic" | "ai" | "human" | "mixed";
 export type LifecyclePhase = "requirement" | "understanding" | "planning" | "implementation" | "testing" | "review" | "deployment" | "future_sessions";
+export type ModelChoice = { model?: string; effort?: string };
+export type ModelPolicy = Record<string, ModelChoice>;
 export type StageDefinition = {
   key: string; order: number; kind: StageKind; gate: boolean; autoApprovable: boolean; writesRepo: boolean; reversible: "yes" | "partial" | "external";
   title_he: string; short_he: string; why_he: string; what_he: string; value_he: string; supports: LifecyclePhase[]; output_he: string; impact_he: string;
+  /** Present only for the stages with an AI call — the routing capability
+   *  and the policy's model+effort recommendation for it (before any
+   *  per-run override). */
+  capability: string | null; recommended: { model: string; tier: string; effort: string } | null;
 };
 export type AutomationPreset = "step_by_step" | "guided" | "automatic" | "custom";
 export type StagePolicy = { run: "auto" | "manual"; gate?: "approve" | "auto" };
 export type AutomationPolicy = { preset: AutomationPreset; stages: Record<string, StagePolicy> };
 export type OnboardingRun = {
   id: string; repoId: string; clientId: string; status: OnboardingStatus; currentStageKey: string | null;
-  onboardingVersion: string; mode: "initial" | "refresh"; previousRunId: string | null; automation: unknown; reviewNote: string | null;
+  onboardingVersion: string; mode: "initial" | "refresh"; previousRunId: string | null; automation: unknown; modelChoices: unknown; reviewNote: string | null;
   workspaceKind: string | null; workspacePath: string | null; defaultBranch: string | null;
   baselineSha: string | null; branchName: string | null; triggeredBy: string;
   startedAt: string; completedAt: string | null; cancelledAt: string | null; cancelledBy: string | null;
@@ -448,11 +454,11 @@ export type OnboardingArtifact = {
 export type OnboardingEvent = { id: string; type: string; payload: Record<string, unknown>; actorUserId: string | null; occurredAt: string };
 export type OnboardingRunView = {
   run: OnboardingRun; stages: OnboardingStage[]; profile: unknown; artifacts: OnboardingArtifact[]; events: OnboardingEvent[];
-  automation: AutomationPolicy; driving: boolean; stageDefinitions: StageDefinition[];
+  automation: AutomationPolicy; modelChoices: ModelPolicy; driving: boolean; stageDefinitions: StageDefinition[];
   repo: { id: string; name: string; adoRepoRef: string | null; localPath: string | null; defaultBranch: string };
 };
 export const getOnboardingStages = () => get<{ stages: StageDefinition[] }>("/onboarding/stages");
-export const startOnboardingRun = (repoId: string, body: { automation?: AutomationPolicy | { preset: AutomationPreset }; consent?: boolean; mode?: "initial" | "refresh"; previousRunId?: string } = {}) =>
+export const startOnboardingRun = (repoId: string, body: { automation?: AutomationPolicy | { preset: AutomationPreset }; modelChoices?: ModelPolicy; consent?: boolean; mode?: "initial" | "refresh"; previousRunId?: string } = {}) =>
   post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, body);
 export const getLatestOnboardingRun = (repoId: string) =>
   get<{ runId: string; status: OnboardingStatus; currentStageKey: string | null; onboardingVersion: string; mode: string; completedAt: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
@@ -467,17 +473,20 @@ export const submitOnboardingStageInput = (repoId: string, runId: string, stageK
   post<{ runStatus: string; stageKey: string | null }>(`/repos/${repoId}/onboarding/runs/${runId}/stages/${stageKey}/input`, { input });
 export const updateOnboardingAutomation = (repoId: string, runId: string, automation: AutomationPolicy | { preset: AutomationPreset }, consent?: boolean) =>
   patch<AutomationPolicy>(`/repos/${repoId}/onboarding/runs/${runId}/automation`, { automation, consent });
+export const updateOnboardingModelChoices = (repoId: string, runId: string, choices: ModelPolicy) =>
+  patch<ModelPolicy>(`/repos/${repoId}/onboarding/runs/${runId}/model-choices`, { choices });
 export const resetOnboardingRunTo = (repoId: string, runId: string, stageKey: string, note?: string) =>
   post<{ reset: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/reset-to/${stageKey}`, { note });
 export const stopOnboardingExecution = (repoId: string, runId: string) =>
   post<{ stopped: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/stop-execution`, {});
 export const getOnboardingDiff = (repoId: string, runId: string, path: string) =>
   get<{ path: string; diff: string; binary: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/diff?${new URLSearchParams({ path })}`);
-export type OnboardingRunCostSummary = { totalCostUsd: number; totalInputTokens: number; totalOutputTokens: number; totalDurationMs: number; executionCount: number };
+export type OnboardingCostByStage = { stageKey: string; model: string | null; effort: string | null; costUsd: number; inputTokens: number; outputTokens: number; durationMs: number };
+export type OnboardingRunCostSummary = { totalCostUsd: number; totalInputTokens: number; totalOutputTokens: number; totalDurationMs: number; executionCount: number; byStage: OnboardingCostByStage[] };
 export const getOnboardingRunCostSummary = (repoId: string, runId: string) =>
   get<OnboardingRunCostSummary>(`/repos/${repoId}/onboarding/runs/${runId}/cost-summary`);
 export type OnboardingExecution = {
-  id: string; stageKey: string; model: string | null; permissionProfile: string; status: string;
+  id: string; stageKey: string; model: string | null; effort: string | null; permissionProfile: string; status: string;
   resultText: string | null; resultJson: unknown; costUsd: string | null; inputTokens: number | null; outputTokens: number | null;
   durationMs: number | null; numTurns: number | null; errorMessage: string | null; denyRulesSnapshot: string[];
   promptKey: string; promptVersion: number; promptTitle: string; promptBody: string;

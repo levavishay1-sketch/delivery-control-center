@@ -151,7 +151,7 @@ registerStage("scan", async (ctx): Promise<StageOutcome> => {
   const runner = createClaudeCodeRunner();
   const exec = await runner.run({
     runId: ctx.runId, stageKey: "scan", repoId: ctx.repoId, clientId: ctx.clientId, cwd: ws.dir,
-    promptId: prompt.id, capability: "onboarding_classify", tools: [], jsonSchema: CLASSIFICATION_SCHEMA as unknown as Record<string, unknown>,
+    promptId: prompt.id, capability: "onboarding_classify", modelOverride: ctx.modelChoices.scan, tools: [], jsonSchema: CLASSIFICATION_SCHEMA as unknown as Record<string, unknown>,
     promptVars: {
       REPOSITORY_SCAN: JSON.stringify({ ...profileSummary, buildSystemPaths: profile.buildSystems.slice(0, 40), testSignals: profile.testSignals.slice(0, 20), ci: profile.ciSignals.slice(0, 10) }),
       INVENTORY: renderInventoryForPrompt(inventory),

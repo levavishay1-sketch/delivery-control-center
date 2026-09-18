@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   getOnboardingExecution, updateOnboardingPrompt,
-  type AutomationPolicy, type AutomationPreset, type LifecyclePhase, type OnboardingEvent, type OnboardingExecution, type OnboardingStatus, type StageDefinition, type StageKind, type StagePolicy,
+  type AutomationPolicy, type AutomationPreset, type LifecyclePhase, type ModelChoice, type ModelPolicy, type OnboardingEvent, type OnboardingExecution, type OnboardingStatus, type StageDefinition, type StageKind, type StagePolicy,
 } from "../../api.ts";
 import { Pill } from "../../ui.tsx";
 
@@ -197,6 +197,79 @@ export function AutomationEditor({ stages, value, onChange, consent, onConsent }
   );
 }
 
+/* ── per-stage model/effort choice ──────────────────────────────────── */
+
+/** Mirrors `config/model-policy.json`'s three tiers — a display list only;
+ *  the actual routing/recommendation always comes from the server. */
+export const MODEL_OPTIONS: { value: string; label: string }[] = [
+  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5 — מהיר וזול" },
+  { value: "claude-sonnet-5", label: "Sonnet 5" },
+  { value: "claude-opus-5", label: "Opus 5 — חזק ויקר" },
+];
+export const EFFORT_OPTIONS: { value: string; label: string }[] = [
+  { value: "low", label: "נמוך" },
+  { value: "medium", label: "בינוני" },
+  { value: "high", label: "גבוה" },
+  { value: "xhigh", label: "גבוה מאוד" },
+  { value: "max", label: "מקסימלי" },
+];
+
+/** Per-AI-stage model + effort — a recommendation from the policy that a
+ *  person may override; a field left as "מומלץ" simply isn't stored, so a
+ *  later policy change (a new default) takes effect automatically. */
+export function ModelChoiceEditor({ stages, value, onChange }: {
+  stages: readonly StageDefinition[]; value: ModelPolicy; onChange: (p: ModelPolicy) => void;
+}) {
+  const aiStages = stages.filter((s) => s.capability && s.recommended);
+  const setChoice = (key: string, patch: Partial<ModelChoice>) => {
+    const next: ModelChoice = { ...(value[key] ?? {}), ...patch };
+    const cleaned: ModelChoice = {};
+    if (next.model) cleaned.model = next.model;
+    if (next.effort) cleaned.effort = next.effort;
+    const out = { ...value };
+    if (cleaned.model || cleaned.effort) out[key] = cleaned; else delete out[key];
+    onChange(out);
+  };
+  if (!aiStages.length) return null;
+  return (
+    <div className="ob-pol" style={{ marginTop: 10 }}>
+      <span className="h">שלב</span><span className="h">מודל</span><span className="h">מאמץ (effort)</span>
+      {aiStages.map((s) => {
+        const rec = s.recommended!;
+        const choice = value[s.key] ?? {};
+        const effectiveModel = choice.model ?? rec.model;
+        const effectiveEffort = choice.effort ?? rec.effort;
+        return (
+          <div key={s.key} style={{ display: "contents" }}>
+            <span>{s.title_he}</span>
+            <select className="ob-select" value={effectiveModel} onChange={(e) => setChoice(s.key, { model: e.target.value === rec.model ? undefined : e.target.value })}>
+              {MODEL_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}{m.value === rec.model ? " · מומלץ" : ""}</option>)}
+            </select>
+            <select className="ob-select" value={effectiveEffort} onChange={(e) => setChoice(s.key, { effort: e.target.value === rec.effort ? undefined : e.target.value })}>
+              {EFFORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}{o.value === rec.effort ? " · מומלץ" : ""}</option>)}
+            </select>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Compact read-only line for a single stage's effective model/effort —
+ *  used next to the stage explainer before it runs. */
+export function ModelChoiceHint({ def, choice }: { def: StageDefinition; choice?: ModelChoice }) {
+  if (!def.recommended) return null;
+  const model = choice?.model ?? def.recommended.model;
+  const effort = choice?.effort ?? def.recommended.effort;
+  const modelLabel = MODEL_OPTIONS.find((m) => m.value === model)?.label ?? model;
+  const overridden = !!(choice?.model || choice?.effort);
+  return (
+    <span className="ob-sub" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+      מודל: {modelLabel} · effort: {effort}{overridden ? " (נבחר ידנית)" : " (מומלץ)"}
+    </span>
+  );
+}
+
 /* ── the Claude call behind a stage ─────────────────────────────────── */
 
 export function ClaudeCallPanel({ repoId, executionId }: { repoId: string; executionId: string }) {
@@ -219,6 +292,7 @@ export function ClaudeCallPanel({ repoId, executionId }: { repoId: string; execu
     <div style={{ display: "grid", gap: 10 }}>
       <KV items={[
         { l: "מודל", v: exec.model ?? "—" },
+        { l: "מאמץ (effort)", v: exec.effort ?? "—" },
         { l: "הרשאות", v: exec.permissionProfile === "restricted_read" ? "קריאה בלבד, מוגבל" : exec.permissionProfile },
         { l: "עלות", v: fmtUsd(exec.costUsd) },
         { l: "טוקנים (קלט / פלט)", v: `${fmtInt(exec.inputTokens)} / ${fmtInt(exec.outputTokens)}` },

@@ -218,7 +218,7 @@ registerStage("validate", async (ctx): Promise<StageOutcome> => {
     const runner = createClaudeCodeRunner();
     const exec = await runner.run({
       runId: ctx.runId, stageKey: "validate", repoId: ctx.repoId, clientId: ctx.clientId, cwd: root,
-      promptId: prompt.id, capability: "onboarding_validate", tools: [...READ_ONLY_TOOLS], denyRules: boundaries.approved.rules,
+      promptId: prompt.id, capability: "onboarding_validate", modelOverride: ctx.modelChoices.validate, tools: [...READ_ONLY_TOOLS], denyRules: boundaries.approved.rules,
       jsonSchema: VALIDATE_SCHEMA as unknown as Record<string, unknown>,
       promptVars: { ARTIFACT_PATHS: JSON.stringify(prose.map((p) => p.path)), CHECKS: JSON.stringify(checks.map((c) => ({ id: c.id, status: c.status, detail: c.detail }))) },
       maxTurns: 40, timeoutMs: 600_000,
