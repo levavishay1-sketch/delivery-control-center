@@ -28,7 +28,7 @@ import type { BuildSystemSignal, CiSignal, FrameworkSignal, IgnoredPathSignal, L
  * the pipeline (the retired `repo-ai/permissions.ts` copy is gone).
  */
 
-const KNOWN_JUNK_DIR_NAMES = [
+export const KNOWN_JUNK_DIR_NAMES = [
   "bin", "obj", "dist", "build", "out", "target",
   "node_modules", "vendor", ".git", ".next", ".nuxt", "__pycache__",
   ".venv", "venv", ".gradle", ".terraform",
