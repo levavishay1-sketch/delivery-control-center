@@ -1,16 +1,23 @@
+import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { closeDb, db } from "@dcc/db";
+import { closeDb, db, dbKind } from "@dcc/db";
 import { users } from "@dcc/db/schema";
 import { getActiveOnboardingPrompt, registerPromptVersion } from "./prompts.ts";
 
 /**
- * Idempotent seed for the v2 onboarding prompts. An explicit script, not
- * lazy-seeded on import and not auto-run on server boot (matches
- * `db:migrate` being a deliberate step). Existing active versions are
- * left alone — edit them from the onboarding screen (each edit is a new
- * immutable version) or delete the active row to re-seed.
+ * Idempotent seed for the v2 onboarding prompts. Runnable directly:
  *
  *   npx tsx packages/core/src/repo-onboarding/seed-prompts.ts
+ *
+ * `seedOnboardingPrompts()` below is also called automatically at API
+ * boot against an embedded PGlite database (never a real Postgres) —
+ * `dev:reset` wipes prompts along with everything else, and forgetting
+ * the manual re-seed step ("no active prompt for onboarding.v2.classify")
+ * was recurring friction (see `tasks.md` §6 for the incident). That
+ * auto-seed ONLY fills genuinely missing keys — an existing active
+ * version, however old, is always left alone; editing a prompt or rolling
+ * out a changed one still requires the explicit `SEED_REPLACE=` step
+ * below, exactly as before.
  *
  * Every prompt states the same discipline the pipeline enforces: ground
  * every claim in an inspected path, never document what Claude can derive
@@ -197,28 +204,61 @@ Return only the JSON object.`,
   },
 ];
 
-const [dev] = await db.select().from(users).where(eq(users.email, process.env.SEED_USER_EMAIL ?? "you@dcc.local")).limit(1);
-if (!dev) {
-  console.log("no dev user found — set SEED_USER_EMAIL or run the app once first");
-  process.exit(1);
+/** Finds the configured dev user; on the embedded PGlite database only, an
+ *  absent one is auto-created (same dev convenience as `actingUser()` in
+ *  `apps/api/src/context.ts`) so this can run standalone, before the API
+ *  has ever handled a request — exactly the state right after `dev:reset`. */
+const AUTO_SEED_EMAIL = "system@dcc.local";
+async function resolveSeedingUser(): Promise<string> {
+  const email = process.env.SEED_USER_EMAIL ?? "you@dcc.local";
+  const [dev] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (dev) return dev.id;
+  if (dbKind !== "pglite") throw new Error("no dev user found — set SEED_USER_EMAIL or run the app once first");
+  // The synthetic seed user itself may already exist from an earlier boot
+  // (this only runs when the configured dev user hasn't shown up yet) —
+  // reuse it rather than re-insert and hit the unique email constraint.
+  const [existingSeedUser] = await db.select().from(users).where(eq(users.email, AUTO_SEED_EMAIL)).limit(1);
+  if (existingSeedUser) return existingSeedUser.id;
+  const [created] = await db.insert(users).values({ entraOid: `seed-${randomUUID()}`, email: AUTO_SEED_EMAIL, displayName: "DCC (auto-seed)" }).returning({ id: users.id });
+  return created!.id;
 }
 
-// SEED_REPLACE=key1,key2 (or "all") registers a NEW version for those keys
-// even when one is active — the way to roll out an edited seed prompt
-// without touching the immutable history.
-const replace = new Set((process.env.SEED_REPLACE ?? "").split(",").map((s) => s.trim()).filter(Boolean));
-let created = 0, skipped = 0;
-for (const p of PROMPTS) {
-  const existing = await getActiveOnboardingPrompt(p.promptKey);
-  if (existing && !(replace.has("all") || replace.has(p.promptKey))) {
-    console.log(`  skip (already active v${existing.version}): ${p.promptKey}`);
-    skipped++;
-    continue;
+/** Registers every prompt in `PROMPTS` that has no active version yet.
+ *  `replace` (key set, or `"all"`) additionally re-registers keys that
+ *  already have an active version — omit it to only fill gaps, which is
+ *  exactly what the boot-time auto-seed does. `log` defaults to silent so
+ *  the boot-time call doesn't spam the server log when nothing changes. */
+export async function seedOnboardingPrompts(opts: { replace?: Set<string>; log?: (msg: string) => void } = {}): Promise<{ created: number; skipped: number }> {
+  const log = opts.log ?? (() => {});
+  const replace = opts.replace ?? new Set<string>();
+  const userId = await resolveSeedingUser();
+  let created = 0, skipped = 0;
+  for (const p of PROMPTS) {
+    const existing = await getActiveOnboardingPrompt(p.promptKey);
+    if (existing && !(replace.has("all") || replace.has(p.promptKey))) {
+      log(`  skip (already active v${existing.version}): ${p.promptKey}`);
+      skipped++;
+      continue;
+    }
+    const row = await registerPromptVersion({ ...p, by: { userId } });
+    log(`  created v${row.version}: ${p.promptKey}`);
+    created++;
   }
-  const row = await registerPromptVersion({ ...p, by: { userId: dev.id } });
-  console.log(`  created v${row.version}: ${p.promptKey}`);
-  created++;
+  return { created, skipped };
 }
 
-console.log(`\n${created} created, ${skipped} already active.`);
-await closeDb();
+if (import.meta.main) {
+  // SEED_REPLACE=key1,key2 (or "all") registers a NEW version for those
+  // keys even when one is active — the way to roll out an edited seed
+  // prompt without touching the immutable history.
+  const replace = new Set((process.env.SEED_REPLACE ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+  try {
+    const { created, skipped } = await seedOnboardingPrompts({ replace, log: console.log });
+    console.log(`\n${created} created, ${skipped} already active.`);
+  } catch (e) {
+    console.log((e as Error).message);
+    process.exitCode = 1;
+  } finally {
+    await closeDb();
+  }
+}

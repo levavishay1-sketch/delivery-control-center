@@ -122,6 +122,7 @@ import {
   getOnboardingExecution,
   updateOnboardingPromptBody,
   recoverInterruptedRuns,
+  seedOnboardingPrompts,
   stopAllFlowRuns,
 } from "@dcc/core";
 import { blocker, gap, task } from "@dcc/db/schema";
@@ -1381,6 +1382,15 @@ if (import.meta.main) {
   // An onboarding stage that was executing when the previous process
   // died lands as Failed (retryable) instead of spinning forever.
   recoverInterruptedRuns().then((n) => { if (n) app.log.warn(`onboarding: ${n} run(s) interrupted by the previous shutdown marked Failed`); }).catch((e) => app.log.error(e));
+
+  // PGlite dev convenience: `dev:reset` wipes the onboarding prompts along
+  // with everything else, and forgetting the manual re-seed step was
+  // recurring friction ("no active prompt for onboarding.v2.classify").
+  // Only fills genuinely missing keys — an existing active prompt, however
+  // old, is never touched; never runs against a real Postgres.
+  if (dbKind === "pglite") {
+    seedOnboardingPrompts().then(({ created }) => { if (created) app.log.info(`onboarding: seeded ${created} missing prompt(s) on the embedded database`); }).catch((e) => app.log.error(e));
+  }
 
   // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
   // un-openable if the process is killed mid-write, so always close it.
