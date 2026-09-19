@@ -249,8 +249,15 @@ export function RepoOnboardingPanel({ id: repoId, nav }: { id: string; nav: (h: 
             {run.status === "Failed" && (
               <div style={{ display: "grid", gap: 10 }}>
                 <Note tone="crit"><b>{currentKey ? title(currentKey) : "השלב"} נכשל.</b> {byKey.get(currentKey ?? "")?.errors.join(" · ")}</Note>
+                {!isCurrent && (
+                  <Note tone="warn">
+                    אתם צופים כרגע ב"{selDef.title_he}", אבל השלב שבאמת נכשל וממתין לטיפול הוא <b>{currentKey ? title(currentKey) : ""}</b>.
+                    הכפתור "נסה שוב את השלב" למטה תמיד מפעיל מחדש את <b>{currentKey ? title(currentKey) : ""}</b> — לא את השלב שאתם צופים בו כרגע.
+                    כדי לחזור באמת לשלב הזה (ולהריץ מחדש הכל מכאן), השתמשו בכפתור "↺ הרץ מחדש מהשלב הזה" בתוך הפאנל של השלב עצמו למטה.
+                  </Note>
+                )}
                 <div className="ob-actions">
-                  <button className="btn btn-primary btn-sm" disabled={!!busy || legacy} onClick={() => act("advance", () => advanceOnboardingRun(repoId, run.id), { fireAndForget: true })}>{busy === "advance" ? "מנסה…" : "נסה שוב את השלב"}</button>
+                  <button className="btn btn-primary btn-sm" disabled={!!busy || legacy} onClick={() => act("advance", () => advanceOnboardingRun(repoId, run.id), { fireAndForget: true })}>{busy === "advance" ? "מנסה…" : `נסה שוב את "${currentKey ? title(currentKey) : "השלב"}"`}</button>
                   <ResetControl defs={defs} merged={merged} disabled={!!busy || legacy} onReset={(k, note) => act("reset", () => resetOnboardingRunTo(repoId, run.id, k, note))} />
                 </div>
               </div>
