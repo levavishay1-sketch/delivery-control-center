@@ -14,12 +14,13 @@
     "decomposition":{ "default": "sonnet", "escalateOn": [{ "breadth": 4 }, { "openGaps": 3 }, { "novelty": "high" }] },
     "review":       { "default": "sonnet" },
     "execution":    { "default": "sonnet", "escalateOn": [{ "breadth": 5 }, { "ambiguity": "high" }, { "novelty": "high" }], "downgradeOn": [{ "mechanical": true }] },
+    "$onboarding_comment": "Onboarding runs once per repository and leaves files that steer every future session in it for months, so the cost of a mistake is not the cost of the call. Spend by how far an error travels: classify feeds one stage, discover feeds four and the repository, plan decides what exists, validate is the last gate before a client's repo. `complexity` comes from classify, and escalateOn tests >=, so `medium` means a small repository still runs on sonnet while anything larger gets opus — economy where the work is small, quality everywhere else. validate does not escalate: a broken guardrail in a ten-file repository is just as broken, and the artifact count barely moves with repository size.",
     "onboarding_classify": { "default": "sonnet", "effort": "low",    "maxUsdPerCall": 0.3 },
-    "onboarding_discover": { "default": "sonnet", "effort": "medium", "escalateOn": [{ "complexity": "high" }], "maxUsdPerCall": 4.0 },
-    "onboarding_plan":     { "default": "sonnet", "effort": "medium", "maxUsdPerCall": 1.5 },
-    "onboarding_generate": { "default": "sonnet", "effort": "medium", "maxUsdPerCall": 3.0 },
-    "onboarding_validate": { "default": "sonnet", "effort": "medium", "maxUsdPerCall": 1.5 },
-    "onboarding_refresh":  { "default": "sonnet", "effort": "low",    "maxUsdPerCall": 1.0 }
+    "onboarding_discover": { "default": "sonnet", "effort": "high",   "escalateOn": [{ "complexity": "medium" }], "maxUsdPerCall": 4.0 },
+    "onboarding_plan":     { "default": "sonnet", "effort": "medium", "escalateOn": [{ "complexity": "medium" }], "maxUsdPerCall": 3.0 },
+    "onboarding_generate": { "default": "sonnet", "effort": "high",   "maxUsdPerCall": 3.0 },
+    "onboarding_validate": { "default": "opus",   "effort": "high",   "maxUsdPerCall": 3.0 },
+    "onboarding_refresh":  { "default": "sonnet", "effort": "medium", "maxUsdPerCall": 1.0 }
   },
   "guardrails": {
     "killAfterStuckIterations": 3,
