@@ -41,7 +41,17 @@ export type ValidateResult = {
 
 const THRESHOLDS = { warnAlways: 3000, failAlways: 6000, claudeMdMaxLines: 150 };
 
-function parseFm(text: string): Record<string, string | string[]> {
+function parseFm(rawText: string): Record<string, string | string[]> {
+  // A file checked out with CRLF line endings (the Git/Windows default —
+  // exactly what a .NET repo like this one gets) leaves every line ending
+  // in `\r`. JS regex `.` excludes line terminators, `\r` among them, so
+  // `(.*)$` can never reach end-of-string on such a line and the whole
+  // per-line match silently fails — frontmatter comes back completely
+  // empty, on every rule and skill, with no error. Confirmed live: a
+  // CRLF copy of a real rule file parsed to `{}` where the LF original
+  // parsed correctly. Normalize once, up front, rather than special-case
+  // every regex below.
+  const text = rawText.replace(/\r\n/g, "\n");
   const m = text.match(/^---\s*\n([\s\S]*?)\n---/);
   const out: Record<string, string | string[]> = {};
   if (!m) return out;
