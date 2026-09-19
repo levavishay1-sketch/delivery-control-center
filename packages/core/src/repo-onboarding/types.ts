@@ -281,6 +281,11 @@ export type StageOutcome = {
   /** Send the run back to an earlier stage (a reviewer's "request changes"):
    *  every stage from `stageKey` on is reset to Pending and the run resumes there. */
   resetTo?: { stageKey: string; note?: string };
+  /** Sets the run's `reviewNote` (read by `generate` as `REVIEW_NOTE`)
+   *  without resetting anything — a person's free-text guidance given at
+   *  approval time (e.g. on the plan gate), not only on a "request
+   *  changes" reset. Empty string clears whatever was there before. */
+  carryNote?: string;
 };
 
 export type StageHandler = (ctx: StageContext) => Promise<StageOutcome>;

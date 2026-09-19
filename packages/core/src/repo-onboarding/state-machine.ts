@@ -161,6 +161,11 @@ async function persistStageOutcome(
       return { runStatus: "Running", stageKey: outcome.resetTo.stageKey };
     }
 
+    if (outcome.carryNote !== undefined) {
+      await tx.update(repositoryOnboardingRun).set({ reviewNote: outcome.carryNote || null }).where(eq(repositoryOnboardingRun.id, runId));
+      if (outcome.carryNote) await appendRepoAiEvent({ clientId, repoId, type: "onboarding.stage.note_added", payload: { runId, stageKey, note: outcome.carryNote }, actorUserId: triggeredBy });
+    }
+
     if (outcome.status === "WaitingForUser") {
       await tx.update(repositoryOnboardingRun).set({ status: "WaitingForUser" }).where(eq(repositoryOnboardingRun.id, runId));
       await appendRepoAiEvent({ clientId, repoId, type: "onboarding.stage.waiting_for_user", payload: { runId, stageKey }, actorUserId: triggeredBy });
@@ -385,7 +390,7 @@ function summarizeInput(stageKey: string, input: unknown): unknown {
   const i = (input ?? {}) as Record<string, unknown>;
   if (stageKey === "boundaries") return { rules: Array.isArray(i.rules) ? i.rules.length : 0, profileId: i.profileId, existingConfig: i.existingConfig, classificationOverride: i.classificationOverride ?? null, notes: i.notes ?? null };
   if (stageKey === "confirm") return { answered: Array.isArray(i.answers) ? (i.answers as { answer_he?: string }[]).filter((a) => a.answer_he?.trim()).length : 0, total: Array.isArray(i.answers) ? i.answers.length : 0, corrections: i.corrections ?? null };
-  if (stageKey === "plan") return { approvedKeys: i.approvedKeys, acknowledgedStaleWarnings: Array.isArray(i.acknowledgedStaleWarnings) ? i.acknowledgedStaleWarnings.length : 0 };
+  if (stageKey === "plan") return { approvedKeys: i.approvedKeys, acknowledgedStaleWarnings: Array.isArray(i.acknowledgedStaleWarnings) ? i.acknowledgedStaleWarnings.length : 0, note: typeof i.note === "string" && i.note.trim() ? i.note.trim() : null };
   if (stageKey === "review") return { decision: i.decision, note: i.note ?? null, dropPaths: i.dropPaths ?? [] };
   return i;
 }

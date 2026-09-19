@@ -491,9 +491,20 @@ function ArtifactTable({ artifacts, selected, onToggle }: { artifacts: PlannedAr
 
 const STALE_VERDICT_HE: Record<string, string> = { outdated: "לא מעודכן", conflicting: "סותר את הקוד" };
 
+/** Best-effort, display-only: does any proposed (non-skipped) artifact's
+ *  own justification mention this warning's path or file name? Never
+ *  gates anything — just tells a person what the checkbox itself can't:
+ *  whether the AI already proposed something for this specific finding,
+ *  or whether it's flagged with no proposed fix at all. */
+function addressedByHint(warningPath: string, artifacts: PlannedArtifact[]): PlannedArtifact | null {
+  const base = warningPath.split("/").pop() ?? warningPath;
+  return artifacts.find((a) => a.action !== "skip" && (a.justification.includes(warningPath) || a.justification.includes(base))) ?? null;
+}
+
 export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set(r.artifacts.filter((a) => a.action !== "skip").map((a) => a.key)));
   const [acked, setAcked] = useState<Set<string>>(new Set());
+  const [note, setNote] = useState("");
   const toggle = (k: string) => setSelected((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const toggleAck = (p: string) => setAcked((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
   const always = r.artifacts.filter((a) => selected.has(a.key) && a.loading === "always").length;
@@ -505,21 +516,32 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
       {r.rationale_he && <Note tone="ai">{r.rationale_he}</Note>}
       {warnings.length > 0 && (
         <Section title={`תיעוד AI קיים שנמצא לא מדויק (${warnings.length})`} aside={<span className="ob-sub">{unacked.length ? `${unacked.length} טרם סומנו` : "הכל סומן"}</span>}>
-          <p className="ob-sub" style={{ marginBottom: 8 }}>Discovery מצא artifacts קיימים (settings, rules, skills, docs וכו') שנתוניהם כבר לא תואמים את הקוד — לא רק חדש שמוצע. סמנו שראיתם כל אחד לפני האישור; זה לא נעלם בשקט.</p>
-          <ul className="ob-list" style={{ display: "grid", gap: 8 }}>
-            {warnings.map((w) => (
-              <li key={w.path} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                <input type="checkbox" checked={acked.has(w.path)} onChange={() => toggleAck(w.path)} style={{ marginTop: 3 }} />
-                <span>
-                  <Code>{w.path}</Code> · <b>{STALE_VERDICT_HE[w.verdict] ?? w.verdict}</b>
-                  {w.reason && <div className="ob-sub" style={{ marginTop: 2 }}>{w.reason}</div>}
-                </span>
-              </li>
-            ))}
+          <Note tone="warn">
+            Discovery מצא artifacts קיימים (settings, rules, skills, docs וכו') שנתוניהם כבר לא תואמים את הקוד. <b>סימון ה-checkbox כאן הוא אישור "ראיתי את זה" בלבד — הוא לא מתקן כלום ולא מפעיל שום פעולה.</b> תיקון בפועל, אם ה-AI הציע כזה, מופיע ברשימת ה-artifacts למטה ומסומן שם. <b>אישור התוכנית חסום עד שתסמנו את כולם.</b>
+          </Note>
+          <ul className="ob-list" style={{ display: "grid", gap: 10, marginTop: 10 }}>
+            {warnings.map((w) => {
+              const fix = addressedByHint(w.path, r.artifacts);
+              return (
+                <li key={w.path} style={{ display: "flex", gap: 8, alignItems: "flex-start", border: "1px solid var(--border-hairline)", borderRadius: 8, padding: "8px 10px" }}>
+                  <input type="checkbox" checked={acked.has(w.path)} onChange={() => toggleAck(w.path)} style={{ marginTop: 3 }} />
+                  <span style={{ flex: 1 }}>
+                    <Code>{w.path}</Code> · <b>{STALE_VERDICT_HE[w.verdict] ?? w.verdict}</b>
+                    {" · "}
+                    <span className={acked.has(w.path) ? "ob-chip" : "ob-chip human"}>{acked.has(w.path) ? "✓ סומן" : "⚠ טרם סומן"}</span>
+                    {w.reason && <div className="ob-sub" style={{ marginTop: 4 }}>{w.reason}</div>}
+                    <div style={{ marginTop: 4, fontSize: 12 }}>
+                      {fix ? <>מטופל על ידי artifact בתוכנית: <b>{fix.title_he}</b> ({fix.path})</> : <span className="ob-sub">לא נמצא artifact בתוכנית שמתייחס במפורש לממצא הזה — אם אתם רוצים שזה יטופל, כתבו על כך בהערה הכללית למטה לפני האישור.</span>}
+                    </div>
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         </Section>
       )}
       <Section title={`הצעה: ${r.artifacts.length} artifacts — סמנו מה ייווצר`} aside={<span className="ob-sub">{selected.size} נבחרו · {always} נטענים בכל session</span>}>
+        <p className="ob-sub" style={{ marginBottom: 8 }}>סימון = ייכתב בשלב הבא; ביטול סימון = לא ייכתב ולא יעלה טוקנים. אפשר לשנות כל בחירה כאן לפני האישור.</p>
         <ArtifactTable artifacts={r.artifacts} selected={selected} onToggle={toggle} />
       </Section>
       {claudeMdOff && <div style={{ marginTop: 10 }}><Note tone="warn">CLAUDE.md הוא ה-artifact היחיד שכל repository מוטמע צריך — ללא סימונו האישור יידחה (אלא אם הוחלט בשלב הגבולות לשמור על הקיים).</Note></div>}
@@ -527,9 +549,13 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
         {r.notCreated.length ? <ul className="ob-list">{r.notCreated.map((n, i) => <li key={i}><b>{ARTIFACT_KIND_HE[n.kind] ?? n.kind}</b> — {n.reason_he}</li>)}</ul> : <Empty text="הכל מוצדק." />}
       </Section>
       {r.protectedGlobs.length > 0 && <Section title="אזורים מוגנים (ל-guardrails)"><div style={{ display: "flex", flexWrap: "wrap", gap: 3 }}>{r.protectedGlobs.map((g) => <Code key={g}>{g}</Code>)}</div></Section>}
+      <Section title="הערה כללית ל-AI (אופציונלי)">
+        <p className="ob-sub" style={{ marginBottom: 6 }}>מועברת כהנחיה נוספת לשלב היצירה — למשל בקשה לטפל בממצא ספציפי, לתקן כפילות בין קבצים, או כל דבר אחר שחשוב שה-AI ייקח בחשבון בסבב הכתיבה הקרוב.</p>
+        <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} style={{ width: "100%", fontSize: 13, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-hairline)" }} placeholder="לדוגמה: אחדו את שני קבצי הכלל של נקודות הכניסה לפלאגין לקובץ אחד מדויק." />
+      </Section>
       <div className="ob-actions" style={{ marginTop: 14 }}>
-        <button className="btn btn-primary" disabled={busy || unacked.length > 0} onClick={() => onSubmit({ approvedKeys: Array.from(selected), acknowledgedStaleWarnings: Array.from(acked) })}>{busy ? "שומר…" : `✓ אשר תוכנית (${selected.size} פריטים) והמשך ליצירה`}</button>
-        <span className="ob-sub">{unacked.length > 0 ? "סמנו את כל התיעוד הלא-מדויק לפני האישור." : "פריטים שלא סומנו לא ייווצרו ולא יעלו טוקנים."}</span>
+        <button className="btn btn-primary" disabled={busy || unacked.length > 0} onClick={() => onSubmit({ approvedKeys: Array.from(selected), acknowledgedStaleWarnings: Array.from(acked), note: note.trim() || undefined })}>{busy ? "שומר…" : `✓ אשר תוכנית (${selected.size} פריטים) והמשך ליצירה`}</button>
+        <span className="ob-sub">{unacked.length > 0 ? `האישור חסום — סמנו את ${unacked.length} ${unacked.length === 1 ? "הממצא" : "הממצאים"} שלא סומנו למעלה.` : "פריטים שלא סומנו לא ייווצרו ולא יעלו טוקנים."}</span>
       </div>
     </div>
   );

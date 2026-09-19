@@ -157,7 +157,7 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
   if (ctx.resumeInput !== undefined) {
     const prior = ctx.ownResult as PlanResult | undefined;
     if (!prior) return { status: "Failed", errors: ["no plan to approve"] };
-    const input = ctx.resumeInput as { approvedKeys?: unknown; acknowledgedStaleWarnings?: unknown };
+    const input = ctx.resumeInput as { approvedKeys?: unknown; acknowledgedStaleWarnings?: unknown; note?: unknown };
     if (!Array.isArray(input.approvedKeys) || !input.approvedKeys.every((k) => typeof k === "string")) return { status: "Failed", errors: ["approvedKeys must be a string[]"] };
     const acknowledged = new Set(Array.isArray(input.acknowledgedStaleWarnings) ? (input.acknowledgedStaleWarnings as unknown[]).filter((x): x is string => typeof x === "string") : []);
     const unacknowledged = (prior.staleArtifactWarnings ?? []).filter((w) => !acknowledged.has(w.path));
@@ -172,7 +172,8 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
     await replaceLedger(ctx.clientId, ctx.repoId, ctx.runId, approved);
     const result: PlanResult = { ...prior, approved, approvedAt: new Date().toISOString() };
     const skipped = approved.filter((a) => a.action === "skip").length;
-    return { status: "Completed", warnings: skipped ? [`${skipped} פריטים הוסרו מהתוכנית על ידי המשתמש`] : [], result };
+    const note = typeof input.note === "string" ? input.note.trim() : "";
+    return { status: "Completed", warnings: skipped ? [`${skipped} פריטים הוסרו מהתוכנית על ידי המשתמש`] : [], result, carryNote: note };
   }
 
   const prompt = await getActiveOnboardingPrompt("onboarding.v2.plan");
