@@ -1,113 +1,100 @@
-# Repository AI redesign lifecycle — a third onboarding mode for when the *tooling* changes, not just the code
+# Repository AI reshape assessment — no new mode, no new screen
 
 Status: **proposed** — not implemented. Written up per this repo's own
 methodology (`/opsx:propose → /opsx:apply → /opsx:archive`) because this
-touches the onboarding schema, prompts, and plan logic broadly enough to
+touches Discovery's schema and Plan's artifact taxonomy broadly enough to
 warrant review before code, the same way `repository-ai-enablement-v2`
-itself was.
+itself was. Revised once already (see history below) toward the smallest
+version that solves the real problem.
 
-Appetite: **large**.
+Appetite: **medium** (revised down from *large* — see revision history below).
 
 ## Why
 
-`repository-ai-enablement-v2` already has two run modes:
+`refresh` and every normal onboarding run already ask, per existing
+AI-facing artifact, "is this still *accurate* against the code" (the
+`existing_instructions_assessment` this pipeline already computes on
+every Discovery call, not a special one). Found live, dogfooding this
+exact pipeline: that's not the only question worth asking. This
+pipeline's own methodology has already changed once — 16 stages → 9,
+a `docs/ai/*.md` encyclopedia → on-demand skills — purely because Claude
+Code's loading mechanics and best practice moved forward, not because
+any repository's *code* changed. A repository onboarded before that
+shift is left carrying artifacts shaped by the old thinking (a
+`docs/ai/architecture.md` that predates skills existing as a concept at
+all), with no path back to reconsideration, because:
 
-- **`initial`** — the first onboarding of a repository.
-- **`refresh`** — deterministic staleness signals (a watched path changed,
-  an artifact was hand-edited, a glob stopped matching, age > 90 days) →
-  one AI judgement only when a signal fires → a targeted fix to the
-  specific artifact whose *content* went stale.
-
-Both answer the same question: **"is what we already decided still
-accurate against the code?"** Neither answers a different one that came
-up live, dogfooding this exact pipeline on a real repository: **"is the
-*shape* of what we decided still the best shape, now that the tooling
-itself has moved on?"**
-
-Concretely: this pipeline's own methodology has already changed once
-(16 stages → 9, `docs/ai/*.md` encyclopedia → on-demand skills) purely
-because Claude Code's loading mechanics and best practice moved forward
-— nothing in any onboarded repository's *code* had to change for that
-verdict to flip. A repository onboarded before that shift is left
-carrying artifacts shaped by the old thinking (a `docs/ai/architecture.md`
-that predates skills existing as a concept at all) with no path back to
-reconsideration, because:
-
-- `refresh` only ever asks "does this specific artifact's *content* still
-  match the code" — it has no concept of "should this exist in this
-  *form* at all."
+- The existing assessment only ever judges *content* accuracy — it has
+  no concept of "should this exist in this *form* at all," only
+  keep/merge/outdated/conflicting.
 - `plan`'s artifact schema has exactly five kinds
   (`claude_md`/`nested_claude_md`/`rule`/`knowledge_skill|workflow_skill`/
   `agent`). A pre-existing file that predates the taxonomy — a loose
   `docs/ai/*.md`, for instance — cannot be proposed for removal or
-  conversion, because it was never able to become a plan *item* in the
-  first place. Found live: Discovery correctly flagged three `docs/ai/*.md`
-  files as `conflicting`/`outdated` against the code, `plan`'s own
-  `not_created` list explained *why* it couldn't act ("תיקון/מחיקת קבצי
-  Markdown חופשיים בתיקיית docs/ אינו בתחום סוגי הארטיפקטים הנתמכים
-  בסבב הזה") — the AI itself named the schema gap it was hitting.
+  conversion, because it can never become a plan *item* in the first
+  place. `plan`'s own `not_created` list said so explicitly on a real
+  run: "תיקון/מחיקת קבצי Markdown חופשיים בתיקיית docs/ אינו בתחום סוגי
+  הארטיפקטים הנתמכים בסבב הזה" — the AI itself named the schema gap it
+  was hitting.
 
 ## What changes
 
-**A third mode: `redesign`.** Same nine stages, same human gates — this
-is not a new pipeline, it's a different *posture* for `discovery` and
-`plan` to take, selected at start time next to today's "רענון" /
-"onboarding מלא מחדש" choice, plus one automatic trigger:
+**No new run mode, no new stage, no new screen the person has to learn.**
+The whole point is that this shows up as one more row in the plan table
+a person already reviews on every run — not as a decision to opt into.
 
-- **Manual**: a person requests it explicitly (e.g. "the team wants a
-  structural review of our AI setup").
-- **Suggested, never forced**: the lifecycle panel (which already surfaces
-  refresh signals) additionally compares the repository's completed run
-  against the current `ONBOARDING_METHODOLOGY_VERSION` and, on a mismatch,
-  shows a dismissible suggestion — never an automatic run. Nothing about
-  crossing a version boundary implies the old setup is *wrong*; it implies
-  it's worth a look.
-
-**Discovery's redesign posture**: in addition to today's operating-model
-read, it is handed the FULL current artifact set (every file the
-inventory finds, not just the ones `existing_instructions_assessment`
-already checks for accuracy) and asked a different question per artifact:
-not just "is this accurate" but "given what Claude Code and this
-methodology can do today, is this still the *right kind of thing*" —
-e.g. "this is a loose docs/ai file predating skills; propose superseding
-it," or "this rule's scope now overlaps a skill; propose consolidating."
-
-**Plan's redesign posture**: a new artifact kind, `legacy_artifact`, for
-exactly the case that has no home today — an existing AI-facing file
-that isn't a claude_md/rule/skill/agent DCC recognizes (a loose docs/ai
-markdown file today; a future taxonomy leftover after the *next*
-methodology shift). Its only actions are `keep` (with a stated reason),
-`superseded_by` (pointing at the plan item that replaces it — usually a
-new or updated skill), or `remove`. Nothing about this kind writes new
-prose; it only lets removal/supersession enter the same human-reviewed
-plan gate every other artifact already goes through — full visibility,
-full "no silent actions," same as today.
+- **Discovery's existing `existing_instructions_assessment`** — the same
+  field, same call, every normal run (`initial` or `refresh` alike) —
+  gets one more axis alongside its current verdict: `reshape`
+  (`"none"` | `"supersede_with_skill"` | `"consolidate_with:<path>"`).
+  No extra AI call, no extra read: Discovery is already reading these
+  files to judge accuracy: this is one more question on the same pass.
+- **`plan` gets a new artifact kind, `legacy_artifact`**, for exactly the
+  case with no home today: an existing AI-facing file that isn't a
+  claude_md/rule/skill/agent DCC recognizes. Its only actions are `keep`
+  (stated reason), `superseded_by` (pointing at the plan item that
+  replaces it — usually a skill), or `remove`. When Discovery's
+  `reshape` fires, `plan` proposes one of these the same way it proposes
+  every other item today — same table, same checkboxes, same approval
+  gate a person already uses.
+- **A small, optional nudge, not a gate**: the lifecycle panel (which
+  already surfaces refresh signals) additionally notes, informationally,
+  when `ONBOARDING_METHODOLOGY_VERSION` has moved on since the repo's
+  last run — "worth running a check" — dismissible, never forcing
+  anything, never a required step.
 
 **Everything else is unchanged.** `generate`/`validate`/`review`/`deliver`
-don't know or care which mode produced the plan they're given; a
-`legacy_artifact` marked `remove` goes through the exact same
-`action: "remove"` deterministic path `generate` already has for a
-reviewer's per-file drop.
+don't know or need to know that a `legacy_artifact` item exists; marked
+`remove`, it goes through the exact same `action: "remove"` deterministic
+path `generate` already has for a reviewer's per-file drop.
 
 ## What does not change
 
 - The five foundational decisions.
-- `refresh`'s own job — content-staleness-against-code detection stays
-  exactly as it is; `redesign` is additive, not a replacement.
+- The existing accuracy assessment's own job — `reshape` is an added
+  field on it, not a replacement.
 - No artifact is ever removed without appearing in a plan a human
-  approves — `legacy_artifact` is a schema addition to make a proposal
-  *possible*, not a new automatic-deletion path.
+  approves — `legacy_artifact` is a schema addition that makes a
+  proposal *possible*, never a new automatic-deletion path.
+- No new choice at run-start, no new stage in the nine-stage stepper.
 
 ## Open questions
 
-- Should `redesign` require the same explicit `consent: true` an
-  `automatic` policy run already requires for auto-resolved gates, given
-  it can now propose deleting more than just newly-generated content? —
-  leaning yes, but not decided here.
-- How a version mismatch is computed when a repo's last run predates
-  `onboardingVersion` being tracked at all (pre-v2 rows) — likely "any
-  v1 row is always a redesign candidate," but not decided here.
-- Whether `legacy_artifact`'s `superseded_by` needs to be a hard
-  validate-time check (does the pointed-to item actually exist in the
-  same plan) or stays advisory text — leaning toward a hard check, given
-  how much churn a dangling reference already cost in `referenced_paths`.
+- Whether `legacy_artifact`'s `superseded_by` needs a hard validate-time
+  check (does the pointed-to item actually exist in the same plan) or
+  stays advisory text — leaning toward a hard check, given how much
+  churn a dangling reference already cost in `referenced_paths`.
+- How to phrase the lifecycle-panel nudge for a repo whose last run
+  predates `onboardingVersion` being tracked at all (pre-v2 rows) —
+  likely "any v1 row always gets the nudge," not decided here.
+
+## Revision history
+
+- **First draft**: proposed a third run mode (`redesign`), selected at
+  start alongside `initial`/`refresh`, with Discovery and Plan taking a
+  distinct "posture" only in that mode. Reconsidered after direct
+  feedback: since Discovery already reads every existing artifact for
+  accuracy on every normal run, asking one more question on that same
+  read costs nothing extra and needs no separate mode, screen, or
+  decision for a person to learn — the smaller version above does
+  everything the mode would have, with no added surface area.
