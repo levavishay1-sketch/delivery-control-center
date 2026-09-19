@@ -25,6 +25,16 @@ export async function getActiveOnboardingPrompt(promptKey: string): Promise<Onbo
   return row ?? null;
 }
 
+/** Every prompt key's currently-active version, ordered by stage — what
+ *  the prompt library screen shows. Unlike `getActiveOnboardingPrompt`
+ *  (looked up per key, only ever reached today from inside a Claude call's
+ *  own detail panel — i.e. only after a run has already used it), this
+ *  lets someone browse and edit every onboarding prompt up front, the
+ *  same way the general prompt library already works. */
+export async function listActiveOnboardingPrompts(): Promise<OnboardingPromptTemplateRow[]> {
+  return db.select().from(onboardingPromptTemplate).where(eq(onboardingPromptTemplate.active, true)).orderBy(onboardingPromptTemplate.stage);
+}
+
 /** Registers a new immutable version of a prompt and marks it active,
  *  deactivating whatever was active before (the DB's own partial unique
  *  index — `active` where true — enforces "at most one active version

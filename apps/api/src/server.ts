@@ -121,6 +121,7 @@ import {
   onboardingRunCostSummary,
   getOnboardingExecution,
   updateOnboardingPromptBody,
+  listActiveOnboardingPrompts,
   recoverInterruptedRuns,
   seedOnboardingPrompts,
   stopAllFlowRuns,
@@ -322,6 +323,8 @@ app.get("/repos/:id/onboarding/executions/:executionId", async (req) => {
   const { id, executionId } = req.params as { id: string; executionId: string };
   return getOnboardingExecution(id, executionId);
 });
+
+app.get("/onboarding/prompts", async () => ({ prompts: await listActiveOnboardingPrompts() }));
 
 app.patch("/onboarding/prompts/:promptKey", async (req) => {
   const dev = await actingUser(req);
