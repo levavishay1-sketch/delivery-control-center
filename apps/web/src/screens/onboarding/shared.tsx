@@ -28,6 +28,7 @@ export const WRITER_HE: Record<string, string> = { ai: "ניסוח AI · כתי�
 export const ARTIFACT_KIND_HE: Record<string, string> = {
   claude_md: "CLAUDE.md", nested_claude_md: "CLAUDE.md מקונן", rule: "Rule לפי נתיבים", knowledge_skill: "Skill ידע", workflow_skill: "Skill תהליך",
   agent: "Subagent", settings: "settings.json", guardrail_hook: "Guardrail hook", dcc_hooks: "hooks של DCC",
+  legacy_artifact: "תיעוד AI קיים",
 };
 export const PRESET_HE: Record<AutomationPreset, { title: string; desc: string }> = {
   step_by_step: { title: "צעד אחר צעד", desc: "שום שלב לא מתחיל לבד. אתם מריצים כל שלב, קוראים את התוצאה, ומחליטים בכל שער." },

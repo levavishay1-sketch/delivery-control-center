@@ -81,7 +81,11 @@ export type Discovery = {
   build_test?: { name: string; command: string; cwd?: string; evidence?: string; confidence: "low" | "medium" | "high" }[];
   constraints?: { statement: string; evidence?: string; severity?: string }[];
   where_to_look?: { task_type: string; paths: string[]; note?: string }[];
-  existing_instructions_assessment?: { path: string; verdict: "keep" | "merge" | "outdated" | "conflicting"; reason?: string }[];
+  existing_instructions_assessment?: {
+    path: string; verdict: "keep" | "merge" | "outdated" | "conflicting"; reason?: string;
+    reshape?: "none" | "supersede_with_skill" | "consolidate" | "redundant"; reshape_note_he?: string; reshape_target?: string;
+  }[];
+  existing_setup_summary_he?: string;
   unknowns: string[];
   questions: DiscoveryQuestion[];
   evidence_paths?: string[];
@@ -97,14 +101,20 @@ export type ConfirmResult = {
   answeredAt?: string;
 };
 
-export type ArtifactKind = "claude_md" | "nested_claude_md" | "rule" | "knowledge_skill" | "workflow_skill" | "agent" | "settings" | "guardrail_hook" | "dcc_hooks";
+export type ArtifactKind = "claude_md" | "nested_claude_md" | "rule" | "knowledge_skill" | "workflow_skill" | "agent" | "settings" | "guardrail_hook" | "dcc_hooks" | "legacy_artifact";
 export type PlannedArtifact = {
   key: string; kind: ArtifactKind; path: string; action: "create" | "update" | "skip" | "remove"; loading: "always" | "on_demand" | "never"; writer: "ai" | "dcc";
   title_he: string; justification: string; consumers: LifecyclePhase[]; watchedPaths: string[]; sourceOfTruth: string;
   skill?: { name: string; description: string; paths?: string[]; disableModelInvocation?: boolean };
-  rulePaths?: string[]; catalogId?: string; notes?: string[];
+  rulePaths?: string[]; catalogId?: string; notes?: string[]; supersededBy?: string;
 };
-export type StaleArtifactWarning = { path: string; verdict: "outdated" | "conflicting"; reason?: string };
+export type StaleArtifactWarning = {
+  path: string;
+  verdict: "outdated" | "conflicting" | "reshape";
+  reason?: string;
+  reshape?: "supersede_with_skill" | "consolidate" | "redundant";
+  reshapeTarget?: string;
+};
 export type PlanResult = {
   artifacts: PlannedArtifact[];
   notCreated: { kind: string; reason_he: string }[];

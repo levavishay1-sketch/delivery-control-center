@@ -334,7 +334,13 @@ export type OnboardingWorkspace = {
 
 export type ArtifactKind =
   | "claude_md" | "nested_claude_md" | "rule" | "knowledge_skill" | "workflow_skill" | "agent"
-  | "settings" | "guardrail_hook" | "dcc_hooks";
+  | "settings" | "guardrail_hook" | "dcc_hooks"
+  /** An AI-facing file that already existed and is NOT one of the kinds
+   *  above — typically a loose `docs/ai/*.md` from a previous methodology,
+   *  before on-demand skills existed. The only kind whose plan item can
+   *  propose removing something a person wrote rather than writing
+   *  anything, so it is opt-in at the gate and never auto-approved. */
+  | "legacy_artifact";
 export type ArtifactAction = "create" | "update" | "skip" | "remove";
 export type ArtifactLoading = "always" | "on_demand" | "never";
 
@@ -359,6 +365,10 @@ export type PlannedArtifact = {
   rulePaths?: string[];
   /** For guardrail hooks / dcc hooks: catalog id. */
   catalogId?: string;
+  /** For `legacy_artifact`: the key of the plan item that takes over this
+   *  file's job (usually a knowledge skill), so the gate can show "removed
+   *  because X replaces it" rather than a bare deletion. */
+  supersededBy?: string;
   /** Deterministic reasons the plan stage attached (e.g. "already covered by README"). */
   notes?: string[];
 };

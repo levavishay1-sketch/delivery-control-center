@@ -63,8 +63,27 @@ export const DISCOVERY_SCHEMA = {
     where_to_look: { type: "array", items: { type: "object", properties: { task_type: str, paths: strArr, note: str }, required: ["task_type", "paths"] } },
     existing_instructions_assessment: {
       type: "array",
-      items: { type: "object", properties: { path: str, verdict: { type: "string", enum: ["keep", "merge", "outdated", "conflicting"] }, reason: str }, required: ["path", "verdict"] },
+      items: {
+        type: "object",
+        properties: {
+          path: str,
+          /** Is the CONTENT still true. */
+          verdict: { type: "string", enum: ["keep", "merge", "outdated", "conflicting"] },
+          reason: str,
+          /** Is the FORM still right — asked on the same read, since the
+           *  file is already open to judge `verdict`. */
+          reshape: { type: "string", enum: ["none", "supersede_with_skill", "consolidate", "redundant"] },
+          reshape_note_he: str,
+          /** The artifact that would take this file's job over. */
+          reshape_target: str,
+        },
+        required: ["path", "verdict"],
+      },
     },
+    /** One paragraph on the repository's existing AI setup as a whole —
+     *  what is there, how much of it still holds, what shape it is in.
+     *  The plan stage leads its own rationale with this. */
+    existing_setup_summary_he: str,
     unknowns: strArr,
     questions: {
       type: "array",
@@ -82,9 +101,13 @@ export const DISCOVERY_SCHEMA = {
 const PLANNED_ITEM = {
   type: "object",
   properties: {
-    kind: { type: "string", enum: ["claude_md", "nested_claude_md", "rule", "knowledge_skill", "workflow_skill", "agent"] },
+    kind: { type: "string", enum: ["claude_md", "nested_claude_md", "rule", "knowledge_skill", "workflow_skill", "agent", "legacy_artifact"] },
     path: str,
-    action: { type: "string", enum: ["create", "update", "skip"] },
+    /** `remove` is only ever valid on `legacy_artifact` — no other kind
+     *  may propose deleting a file. */
+    action: { type: "string", enum: ["create", "update", "skip", "remove"] },
+    /** `legacy_artifact` only: the `key`/name of the item taking over. */
+    superseded_by: str,
     title_he: str,
     justification: str,
     consumers: { type: "array", items: { type: "string", enum: ["requirement", "understanding", "planning", "implementation", "testing", "review", "deployment", "future_sessions"] } },

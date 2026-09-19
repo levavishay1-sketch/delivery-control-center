@@ -285,6 +285,22 @@ export function DiscoveryView({ r }: { r: DiscoveryResult }) {
         { l: "סבבים", v: r.stats.numTurns ?? "—" },
         { l: "ראיות (קבצים שנבדקו)", v: fmtInt(d.evidence_paths?.length ?? 0) },
       ]} />
+      {d.existing_setup_summary_he && (
+        <Section title="תשתית ה-AI שכבר קיימת ב-Repository — תמונה כוללת">
+          <Note tone="ai">{d.existing_setup_summary_he}</Note>
+          {!!d.existing_instructions_assessment?.length && (
+            <ul className="ob-list" style={{ marginTop: 8 }}>
+              {d.existing_instructions_assessment.map((a) => (
+                <li key={a.path}>
+                  <Code>{a.path}</Code> · <b>{STALE_VERDICT_HE[a.verdict] ?? a.verdict}</b>
+                  {a.reshape && a.reshape !== "none" ? <> · <span className="ob-chip human">{RESHAPE_HE[a.reshape] ?? a.reshape}{a.reshape_target ? `: ${a.reshape_target}` : ""}</span></> : null}
+                  {a.reason || a.reshape_note_he ? <div className="ob-sub">{[a.reason, a.reshape_note_he].filter(Boolean).join(" · ")}</div> : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      )}
       {d.purpose && <Section title="מטרת המערכת"><p style={{ fontSize: 13, lineHeight: 1.6 }}>{d.purpose}</p></Section>}
       <Section title="כיסוי התיעוד הקיים (מה לא צריך להיכתב שוב)">
         {d.coverage?.length ? (
@@ -456,18 +472,24 @@ function ArtifactTable({ artifacts, selected, onToggle }: { artifacts: PlannedAr
         const on = selected ? selected.has(a.key) : a.action !== "skip";
         const isOpen = open[a.key] ?? false;
         return (
-          <div key={a.key} className="ob-q" style={{ opacity: on ? 1 : 0.6 }}>
+          <div key={a.key} className="ob-q" style={{ opacity: on ? 1 : 0.6, ...(a.action === "remove" ? { borderInlineStart: "3px solid var(--status-critical)" } : {}) }}>
             <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
               {onToggle && <input type="checkbox" checked={on} onChange={() => onToggle(a.key)} style={{ marginTop: 4 }} />}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                   <b style={{ fontSize: 13 }}>{a.title_he}</b>
                   <span className="ob-chip">{ARTIFACT_KIND_HE[a.kind] ?? a.kind}</span>
-                  <span className={`ob-chip ${a.action === "skip" ? "" : a.action === "remove" ? "bad" : "ok"}`}>{ACTION_HE[a.action] ?? a.action}</span>
-                  <span className={`ob-chip ${a.loading === "always" ? "human" : ""}`}>{LOADING_HE[a.loading] ?? a.loading}</span>
-                  <span className="ob-chip">{WRITER_HE[a.writer] ?? a.writer}</span>
+                  <span className={`ob-chip ${a.action === "skip" ? "" : a.action === "remove" ? "bad" : "ok"}`}>{a.action === "remove" ? "מחיקת הקובץ" : ACTION_HE[a.action] ?? a.action}</span>
+                  {a.action !== "remove" && <span className={`ob-chip ${a.loading === "always" ? "human" : ""}`}>{LOADING_HE[a.loading] ?? a.loading}</span>}
+                  {a.action !== "remove" && <span className="ob-chip">{WRITER_HE[a.writer] ?? a.writer}</span>}
                 </div>
                 <div style={{ marginTop: 4 }}><Code>{a.path}</Code></div>
+                {a.action === "remove" && (
+                  <p style={{ fontSize: 12.5, marginTop: 6, color: "var(--status-critical)" }}>
+                    {on ? "✓ הקובץ יימחק בשלב היצירה" : "לא יימחק — סמנו רק אם אתם רוצים שהקובץ יוסר"}
+                    {a.supersededBy ? <> · במקומו: <Code>{a.supersededBy}</Code></> : null}
+                  </p>
+                )}
                 <p style={{ fontSize: 12.5, marginTop: 6, lineHeight: 1.55 }}>{a.justification || <span className="ob-sub">ללא הצדקה</span>}</p>
                 {a.notes?.length ? <p className="ob-sub" style={{ marginTop: 3 }}>{a.notes.join(" · ")}</p> : null}
                 <button type="button" className="ob-toggle" style={{ marginTop: 4 }} onClick={() => setOpen({ ...open, [a.key]: !isOpen })}>{isOpen ? "פחות פרטים" : "צרכנים, מקור אמת, מה מעדכן אותו…"}</button>
@@ -489,7 +511,12 @@ function ArtifactTable({ artifacts, selected, onToggle }: { artifacts: PlannedAr
   );
 }
 
-const STALE_VERDICT_HE: Record<string, string> = { outdated: "לא מעודכן", conflicting: "סותר את הקוד" };
+const STALE_VERDICT_HE: Record<string, string> = { outdated: "לא מעודכן", conflicting: "סותר את הקוד", reshape: "מבנה לא מתאים" };
+const RESHAPE_HE: Record<string, string> = {
+  supersede_with_skill: "התוכן שייך ל-skill שנטען לפי דרישה",
+  consolidate: "חופף לקובץ אחר — כדאי לאחד",
+  redundant: "מיותר — התפקיד שלו כבר מכוסה",
+};
 
 /** Best-effort, display-only: does any proposed (non-skipped) artifact's
  *  own justification mention this warning's path or file name? Never
@@ -502,7 +529,11 @@ function addressedByHint(warningPath: string, artifacts: PlannedArtifact[]): Pla
 }
 
 export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(r.artifacts.filter((a) => a.action !== "skip").map((a) => a.key)));
+  // Deletions start UNCHECKED: creating something new is the expected
+  // outcome of this stage and can default on, but removing a file someone
+  // wrote is always an explicit opt-in, never something you have to notice
+  // and turn off.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(r.artifacts.filter((a) => a.action !== "skip" && a.action !== "remove").map((a) => a.key)));
   const [acked, setAcked] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const toggle = (k: string) => setSelected((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
@@ -511,6 +542,11 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
   const claudeMdOff = !r.artifacts.some((a) => a.kind === "claude_md" && selected.has(a.key));
   const warnings = r.staleArtifactWarnings ?? [];
   const unacked = warnings.filter((w) => !acked.has(w.path));
+  // Two different decisions, never mixed in one list: what gets written,
+  // and what gets deleted.
+  const removals = r.artifacts.filter((a) => a.action === "remove");
+  const writes = r.artifacts.filter((a) => a.action !== "remove");
+  const removeCount = removals.filter((a) => selected.has(a.key)).length;
   return (
     <div>
       {r.rationale_he && <Note tone="ai">{r.rationale_he}</Note>}
@@ -527,6 +563,7 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
                   <input type="checkbox" checked={acked.has(w.path)} onChange={() => toggleAck(w.path)} style={{ marginTop: 3 }} />
                   <span style={{ flex: 1 }}>
                     <Code>{w.path}</Code> · <b>{STALE_VERDICT_HE[w.verdict] ?? w.verdict}</b>
+                    {w.reshape && <> · <span className="ob-chip">{RESHAPE_HE[w.reshape] ?? w.reshape}{w.reshapeTarget ? `: ${w.reshapeTarget}` : ""}</span></>}
                     {" · "}
                     <span className={acked.has(w.path) ? "ob-chip" : "ob-chip human"}>{acked.has(w.path) ? "✓ סומן" : "⚠ טרם סומן"}</span>
                     {w.reason && <div className="ob-sub" style={{ marginTop: 4 }}>{w.reason}</div>}
@@ -540,11 +577,19 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
           </ul>
         </Section>
       )}
-      <Section title={`הצעה: ${r.artifacts.length} artifacts — סמנו מה ייווצר`} aside={<span className="ob-sub">{selected.size} נבחרו · {always} נטענים בכל session</span>}>
+      <Section title={`הצעה: ${writes.length} artifacts — סמנו מה ייווצר`} aside={<span className="ob-sub">{writes.filter((a) => selected.has(a.key)).length} נבחרו · {always} נטענים בכל session</span>}>
         <p className="ob-sub" style={{ marginBottom: 8 }}>סימון = ייכתב בשלב הבא; ביטול סימון = לא ייכתב ולא יעלה טוקנים. אפשר לשנות כל בחירה כאן לפני האישור.</p>
-        <ArtifactTable artifacts={r.artifacts} selected={selected} onToggle={toggle} />
+        <ArtifactTable artifacts={writes} selected={selected} onToggle={toggle} />
       </Section>
       {claudeMdOff && <div style={{ marginTop: 10 }}><Note tone="warn">CLAUDE.md הוא ה-artifact היחיד שכל repository מוטמע צריך — ללא סימונו האישור יידחה (אלא אם הוחלט בשלב הגבולות לשמור על הקיים).</Note></div>}
+      {removals.length > 0 && (
+        <Section title={`קבצים קיימים שמוצע להסיר (${removals.length})`} aside={<span className="ob-sub">{removals.filter((a) => selected.has(a.key)).length} סומנו למחיקה</span>}>
+          <Note tone="warn">
+            אלה קבצים שכבר קיימים ב-repository ושמישהו כתב — לא משהו שנוצר עכשיו. <b>ברירת המחדל היא לא למחוק:</b> הם יישארו בדיוק כמו שהם אלא אם תסמנו אותם במפורש. גם בהרצה אוטומטית מלאה מחיקה אף פעם לא מתבצעת לבד — היא תמיד מחכה לאדם. מה שתסמנו יופיע ב-diff המלא בשלב הסקירה לפני שמשהו יוצא החוצה.
+          </Note>
+          <div style={{ marginTop: 10 }}><ArtifactTable artifacts={removals} selected={selected} onToggle={toggle} /></div>
+        </Section>
+      )}
       <Section title={`מה לא ייווצר, ולמה (${r.notCreated.length})`}>
         {r.notCreated.length ? <ul className="ob-list">{r.notCreated.map((n, i) => <li key={i}><b>{ARTIFACT_KIND_HE[n.kind] ?? n.kind}</b> — {n.reason_he}</li>)}</ul> : <Empty text="הכל מוצדק." />}
       </Section>
@@ -554,7 +599,7 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
         <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} style={{ width: "100%", fontSize: 13, padding: "8px 10px", borderRadius: 8, border: "1px solid var(--border-hairline)" }} placeholder="לדוגמה: אחדו את שני קבצי הכלל של נקודות הכניסה לפלאגין לקובץ אחד מדויק." />
       </Section>
       <div className="ob-actions" style={{ marginTop: 14 }}>
-        <button className="btn btn-primary" disabled={busy || unacked.length > 0} onClick={() => onSubmit({ approvedKeys: Array.from(selected), acknowledgedStaleWarnings: Array.from(acked), note: note.trim() || undefined })}>{busy ? "שומר…" : `✓ אשר תוכנית (${selected.size} פריטים) והמשך ליצירה`}</button>
+        <button className="btn btn-primary" disabled={busy || unacked.length > 0} onClick={() => onSubmit({ approvedKeys: Array.from(selected), acknowledgedStaleWarnings: Array.from(acked), note: note.trim() || undefined })}>{busy ? "שומר…" : `✓ אשר תוכנית (${selected.size - removeCount} ייווצרו${removeCount ? `, ${removeCount} יימחקו` : ""}) והמשך ליצירה`}</button>
         <span className="ob-sub">{unacked.length > 0 ? `האישור חסום — סמנו את ${unacked.length} ${unacked.length === 1 ? "הממצא" : "הממצאים"} שלא סומנו למעלה.` : "פריטים שלא סומנו לא ייווצרו ולא יעלו טוקנים."}</span>
       </div>
     </div>

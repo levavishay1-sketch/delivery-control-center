@@ -28,7 +28,18 @@ export type Discovery = {
   build_test?: { name: string; command: string; cwd?: string; evidence?: string; confidence: "low" | "medium" | "high" }[];
   constraints?: { statement: string; evidence?: string; severity?: string }[];
   where_to_look?: { task_type: string; paths: string[]; note?: string }[];
-  existing_instructions_assessment?: { path: string; verdict: "keep" | "merge" | "outdated" | "conflicting"; reason?: string }[];
+  existing_instructions_assessment?: {
+    path: string;
+    verdict: "keep" | "merge" | "outdated" | "conflicting";
+    reason?: string;
+    /** Whether the file is still the right SHAPE, independent of whether
+     *  its content is still true — judged on the same read. */
+    reshape?: "none" | "supersede_with_skill" | "consolidate" | "redundant";
+    reshape_note_he?: string;
+    reshape_target?: string;
+  }[];
+  /** The existing AI setup as a whole, in one paragraph. */
+  existing_setup_summary_he?: string;
   unknowns: string[];
   questions: DiscoveryQuestion[];
   evidence_paths?: string[];

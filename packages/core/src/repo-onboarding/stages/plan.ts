@@ -24,14 +24,24 @@ import type { ScanResult } from "./scan.ts";
  */
 type AiPlanItem = {
   kind: Exclude<ArtifactKind, "settings" | "guardrail_hook" | "dcc_hooks">;
-  path: string; action: "create" | "update" | "skip"; title_he?: string; justification: string;
+  path: string; action: "create" | "update" | "skip" | "remove"; title_he?: string; justification: string;
   consumers?: LifecyclePhase[]; watched_paths?: string[]; source_of_truth?: string;
   skill_name?: string; skill_description?: string; skill_paths?: string[]; disable_model_invocation?: boolean;
-  rule_paths?: string[]; estimated_lines?: number;
+  rule_paths?: string[]; estimated_lines?: number; superseded_by?: string;
 };
 type AiPlan = { artifacts: AiPlanItem[]; not_created: { kind: string; reason_he: string }[]; rationale_he?: string };
 
-export type StaleArtifactWarning = { path: string; verdict: "outdated" | "conflicting"; reason?: string };
+/** Discovery's per-file finding that needs a person's eyes: the content no
+ *  longer matches the code (`verdict`), the file is the wrong shape for its
+ *  job (`reshape`), or both. */
+export type StaleArtifactWarning = {
+  path: string;
+  verdict: "outdated" | "conflicting" | "reshape";
+  reason?: string;
+  /** Set when the finding is about form: what shape it should take instead. */
+  reshape?: "supersede_with_skill" | "consolidate" | "redundant";
+  reshapeTarget?: string;
+};
 export type PlanResult = {
   artifacts: PlannedArtifact[];
   notCreated: { kind: string; reason_he: string }[];
@@ -72,6 +82,14 @@ function normalizeAiItems(items: AiPlanItem[], scan: ScanResult, boundaries: Bou
       skill = { name, description: (it.skill_description || it.justification || "").slice(0, 250), paths: it.skill_paths?.filter((x) => typeof x === "string" && x.trim()), disableModelInvocation: kind === "workflow_skill" ? !!it.disable_model_invocation : false };
     }
     else if (kind === "agent") { const name = slug(path.basename(p, ".md") || it.title_he || "agent"); p = `.claude/agents/${name}.md`; key = `agent:${name}`; }
+    else if (kind === "legacy_artifact") {
+      // The only kind that touches a file a person wrote. It must already
+      // exist (nothing to retire otherwise), and `remove` is the only
+      // action that does anything — anything else means "leave it alone".
+      if (!p || !existsSync(path.join(workspaceDir, p))) { notes.push(`legacy_artifact ${p || "(ללא נתיב)"}: הקובץ לא קיים — הפריט הושמט`); continue; }
+      key = `legacy:${p}`;
+      if (it.action !== "remove") it.action = "skip";
+    }
     else continue;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -92,12 +110,20 @@ function normalizeAiItems(items: AiPlanItem[], scan: ScanResult, boundaries: Bou
       justification = CLAUDE_MD_JUSTIFICATION;
       notes.push(`${p}: the model proposed skipping CLAUDE.md — kept in the plan: Claude Code loads CLAUDE.md, not AGENTS.md (CLAUDE.md imports it with @AGENTS.md and adds only what is Claude-specific)`);
     }
-    const loading: PlannedArtifact["loading"] = kind === "claude_md" ? "always" : kind === "rule" ? (rulePaths?.length ? "on_demand" : "always") : "on_demand";
+    // A legacy doc is never auto-loaded by Claude Code — it costs context
+    // only if something points at it, so it must not count toward the budget.
+    const loading: PlannedArtifact["loading"] = kind === "legacy_artifact" ? "never"
+      : kind === "claude_md" ? "always"
+      : kind === "rule" ? (rulePaths?.length ? "on_demand" : "always")
+      : "on_demand";
     out.push({
-      key, kind, path: p, action, loading, writer: "ai",
+      key, kind, path: p, action, loading,
+      // DCC performs a removal itself; only prose is drafted by the model.
+      writer: kind === "legacy_artifact" ? "dcc" : "ai",
       title_he: title, justification, consumers: phases(it.consumers),
       watchedPaths: (it.watched_paths ?? []).filter((x) => typeof x === "string"), sourceOfTruth: it.source_of_truth || "repository code",
       skill, rulePaths, notes: [],
+      ...(kind === "legacy_artifact" && it.superseded_by ? { supersededBy: it.superseded_by } : {}),
     });
   }
   // Exactly one root CLAUDE.md, always.
@@ -165,7 +191,13 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
       return { status: "Failed", errors: [`Discovery found ${unacknowledged.length} existing AI artifact(s) outdated or conflicting with the code — acknowledge each one before approving: ${unacknowledged.map((w) => w.path).join(", ")}`] };
     }
     const approvedSet = new Set(input.approvedKeys as string[]);
-    const approved: PlannedArtifact[] = prior.artifacts.map((a) => ({ ...a, action: approvedSet.has(a.key) ? (a.action === "skip" ? "create" : a.action) : "skip" }));
+    const approved: PlannedArtifact[] = prior.artifacts.map((a) => {
+      // Checking a box never turns "leave this alone" into a deletion, and
+      // never turns a legacy file into something DCC would write: the only
+      // two outcomes for that kind are the proposed removal, or nothing.
+      if (a.kind === "legacy_artifact") return { ...a, action: approvedSet.has(a.key) && a.action === "remove" ? "remove" as const : "skip" as const };
+      return { ...a, action: approvedSet.has(a.key) ? (a.action === "skip" ? "create" : a.action) : "skip" };
+    });
     if (!approved.some((a) => a.kind === "claude_md" && a.action !== "skip") && !scan.inventory.summary.hasClaudeMd) {
       return { status: "Failed", errors: ["CLAUDE.md is the one artifact every onboarded repository needs — approve it (or keep the existing one via the boundaries stage)"] };
     }
@@ -204,16 +236,33 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
   const aiPlan = exec.json as AiPlan;
   const norm = normalizeAiItems(aiPlan.artifacts ?? [], scan, boundaries, ctx.workspaceDir);
   const artifacts = [...norm.artifacts, ...det.artifacts];
+  // Two independent reasons an existing artifact needs a person's eyes: its
+  // content no longer matches the code, or its form is no longer the right
+  // one for the job. Either way it must be acknowledged before approval —
+  // a file flagged for both is listed once, content first.
   const staleArtifactWarnings: StaleArtifactWarning[] = (discovery.discovery.existing_instructions_assessment ?? [])
-    .filter((a): a is typeof a & { verdict: "outdated" | "conflicting" } => a.verdict === "outdated" || a.verdict === "conflicting")
-    .map((a) => ({ path: a.path, verdict: a.verdict, reason: a.reason }));
+    .filter((a) => a.verdict === "outdated" || a.verdict === "conflicting" || (a.reshape && a.reshape !== "none"))
+    .map((a) => {
+      const contentStale = a.verdict === "outdated" || a.verdict === "conflicting";
+      const reshape = a.reshape && a.reshape !== "none" ? a.reshape : undefined;
+      return {
+        path: a.path,
+        verdict: (contentStale ? a.verdict : "reshape") as StaleArtifactWarning["verdict"],
+        reason: [contentStale ? a.reason : "", reshape ? a.reshape_note_he : ""].filter(Boolean).join(" · ") || a.reason,
+        ...(reshape ? { reshape, ...(a.reshape_target ? { reshapeTarget: a.reshape_target } : {}) } : {}),
+      };
+    });
   const result: PlanResult = {
     artifacts, notCreated: [...(aiPlan.not_created ?? []), ...det.notCreated], rationale_he: aiPlan.rationale_he, protectedGlobs: det.protectedGlobs, claudeExecutionId: exec.executionId,
     staleArtifactWarnings,
   };
   return { status: "WaitingForUser", warnings: norm.notes, claudeExecutionId: exec.executionId, result };
 }, (waiting) => ({
-  approvedKeys: (waiting as PlanResult).artifacts.filter((a) => a.action !== "skip").map((a) => a.key),
+  // Deleting a file a person wrote is the one thing automation never does
+  // on its own: `remove` items are left out of the auto-approval, so a
+  // fully automatic run still produces every other artifact and simply
+  // leaves the legacy files in place for someone to decide on later.
+  approvedKeys: (waiting as PlanResult).artifacts.filter((a) => a.action !== "skip" && a.action !== "remove").map((a) => a.key),
   // Automation only reaches here with explicit prior consent (the "automatic"
   // preset requires `consent: true`) — auto-acknowledging is that same consent
   // applied to this gate, not a new silent skip.
