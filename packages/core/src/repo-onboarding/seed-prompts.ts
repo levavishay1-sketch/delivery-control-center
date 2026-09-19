@@ -247,6 +247,24 @@ export async function seedOnboardingPrompts(opts: { replace?: Set<string>; log?:
   return { created, skipped };
 }
 
+/** Read-only: which prompt keys have an active DB version whose text no
+ *  longer matches the code's `PROMPTS` entry. This is the drift that bit
+ *  us live — a code change to a prompt's wording sat inactive because
+ *  nobody remembered the exact `SEED_REPLACE=<key>` command, and nothing
+ *  said so out loud. Never auto-fixed: the active version might just as
+ *  well be someone's deliberate edit made from the Prompts screen, and
+ *  silently overwriting that would be exactly the kind of silent action
+ *  this system is built to avoid — this only makes the mismatch visible,
+ *  by whichever channel the caller logs it to (server boot, a CLI check). */
+export async function checkOnboardingPromptDrift(): Promise<{ promptKey: string; activeVersion: number }[]> {
+  const drifted: { promptKey: string; activeVersion: number }[] = [];
+  for (const p of PROMPTS) {
+    const existing = await getActiveOnboardingPrompt(p.promptKey);
+    if (existing && existing.body !== p.body) drifted.push({ promptKey: p.promptKey, activeVersion: existing.version });
+  }
+  return drifted;
+}
+
 if (import.meta.main) {
   // SEED_REPLACE=key1,key2 (or "all") registers a NEW version for those
   // keys even when one is active — the way to roll out an edited seed

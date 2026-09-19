@@ -150,6 +150,11 @@ function OnboardingPromptCard({ p, onSaved }: { p: OnboardingPromptLibraryItem; 
         </div>
         {!editing && <button className="btn btn-secondary btn-sm" onClick={open}>ערוך</button>}
       </div>
+      {p.driftedFromCode && !editing && (
+        <p style={{ fontSize: 12, color: "var(--status-warning)", marginBottom: 10 }}>
+          ⚠ הגרסה הפעילה (v{p.version}) לא תואמת את הניסוח העדכני בקוד — כנראה קוד שונה בלי שהגרסה גולגלה. ערכו ושמרו, או הריצו <code>SEED_REPLACE={p.promptKey}</code>.
+        </p>
+      )}
 
       {editing ? (
         <>

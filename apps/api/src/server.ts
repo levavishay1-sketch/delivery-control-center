@@ -124,6 +124,7 @@ import {
   listActiveOnboardingPrompts,
   recoverInterruptedRuns,
   seedOnboardingPrompts,
+  checkOnboardingPromptDrift,
   stopAllFlowRuns,
 } from "@dcc/core";
 import { blocker, gap, task } from "@dcc/db/schema";
@@ -324,7 +325,11 @@ app.get("/repos/:id/onboarding/executions/:executionId", async (req) => {
   return getOnboardingExecution(id, executionId);
 });
 
-app.get("/onboarding/prompts", async () => ({ prompts: await listActiveOnboardingPrompts() }));
+app.get("/onboarding/prompts", async () => {
+  const [prompts, drifted] = await Promise.all([listActiveOnboardingPrompts(), checkOnboardingPromptDrift()]);
+  const driftedKeys = new Set(drifted.map((d) => d.promptKey));
+  return { prompts: prompts.map((p) => ({ ...p, driftedFromCode: driftedKeys.has(p.promptKey) })) };
+});
 
 app.patch("/onboarding/prompts/:promptKey", async (req) => {
   const dev = await actingUser(req);
@@ -1394,6 +1399,19 @@ if (import.meta.main) {
   if (dbKind === "pglite") {
     seedOnboardingPrompts().then(({ created }) => { if (created) app.log.info(`onboarding: seeded ${created} missing prompt(s) on the embedded database`); }).catch((e) => app.log.error(e));
   }
+
+  // A code change to a prompt's wording (in seed-prompts.ts) never takes
+  // effect on its own — someone has to remember the exact `SEED_REPLACE=
+  // <key>` command, and until they do, the OLD active version keeps
+  // running silently after a normal `git pull` + restart (found live:
+  // discovery's broadened existing-artifact check shipped in code but sat
+  // inactive for days). Read-only, runs against any database — this never
+  // auto-replaces (an active version may be someone's deliberate edit
+  // from the Prompts screen), it only says out loud that code and the
+  // active prompt have diverged.
+  checkOnboardingPromptDrift().then((drifted) => {
+    for (const d of drifted) app.log.warn(`onboarding: prompt "${d.promptKey}" active version (v${d.activeVersion}) no longer matches the code — run SEED_REPLACE=${d.promptKey} npx tsx packages/core/src/repo-onboarding/seed-prompts.ts to roll it out (or ignore if that's a deliberate edit)`);
+  }).catch((e) => app.log.error(e));
 
   // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
   // un-openable if the process is killed mid-write, so always close it.

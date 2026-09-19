@@ -24,7 +24,7 @@ export { scanRepository } from "./scanner.ts";
 export { scanAiInventory, type AiInventory, type InventoryItem } from "./inventory.ts";
 export { createClaudeCodeRunner, type ClaudeCodeRunner, type ClaudeExecutionRequest, type ClaudeExecutionResult } from "./runner.ts";
 export { getActiveOnboardingPrompt, listActiveOnboardingPrompts, registerPromptVersion, updateOnboardingPromptBody, type OnboardingPromptTemplateRow } from "./prompts.ts";
-export { seedOnboardingPrompts } from "./seed-prompts.ts";
+export { seedOnboardingPrompts, checkOnboardingPromptDrift } from "./seed-prompts.ts";
 export { extractClaudeJson } from "./json.ts";
 export { loadProfileCatalog, type SecurityProfile } from "./security-profiles.ts";
 export { GUARDRAIL_CATALOG, type GuardrailDefinition } from "./guardrails.ts";

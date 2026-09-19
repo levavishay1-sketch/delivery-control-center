@@ -40,7 +40,7 @@ export {
   startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, listOnboardingRuns, submitStageInput,
   updateRunAutomation, updateRunModelChoices, resetRunToStage, stopRunExecution, getRunFileDiff, onboardingStageCatalogue, listRunExecutions,
   checkRepositoryRefresh, repositoryRefreshMetrics, onboardingRunCostSummary,
-  getOnboardingExecution, updateOnboardingPromptBody, listActiveOnboardingPrompts, presetPolicy, normalizePolicy, normalizeModelPolicy, STAGES as ONBOARDING_STAGES, recoverInterruptedRuns, seedOnboardingPrompts,
+  getOnboardingExecution, updateOnboardingPromptBody, listActiveOnboardingPrompts, presetPolicy, normalizePolicy, normalizeModelPolicy, STAGES as ONBOARDING_STAGES, recoverInterruptedRuns, seedOnboardingPrompts, checkOnboardingPromptDrift,
   type OnboardingStatus, type RepositoryProfile as OnboardingRepositoryProfile, type AutomationPolicy, type AutomationPreset,
   type RefreshResult, type RefreshMetrics, type OnboardingRunCostSummary, type OnboardingCostByStage, type ModelChoice, type ModelPolicy,
 } from "./repo-onboarding/index.ts";

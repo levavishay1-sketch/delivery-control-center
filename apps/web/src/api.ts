@@ -495,7 +495,7 @@ export const getOnboardingExecution = (repoId: string, executionId: string) =>
   get<OnboardingExecution>(`/repos/${repoId}/onboarding/executions/${executionId}`);
 export const updateOnboardingPrompt = (promptKey: string, body: string) =>
   patch<{ id: string; version: number }>(`/onboarding/prompts/${promptKey}`, { body });
-export type OnboardingPromptLibraryItem = { id: string; promptKey: string; version: number; stage: string; title: string; body: string; defaultModel: string | null; createdAt: string };
+export type OnboardingPromptLibraryItem = { id: string; promptKey: string; version: number; stage: string; title: string; body: string; defaultModel: string | null; createdAt: string; driftedFromCode: boolean };
 export const getOnboardingPromptLibrary = () => get<{ prompts: OnboardingPromptLibraryItem[] }>("/onboarding/prompts");
 export type RefreshSignal = { kind: string; detail: string; artifacts: string[] };
 export type RefreshResult = {
