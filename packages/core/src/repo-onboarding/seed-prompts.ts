@@ -152,6 +152,10 @@ AGENTS.md:
 Reviewer feedback to apply in this pass (empty on the first pass):
 {{REVIEW_NOTE}}
 
+The path patterns DCC's guardrail hooks currently enforce — a Write/Edit to a matching path is BLOCKED at the tool level, not just documented:
+{{PROTECTED_GLOBS}}
+This list is deterministic, not something you normally draft — you are shown it so you can check it against what the artifacts above say about those same paths. If review feedback names a specific pattern in this list as wrong (blocks a path an artifact calls hand-written and safe to edit, or fails to cover a path an artifact calls generated), or your own reading of DISCOVERY/the artifacts finds the same thing even without being told, return \`protected_globs_correction\`: the FULL corrected list (every pattern that should remain in force, not a diff). Omit the field entirely otherwise — most passes need no change here. Each pattern is matched against a repository-relative path with gitignore-style rules: \`**\` spans directories, \`*\`/\`?\` stay inside one segment, a pattern containing \`/\` before the end is anchored at the repository root, and a pattern naming a directory covers everything inside it. One path fragment per array entry — never join two paths into one string with a comma or "and", which cannot match anything.
+
 Writing rules — these are enforced by validation, not suggestions:
 - Facts only from the operating model, the human knowledge, or a file you read now. Every command must be one discovery confirmed; label its confidence when not high. No invented paths.
 - Do not document what Claude can derive by reading code: no directory trees, no dependency lists, no class/function inventories, no framework tutorials, no generic best practices, no personality instructions.
@@ -164,7 +168,7 @@ Writing rules — these are enforced by validation, not suggestions:
 - nested_claude_md: same rules as claude_md but only what differs from the root.
 - Write user-facing prose in English (code identifiers stay as-is); notes_he in Hebrew.
 
-Return only the JSON object: {"files":[{"key","path","content","notes_he"}], "summary_he", "skipped":[{"key","reason_he"}]}. Every approved key must appear in files or in skipped.`,
+Return only the JSON object: {"files":[{"key","path","content","notes_he"}], "summary_he", "skipped":[{"key","reason_he"}], "protected_globs_correction": [optional]}. Every approved key must appear in files or in skipped.`,
   },
   {
     promptKey: "onboarding.v2.validate",

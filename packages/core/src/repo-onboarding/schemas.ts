@@ -142,6 +142,14 @@ export const GENERATE_SCHEMA = {
     },
     summary_he: str,
     skipped: { type: "array", items: { type: "object", properties: { key: str, reason_he: str }, required: ["key", "reason_he"] } },
+    // The guardrail hooks' protected-path list is a deterministic
+    // artifact (`writer: "dcc"`) — the model never drafts its content,
+    // so without an explicit correction channel a validate finding
+    // about it ("blocks a hand-written path", "protects nothing") can
+    // never be fixed by the one automatic retry: the same list would be
+    // re-rendered unchanged on every attempt. This field is that
+    // channel. Omit it when the current list needs no change.
+    protected_globs_correction: { type: "array", items: str },
   },
   required: ["files"],
 } as const;

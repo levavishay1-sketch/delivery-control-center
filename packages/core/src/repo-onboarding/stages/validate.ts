@@ -9,6 +9,7 @@ import { VALIDATE_SCHEMA } from "../schemas.ts";
 import { registerStage } from "../state-machine.ts";
 import type { StageOutcome } from "../types.ts";
 import type { BoundariesResult } from "./boundaries.ts";
+import { buildPathIndex, resolveBySuffix } from "./generate.ts";
 import type { GenerateResult } from "./generate.ts";
 import type { PlanResult } from "./plan.ts";
 
@@ -177,6 +178,12 @@ registerStage("validate", async (ctx): Promise<StageOutcome> => {
   const gen = ctx.priorResults.generate as GenerateResult | undefined;
   if (!boundaries?.approved || !plan?.approved || !gen) return { status: "Failed", errors: ["generate has not completed"] };
   const root = ctx.workspaceDir;
+  // `generate` may have replaced the deterministic list with a validated
+  // `protected_globs_correction` — that is what the hooks on disk were
+  // actually rendered with, so it is what must be checked. Falling back
+  // to plan.protectedGlobs keeps this working for a run from before this
+  // field existed.
+  const protectedGlobs = gen.protectedGlobs ?? plan.protectedGlobs;
   const checks: Check[] = [];
   const add = (c: Check) => checks.push(c);
   const items: ContextBudget["items"] = [];
@@ -218,9 +225,9 @@ registerStage("validate", async (ctx): Promise<StageOutcome> => {
   // so the hooks are exercised against real files from this repository
   // rather than synthetic paths that happen to match the first pattern.
   const allFiles = repoFiles(root);
-  const coverage = protectedPatternCoverage(root, plan.protectedGlobs, allFiles);
-  const unprotected = allFiles.filter((f) => !plan.protectedGlobs.some((p) => matchesProtectedPattern(f, p)));
-  if (plan.protectedGlobs.length) {
+  const coverage = protectedPatternCoverage(root, protectedGlobs, allFiles);
+  const unprotected = allFiles.filter((f) => !protectedGlobs.some((p) => matchesProtectedPattern(f, p)));
+  if (protectedGlobs.length) {
     // Only one thing here is decidable without judgement: a pattern that
     // matches no file protects nothing. Everything else — whether a
     // broad pattern is correct — depends on what those files are, which
@@ -346,8 +353,20 @@ registerStage("validate", async (ctx): Promise<StageOutcome> => {
   // whose path list could never match a real file was never shown to
   // the reviewer at all — it had no way to report what it never saw.
   const reviewPaths = Array.from(new Set([...prose.map((p) => p.path), ...approved.filter((a) => a.writer === "dcc" && exists(a.path)).map((a) => a.path)]));
+  // A reference that doesn't exist as given may still be a real path with
+  // its leading segments dropped ("Alt.DataModel.Crm.External/Contracts"
+  // for the real "Shared/DataModel/Crm/Alt.DataModel.Crm.External/
+  // Contracts") — exactly the shortened-reference case generate's own
+  // fixLooseFileReferences targets. Try the same suffix resolution before
+  // calling it missing: a unique match means the reference is genuinely
+  // fine, just written short; ambiguous or no match is the real failure.
+  const pathIndex = buildPathIndex(root);
   const missingRefs: string[] = [];
-  for (const p of prose) for (const ref of referencedPaths(p.text)) if (!exists(ref) && !existsSync(path.join(root, path.dirname(p.path), ref))) missingRefs.push(`${p.path} → ${ref}`);
+  for (const p of prose) for (const ref of referencedPaths(p.text)) {
+    if (exists(ref) || existsSync(path.join(root, path.dirname(p.path), ref))) continue;
+    if (resolveBySuffix(pathIndex, ref).length === 1) continue;
+    missingRefs.push(`${p.path} → ${ref}`);
+  }
   add({ id: "referenced_paths", label_he: "נתיבים מוזכרים קיימים", status: missingRefs.length > 3 ? "fail" : missingRefs.length ? "warn" : "pass", detail: missingRefs.length ? missingRefs.slice(0, 8).join(" · ") : "כל הנתיבים המוזכרים נמצאו" });
 
   // Context budget.
