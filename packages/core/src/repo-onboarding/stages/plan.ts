@@ -140,6 +140,32 @@ function normalizeAiItems(items: AiPlanItem[], scan: ScanResult, boundaries: Bou
   return { artifacts: out, notes };
 }
 
+/**
+ * Merge the model's items with DCC's own, dropping any legacy item that
+ * names a file DCC itself maintains.
+ *
+ * A legacy item keys on `legacy:<path>`, so it never collides by key
+ * with the DCC-managed item for the same file: the plan could carry one
+ * path as both "update" and "remove". `generate` applies removals after
+ * every write, so approving both would write the file and then delete
+ * it, leaving `settings.json` registering a hook that no longer exists
+ * and breaking the next session. A file DCC maintains is not legacy by
+ * definition, so the legacy item is the one that goes.
+ *
+ * Exported for testing — this is a silent, order-dependent data loss if
+ * it ever regresses.
+ */
+export function mergeWithoutPathCollisions(aiItems: PlannedArtifact[], dccItems: PlannedArtifact[]): { artifacts: PlannedArtifact[]; notes: string[] } {
+  const managed = new Map(dccItems.map((a) => [a.path, a.kind]));
+  const notes: string[] = [];
+  const kept = aiItems.filter((a) => {
+    if (a.kind !== "legacy_artifact" || !managed.has(a.path)) return true;
+    notes.push(`legacy_artifact ${a.path}: הקובץ מנוהל על ידי DCC עצמו (${managed.get(a.path)}) — הפריט הושמט ולא יוצע למחיקה`);
+    return false;
+  });
+  return { artifacts: [...kept, ...dccItems], notes };
+}
+
 function deterministicItems(scan: ScanResult, boundaries: BoundariesResult, discovery: DiscoveryResult, workspaceDir: string): { artifacts: PlannedArtifact[]; protectedGlobs: string[]; notCreated: { kind: string; reason_he: string }[] } {
   const artifacts: PlannedArtifact[] = [];
   const notCreated: { kind: string; reason_he: string }[] = [];
@@ -213,7 +239,10 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
 
   const det = deterministicItems(scan, boundaries, discovery, ctx.workspaceDir);
   const humanKnowledge = JSON.stringify({
-    answers: (confirm?.answers ?? []).map((a) => ({ question: confirm?.questions.find((q) => q.id === a.id)?.question_he, answer: a.status === "answered" ? a.answer_he : "UNKNOWN" })),
+    answers: (confirm?.answers ?? []).map((a) => ({
+      question: confirm?.questions.find((q) => q.id === a.id)?.question_he,
+      answer: a.status === "answered" ? a.answer_he : a.status === "not_asked" ? "NOT_ASKED" : "UNKNOWN",
+    })),
     corrections: confirm?.corrections ?? null, classificationOverride: boundaries.approved.classificationOverride ?? null, notes: boundaries.approved.notes ?? null,
   });
   const runner = createClaudeCodeRunner();
@@ -235,7 +264,9 @@ registerStage("plan", async (ctx): Promise<StageOutcome> => {
   if (exec.status !== "Completed" || !exec.json) return { status: "Failed", errors: [exec.errorMessage ?? "plan call did not complete"], claudeExecutionId: exec.executionId };
   const aiPlan = exec.json as AiPlan;
   const norm = normalizeAiItems(aiPlan.artifacts ?? [], scan, boundaries, ctx.workspaceDir);
-  const artifacts = [...norm.artifacts, ...det.artifacts];
+  const merged = mergeWithoutPathCollisions(norm.artifacts, det.artifacts);
+  const artifacts = merged.artifacts;
+  norm.notes.push(...merged.notes);
   // Two independent reasons an existing artifact needs a person's eyes: its
   // content no longer matches the code, or its form is no longer the right
   // one for the job. Either way it must be acknowledged before approval —

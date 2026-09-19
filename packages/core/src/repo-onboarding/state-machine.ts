@@ -360,7 +360,7 @@ async function submitStageInputInternal(repoId: string, runId: string, stageKey:
         runId, repoId, clientId, triggeredBy: by.userId,
         workspaceDir: run.workspacePath ?? "", baselineSha: run.baselineSha ?? "",
         mode: run.mode === "refresh" ? "refresh" as const : "initial" as const,
-        priorResults, ownResult: stageRow.result ?? undefined, resumeInput: input, reviewNote: run.reviewNote,
+        priorResults, ownResult: stageRow.result ?? undefined, resumeInput: input, resumeSource: source, reviewNote: run.reviewNote,
         automation: normalizePolicy(run.automation),
         modelChoices: normalizeModelPolicy(run.modelChoices),
       },

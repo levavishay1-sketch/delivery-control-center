@@ -90,7 +90,7 @@ Classification:
 Operating model from discovery:
 {{DISCOVERY}}
 
-Verified human knowledge (answers from the team; "UNKNOWN" means nobody knows — never fill it in):
+Human knowledge from the team. An actual answer = a person answered. "UNKNOWN" = a person was asked and does not know. "NOT_ASKED" = nobody was ever asked (the gate was resolved automatically) — treat it as still open, never as established, and never propose an artifact that records it as a team answer. Never fill any of them in:
 {{HUMAN_KNOWLEDGE}}
 
 What already exists:
@@ -105,7 +105,8 @@ Artifacts from the previous onboarding (refresh only — propose "update" only f
 How Claude Code loads things (this is what your plan must optimize for):
 - CLAUDE.md is loaded into EVERY session. Target 40-80 lines, hard maximum 120. Longer files reduce instruction adherence. It is a map, not an encyclopedia: purpose in 2-3 lines, build/test commands Claude cannot guess, hard constraints and gotchas, repository etiquette, and pointers to the on-demand files by name. Never directory trees, dependency lists, file-by-file descriptions, generic advice, or anything derivable by reading the code.
 - .claude/skills/<name>/SKILL.md loads ON DEMAND: only its description (~1 line) is in context every session; the body loads when the task matches. Use knowledge_skill for repository knowledge that is only sometimes needed (a repository map with where-to-look, integrations, verified critical context). Use workflow_skill only for a recurring, error-prone, repository-specific multi-step procedure with evidence it recurs.
-- .claude/rules/<topic>.md with paths: globs loads only when Claude works with matching files. Use for conventions bound to a clear area (generated code, migrations, a plugin folder). A rule without paths loads every session — do not propose one.
+- .claude/rules/<topic>.md with paths: globs loads only when Claude works with matching files. Use for conventions bound to a clear area (generated code, migrations, a plugin folder). A rule without paths loads every session — do not propose one. Frontmatter must be \`paths:\` as a YAML list; \`globs:\`/\`alwaysApply:\` are Cursor's syntax, which Claude Code does not read — a rule carrying them silently loads on every session instead.
+- A path-scoped rule and a nested CLAUDE.md DROP OUT of context when a long session compacts, and only come back once Claude next reads a file they match. CLAUDE.md is re-read from disk and survives. So the split is by consequence, not by topic: a convention ("name plugin classes this way") belongs in a rule; a constraint whose violation causes real damage — data loss, overwritten generated code, a production incident, a security or compliance breach — must stay in CLAUDE.md even when it applies to only one area, because mid-session is exactly when it is needed and exactly when a rule may be absent. When in doubt, ask what happens if Claude does not have this line at the moment it acts.
 - A nested CLAUDE.md in a subdirectory loads when Claude reads files there. Propose only for a genuinely separate subsystem with its own conventions (monorepo package, separate app).
 - agent (.claude/agents) — almost never justified at onboarding; propose only with a concrete, recurring isolated task.
 
@@ -113,7 +114,7 @@ For EVERY candidate answer the ten questions in the justification: what problem 
 
 Rules for items:
 - exactly one claude_md item (path from the inventory if it exists, else CLAUDE.md), action create or update — skip ONLY when an existing CLAUDE.md itself has the policy keep. AGENTS.md is NOT loaded by Claude Code: when it exists, CLAUDE.md is still required and simply starts with @AGENTS.md, adding only what is Claude-specific;
-- knowledge/workflow skills: skill_name (lowercase-hyphen), skill_description (≤ 200 characters, lead with the words a request would contain, e.g. "Where things live in this repo: ..."), optional skill_paths globs, disable_model_invocation true for workflows with side effects;
+- knowledge/workflow skills: skill_name (lowercase-hyphen), skill_description (≤ 200 characters, lead with the words a request would contain, e.g. "Where things live in this repo: ..."), optional skill_paths globs, disable_model_invocation true for workflows with side effects. A knowledge_skill is background context, so DCC marks it \`user-invocable: false\` — do not propose one whose only value is as a command a person runs; that is a workflow_skill;
 - rules: rule_paths globs that match real files;
 - watched_paths: the repository paths whose change would make this artifact stale (used for refresh detection);
 - title_he in Hebrew; justification in English, concrete, citing paths;
@@ -135,7 +136,11 @@ APPROVED ARTIFACTS (key, kind, path, action, justification, skill/rule frontmatt
 Operating model (your evidence — cite paths from it; do not re-discover):
 {{DISCOVERY}}
 
-Verified human knowledge ("UNKNOWN" = nobody knows; write "unknown — ask the team" rather than inventing):
+Human knowledge from the team. Three answer values, and they mean different things:
+- an actual answer — a person answered; you may state it as established, attributed to the team;
+- "UNKNOWN" — a person was asked and does not know. You may record it as a known-unknown the team confirmed;
+- "NOT_ASKED" — nobody was ever asked: the gate was resolved automatically. You must NOT present it as a team answer, must NOT write that it was asked or confirmed, and must NOT tell future sessions to stop investigating it. Write it as an open question still worth asking, or leave it out.
+Never invent an answer for any of the three.
 {{HUMAN_KNOWLEDGE}}
 
 Classification:
@@ -153,7 +158,7 @@ Writing rules — these are enforced by validation, not suggestions:
 - Point instead of copy: reference existing docs and the on-demand files by name; do not paste their content.
 - Claude Code strips block-level HTML comments from CLAUDE.md before loading it; DCC adds its own provenance comment — do not add one.
 - claude_md (max_lines applies): "# <repo name>", 2-3 lines of purpose, "## Commands" (build/test/lint/run that Claude cannot guess, with the cwd when it matters), "## Constraints" (hard rules and gotchas, each one line, most important first), "## Where to look" (3-8 lines pointing to paths or to the skills by name), "## Etiquette" (branching, commits, PRs — only if repository-specific). If the repository has AGENTS.md, the very first line must be @AGENTS.md and you must not repeat its content. For action=update, read the existing file first, keep what is correct and specific, remove what is derivable or stale, and fold in what is missing.
-- knowledge_skill: markdown body only (DCC adds the frontmatter). Structure with short headings and bullets; every bullet points at a path. A "repository map" skill lists areas → paths → what lives there, entry points, and where to look for common task types. An "integrations" skill lists system, direction, implementation path, and constraints. A "critical context" skill records the verified human answers and non-obvious constraints, each with its source ("team answer", "path"). Keep within max_lines.
+- knowledge_skill: markdown body only (DCC adds the frontmatter). Structure with short headings and bullets; every bullet points at a path. A "repository map" skill lists areas → paths → what lives there, entry points, and where to look for common task types. An "integrations" skill lists system, direction, implementation path, and constraints. A "critical context" skill records non-obvious constraints and the answers a person actually gave, each with its source ("team answer", "path") — an "UNKNOWN" may be recorded as a confirmed known-unknown, a "NOT_ASKED" may not be recorded as either, and neither may carry an instruction to stop investigating. Keep within max_lines.
 - workflow_skill: body only; numbered steps a session can follow, each with the exact command or path; the trigger sentence first.
 - rule: body only (DCC adds the paths frontmatter). Conventions specific to those paths, each with the reason; ≤ max_lines.
 - nested_claude_md: same rules as claude_md but only what differs from the root.

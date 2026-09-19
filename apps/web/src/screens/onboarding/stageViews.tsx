@@ -444,13 +444,25 @@ export function ConfirmView({ r, status }: { r: ConfirmResult; status: Onboardin
         ? <Note tone="info">ה-Discovery לא השאיר שאלות פתוחות — השלב דולג אוטומטית.</Note>
         : (
           <Section title="תשובות (ידע אנושי, לא מסקנת AI)">
+            {r.resolvedBy === "automation" && (
+              <Note tone="warning">
+                השער הזה אושר אוטומטית — השאלות לא הוצגו לאף אדם. הן נרשמו כ״לא נשאל״, ולכן לא ייכתבו למאגר כתשובות מאומתות.
+                כדי לקבל עליהן תשובות אמיתיות: חזרו לשלב זה וענו ידנית.
+              </Note>
+            )}
             <div style={{ display: "grid", gap: 8 }}>
               {r.questions.map((q) => {
                 const a = r.answers?.find((x) => x.id === q.id);
                 return (
                   <div key={q.id} className="ob-q">
                     <b style={{ fontSize: 12.5 }}>{q.question_he}</b>
-                    <p style={{ fontSize: 12.5, marginTop: 3 }}>{a?.status === "answered" ? a.answer_he : <span style={{ color: "var(--status-warning)", fontWeight: 600 }}>UNKNOWN — לא נענה</span>}</p>
+                    <p style={{ fontSize: 12.5, marginTop: 3 }}>
+                      {a?.status === "answered"
+                        ? a.answer_he
+                        : a?.status === "not_asked"
+                          ? <span style={{ color: "var(--status-warning)", fontWeight: 600 }}>לא נשאל — אף אחד לא נשאל את זה</span>
+                          : <span style={{ color: "var(--status-warning)", fontWeight: 600 }}>UNKNOWN — נשאל, ואין תשובה</span>}
+                    </p>
                   </div>
                 );
               })}
@@ -587,6 +599,20 @@ export function PlanGate({ r, busy, onSubmit }: GateProps<PlanResult>) {
           <Note tone="warn">
             אלה קבצים שכבר קיימים ב-repository ושמישהו כתב — לא משהו שנוצר עכשיו. <b>ברירת המחדל היא לא למחוק:</b> הם יישארו בדיוק כמו שהם אלא אם תסמנו אותם במפורש. גם בהרצה אוטומטית מלאה מחיקה אף פעם לא מתבצעת לבד — היא תמיד מחכה לאדם. מה שתסמנו יופיע ב-diff המלא בשלב הסקירה לפני שמשהו יוצא החוצה.
           </Note>
+          {/* Leaving a superseded file unchecked is a legitimate choice, but
+              it is not a no-op: the repository ends up carrying the same
+              knowledge twice, with nothing pointing at the old copy. Say so
+              here, per file, so it is a decision and not an oversight. */}
+          {removals.some((a) => !selected.has(a.key) && a.supersededBy) && (
+            <Note tone="info">
+              קבצים שלא תסמנו יישארו — אבל התוכן שלהם עובר לקובץ החדש, ולכן ה-repository יחזיק <b>שני עותקים של אותו ידע</b>, כשהישן כבר לא מקושר משום מקום. זו בחירה לגיטימית, רק דעו שמישהו יצטרך להחליט בהמשך מי מקור האמת:
+              <ul className="ob-list" style={{ marginTop: 6 }}>
+                {removals.filter((a) => !selected.has(a.key) && a.supersededBy).map((a) => (
+                  <li key={a.key}><Code>{a.path}</Code> יישאר לצד <Code>{a.supersededBy}</Code></li>
+                ))}
+              </ul>
+            </Note>
+          )}
           <div style={{ marginTop: 10 }}><ArtifactTable artifacts={removals} selected={selected} onToggle={toggle} /></div>
         </Section>
       )}

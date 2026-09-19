@@ -264,6 +264,11 @@ export type StageContext = {
   ownResult?: unknown;
   /** Set only on a resume via `submitStageInput` — the person's raw input. */
   resumeInput?: unknown;
+  /** Who supplied `resumeInput`: a person at the gate, or the automation
+   *  policy applying the stage's defaults. A gate resolved by automation
+   *  is not a person's answer, and a stage must not let a later stage
+   *  present it as one. */
+  resumeSource?: "person" | "automation";
   /** A reviewer's "request changes" note (generate reads it). */
   reviewNote?: string | null;
   automation: AutomationPolicy;

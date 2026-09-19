@@ -92,13 +92,14 @@ export type Discovery = {
 };
 export type DiscoveryResult = { discovery: Discovery; claudeExecutionId: string; stats: { toolCalls: Record<string, number>; costUsd: number | null; numTurns: number | null } };
 
-export type ConfirmAnswer = { id: string; answer_he: string; status: "answered" | "unknown" };
+export type ConfirmAnswer = { id: string; answer_he: string; status: "answered" | "unknown" | "not_asked" };
 export type ConfirmResult = {
   questions: DiscoveryQuestion[];
   digest: { purpose: string; components: number; integrations: number; constraints: number; unknowns: string[]; coverage: Discovery["coverage"] };
   answers?: ConfirmAnswer[];
   corrections?: string;
   answeredAt?: string;
+  resolvedBy?: "person" | "automation";
 };
 
 export type ArtifactKind = "claude_md" | "nested_claude_md" | "rule" | "knowledge_skill" | "workflow_skill" | "agent" | "settings" | "guardrail_hook" | "dcc_hooks" | "legacy_artifact";
