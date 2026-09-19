@@ -80,3 +80,31 @@ export function cleanPathFragment(raw: string): string {
   const cut = raw.search(/\s+[(—]|\s+-\s+/);
   return (cut >= 0 ? raw.slice(0, cut) : raw).trim().replace(/^\.?\//, "");
 }
+
+/**
+ * Mirror of the gitignore-style matcher inlined in the path-protecting
+ * guardrail templates, so validation can report exactly which files a
+ * pattern will block without spawning the hook once per file.
+ *
+ * The two copies must agree. `validate` cross-checks them by running the
+ * real hook against sample files this function classified, and fails the
+ * stage if they ever disagree — so this mirror cannot drift unnoticed.
+ * Keep it and the template's `matchesPattern` byte-compatible in
+ * behaviour when changing either.
+ */
+export function matchesProtectedPattern(filePath: string, pattern: string): boolean {
+  let p = String(pattern).trim().replace(/^\.?\//, "");
+  if (p.endsWith("/")) p = p.slice(0, -1);
+  if (!p) return false;
+  const anchored = p.includes("/");
+  const body = p
+    .split("/")
+    .map((seg) =>
+      seg === "**"
+        ? "(?:.*)"
+        : seg.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]"),
+    )
+    .join("/")
+    .replace(/\(\?:\.\*\)\//g, "(?:.*/)?");
+  return new RegExp(`^${anchored ? "" : "(?:.*/)?"}${body}(?:/.*)?$`).test(filePath);
+}

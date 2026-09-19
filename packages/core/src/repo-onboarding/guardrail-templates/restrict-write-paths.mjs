@@ -11,13 +11,53 @@
 // itself is a reviewed, static template.
 import { readFileSync } from "node:fs";
 
-// Substituted by guardrails.ts — a JS array-literal of glob fragments.
+// Substituted by guardrails.ts — a JS array-literal of path patterns.
 const PROTECTED_GLOBS = {{PROTECTED_GLOBS}};
 
-const input = JSON.parse(readFileSync(0, "utf8"));
-const path = String(input?.tool_input?.file_path ?? "").replace(/\\/g, "/");
+/**
+ * Minimal gitignore-style path matcher. Inlined on purpose: this file
+ * ships into the repository and must run with zero dependencies.
+ *
+ * - `**` spans directories; `*` and `?` stay inside one segment.
+ * - A pattern containing `/` anywhere but the end is anchored at the
+ *   repository root; any other pattern matches at any depth.
+ * - A pattern naming a directory also matches everything inside it.
+ *
+ * Note for maintainers: this deliberately does NOT fall back to a
+ * substring test. A substring test silently accepts a pattern like
+ * "*.snk files" that can never match a real path, which is how this
+ * guardrail was wrong before. A pattern that matches nothing is a bug
+ * to fix in the pattern, not something to paper over here.
+ */
+function matchesPattern(filePath, pattern) {
+  let p = String(pattern).trim().replace(/^\.?\//, "");
+  if (p.endsWith("/")) p = p.slice(0, -1);
+  if (!p) return false;
+  const anchored = p.includes("/");
+  const body = p
+    .split("/")
+    .map((seg) =>
+      seg === "**"
+        ? "(?:.*)"
+        : seg.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, "[^/]*").replace(/\?/g, "[^/]"),
+    )
+    .join("/")
+    .replace(/\(\?:\.\*\)\//g, "(?:.*/)?");
+  return new RegExp(`^${anchored ? "" : "(?:.*/)?"}${body}(?:/.*)?$`).test(filePath);
+}
 
-const hit = PROTECTED_GLOBS.find((frag) => frag && path.includes(frag));
+/** Claude Code sends an absolute `file_path`; the patterns are
+ *  repository-relative, so strip the repo root before matching. */
+function repoRelative(raw, cwd) {
+  const p = String(raw ?? "").replace(/\\/g, "/");
+  const root = String(process.env.CLAUDE_PROJECT_DIR || cwd || "").replace(/\\/g, "/").replace(/\/+$/, "");
+  return (root && p.startsWith(`${root}/`) ? p.slice(root.length + 1) : p).replace(/^\.?\//, "");
+}
+
+const input = JSON.parse(readFileSync(0, "utf8"));
+const path = repoRelative(input?.tool_input?.file_path, input?.cwd);
+
+const hit = PROTECTED_GLOBS.find((frag) => frag && matchesPattern(path, frag));
 if (hit) {
   process.stderr.write(`DCC guardrail "Restrict Write Paths": refusing to write to "${path}" — matches a protected path ("${hit}"). Changes here should come from a human-reviewed PR.\n`);
   process.exit(2);

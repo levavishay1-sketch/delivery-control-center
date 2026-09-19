@@ -157,7 +157,7 @@ export const VALIDATE_SCHEMA = {
         properties: {
           severity: { type: "string", enum: ["low", "medium", "high"] },
           artifact: str, problem_he: str, evidence: str, recommended_correction_he: str,
-          category: { type: "string", enum: ["contradiction", "unsupported_claim", "duplication", "generic_filler", "missing_critical", "broken_reference", "other"] },
+          category: { type: "string", enum: ["contradiction", "unsupported_claim", "duplication", "generic_filler", "missing_critical", "broken_reference", "ineffective_guardrail", "other"] },
         },
         required: ["severity", "artifact", "problem_he"],
       },

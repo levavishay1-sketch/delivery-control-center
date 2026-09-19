@@ -173,13 +173,17 @@ Artifacts to review (read each one from the repository):
 Deterministic checks DCC already ran (do not repeat them; use them as context):
 {{CHECKS}}
 
+Exactly which repository files each guardrail hook will now refuse to let a session write, measured by running its own matcher over this repository:
+{{PROTECTED_COVERAGE}}
+
 Read the artifacts, then verify their claims against the code (open the files they point at, check that commands exist in scripts/manifests, that paths exist, that constraints match what the code does). Report:
 - contradiction: a statement the code contradicts (cite the evidence path);
 - unsupported_claim: a statement with no evidence in the repository;
 - duplication: content that repeats another artifact or a maintained README/doc instead of pointing at it;
 - generic_filler: advice that is not repository-specific;
 - missing_critical: a durable, non-obvious fact discovery established that no artifact records;
-- broken_reference: a path or command that does not exist.
+- broken_reference: a path or command that does not exist;
+- ineffective_guardrail: a guardrail whose real effect is wrong. Judge each entry of PROTECTED_COVERAGE against what the artifacts themselves say about those files. Blocking vendored or generated output is correct and needs no finding. A guardrail that blocks files the artifacts describe as hand-written, safe to edit, or a place to go and work is a high-severity finding — the repository would ship instructions and enforcement that contradict each other. So is a guardrail whose stated purpose names something it does not actually cover.
 Severity high = a future session would act wrongly; medium = wasted time or confusion; low = polish.
 overall_status: FAIL if any high-severity issue, WARN if medium, else PASS. strengths_he: 2-4 things done well, in Hebrew. problem_he and recommended_correction_he in Hebrew.
 
