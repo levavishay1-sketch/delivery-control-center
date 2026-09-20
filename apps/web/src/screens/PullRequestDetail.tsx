@@ -198,7 +198,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
   if (!head) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><p className="ob-sub" style={{ marginTop: 12 }}>טוען את הבקשה…</p></>;
 
   const { pr, nextStep, blockers } = head;
-  const canMerge = blockers.every((b) => b.ok !== false);
+  const canMerge = pr.state === "open" && blockers.every((b) => b.ok !== false);
   const loading = (what: string) => <p className="ob-sub"><span className="spinner" style={{ width: 13, height: 13, marginInlineEnd: 8, verticalAlign: "middle" }} />טוען {what} מהגיט־האוסט…</p>;
 
   return (
@@ -217,9 +217,11 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
             <div className="l">פתח {pr.author} · {waited(pr.waitingHours)} · אל <span className="ob-code">{pr.baseBranch}</span></div>
           </div>
           <div className="flags">
-            {pr.draft && <span className="pill inactive">טיוטה</span>}
-            {pr.conflicts && <span className="pill critical">התנגשות</span>}
-            {!pr.conflicts && pr.mergeable && <span className="pill healthy">אין התנגשות</span>}
+            {pr.state === "merged" && <span className="pill healthy">מוזגה</span>}
+            {pr.state === "closed" && <span className="pill inactive">נסגרה בלי מיזוג</span>}
+            {pr.draft && pr.state === "open" && <span className="pill inactive">טיוטה</span>}
+            {pr.state === "open" && pr.conflicts && <span className="pill critical">התנגשות</span>}
+            {pr.state === "open" && !pr.conflicts && pr.mergeable && <span className="pill healthy">אין התנגשות</span>}
           </div>
         </div>
         <div className="ob-actions">
@@ -247,11 +249,11 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
           </div>
           <div className="dash">
             <div style={{ minWidth: 0 }}>
-              <div className="panel" style={{ marginBottom: 12 }}>
+              {blockers.length > 0 && <div className="panel" style={{ marginBottom: 12 }}>
                 <h4>מה חוסם מיזוג</h4>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>
                 {blockers.map((b) => <BlockerRow key={b.key} b={b} />)}
-              </div>
+              </div>}
               {!d
                 ? <div className="panel">{loading("את מפת הקוד")}</div>
                 : (

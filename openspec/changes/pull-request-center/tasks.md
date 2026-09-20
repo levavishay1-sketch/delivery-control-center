@@ -141,3 +141,11 @@ Agreed with the user after the repository's stray branches were cleared (three d
 - [x] 16.3 A commit's file count is shown only where it is that commit's own. The host answers a whole branch's files at once, so on a request's screen each dot used to claim every file of the request (139); those dots now show no count rather than a wrong one.
 - Deliberately not built: Hebrew topics and Hebrew commit descriptions. They need a model to translate or summarise, which costs per call; the user chose English to keep this free.
 - [x] 16.4 The branch's name is aligned to the right edge (the reading side) on a request's screen, and is the headline of each row in the requests list too, with `#number · title` under it. A row still opens the request's screen; a separate "על מה הענף" button on the row opens the same list of subjects nested under it, without leaving the list (it asks the host for the request's detail, which pointing at the row has usually already fetched). One shared component draws the list on both screens.
+
+## 17. Requests already dealt with stay findable
+
+The user expected the first request of this repository (merged) to appear in the list; the list only asked the host for open ones.
+
+- [x] 17.1 The list asks the host for the most recent closed requests too (its "closed" includes merged; each row says which it is) and offers them under "מוזגו לאחרונה" and "נסגרו בלי מיזוג" beside "פתוחות". The tiles and the sorting still speak only of the open ones.
+- [x] 17.2 A merged or closed request opens on its own screen: no blockers, a next step that says it is done, its files and timeline (with the merge itself), no live map (its branch may be gone and the base has moved on) and no side-by-side file comparison (open requests only), and the merge button stays disabled.
+- [x] 17.3 The line under a row's branch name (`#number · title`) is gone from the list; the request's number and title remain on its own screen.

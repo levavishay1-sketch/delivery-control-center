@@ -709,7 +709,6 @@ a { color: var(--color-accent); }
 .pr-line { display: flex; align-items: stretch; border-bottom: 1px solid var(--divider); }
 .pr-line .pr-row { flex: 1; min-width: 0; border-bottom: none; }
 .pr-title.br { font-family: var(--mono); direction: ltr; text-align: right; unicode-bidi: isolate; overflow-wrap: anywhere; }
-.pr-sub { direction: ltr; text-align: right; unicode-bidi: isolate; }
 .pr-exp { appearance: none; border: none; border-inline-start: 1px solid var(--divider); background: none; font: inherit; font-size: 11.5px; color: var(--color-accent-dark); padding: 0 12px; cursor: pointer; white-space: nowrap; }
 .pr-exp:hover, .pr-exp.on { background: var(--surface-tint-2); }
 .pr-inline { padding: 4px 16px 10px; border-bottom: 1px solid var(--divider); background: var(--surface-tint-2); }

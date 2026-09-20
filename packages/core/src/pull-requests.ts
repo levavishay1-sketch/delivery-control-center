@@ -35,6 +35,8 @@ export type PullRequestRow = {
   baseBranch: string;
   createdAt: string;
   updatedAt: string;
+  /** When it was merged or closed; null while open. */
+  closedAt: string | null;
   changedFiles: number;
   additions: number;
   deletions: number;
@@ -53,7 +55,10 @@ export type PullRequestRow = {
 };
 
 export type PullRequestList = {
+  /** The open requests — what is waiting. */
   rows: PullRequestRow[];
+  /** The most recent merged and closed ones, so a request that was dealt with can still be found. */
+  history: PullRequestRow[];
   repos: { id: string; name: string; clientId: string | null; clientName: string | null; provider: "github" | "ado" | null; reason?: string }[];
   syncedAt: string;
   /** A host that could not be reached keeps the screen honest rather than empty. */
@@ -66,7 +71,7 @@ type RepoRef = { id: string; name: string; url: string; clientId: string | null;
 
 type Provider = {
   id: "github" | "ado";
-  list(repo: RepoRef): Promise<Omit<PullRequestRow, "repo" | "client" | "flags" | "parentId" | "waitingHours">[]>;
+  list(repo: RepoRef, state: "open" | "closed"): Promise<Omit<PullRequestRow, "repo" | "client" | "flags" | "parentId" | "waitingHours">[]>;
 };
 
 const run = (file: string, args: string[], timeoutMs = 25_000) =>
@@ -110,12 +115,12 @@ async function ghAvailable(): Promise<boolean> {
   return !!again;
 }
 
-const GH_FIELDS = "number,title,url,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,changedFiles,additions,deletions,mergeable,reviewDecision,statusCheckRollup";
+const GH_FIELDS = "number,title,url,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,closedAt,changedFiles,additions,deletions,mergeable,reviewDecision,statusCheckRollup";
 
 type GhPr = {
   number: number; title: string; url: string; state: string; isDraft: boolean;
   author?: { login?: string } | null; headRefName: string; baseRefName: string;
-  createdAt: string; updatedAt: string; changedFiles?: number; additions?: number; deletions?: number;
+  createdAt: string; updatedAt: string; closedAt?: string | null; changedFiles?: number; additions?: number; deletions?: number;
   mergeable?: string; reviewDecision?: string | null;
   statusCheckRollup?: { state?: string; conclusion?: string; status?: string }[] | null;
 };
@@ -148,8 +153,8 @@ export async function ghText(args: string[]): Promise<string | null> {
 
 const github: Provider = {
   id: "github",
-  async list(r) {
-    const res = await run(ghBin() ?? "gh", ["pr", "list", "--repo", r.url, "--state", "open", "--limit", "50", "--json", GH_FIELDS]);
+  async list(r, state) {
+    const res = await run(ghBin() ?? "gh", ["pr", "list", "--repo", r.url, "--state", state, "--limit", state === "open" ? "50" : "25", "--json", GH_FIELDS]);
     if (res.code !== 0) throw new Error(res.err.split("\n")[0] || "gh pr list נכשל");
     const parsed = JSON.parse(res.out || "[]") as GhPr[];
     return parsed.map((p) => ({
@@ -165,6 +170,7 @@ const github: Provider = {
       baseBranch: p.baseRefName,
       createdAt: p.createdAt,
       updatedAt: p.updatedAt,
+      closedAt: p.closedAt ?? null,
       changedFiles: p.changedFiles ?? 0,
       additions: p.additions ?? 0,
       deletions: p.deletions ?? 0,
@@ -220,13 +226,15 @@ async function reposToWatch(): Promise<{ refs: RepoRef[]; skipped: PullRequestLi
 let cache: { at: number; list: PullRequestList } | null = null;
 const LIST_TTL_MS = 60_000;
 
-/** Every open request DCC can see, with what DCC knows about it added. */
+/** Every open request DCC can see, with what DCC knows about it added — and the recent merged and closed ones after it. */
 export async function listPullRequests(opts: { refresh?: boolean } = {}): Promise<PullRequestList> {
   if (!opts.refresh && cache && Date.now() - cache.at < LIST_TTL_MS) return cache.list;
   const { refs, skipped } = await reposToWatch();
   const problems: PullRequestList["problems"] = [];
   const watched: PullRequestList["repos"] = [...skipped];
-  const raw: (Omit<PullRequestRow, "flags" | "waitingHours" | "parentId"> & { repo: { id: string; name: string }; client: { id: string | null; name: string | null } })[] = [];
+  type Raw = Omit<PullRequestRow, "flags" | "waitingHours" | "parentId"> & { repo: { id: string; name: string }; client: { id: string | null; name: string | null } };
+  const raw: Raw[] = [];
+  const past: Raw[] = [];
 
   if (refs.length && !(await ghAvailable())) {
     for (const r of refs) watched.push({ id: r.id, name: r.name, clientId: r.clientId, clientName: r.clientName, provider: "github", reason: "GitHub CLI לא מותקן — התקינו gh והתחברו" });
@@ -236,8 +244,12 @@ export async function listPullRequests(opts: { refresh?: boolean } = {}): Promis
       watched.push({ id: r.id, name: r.name, clientId: r.clientId, clientName: r.clientName, provider: "github" });
       for (const p of PROVIDERS) {
         try {
-          const prs = await p.list(r);
-          for (const pr of prs) raw.push({ ...pr, repo: { id: r.id, name: r.name }, client: { id: r.clientId, name: r.clientName } });
+          // Open ones are what matters; the merged and closed are asked for alongside, so a dealt-with request can still be found.
+          // The host's "closed" already includes the merged ones; each row says which it is.
+          const [open, done] = await Promise.all([p.list(r, "open"), p.list(r, "closed").catch(() => [])]);
+          const ref = { repo: { id: r.id, name: r.name }, client: { id: r.clientId, name: r.clientName } };
+          for (const pr of open) raw.push({ ...pr, ...ref });
+          for (const pr of done) past.push({ ...pr, ...ref });
         } catch (e) {
           problems.push({ repo: r.name, reason: e instanceof Error ? e.message.slice(0, 160) : String(e) });
         }
@@ -263,7 +275,11 @@ export async function listPullRequests(opts: { refresh?: boolean } = {}): Promis
     return rank(a) - rank(b) || b.waitingHours - a.waitingHours;
   });
 
-  const list: PullRequestList = { rows, repos: watched, syncedAt: new Date().toISOString(), problems };
+  const history: PullRequestRow[] = past
+    .map((p) => ({ ...p, parentId: null, waitingHours: 0, flags: [] as PullRequestRow["flags"] }))
+    .sort((a, b) => (b.closedAt ?? b.updatedAt).localeCompare(a.closedAt ?? a.updatedAt));
+
+  const list: PullRequestList = { rows, history, repos: watched, syncedAt: new Date().toISOString(), problems };
   cache = { at: Date.now(), list };
   return list;
 }

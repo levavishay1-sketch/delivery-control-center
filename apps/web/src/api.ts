@@ -476,7 +476,7 @@ export const getTaskCodeMap = (taskId: string) => get<{ codeMap: CodeMap | null;
 export type PullRequestRow = {
   id: string; provider: "github" | "ado"; number: number; title: string; url: string;
   state: "open" | "merged" | "closed"; draft: boolean; author: string; headBranch: string; baseBranch: string;
-  createdAt: string; updatedAt: string; changedFiles: number; additions: number; deletions: number;
+  createdAt: string; updatedAt: string; closedAt: string | null; changedFiles: number; additions: number; deletions: number;
   mergeable: boolean | null; conflicts: boolean; review: "approved" | "changes_requested" | "none";
   checks: "passing" | "failing" | "running" | "none"; parentId: string | null;
   repo: { id: string; name: string }; client: { id: string | null; name: string | null };
@@ -484,11 +484,13 @@ export type PullRequestRow = {
 };
 export type PullRequestList = {
   rows: PullRequestRow[];
+  /** Recently merged and closed requests. */
+  history: PullRequestRow[];
   repos: { id: string; name: string; clientId: string | null; clientName: string | null; provider: "github" | "ado" | null; reason?: string }[];
   syncedAt: string; problems: { repo: string; reason: string }[];
 };
 export type PrBlocker = { key: string; ok: boolean | null; title: string; detail: string };
-export type NextStep = { title: string; detail: string; action: "update_branch" | "request_review" | "merge" | "open_host" | "wait" };
+export type NextStep = { title: string; detail: string; action: "update_branch" | "request_review" | "merge" | "open_host" | "wait" | "done" };
 export type PullRequestFile = { path: string; status: string; additions: number; deletions: number; note?: string; from?: string };
 export type FileGroup = { key: string; title: string; note?: string; files: PullRequestFile[]; additions: number; deletions: number };
 export type TimelineItem = { at: string; kind: string; text: string; detail?: string; tag?: string; tone?: "warning" | "healthy" | "neutral" };

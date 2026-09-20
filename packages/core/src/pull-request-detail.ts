@@ -23,7 +23,7 @@ export type Blocker = {
   detail: string;
 };
 
-export type NextStep = { title: string; detail: string; action: "update_branch" | "request_review" | "merge" | "open_host" | "wait" };
+export type NextStep = { title: string; detail: string; action: "update_branch" | "request_review" | "merge" | "open_host" | "wait" | "done" };
 
 export type FileGroupKey = "code" | "instructions" | "docs" | "config" | "build" | "other";
 
@@ -148,6 +148,8 @@ function topicsOf(files: GhFile[]): Topic[] {
 /* ── what blocks a merge, in the order that matters ───────────────── */
 
 function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boolean): Blocker[] {
+  // Nothing blocks a request that has already been merged or closed.
+  if (pr.state !== "open") return [];
   const b: Blocker[] = [];
   b.push(pr.conflicts
     ? { key: "conflict", ok: false, title: "התנגשות מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
@@ -172,6 +174,8 @@ function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boole
 }
 
 function nextStepFor(pr: PullRequestRow, blockers: Blocker[], behind: number, behindTouching: number): NextStep {
+  if (pr.state === "merged") return { title: "הבקשה כבר מוזגה", detail: `השינוי נכנס ל-${pr.baseBranch}${pr.closedAt ? ` ב-${new Date(pr.closedAt).toLocaleDateString("he-IL")}` : ""}. אין מה לעשות בה, והענף שלה אפשר למחוק אם לא נמחק.`, action: "done" };
+  if (pr.state === "closed") return { title: "הבקשה נסגרה בלי מיזוג", detail: "השינוי לא נכנס. אם העבודה עדיין נחוצה, אפשר לפתוח בקשה חדשה מאותו ענף.", action: "done" };
   if (behindTouching > 0 || pr.conflicts) {
     return {
       title: "עדכנו את הענף מהיעד" + (blockers.some((b) => b.key === "review" && b.ok === false) ? ", ואז בקשו סקירה" : ""),
@@ -195,9 +199,12 @@ function nextStepFor(pr: PullRequestRow, blockers: Blocker[], behind: number, be
  *  timeline) arrive separately, so a person sees something useful immediately and the rest fills in. */
 export type PullRequestQuick = { pr: PullRequestRow; blockers: Blocker[]; nextStep: NextStep };
 
+const findRequest = (list: { rows: PullRequestRow[]; history: PullRequestRow[] }, repoId: string, number: number) =>
+  list.rows.find((r) => r.repo.id === repoId && r.number === number) ?? list.history.find((r) => r.repo.id === repoId && r.number === number);
+
 export async function pullRequestQuick(repoId: string, number: number): Promise<PullRequestQuick> {
   const list = await listPullRequests({});
-  const pr = list.rows.find((r) => r.repo.id === repoId && r.number === number);
+  const pr = findRequest(list, repoId, number);
   if (!pr) throw new Error("בקשת המיזוג לא נמצאה");
   const blockers = blockersFor(pr, !!pr.parentId, pr.checks !== "none");
   return { pr, blockers, nextStep: nextStepFor(pr, blockers, 0, 0) };
@@ -215,7 +222,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
     if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
   }
   const list = await listPullRequests({ refresh: opts.refresh });
-  const pr = list.rows.find((r) => r.repo.id === repoId && r.number === number);
+  const pr = findRequest(list, repoId, number);
   if (!pr) throw new Error("בקשת המיזוג לא נמצאה");
   const [r] = await db.select({ adoRepoRef: repo.adoRepoRef }).from(repo).where(eq(repo.id, repoId)).limit(1);
   const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
@@ -223,11 +230,12 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
 
   // Three independent questions to the host, asked together rather than one after the other:
   // what the request holds, what the branch gained, and what the base gained since.
+  // A request that is no longer open has no live comparison to make: its branch may be gone, and the base has moved on.
   const [view, ours, theirs] = slug
     ? await Promise.all([
         ghJson<{ body?: string; files?: GhFile[]; reviews?: GhReview[]; comments?: GhComment[] }>(["pr", "view", String(number), "--repo", url!, "--json", "body,files,reviews,comments"]),
-        ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.baseBranch}...${pr.headBranch}`]),
-        ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.headBranch}...${pr.baseBranch}`]),
+        pr.state === "open" ? ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.baseBranch}...${pr.headBranch}`]) : Promise.resolve(null),
+        pr.state === "open" ? ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.headBranch}...${pr.baseBranch}`]) : Promise.resolve(null),
       ])
     : [null, null, null];
   // The base's history before the branch point is not fetched: listing it took ~8s on the host,
@@ -248,7 +256,9 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
 
   let codeMap: CodeMap | null = null;
   let codeMapProblem: string | null = null;
-  if (!ours || !theirs) {
+  if (pr.state !== "open") {
+    codeMapProblem = pr.state === "merged" ? "הבקשה כבר מוזגה, ולכן אין מפה חיה של מיקום הענף. רשימת הקבצים והיומן מציגים מה נכנס." : "הבקשה נסגרה, ולכן אין מפה חיה של מיקום הענף.";
+  } else if (!ours || !theirs) {
     codeMapProblem = "אין כרגע מידע מהגיט־האוסט על הענף הזה, ולכן אי אפשר לצייר את מיקומו. נסו לרענן.";
   } else {
     const facts: CodeMapFacts = {
@@ -264,7 +274,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
       behindTouching: overlap.length,
       perCommitFiles: false,
       pushed: true,
-      merged: pr.state === "merged",
+      merged: false,
       prUrl: pr.url,
       prNumber: pr.number,
       fetchedAt: null,
@@ -281,6 +291,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   const nextStep = nextStepFor(pr, blockers, behind, overlap.length);
 
   const timeline: TimelineItem[] = [];
+  if (pr.state !== "open" && pr.closedAt) timeline.push({ at: pr.closedAt, kind: "merged", text: pr.state === "merged" ? `הבקשה מוזגה ל-${pr.baseBranch}` : "הבקשה נסגרה בלי מיזוג", tone: pr.state === "merged" ? "healthy" : "warning" });
   timeline.push({ at: pr.createdAt, kind: "opened", text: `הבקשה נפתחה על ידי ${pr.author}`, tone: "neutral" });
   for (const c of (ours?.commits ?? []).slice(-8)) timeline.push({ at: c.commit.author.date, kind: "commit", text: subject(c.commit.message), detail: `${short(c.sha)} · ${c.commit.author.name}` });
   for (const c of theirCommits.slice(-5)) timeline.push({ at: c.at, kind: "base", text: `${pr.baseBranch} התקדם: ${c.subject}`, detail: `${c.sha} · ${c.author}`, tag: overlap.length ? "נוגע באותם קבצים" : undefined, tone: overlap.length ? "warning" : undefined });
@@ -330,6 +341,7 @@ export async function pullRequestFile(repoId: string, number: number, filePath: 
   const d = kept && Date.now() - kept.at < FILE_TTL_MS ? kept.value : await pullRequestDetail(repoId, number);
   const file = d.groups.flatMap((g) => g.files).find((f) => f.path === filePath);
   if (!file) throw new Error("הקובץ הזה לא נמצא בבקשה");
+  if (d.pr.state !== "open") throw new Error("השוואת קובץ לפני ואחרי זמינה רק בבקשות פתוחות.");
   if (!d.refs) throw new Error("אין כרגע מידע מהגיט־האוסט על הגרסאות. נסו לרענן.");
   const [r] = await db.select({ adoRepoRef: repo.adoRepoRef }).from(repo).where(eq(repo.id, repoId)).limit(1);
   const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
