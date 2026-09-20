@@ -171,11 +171,11 @@ export function CostPanel({ cost, title, nav }: { cost: OnboardingCost; title: (
               <CostLine model={s.model} effort={s.effort} costUsd={s.costUsd} />
             </div>
           ))}
-          {cost.assistant && cost.assistant.calls > 0 && (
+          {cost.chat && cost.chat.calls > 0 && (
             <div className="row" style={{ padding: "7px 10px", fontSize: 12 }}>
-              <span className="title">העוזר · {fmtInt(cost.assistant.calls)} שאלות</span>
+              <span className="title">הצ'אט · {fmtInt(cost.chat.calls)} שאלות</span>
               <span className="spacer" />
-              <CostLine inputTokens={cost.assistant.inputTokens} outputTokens={cost.assistant.outputTokens} costUsd={cost.assistant.costUsd} />
+              <CostLine inputTokens={cost.chat.inputTokens} outputTokens={cost.chat.outputTokens} costUsd={cost.chat.costUsd} />
             </div>
           )}
         </div>

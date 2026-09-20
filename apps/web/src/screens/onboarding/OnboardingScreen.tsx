@@ -9,7 +9,7 @@ import {
 import { PageHead, Pill } from "../../ui.tsx";
 import { CodeMapPanel } from "../../components/CodeMap.tsx";
 import { FileCompare } from "../../components/FileCompare.tsx";
-import { Assistant } from "./Assistant.tsx";
+import { useClaudeContext } from "../../claude/context.ts";
 import { RunTerminal } from "./Terminal.tsx";
 import { AutomationEditor, AutomationPanel, CostPanel, EventLogPanel, ModelEditor, ModelPanel, RunsPanel } from "./rail.tsx";
 import { KIND_CHIP, RUN_STATUS_HE, STAGE_STATUS_HE, errText, fmtDate, fmtInt, fmtUsd, policyNeedsConsent, presetPolicy, shortSha } from "./labels.ts";
@@ -60,6 +60,25 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
     const t = window.setInterval(() => { if (!over.current) refresh().catch(() => {}); }, 2000);
     return () => window.clearInterval(t);
   }, [runId, refresh]);
+
+  // What the one chat knows about this screen: the run's state, and — read
+  // at the moment of asking — the text on the terminal right now. The
+  // session's own digest is added by the server for a `run` topic.
+  useClaudeContext(view ? {
+    screen: "onboarding",
+    topic: { kind: "run", id: view.run.id, title: `הטמעת ${repoName}` },
+    facts: {
+      "מאגר": repoName,
+      "מצב ההרצה": RUN_STATUS_HE[view.run.status]?.label ?? view.run.status,
+      "שלב נוכחי": view.run.currentStageKey ? (view.definitions.find((d) => d.key === view.run.currentStageKey)?.title_he ?? view.run.currentStageKey) : "—",
+      "שלבים שהושלמו": view.stages.filter((s) => s.status === "Completed").map((s) => view.definitions.find((d) => d.key === s.stageKey)?.title_he ?? s.stageKey),
+      "עלות ההרצה": `$${view.cost.totalCostUsd.toFixed(2)}`,
+      aiCostUsd: view.cost.totalCostUsd,
+      status: RUN_STATUS_HE[view.run.status]?.label ?? view.run.status,
+    },
+    liveFacts: () => ({ "המסך בטרמינל עכשיו": (screenRef.current?.() ?? "").slice(-3500) }),
+    suggestions: ["מה הוא רוצה ממני עכשיו?", "מה הוא עשה עד עכשיו?", "מה ההשלכות של כל אפשרות?", "איך ממשיכים מכאן?"],
+  } : null);
 
   const act = async (name: string, fn: () => Promise<unknown>) => {
     setBusy(name);
@@ -151,7 +170,7 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
           />
 
           <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} />
-          <Assistant repoId={id} runId={run.id} screenRef={screenRef} cost={view.cost.assistant} />
+          <p className="ob-sub" style={{ marginTop: 10 }}>שאלות על מה שהסשן עושה — בצ'אט של קלוד (הכפתור למטה משמאל, או Ctrl K). הוא מקבל את מה שהתחדש בסשן ואת המסך שבטרמינל.</p>
         </div>
 
         <div className="rail">

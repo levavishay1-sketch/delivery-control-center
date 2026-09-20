@@ -159,9 +159,9 @@ One registry in `packages/core/src/actions/`:
 million tokens). Capabilities after this change: `gap_detection`,
 `decomposition`, `execution`, `onboarding_init`, `chat`, `chat_code_read`,
 `conversation_summary`, `usage_insights`, `interactive_session` (recorded,
-not routed). Removed: `brief`, `matching`, `narrative`, `review`,
-`onboarding_assistant` — a capability nothing calls is a statement, not a
-policy.
+not routed). Removed: `brief`, `matching`, `narrative`, `review`, and the
+onboarding reading aid's own capability — a capability nothing calls is a
+statement, not a policy.
 
 The editor in the control center writes the same file through the API,
 bumps `version`, and appends a `policy.changed` event on the internal

@@ -3,7 +3,7 @@ export {
   startOnboardingRun, runOnboardingStage, completeInitStage, resumeOnboardingSession, refreshReview, approveReview, cancelOnboardingRun,
   updateOnboardingAutomation, updateOnboardingModelChoices, getOnboardingRunView, getOnboardingFileVersions, listOnboardingRuns, getLatestOnboardingRun,
   onboardingStageCatalogue, authorizeOnboardingTerminal, recoverOnboardingRuns,
-  getOnboardingAssistant, askOnboardingAssistant, resetOnboardingAssistant, sendToOnboardingSession,
+  onboardingChatFacts, sendToOnboardingSession,
 } from "./runs.ts";
 export { subscribeTerminal, writeTerminalInput, resizeTerminal, killAllSessions, type TerminalMessage } from "./session.ts";
 export {

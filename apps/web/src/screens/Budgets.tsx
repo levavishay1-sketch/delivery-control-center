@@ -1,11 +1,17 @@
 import { useEffect, useState } from "react";
 import { getBudgets } from "../api.ts";
 import { PageHead } from "../ui.tsx";
+import { useClaudeContext } from "../claude/context.ts";
 
 export function Budgets() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof getBudgets>>["budgets"] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { getBudgets().then((r) => setRows(r.budgets)).catch((e) => setErr(String(e))); }, []);
+  useClaudeContext({
+    screen: "budgets", topic: { kind: "app" },
+    facts: rows ? { "תקציבים לפי לקוח": rows.map((b) => `${b.clientName}: $${b.spentUsd.toFixed(2)} מתוך $${b.monthlyUsd} (${b.pct}%)`), aiCostUsd: rows.reduce((a, b) => a + b.spentUsd, 0) } : {},
+    suggestions: ["מאיפה מגיע המספר הזה?", "מה קורה כשעוברים את התקציב?"],
+  });
 
   const total = (rows ?? []).reduce((a, b) => a + b.spentUsd, 0);
   const cap = (rows ?? []).reduce((a, b) => a + b.monthlyUsd, 0);

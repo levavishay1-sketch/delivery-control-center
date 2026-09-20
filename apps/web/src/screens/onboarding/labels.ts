@@ -84,7 +84,7 @@ export function eventLabel(e: OnboardingEvent, title: (key: string) => string): 
     case "onboarding.session.command": return { text: `פקודה בסשן: ${s("command")}`, tone: "ai" };
     case "onboarding.session.prompt": return { text: `נכתב ל-Claude: ${s("text")}`, tone: "ai" };
     case "onboarding.session.answer": return { text: `${s("question")} → ${s("answer")}`, tone: "" };
-    case "onboarding.assistant.sent": return { text: `נשלחה לסשן הוראה מהעוזר${p.forced ? " (למרות שהסשן נראה עסוק)" : ""}: ${s("text")}`, tone: "ai" };
+    case "onboarding.session.instructed": return { text: `נשלחה לסשן הוראה מהצ'אט${p.forced ? " (למרות שהסשן נראה עסוק)" : ""}: ${s("text")}`, tone: "ai" };
     case "onboarding.review.approved": return { text: `סקירת התוצרים אושרה · ${s("files")} קבצים${p.auto ? " (לפי המדיניות)" : ""}`, tone: "healthy" };
     case "onboarding.gate.auto_resolved": return { text: `${title(s("stageKey"))}: השער אושר לפי המדיניות`, tone: "warning" };
     case "onboarding.delivered": return { text: p.prUrl ? `נמסר: commit ${s("commitSha")} ו-PR נפתח` : p.localOnly ? "נמסר: commit בענף מקומי" : `נמסר: commit ${s("commitSha") || "—"}`, tone: "healthy" };

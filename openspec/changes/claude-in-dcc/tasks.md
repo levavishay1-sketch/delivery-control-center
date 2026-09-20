@@ -25,15 +25,15 @@ Branches: `project/claude-in-dcc`, one `task/…` branch per stage.
 
 ## 2. The chat · `task/claude-chat`
 
-- [ ] 2.1 `@dcc/db`: `conversation`, `conversation_message` (in `0035_claude.sql`), RLS, indexes
-- [ ] 2.2 `@dcc/core` `chat/`: topic keys, conversation store, prompt assembly (stable prefix / delta), lean CLI call with `--session-id` / `--resume`, cumulative-cost delta, fresh session when the old one is gone, input-token cap
-- [ ] 2.3 `@dcc/core` `glossary/`: registries for requirement, task, pull request, onboarding run, control center, dashboard/lists; step-zero matcher (glossary + fact templates)
-- [ ] 2.4 `@dcc/core`: "did this help" (explicit + re-asked within a minute); `unanswered` detection
-- [ ] 2.5 API: `GET /claude/conversations`, `GET /claude/conversations/:id`, `POST /claude/ask` (topic + context + question), `POST /claude/messages/:id/helpful`, internal client resolution for `app`
-- [ ] 2.6 Web: `useClaudeContext`, `ClaudeChat` (launcher, floating / pinned, topic bar, chips, cost line, helpful), `GlossaryHint` (`?`), mounted once in `App.tsx`; context registered on requirement, task, pull request, onboarding, control center, dashboard
-- [ ] 2.7 Web: שיחות tab; a row opens the chat on that conversation
-- [ ] 2.8 Onboarding assistant deleted: `assistant.ts`, `Assistant.tsx`, its API routes, `assistant.json`, the capability, and its OpenSpec change; `digestTranscript` feeds the `run:<id>` topic's facts
-- [ ] 2.9 Verified live: a question answered from the glossary at zero cost, one from facts, one by the model with a ledger row; switching screens switches the conversation and the old one is found again
+- [x] 2.1 `@dcc/db`: `conversation`, `conversation_message` (in `0035_claude.sql`), RLS, indexes
+- [x] 2.2 `@dcc/core` `chat/`: topic keys (one conversation per client × topic × person), prompt assembly (the screen's glossary + facts, sent only when their hash changed), lean CLI call with `--session-id` / `--resume` and no tools, cumulative-cost delta per session, a fresh session when the old one is gone, the input cap through the ledger, roll-over on size or age with a recorded `conversation_summary` call. Found live: on a resumed session the CLI reports only the fresh tokens as input (3) and the history through the cache buckets (5,655 written) — the conversation's size is their sum
+- [x] 2.3 `@dcc/core` `glossary/`: registries for requirement, task, pull request, onboarding, control center, dashboard, budgets (one wording for the `?` hint, the chat and the docs); step-zero matcher — screen question → glossary `about`, fact templates (next step, cost, owner, status, gaps, blocker) before glossary terms, glossary term when the question is short and about it
+- [x] 2.4 `@dcc/core`: "did this help" — marked by the person, or the same question again within a minute (`helpful_source = reasked`); `[אין לי את זה במסך]` marker → `unanswered` on the ledger row
+- [x] 2.5 API: `POST /claude/chat/open`, `POST /claude/chat/ask`, `POST /claude/messages/:id/helpful`, `GET /claude/conversations`, `GET /claude/conversations/:id`, `GET /claude/glossary/:screen`; the `app` topic lives on the client named "DCC Internal" (else `.dcc.json`'s, else the first client)
+- [x] 2.6 Web: `useClaudeContext` (a store the dock reads; `liveFacts` read at the moment of asking), `ClaudeChat` (launcher bottom-left, `Ctrl K`, floating or pinned beside the screen — remembered, unavailable under 1100 px; topic bar; chips from the screen; the cost line and עזר / לא עזר on every answer), `GlossaryHint` (`?` on the requirement's run buttons, the pull request's review button, the control center's tiles); mounted once in `App.tsx`; context registered on requirement, task, pull request, onboarding, control center, dashboard, budgets
+- [x] 2.7 Web: שיחות tab, grouped by day with cost and calls; a row opens that conversation in the dock; `#/claude/conversations/<id>` does the same
+- [x] 2.8 The onboarding reading aid deleted — its core module, its panel, its API routes, its per-run store file, its capability and its OpenSpec change; its names on the retired list. `digestTranscript` and the changed-files summary now feed the `run:<id>` topic's facts (`onboardingChatFacts`); "send to session" stays in core for the stage-3 action registry; the event it wrote is renamed `onboarding.session.instructed`
+- [x] 2.9 Verified live against the API and in the dock: "מה הכפתור פרק למשימות עושה?" and "מה המסך הזה מציג?" answered from the glossary at $0.000 (source = system); three model questions answered by Haiku 4.5 at low effort — three ledger rows with tokens, cache buckets, duration and the policy rule (`default haiku for chat`, v2), $0.023 in all; the conversation listed with 6 messages and 3 calls. Note for the next tester: Hebrew sent through `curl` from Git Bash arrives garbled (console code page) — use a UTF-8 payload file or the browser
 
 ## 3. Actions · `task/claude-actions`
 

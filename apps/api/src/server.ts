@@ -130,10 +130,13 @@ import {
   onboardingStageCatalogue,
   authorizeOnboardingTerminal,
   recoverOnboardingRuns,
-  getOnboardingAssistant,
-  askOnboardingAssistant,
-  resetOnboardingAssistant,
-  sendToOnboardingSession,
+  openChat,
+  askChat,
+  markHelpful,
+  listConversations,
+  getConversation,
+  ChatError,
+  glossaryFor,
   subscribeTerminal,
   writeTerminalInput,
   resizeTerminal,
@@ -362,32 +365,55 @@ app.get("/repos/:id/onboarding/runs/:runId/file", async (req) => {
   return getOnboardingFileVersions(id, runId, q.path);
 });
 
-/* The Hebrew assistant next to the terminal: questions about the session, and
- * instructions the person chooses to send to it (openspec/changes/onboarding-assistant). */
-app.get("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
-  await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  return getOnboardingAssistant(id, runId);
+/* ── the one chat (claude-in-dcc §4–§7): one dock over every screen, a conversation per topic ── */
+
+const topicSchema = z.object({ kind: z.enum(["wi", "task", "pr", "run", "app"]), id: z.string().max(200).nullish() });
+const contextSchema = z.object({
+  screen: z.string().max(60).nullish(),
+  facts: z.record(z.unknown()).optional(),
+  suggestions: z.array(z.string().max(200)).max(12).optional(),
+  actions: z.array(z.string().max(60)).max(30).optional(),
 });
 
-app.post("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
+app.post("/claude/chat/open", async (req, reply) => {
   const dev = await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  const b = z.object({ question: z.string().min(1).max(4000), screen: z.string().max(20_000).optional() }).parse(req.body);
-  return askOnboardingAssistant(id, runId, b.question, b.screen, { userId: dev.id });
+  const b = z.object({ topic: topicSchema, context: contextSchema.optional() }).parse(req.body ?? {});
+  try { return await openChat(b.topic, dev.id, b.context ?? {}); } catch (e) { if (e instanceof ChatError) return reply.code(409).send({ error: e.message }); throw e; }
 });
 
-app.delete("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
-  await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  return resetOnboardingAssistant(id, runId);
-});
-
-app.post("/repos/:id/onboarding/runs/:runId/assistant/send", async (req) => {
+app.post("/claude/chat/ask", async (req, reply) => {
   const dev = await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  const b = z.object({ text: z.string().min(1).max(8000), messageId: z.string().optional(), force: z.boolean().optional() }).parse(req.body);
-  return sendToOnboardingSession(id, runId, { userId: dev.id }, b);
+  const b = z.object({ topic: topicSchema, context: contextSchema.optional(), question: z.string().min(1).max(4000) }).parse(req.body ?? {});
+  try { return await askChat({ topic: b.topic, userId: dev.id, question: b.question, ctx: b.context ?? {} }); } catch (e) { if (e instanceof ChatError) return reply.code(409).send({ error: e.message }); throw e; }
+});
+
+app.post("/claude/messages/:id/helpful", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ helpful: z.boolean(), note: z.string().max(1000).optional() }).parse(req.body ?? {});
+  try { return await markHelpful(id, dev.id, b.helpful, b.note); } catch (e) { if (e instanceof ChatError) return reply.code(409).send({ error: e.message }); throw e; }
+});
+
+app.get("/claude/conversations", async (req) => {
+  await actingUser(req);
+  const q = z.object({ clientId: z.string().uuid().optional(), userId: z.string().uuid().optional(), limit: z.coerce.number().int().optional() }).parse(req.query ?? {});
+  return { conversations: await listConversations(q) };
+});
+
+app.get("/claude/conversations/:id", async (req, reply) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const c = await getConversation(id);
+  if (!c) return reply.code(404).send({ error: "conversation" });
+  return c;
+});
+
+app.get("/claude/glossary/:screen", async (req, reply) => {
+  await actingUser(req);
+  const { screen } = req.params as { screen: string };
+  const g = glossaryFor(screen);
+  if (!g) return reply.code(404).send({ error: "glossary" });
+  return g;
 });
 
 /** The run's terminal: the live Claude Code session plus DCC's own lines.

@@ -53,6 +53,10 @@ const RETIRED = [
   // retired 2026-09-20 by the one ledger (openspec/changes/claude-in-dcc)
   "recordRunCost", "recordRouting", "model.routed", "modelRouted", "summariseTimeline", "summarise.ts",
   "costAtStart", "costAtEnd", "getCostDetail", "CostDetailModal", "COST_KIND_LABELS", "run-cost-tracking",
+  // the reading aid next to the onboarding terminal, retired 2026-09-20: the one chat is that assistant now
+  "onboarding_assistant", "onboarding-assistant", "askAssistant", "assistantMessages", "resetAssistant", "markAssistantSent", "assistantBusy",
+  "assistantModel", "assistant.json", "askOnboardingAssistant", "getOnboardingAssistant", "resetOnboardingAssistant", "AssistantTotals",
+  "Assistant.tsx", "onboarding.assistant.sent", "AssistantMessage",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
 // docs/history/ holds the design records the user asked to keep. Everything else — the replacing

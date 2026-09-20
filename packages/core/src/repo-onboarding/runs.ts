@@ -6,12 +6,11 @@ import { repo, repoAiEvent, repositoryOnboardingRun, repositoryOnboardingStage }
 import { callsForEntity } from "../claude-center.ts";
 import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { recommend } from "../routing.ts";
-import { changedFiles, fileVersions } from "./changes.ts";
+import { changeSummary, changedFiles, fileVersions } from "./changes.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { appendRepoAiEvent } from "./events.ts";
-import { assistantBusy, assistantMessages, assistantModel, askAssistant, markAssistantSent, resetAssistant } from "./assistant.ts";
 import { lastInputUser, markDisconnected, startClaudeSession, statusFile, stopClaudeSession, terminalLine, terminalState, writeTerminalInput } from "./session.ts";
-import { promptSeenAfter, readStatusSnapshot, scanTranscript, sessionIdle, transcriptLineCount, type TranscriptFact } from "./transcript.ts";
+import { digestTranscript, promptSeenAfter, readStatusSnapshot, scanTranscript, sessionIdle, transcriptLineCount, type TranscriptFact } from "./transcript.ts";
 import {
   LIVE_RUN_STATUSES, STAGES, isStageKey, normalizeModelPolicy, normalizePolicy, policyNeedsConsent, presetPolicy, stageDefinition,
   type AutomationPolicy, type ChangedFile, type DeliverResult, type ModelPolicy, type PrepareResult, type ReviewResult, type RunSession,
@@ -531,7 +530,7 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
   // not yet recorded, rather than hidden until the stage ends.
   const calls = await callsForEntity(ctx.clientId, { entityKind: "onboarding_run", entityId: runId });
   const sessionCalls = calls.filter((c) => c.capability === "onboarding_init");
-  const assistantCalls = calls.filter((c) => c.capability === "onboarding_assistant");
+  const chatCalls = calls.filter((c) => c.trigger === "chat" || c.trigger === "rollover");
   const cur = session.ledgerCursor ?? ZERO;
   const unrecorded = {
     costUsd: Math.max(0, totals.costUsd - cur.costUsd), inputTokens: Math.max(0, totals.inputTokens - cur.inputTokens),
@@ -558,8 +557,8 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
     inputTokens: sum(sessionCalls, (c) => c.inputTokens) + unrecorded.inputTokens,
     outputTokens: sum(sessionCalls, (c) => c.outputTokens) + unrecorded.outputTokens,
     apiDurationMs: sum(sessionCalls, (c) => c.durationMs ?? 0) + unrecorded.apiDurationMs,
-    assistant: assistantCalls.length
-      ? { costUsd: sum(assistantCalls, (c) => c.costUsd), calls: assistantCalls.length, inputTokens: sum(assistantCalls, (c) => c.inputTokens), outputTokens: sum(assistantCalls, (c) => c.outputTokens) }
+    chat: chatCalls.length
+      ? { costUsd: sum(chatCalls, (c) => c.costUsd), calls: chatCalls.length, inputTokens: sum(chatCalls, (c) => c.inputTokens), outputTokens: sum(chatCalls, (c) => c.outputTokens) }
       : null,
     byStage: [...byStage.values()],
     calls,
@@ -604,33 +603,29 @@ export function onboardingStageCatalogue() {
   return { stages: STAGES, recommended: { init: { model: rec.model, effort: rec.effort } } };
 }
 
-/* ── the Hebrew assistant ─────────────────────────────────────────── */
+/* ── what the one chat knows about a run (claude-in-dcc design §3) ─── */
 
-export async function getOnboardingAssistant(repoId: string, runId: string) {
-  await loadRun(repoId, runId);
-  return { messages: assistantMessages(runId), model: assistantModel(), busy: assistantBusy(runId) };
-}
-
-/** Answer a question about the session. Its cost is added to the run's own assistant line. */
-export async function askOnboardingAssistant(repoId: string, runId: string, question: string, screen: string | undefined, by: Actor) {
-  const { run, ctx } = await loadRun(repoId, runId);
-  if (!question.trim()) throw new OnboardingError("כתבו שאלה");
-  if (assistantBusy(runId)) throw new OnboardingError("העוזר עדיין עונה על השאלה הקודמת");
-  const s = sessionOf(run);
-  let a;
-  try {
-    // Its cost is a ledger row like every call; the run's cost card reads it from there.
-    a = await askAssistant({ runId, clientId: ctx.clientId, userId: by.userId, question, screen, transcriptPath: s.transcriptPath, workspacePath: run.workspacePath, baselineSha: run.baselineSha });
-  } catch (e) {
-    throw new OnboardingError(`העוזר לא הצליח לענות: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
-  }
-  return { message: a.message, costUsd: a.costUsd };
-}
-
-export async function resetOnboardingAssistant(repoId: string, runId: string) {
-  await loadRun(repoId, runId);
-  resetAssistant(runId);
-  return { reset: true };
+/** The facts the chat gets for a `run:<id>` topic: the session's state, what
+ *  it did since the previous question (a digest of the transcript from the
+ *  cursor), and the files changed in the isolated copy. The chat keeps the
+ *  cursor; only what is new is handed over each time. */
+export async function onboardingChatFacts(runId: string, cursor: number): Promise<{ facts: Record<string, unknown>; cursor: number }> {
+  const [row] = await db.select().from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, runId)).limit(1);
+  if (!row) return { facts: {}, cursor };
+  const s = sessionOf(row);
+  const digest = s.transcriptPath ? digestTranscript(s.transcriptPath, cursor, cursor ? 10_000 : 14_000) : { text: "", cursor, entries: 0 };
+  const files = row.workspacePath && row.baselineSha ? await changeSummary(row.workspacePath, row.baselineSha).catch(() => "") : "";
+  const stage = row.currentStageKey ? stageDefinition(row.currentStageKey as StageKey)?.title_he ?? row.currentStageKey : "—";
+  return {
+    facts: {
+      "שלב נוכחי": stage,
+      "מצב ההרצה": row.status,
+      "סשן Claude": s.state === "live" ? "פעיל" : s.state === "ended" ? "נסגר" : s.state === "disconnected" ? "נותק" : "לא התחיל",
+      "מה הסשן עשה מאז השאלה הקודמת": digest.text || "(אין חדש)",
+      "קבצים ששונו בעותק המבודד": files || "(אין)",
+    },
+    cursor: digest.cursor,
+  };
 }
 
 /** Type an instruction into the live session, as the person who pressed send.
@@ -652,8 +647,7 @@ export async function sendToOnboardingSession(repoId: string, runId: string, by:
   if (!writeTerminalInput(runId, `\x1b[200~${text}\x1b[201~`, by.userId)) throw new OnboardingError("סשן Claude לא פעיל");
   await new Promise((r) => setTimeout(r, 500));
   writeTerminalInput(runId, "\r", by.userId);
-  if (input.messageId) markAssistantSent(runId, input.messageId, !!input.force);
-  await event(ctx, "onboarding.assistant.sent", { text: text.length > 500 ? `${text.slice(0, 499)}…` : text, forced: !!input.force }, by.userId);
+  await event(ctx, "onboarding.session.instructed", { text: text.length > 500 ? `${text.slice(0, 499)}…` : text, forced: !!input.force, messageId: input.messageId ?? null }, by.userId);
   // Typed into a terminal is not the same as received: look for the message in the transcript.
   let confirmed = false;
   for (let i = 0; i < 12 && file && !confirmed; i++) {

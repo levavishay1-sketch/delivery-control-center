@@ -74,10 +74,11 @@ for (const r of runs) {
       inputTokens: Math.round(totals.inputTokens), outputTokens: Math.round(totals.outputTokens), costUsd: totals.costUsd, sourceRef: `run:${r.id}`,
     });
   }
+  // The reading aid that sat next to the onboarding terminal was the chat before the chat: its cost counts as chat.
   if (s.assistant && s.assistant.calls > 0) {
     await write({
-      clientId: r.clientId, userId: r.triggeredBy, entityKind: "onboarding_run", entityId: r.id, capability: "onboarding_assistant", trigger: "chat",
-      label: "העוזר של ההטמעה (לפני היומן)", startedAt: r.startedAt, finishedAt: finished, numTurns: s.assistant.calls,
+      clientId: r.clientId, userId: r.triggeredBy, entityKind: "onboarding_run", entityId: r.id, capability: "chat", trigger: "chat",
+      label: "שאלות על סשן ההטמעה (לפני היומן)", startedAt: r.startedAt, finishedAt: finished, numTurns: s.assistant.calls,
       inputTokens: Math.round(s.assistant.inputTokens), outputTokens: Math.round(s.assistant.outputTokens), costUsd: s.assistant.costUsd, sourceRef: `run-assistant:${r.id}`,
     });
   }

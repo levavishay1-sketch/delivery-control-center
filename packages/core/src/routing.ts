@@ -18,7 +18,6 @@ export type Capability =
   | "decomposition"
   | "execution"
   | "onboarding_init"
-  | "onboarding_assistant"
   | "chat"
   | "chat_code_read"
   | "conversation_summary"

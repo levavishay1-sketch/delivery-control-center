@@ -26,7 +26,6 @@ export const CAPABILITY_HE: Record<string, string> = {
   decomposition: "פירוק למשימות",
   execution: "ביצוע משימה",
   onboarding_init: "הטמעת מאגר",
-  onboarding_assistant: "העוזר של ההטמעה",
   chat: "צ'אט",
   chat_code_read: "קריאה בקוד מהצ'אט",
   conversation_summary: "סיכום שיחה",
