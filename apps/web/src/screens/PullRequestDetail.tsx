@@ -86,46 +86,130 @@ function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; co
   );
 }
 
-/** The review, written here and sent to the host: the person never has to open it. */
-function ReviewPanel({ repoId, number, base, onDone }: { repoId: string; number: number; base: string; onDone: () => void }) {
+/** What a person has ticked while reviewing, kept while they move between the tabs of one request. */
+const reviewProgress = new Map<string, { open: boolean; checked: string[] }>();
+
+type Step = { key: string; title: string; detail: string; go?: () => void; goText?: string };
+
+/**
+ * Reviewing and deciding, in one place: what to look at before deciding, and then
+ * the decision itself, which is sent to the host as a real review
+ * (`openspec/changes/pull-request-center`). The steps are what a person says they
+ * did — DCC cannot know they read anything — so they are there to slow the
+ * decision down, not to prove it.
+ */
+function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: {
+  repoId: string; number: number; base: string; blockers: PrBlocker[]; steps: Step[]; onFiles: () => void; onDone: () => void;
+}) {
+  const key = `${repoId}:${number}`;
+  const saved = reviewProgress.get(key);
+  const [open, setOpen] = useState(saved?.open ?? false);
+  const [checked, setChecked] = useState<string[]>(saved?.checked ?? []);
   const [decision, setDecision] = useState<ReviewDecision | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(null);
+  useEffect(() => { reviewProgress.set(key, { open, checked }); }, [key, open, checked]);
+
+  // Everything except the missing approval — that is what this flow is about to give.
+  const stuck = blockers.filter((b) => b.key !== "review" && b.ok === false);
+  const done = steps.filter((st) => checked.includes(st.key)).length;
+  const ready = done === steps.length;
+  const toggle = (k: string) => setChecked((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]));
+
   const options: { key: ReviewDecision; title: string; text: string }[] = [
     { key: "approve", title: `מאשר מיזוג ל-${base}`, text: "השינוי טוב. אישור רשמי בגיט־האוסט, והמיזוג נפתח אם אין חסמים אחרים." },
     { key: "request_changes", title: "לא מאשר, צריך תיקון", text: "השינוי לא מוכן. הבקשה מסומנת באדום, והכותב צריך לתקן ולשלוח שוב. חובה לכתוב מה לתקן." },
     { key: "comment", title: "רק הערה", text: "כותבים מה חשבתם, בלי להחליט. הבקשה נשארת פתוחה." },
   ];
   const needsText = decision === "comment" || decision === "request_changes";
-  const send = async () => {
+
+  const finish = async () => {
     if (!decision) return;
     setBusy(true); setErr(null); setSent(null);
     try {
       await submitPullRequestReview(repoId, number, decision, text);
-      setSent("הסקירה נשלחה לגיט־האוסט.");
-      setDecision(null); setText("");
+      setSent(decision === "approve" ? "האישור נשלח לגיט־האוסט." : decision === "request_changes" ? "הבקשה סומנה כדורשת תיקון, והכותב יקבל את ההערה." : "ההערה נשלחה לגיט־האוסט.");
+      setDecision(null); setText(""); setChecked([]); setOpen(false);
       onDone();
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
+
+  if (!open) {
+    return (
+      <div className="panel rv" style={{ marginBottom: 12 }}>
+        <div className="rv-head">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h4 style={{ margin: 0 }}>סקירה ואישור</h4>
+            <p className="ob-sub" style={{ marginTop: 3 }}>הבקשה פתוחה ומוכנה לסקירה. התהליך יעבור אתכם על מה שנכנס, ובסוף תחליטו.</p>
+          </div>
+          <button className="btn btn-primary" onClick={() => setOpen(true)}>התחל בתהליך אישור PR</button>
+        </div>
+        {sent && <div className="ob-note ok" style={{ marginTop: 8 }}>{sent}</div>}
+      </div>
+    );
+  }
+
   return (
     <div className="panel rv" style={{ marginBottom: 12 }}>
-      <h4>הסקירה שלך</h4>
-      <p className="ob-sub" style={{ marginBottom: 8 }}>עברתם על הקבצים? בחרו החלטה. היא נשלחת לגיט־האוסט, ואתם לא צריכים להיכנס אליו.</p>
-      <div className="rv-opts" role="radiogroup" aria-label="החלטה">
-        {options.map((o) => (
-          <button key={o.key} type="button" role="radio" aria-checked={decision === o.key} className={`rv-o${decision === o.key ? " on" : ""}`} onClick={() => setDecision(o.key)}>
-            <b>{o.title}</b>{o.text}
-          </button>
-        ))}
+      <div className="rv-head">
+        <h4 style={{ margin: 0 }}>סקירה ואישור · בקשה #{number}</h4>
+        <span className="ob-sub">עברתם על {done} מתוך {steps.length}</span>
+        <span style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>צא מהסקירה</button>
       </div>
-      <textarea className="rv-ta" value={text} onChange={(e) => setText(e.target.value)} rows={3}
-        placeholder={needsText ? "מה חשבתם? כתבו כאן" : "אפשר להוסיף הערה (לא חובה)"} />
-      {err && <div className="ob-note crit" style={{ marginTop: 8 }}>{err}</div>}
-      {sent && <div className="ob-note ok" style={{ marginTop: 8 }}>{sent}</div>}
-      <div className="ob-actions" style={{ marginTop: 8 }}>
-        <button className="btn btn-primary btn-sm" disabled={!decision || busy || (needsText && !text.trim())} onClick={() => void send()}>{busy ? "שולח…" : "שלח סקירה"}</button>
+
+      <div className="panel rv-in" style={{ marginBottom: 10 }}>
+        <h4>מה לבדוק לפני שמחליטים</h4>
+        <div className="pr-chk">
+          <span className={`ic ${stuck.length ? "no" : "yes"}`}>{stuck.length ? "✕" : "✓"}</span>
+          <div>
+            <div className="tt">{stuck.length ? "יש חסמים פתוחים חוץ מהאישור" : "אין חסמים אדומים חוץ מהאישור"}</div>
+            <div className="dd">{stuck.length ? stuck.map((b) => b.title).join(" · ") : "DCC בדק בשבילכם"}</div>
+          </div>
+        </div>
+        {steps.map((st) => {
+          const on = checked.includes(st.key);
+          return (
+            <button type="button" key={st.key} className="pr-chk rv-row" aria-pressed={on} onClick={() => toggle(st.key)}>
+              <span className={`ic ${on ? "yes" : "box"}`}>{on ? "✓" : "☐"}</span>
+              <div>
+                <div className="tt">{st.title}</div>
+                <div className="dd">
+                  {st.detail}
+                  {st.go && <> · <span className="rv-link" role="link" tabIndex={0}
+                    onClick={(e) => { e.stopPropagation(); st.go!(); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); e.stopPropagation(); st.go!(); } }}>{st.goText}</span></>}
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="panel rv-in">
+        <h4>ההחלטה שלכם</h4>
+        {!ready
+          ? <div className="rv-lock">סמנו את השורות למעלה, וההחלטה תיפתח. <button type="button" className="rv-link" onClick={onFiles}>או פתחו קודם את הקבצים</button></div>
+          : (
+            <>
+              <div className="rv-opts" role="radiogroup" aria-label="החלטה">
+                {options.map((o) => (
+                  <button key={o.key} type="button" role="radio" aria-checked={decision === o.key} className={`rv-o${decision === o.key ? " on" : ""}`} onClick={() => setDecision(o.key)}>
+                    <b>{o.title}</b>{o.text}
+                  </button>
+                ))}
+              </div>
+              <textarea className="rv-ta" value={text} onChange={(e) => setText(e.target.value)} rows={3}
+                placeholder={needsText ? "מה חשבתם? כתבו כאן" : "אפשר להוסיף הערה (לא חובה)"} />
+              {err && <div className="ob-note crit" style={{ marginTop: 8 }}>{err}</div>}
+              <div className="ob-actions" style={{ marginTop: 8 }}>
+                <button className="btn btn-primary btn-sm" disabled={!decision || busy || (needsText && !text.trim())} onClick={() => void finish()}>{busy ? "שולח…" : "סיים סקירה"}</button>
+                <span className="ob-sub" style={{ alignSelf: "center" }}>ההחלטה נשלחת לגיט־האוסט, והמסך מתרענן.</span>
+              </div>
+            </>
+          )}
       </div>
     </div>
   );
@@ -244,6 +328,8 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
   if (!head) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><p className="ob-sub" style={{ marginTop: 12 }}>טוען את הבקשה…</p></>;
 
   const { pr, nextStep, blockers } = head;
+  // A deletion is the part of a change a person most wants to have seen before approving.
+  const deletedCount = (d?.groups ?? []).reduce((n, g) => n + g.files.filter((x) => x.status === "D").length, 0);
   const loading = (what: string) => <p className="ob-sub"><span className="spinner" style={{ width: 13, height: 13, marginInlineEnd: 8, verticalAlign: "middle" }} />טוען {what} מהגיט־האוסט…</p>;
 
   return (
@@ -283,14 +369,24 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
 
       {tab === "overview" && (
         <>
-          <div className={`pr-next ${nextStep.action === "merge" ? "ok" : ""}`}>
-            <div className="t">הצעד הבא</div>
-            <div className="s">{nextStep.title}</div>
-            <div className="d">{nextStep.detail}</div>
-          </div>
+          {/* The review flow below says what to do when only the approval is missing, so the next step would repeat it. */}
+          {nextStep.action !== "request_review" && (
+            <div className={`pr-next ${nextStep.action === "merge" ? "ok" : ""}`}>
+              <div className="t">הצעד הבא</div>
+              <div className="s">{nextStep.title}</div>
+              <div className="d">{nextStep.detail}</div>
+            </div>
+          )}
+          {pr.state === "open" && (pr.draft
+            ? <div className="panel rv" style={{ marginBottom: 12 }}><h4>סקירה ואישור</h4><p className="ob-sub">כל עוד הבקשה מסומנת כטיוטה אין מה לסקור: סמנו אותה מוכנה לסקירה בגיט־האוסט, והתהליך ייפתח כאן.</p></div>
+            : <ReviewFlow repoId={repoId} number={number} base={pr.baseBranch} blockers={blockers}
+                steps={[
+                  { key: "files", title: "עברתי על רשימת הקבצים", detail: `${d?.fileCount ?? pr.changedFiles} קבצים${d?.topics.length ? ` · ${d.topics.length} נושאים` : ""}`, go: () => go("files"), goText: "פתח את הרשימה" },
+                  ...(deletedCount > 0 ? [{ key: "deleted", title: "ראיתי מה נמחק", detail: `${deletedCount} קבצים נמחקו בבקשה`, go: () => go("files"), goText: "פתח את הרשימה" }] : []),
+                ]}
+                onFiles={() => go("files")} onDone={() => void load(true)} />)}
           <div className="dash">
             <div style={{ minWidth: 0 }}>
-              {pr.state === "open" && d && <ReviewPanel repoId={repoId} number={number} base={pr.baseBranch} onDone={() => void load(true)} />}
               {blockers.length > 0 && <div className="panel" style={{ marginBottom: 12 }}>
                 <h4>מה חוסם מיזוג</h4>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>

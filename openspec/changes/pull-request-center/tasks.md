@@ -155,8 +155,19 @@ The user expected the first request of this repository (merged) to appear in the
 
 The user does not want to open the host: DCC is the interface, the host is where things are recorded. Users will later enter DCC with their own accounts and see only what their permissions allow; who sees what, and notifications to the developer, come after this screen.
 
-- [x] 18.1 A card "הסקירה שלך" on the request's overview: three choices — a comment, an approval, a request for changes (with the reasons a request for changes needs text) — and a box for the words. Sending writes a real review on the host through the operator's own login (`gh pr review`); the screen refreshes from the host afterwards, so what it shows is what the host holds.
+- [x] 18.1 A card "הסקירה שלך" (the last step of section 19 since) on the request's overview: three choices — a comment, an approval, a request for changes (with the reasons a request for changes needs text) — and a box for the words. Sending writes a real review on the host through the operator's own login (`gh pr review`); the screen refreshes from the host afterwards, so what it shows is what the host holds.
 - [x] 18.2 The card always offers the three real choices — "מאשר מיזוג ל-<target>", "לא מאשר, צריך תיקון" (with the reasons required) and "רק הערה" — and each is the host's own approve, request changes or comment; nothing is decided only inside DCC. **The host refuses an approval, or a request for changes, from the request's own author**, and DCC currently acts as one account, which is that author on this repository's request. Trying it says so in words (an official approval comes from another person's account) and comments still go through; it stops being an issue when each person acts as their own account, the next piece of work.
 - [x] 18.3 The timeline shows a review's own words, so the developer reads what the reviewer wrote.
 - [ ] 18.4 Not yet checked end to end: a real review was not posted, so as not to leave a test comment on the user's own request. The first real send is the check.
 - [ ] 18.5 To come, by the user's own sequencing: each user acting as their own account on the host, permissions on who sees which requests, and notifications to the developer.
+
+## 19. Reviewing is a process with a beginning, not a box on the side
+
+The user asked for a process that helps a person decide, entered from a button, with the decision at its end — and for nothing on the screen they cannot read.
+
+- [x] 19.1 On an open request that is not a draft, "סקירה ואישור" offers one button: **התחל בתהליך אישור PR**. A draft says instead that it has to be marked ready on the host first; a merged or closed request has no card.
+- [x] 19.2 The button opens the process in place, in the same card: what to check before deciding — the blockers DCC already checked (all except the missing approval, which is what the process is about to give), that the person went over the files, and that they saw what the request deletes — and then the decision. The rows are what the person says they did; DCC cannot know they read anything, so they are there to slow the decision down, not to prove it. What they ticked survives moving between the request's tabs.
+- [x] 19.3 The decision opens only once the rows are ticked, and it is the same three host actions. "סיים סקירה" sends it to the host and refreshes the screen.
+- [x] 19.4 "הצעד הבא" no longer says to request a review: that card is hidden when the review process already says it, and stays for a real blocker (a draft, a conflict, a request waiting on another).
+- [x] 19.5 The header's three disabled buttons (עדכן את הענף, בקש סקירה, מזג) are gone — the user could not tell what they were. What they stand for will come back in a place that explains itself.
+- [ ] 19.6 Claude is deliberately NOT in this card. The user decided the assistant becomes one chat for the whole application, with its own screen for usage, cost and tokens, instead of a box per screen — and that this card should not grow one that would then be removed. That change, and making the model/effort/cost/token strip identical everywhere it already appears, is the next conversation.
