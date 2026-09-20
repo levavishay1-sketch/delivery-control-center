@@ -169,6 +169,8 @@ export async function startFlowRun(input: {
   clientId: string; workitemId: string; kind: FlowKind; by: Dev; taskId?: string;
   /** assess-only: how the user wants the readiness check to run. */
   assessOpts?: { promptKey?: string; customEmphasis?: string; model?: string };
+  /** Which door the person came through — the button, or a proposal in the chat. On the ledger row. */
+  trigger?: CallTrigger;
 }): Promise<{ runId: string; alreadyRunning: boolean }> {
   for (const [id, b] of buffers) {
     if (input.taskId ? b.taskId === input.taskId : b.workitemId === input.workitemId && !b.taskId) {
@@ -490,7 +492,11 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     // exhausted) as a result line with is_error — the process still exits
     // 0, so surface it here rather than returning the error text as "the answer".
     if (env.is_error) throw new Error(`claude run failed (${env.subtype ?? "error"}): ${text.slice(0, 300)}`);
-    const modelFromUsage = env.modelUsage ? Object.keys(env.modelUsage)[0] ?? null : null;
+    // The CLI lists every model the run touched, its own small helper calls
+    // included — the model that carried the run is the one that cost the most.
+    const modelFromUsage = env.modelUsage
+      ? Object.entries(env.modelUsage).map(([m, u]) => [m, Number((u as { costUSD?: number } | null)?.costUSD ?? 0)] as const).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+      : null;
     meta = {
       model: modelFromUsage ?? decision.model,
       effort: decision.effort,
@@ -682,7 +688,7 @@ async function buildRetroPrompt(input: { clientId: string; workitemId: string })
   return { prompt, wi };
 }
 
-async function runRetro(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<RetroResult> {
+async function runRetro(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<RetroResult> {
   pushLine(input.runId, "אוסף timeline, עלויות והיסטוריית החלטות…");
   const { prompt } = await buildRetroPrompt(input);
   pushLine(input.runId, "מנתח ומכין המלצות…");
@@ -690,7 +696,7 @@ async function runRetro(input: { clientId: string; workitemId: string; by: Dev; 
   const raw = await runClaudeJson<Partial<RetroResult>>(
     process.cwd(), prompt, {
       timeoutMs: 300000, maxTurns: 4, runId: input.runId,
-      ledger: { clientId: input.clientId, userId: input.by.userId, capability: "retro", trigger: "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: "המלצות לשיפור" },
+      ledger: { clientId: input.clientId, userId: input.by.userId, capability: "retro", trigger: input.trigger ?? "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: "המלצות לשיפור" },
     },
   );
 
@@ -935,7 +941,7 @@ export async function previewAssessPrompt(input: { clientId: string; workitemId:
   return { prompt: built.prompt, promptHe: built.promptHe, model: built.model ?? null, templateTitle: built.templateTitle };
 }
 
-async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; promptKey?: string; customEmphasis?: string; model?: string }): Promise<AssessResult> {
+async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; promptKey?: string; customEmphasis?: string; model?: string; trigger?: CallTrigger }): Promise<AssessResult> {
   pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
   const built = await buildAssessPrompt({
     clientId: input.clientId, workitemId: input.workitemId,
@@ -946,7 +952,7 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   const raw = await runClaudeJson<Partial<AssessResult> & { rationale?: string | string[]; whatChanges?: string | string[] }>(
     built.cwd ?? process.cwd(), built.prompt, {
       timeoutMs: 600000, runId: input.runId, model: built.model,
-      ledger: { clientId: input.clientId, userId: input.by.userId, capability: "gap_detection", trigger: "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: `בחינת בשלות הדרישה · ${built.templateTitle}` },
+      ledger: { clientId: input.clientId, userId: input.by.userId, capability: "gap_detection", trigger: input.trigger ?? "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: `בחינת בשלות הדרישה · ${built.templateTitle}` },
     },
   );
   pushLine(input.runId, "כותב סיכום ופערים…");
@@ -1228,13 +1234,13 @@ export async function previewBreakdownPrompt(input: { clientId: string; workitem
   return { prompt, promptHe, repoName };
 }
 
-async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<BreakdownResult> {
+async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<BreakdownResult> {
   const { prompt, cwd } = await buildBreakdownPrompt(input);
   const proposed = await runClaudeJson<
     { seq: number; parentSeq?: number | null; kind?: string; intent: string; prompt?: string; appetite: string; affectedPaths?: string[]; compiledComponents?: string[]; dependsOnSeq?: number[] }[]
   >(cwd ?? process.cwd(), prompt, {
     timeoutMs: 600000, runId: input.runId,
-    ledger: { clientId: input.clientId, userId: input.by.userId, capability: "decomposition", trigger: "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: "פירוק למשימות" },
+    ledger: { clientId: input.clientId, userId: input.by.userId, capability: "decomposition", trigger: input.trigger ?? "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: "פירוק למשימות" },
   });
   pushLine(input.runId, "בונה את היררכיית המשימות…");
 
@@ -1539,7 +1545,7 @@ export async function previewImplementPrompt(input: { clientId: string; workitem
   return { prompt, promptHe, approved: t.approvedAt != null };
 }
 
-async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string }): Promise<ImplementResult> {
+async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<ImplementResult> {
   const { prompt, instruction, t, wi, hasChecks } = await buildImplementPrompt(input);
   // Defense in depth — the API route already refuses this before a run is
   // even queued, but a run only ever does what this function lets it do.
@@ -1592,7 +1598,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     dir, prompt, {
       timeoutMs: 900_000, runId: input.runId, write: !isCheck,
       ledger: {
-        clientId: input.clientId, userId: input.by.userId, capability: "execution", trigger: "button",
+        clientId: input.clientId, userId: input.by.userId, capability: "execution", trigger: input.trigger ?? "button",
         entity: { kind: "task", id: input.taskId }, workitemId: input.workitemId, screen: "task",
         label: `${isCheck ? "בדיקה" : "פיתוח משימה"} #${t.seq}: ${t.intent.slice(0, 60)}`,
         signals: { mechanical: isCheck }, meta: { taskSeq: t.seq, check: isCheck },

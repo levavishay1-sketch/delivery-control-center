@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { askChat, getConversation, markHelpful, openChat, type ChatMessage, type ConversationView, type TopicRef } from "../api.ts";
 import { Icon, ICONS } from "../ui.tsx";
 import { CostLine } from "./CostLine.tsx";
+import { ProposalCard } from "./ProposalCard.tsx";
 import { errText } from "../screens/onboarding/labels.ts";
 import { onChatCommand, useCurrentClaudeContext, type ClaudeScreenContext } from "./context.ts";
 
@@ -167,11 +168,21 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
             {messages.map((m) => {
               if (m.role === "system") return <div key={m.id} className="cc-divider" title={m.text}><span>{m.text.split("\n")[0]}</span></div>;
               if (m.role === "user") return <div key={m.id} className="cc-msg user"><Text text={m.text} /></div>;
+              if (m.kind === "proposal" || m.kind === "declared_cost" || m.kind === "refusal") {
+                return (
+                  <div key={m.id} className="cc-msg assistant" style={{ paddingTop: 6 }}>
+                    <ProposalCard message={m} onUpdate={(next, extra) => setMessages((ms) => {
+                      const out = ms.map((x) => (x.id === next.id ? next : x));
+                      return extra ? [...out, extra] : out;
+                    })} />
+                  </div>
+                );
+              }
               const system = m.source === "system";
               return (
                 <div key={m.id} className="cc-msg assistant">
                   <div className="src">
-                    {system ? <><span className="ob-chip det">נענה מהמערכת</span><span className="ob-sub">בלי מודל · ללא עלות</span></> : <><span className="ob-chip ai">קלוד</span>{m.payload.unanswered ? <span className="ob-sub">אין לו את זה במסך</span> : <span className="ob-sub">מהעובדות שעל המסך</span>}</>}
+                    {system ? <><span className="ob-chip det">נענה מהמערכת</span><span className="ob-sub">בלי מודל · ללא עלות</span></> : <><span className="ob-chip ai">קלוד</span>{m.payload.from === "code" ? <span className="ob-sub">מקריאה בקוד של המאגר, באישורכם</span> : m.payload.unanswered ? <span className="ob-sub">אין לו את זה במסך</span> : <span className="ob-sub">מהעובדות שעל המסך</span>}</>}
                   </div>
                   <Text text={m.text} />
                   <div className="foot">

@@ -170,10 +170,13 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         "שם הדרישה": w.title, "מפתח": w.key ?? "(עדיין אין)", "לקוח": w.clientId, "שלב (phase)": w.phase, "סוג": w.type, "עדיפות": w.priority, "סיכון": w.risk, "מבצע": w.executor,
         "תאריך יעד": w.dueDate ?? "(לא נקבע)", "פערים פתוחים": gaps.map((g) => g.description), "חוסם פתוח": blocker?.question ?? null,
         "משימות": live.length ? `${done} מתוך ${live.length} הושלמו, ${inTfs} נוצרו ב-TFS` : "עדיין אין משימות",
+        // whether there is code to read — the chat offers a (costlier) reading of it only when there is
+        "מאגרים מקושרים": d.repos.length ? d.repos.map((r) => r.name).join(", ") : "(אין — אין קוד לקרוא)",
         "עלות AI בפועל": cost ? `$${cost.totalUsd.toFixed(2)} ב-${cost.runCount} קריאות` : "עדיין לא נרשמה",
         "הצעד הבא": nextStep, nextStep, status: w.phase, aiCostUsd: cost?.totalUsd ?? 0, openGaps: gaps.map((g) => g.description), blocker: blocker?.question ?? null,
       },
-      suggestions: ["מה השלב הבא?", "מה זה פער?", "כמה עלה עד עכשיו?"],
+      suggestions: ["מה השלב הבא?", "מה זה פער?", "כמה עלה עד עכשיו?", ...(live.length === 0 && !gaps.length ? ["תפרק את הדרישה למשימות"] : [])],
+      actions: ["assess", "breakdown"],
     };
   })() : null);
 

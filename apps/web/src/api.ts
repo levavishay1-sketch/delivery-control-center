@@ -219,6 +219,21 @@ export const markHelpful = (messageId: string, helpful: boolean, note?: string) 
 export const getConversations = (q: { clientId?: string; userId?: string; limit?: number } = {}) => get<{ conversations: ConversationView[] }>(`/claude/conversations${qs(q as CenterQuery)}`);
 export const getConversation = (id: string) => get<{ conversation: ConversationView; messages: ChatMessage[]; topic: TopicRef; suggestions: string[]; glossary: ScreenGlossary | null }>(`/claude/conversations/${id}`);
 export const getGlossary = (screen: string) => get<ScreenGlossary>(`/claude/glossary/${screen}`);
+/* actions through the chat (claude-in-dcc §5): a proposal is a message; running it is the person's click */
+export type ProposalPayload = {
+  key: string; title: string; describe: string; params: Record<string, unknown>; consequential: boolean;
+  estimate: { capability: string; model: string; effort: string; usd: number | null } | null;
+  status: "proposed" | "running" | "done" | "cancelled" | "failed"; result?: unknown; error?: string; ranAt?: string; recorded?: string;
+};
+export type DeclaredCostPayload = {
+  reason: string; question: string; estimate: { model: string; effort: string; usdMin: number; usdMax: number };
+  status: "proposed" | "running" | "done" | "cancelled" | "failed"; error?: string;
+};
+export const runProposal = (messageId: string) => post<{ message: ChatMessage }>(`/claude/proposals/${messageId}/run`, {});
+export const cancelProposal = (messageId: string) => post<{ message: ChatMessage }>(`/claude/proposals/${messageId}/cancel`, {});
+export const getProposalPreview = (messageId: string) => get<{ prompt: string; promptHe: string }>(`/claude/proposals/${messageId}/preview`);
+export const runCodeQuestion = (messageId: string) => post<{ message: ChatMessage; answer: ChatMessage }>(`/claude/messages/${messageId}/run-code`, {});
+export const cancelCodeQuestion = (messageId: string) => post<{ message: ChatMessage }>(`/claude/messages/${messageId}/run-code/cancel`, {});
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
 

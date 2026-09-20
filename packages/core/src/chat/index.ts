@@ -10,6 +10,8 @@ import { runClaudeRaw } from "../ai-assist.ts";
 import { chatPolicy } from "../routing.ts";
 import { asksAboutScreen, glossaryAnswer, glossaryFor, matchGlossary, type ScreenGlossary } from "../glossary/index.ts";
 import { onboardingChatFacts } from "../repo-onboarding/runs.ts";
+import { actionEntityFor, actionsFor, type ActionDef } from "../actions/index.ts";
+import { codeReadEstimate } from "./proposals.ts";
 
 /**
  * The one chat (claude-in-dcc §4–§7, design §2–§3).
@@ -110,8 +112,8 @@ export class ChatError extends Error {}
 
 type ConvRow = typeof conversation.$inferSelect;
 type MsgRow = typeof conversationMessage.$inferSelect;
-/** Per-conversation bookkeeping kept in `cli_baseline`: what the CLI already reported (cumulative), the session's state, the cursor into a run's transcript. */
-type Baseline = { costUsd?: number; lastInputTokens?: number; started?: boolean; transcriptCursor?: number };
+/** Per-conversation bookkeeping kept in `cli_baseline`: what the CLI already reported (cumulative), the session's state, the rules it was started under, the cursor into a run's transcript. */
+type Baseline = { costUsd?: number; lastInputTokens?: number; started?: boolean; systemHash?: string; transcriptCursor?: number };
 const baselineOf = (c: ConvRow): Baseline => (c.cliBaseline ?? {}) as Baseline;
 
 async function activeConversation(clientId: string, topicKey: string, userId: string): Promise<ConvRow | null> {
@@ -156,6 +158,7 @@ async function messagesOf(c: Pick<ConvRow, "id" | "clientId">): Promise<ChatMess
   return rows.map(({ m, call }) => toMessage(m, call));
 }
 
+export const messageView = (m: MsgRow, call: typeof claudeCall.$inferSelect | null): ChatMessage => toMessage(m, call);
 const toMessage = (m: MsgRow, call: typeof claudeCall.$inferSelect | null): ChatMessage => ({
   id: m.id, conversationId: m.conversationId, role: m.role, kind: m.kind, text: m.text, source: m.source, callId: m.callId,
   payload: m.payload ?? {}, helpful: m.helpful, helpfulSource: m.helpfulSource, createdAt: new Date(m.createdAt).toISOString(),
@@ -217,13 +220,22 @@ function stepZero(screen: string | null, facts: Record<string, unknown>, questio
 /* ── the model call ────────────────────────────────────────────────── */
 
 const CHAT_DIR = path.join(os.homedir(), ".dcc-chat");
-const chatDir = (conversationId: string) => path.join(CHAT_DIR, conversationId);
+export const chatDir = (conversationId: string) => path.join(CHAT_DIR, conversationId);
 /** The CLI session file, to delete with the conversation (retention). */
 export function deleteChatSession(conversationId: string) {
   rmSync(chatDir(conversationId), { recursive: true, force: true });
 }
 
 export const UNANSWERED_MARK = "[אין לי את זה במסך]";
+
+/** Write a prompt file only when its text differs from what is there — the CLI reads it on every call. */
+export function ensureSystemFile(dir: string, name: string, text: string): string {
+  const file = path.join(dir, name);
+  let current: string | null = null;
+  try { current = existsSync(file) ? readFileSync(file, "utf8") : null; } catch { current = null; }
+  if (current !== text) writeFileSync(file, text, "utf8");
+  return file;
+}
 
 const SYSTEM = `You are the one chat of DCC (Delivery Control Center), an internal system that manages AI-assisted software delivery around Azure DevOps and Claude Code. The person asking is not a developer and reads Hebrew. You answer in Hebrew.
 
@@ -233,8 +245,32 @@ Rules:
 - Answer FROM the facts and the glossary. Never invent a fact, a number, a name or a state. If the facts do not contain what is asked, start your answer with the exact marker ${UNANSWERED_MARK} and then say briefly what you can say and where the answer would be found.
 - Short and plain, usually under 120 words. Plain text only: no headings, no bold or other markdown (short lines starting with "-" are fine). Explain consequences in everyday words ("if you press it, the tasks are proposed but not created").
 - Put commands, file paths, code and keyboard keys in backticks, exactly as written, never translated.
-- You cannot perform any action, read files, run code or browse. If asked to do something, say what button does it and what would happen.
+- You never perform anything yourself, and you cannot read files, run code or browse.
+- ACTIONS. The context may list "פעולות שאפשר להציע". If the person asks you to DO something that one of them does, answer in one or two sentences what will happen and add ONE block, exactly in this form, with only the listed parameters as JSON: <action key="KEY">{"param":"value"}</action>. The block becomes a card under your answer with an approve button; say that you are proposing it and that it runs only after their approval there. Never say or imply that you did it, and do not send them to a button on the screen instead. If no listed action does what is asked, say so and name the screen or button that does. Never invent an action.
+- CODE. If the answer lies in the repository's code (what a piece of code does, why something fails, where a thing is handled), do NOT use the marker: answer what the facts allow and add ONE block: <needs_code>one sentence: what would have to be read and why</needs_code>. Reading code is a separate, costlier call the person approves under your answer. The marker is for what neither the screen nor the code would answer.
 - When a person's question is about a button or a term that the glossary covers, answer with the glossary's meaning and consequence.`;
+
+function renderActions(defs: ActionDef[]): string {
+  if (!defs.length) return "";
+  return ["פעולות שאפשר להציע מהמסך הזה (רק אלה):", ...defs.map((d) => `- ${d.key} — "${d.title}"${d.params.length ? ` · פרמטרים: ${d.params.map((p) => `${p.name}${p.required ? " (חובה)" : ""}: ${p.explain}`).join("; ")}` : " · בלי פרמטרים"}`)].join("\n");
+}
+
+/** The blocks a model answer may carry, and the text without them. */
+function parseBlocks(raw: string): { text: string; action: { key: string; params: Record<string, unknown> } | null; needsCode: string | null } {
+  let text = raw;
+  let action: { key: string; params: Record<string, unknown> } | null = null;
+  const a = raw.match(/<action\s+key="([^"]+)"\s*>([\s\S]*?)<\/action>/i);
+  if (a) {
+    let params: Record<string, unknown> = {};
+    try { const j = JSON.parse(a[2]!.trim() || "{}"); if (j && typeof j === "object" && !Array.isArray(j)) params = j as Record<string, unknown>; } catch { /* not JSON: no params */ }
+    action = { key: a[1]!.trim(), params };
+    text = text.replace(a[0], "");
+  }
+  const n = raw.match(/<needs_code\s*\/?>([\s\S]*?)(?:<\/needs_code>|$)/i);
+  const needsCode = n ? n[1]!.trim() || null : null;
+  if (n) text = text.replace(n[0], "");
+  return { text: text.trim(), action, needsCode };
+}
 
 function renderFacts(facts: Record<string, unknown>): string {
   const lines: string[] = [];
@@ -252,12 +288,13 @@ function renderGlossary(g: ScreenGlossary | null): string {
 }
 
 const hash = (s: string) => createHash("sha1").update(s).digest("hex");
+/** Which rules a conversation's model session was started under (kept in its baseline): when the rules change, the session must not continue — its history holds answers given under the old ones. */
+const SYSTEM_HASH = hash(SYSTEM);
 
-async function callModel(c: ConvRow, topic: ResolvedTopic, userId: string, prompt: string, question: string, opts: { expectedInput?: number; baselineUsd?: number }) {
+async function callModel(c: ConvRow, topic: ResolvedTopic, userId: string, prompt: { next: string; full: string }, question: string, opts: { expectedInput?: number; baselineUsd?: number }) {
   const dir = chatDir(c.id);
   mkdirSync(dir, { recursive: true });
-  const sys = path.join(dir, "system.txt");
-  if (!existsSync(sys)) writeFileSync(sys, SYSTEM, "utf8");
+  const sys = ensureSystemFile(dir, "system.txt", SYSTEM);
   const b = baselineOf(c);
   const run = (sessionId: string, resume: boolean, p: string) =>
     runClaudeRaw(dir, p, {
@@ -271,14 +308,14 @@ async function callModel(c: ConvRow, topic: ResolvedTopic, userId: string, promp
       lean: { systemPromptFile: sys, session: { id: sessionId, resume } },
     });
   try {
-    return { res: await run(c.cliSessionId!, !!b.started, prompt), fresh: false };
+    return { res: await run(c.cliSessionId!, !!b.started, b.started ? prompt.next : prompt.full), fresh: false };
   } catch (e) {
     // The CLI's session file is gone (a cleanup, a different machine): start
     // a new session and tell it everything again. Anything else is a real failure.
     if (!b.started || !/no conversation|not found|session/i.test(String(e))) throw e;
     const sessionId = randomUUID();
     await patchConversation(c, { cliSessionId: sessionId, cliBaseline: { ...b, costUsd: 0, started: false } });
-    return { res: await run(sessionId, false, prompt), fresh: true };
+    return { res: await run(sessionId, false, prompt.full), fresh: true };
   }
 }
 
@@ -289,7 +326,7 @@ async function rollOver(c: ConvRow, topic: ResolvedTopic, userId: string, why: s
   let summary = "";
   if (b.started) {
     const dir = chatDir(c.id);
-    const sys = path.join(dir, "system.txt");
+    const sys = ensureSystemFile(dir, "system.txt", SYSTEM);
     try {
       const { text } = await runClaudeRaw(dir, "סכם את השיחה הזו עבור ההמשך שלה, בעברית, עד 120 מילים: מה נשאל, מה נענה והוחלט, ומה עדיין פתוח. טקסט פשוט בלבד.", {
         ledger: {
@@ -318,6 +355,9 @@ function rolloverReason(c: ConvRow): string | null {
   if ((b.lastInputTokens ?? 0) >= pol.rolloverInputTokens) return `השיחה התארכה מעבר ל-${pol.rolloverInputTokens.toLocaleString("en-US")} טוקנים`;
   const cold = Date.now() - new Date(c.lastMessageAt).getTime();
   if (b.started && cold > pol.rolloverColdDays * 864e5) return `שקט של יותר מ-${pol.rolloverColdDays} ימים`;
+  // The chat's rules were updated since this session began: what the model
+  // said under the old rules would otherwise steer every later answer.
+  if (b.started && b.systemHash !== SYSTEM_HASH) return "כללי הצ'אט התעדכנו";
   return null;
 }
 
@@ -371,31 +411,65 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
 
     const b = baselineOf(conv);
     const g = glossaryFor(topic.screen);
-    const contextText = [renderGlossary(g), Object.keys(facts).length ? `העובדות על המסך עכשיו:\n${renderFacts(facts)}` : ""].filter(Boolean).join("\n\n");
+    const defs = actionsFor(topic.kind, input.ctx.actions ?? null);
+    const contextText = [renderGlossary(g), renderActions(defs), Object.keys(facts).length ? `העובדות על המסך עכשיו:\n${renderFacts(facts)}` : ""].filter(Boolean).join("\n\n");
     const contextHash = hash(contextText);
-    const parts: string[] = [];
-    if (!b.started || rolledOver) parts.push(`השיחה על: ${topic.title}.`);
+    // What a session that already holds the earlier turns needs now (`next`),
+    // and everything a session starting from nothing needs (`full`).
+    const opening = [`השיחה על: ${topic.title}.`];
     if (rolledOver) {
       const note = (await messagesOf(conv)).find((m) => m.kind === "system_note");
-      if (note) parts.push(note.text);
+      if (note) opening.push(note.text);
     }
-    if (contextText && (contextHash !== conv.contextHash || !b.started)) parts.push(`הקשר המסך:\n${contextText}`);
-    parts.push(`השאלה: ${question}`);
+    const contextPart = contextText ? `הקשר המסך:\n${contextText}` : "";
+    const ask = `השאלה: ${question}`;
+    const full = [...opening, contextPart, ask].filter(Boolean).join("\n\n");
+    const next = [contextHash !== conv.contextHash ? contextPart : "", ask].filter(Boolean).join("\n\n");
 
-    const { res, fresh } = await callModel(conv, topic, input.userId, parts.join("\n\n"), question, { expectedInput: b.lastInputTokens, baselineUsd: b.costUsd });
+    const { res, fresh } = await callModel(conv, topic, input.userId, { next, full }, question, { expectedInput: b.lastInputTokens, baselineUsd: b.costUsd });
     const unanswered = res.text.includes(UNANSWERED_MARK);
-    const text = res.text.replace(UNANSWERED_MARK, "").trim() || "(אין תשובה)";
+    const parsed = parseBlocks(res.text.replace(UNANSWERED_MARK, ""));
+    const text = parsed.text || (parsed.action ? "הנה מה שאפשר לעשות:" : parsed.needsCode ? "על זה אין תשובה במסך — צריך לקרוא בקוד." : "(אין תשובה)");
     const a = await addMessage(conv, { role: "assistant", kind: "answer", source: "model", text, callId: res.callId, payload: unanswered ? { unanswered: true } : {} });
+
+    // The cards: a proposal the person approves (validated against the
+    // registry — exists, on this topic, allowed for this person — or it
+    // becomes a sentence, never a button), and a declared cost for code.
+    const cards: MsgRow[] = [];
+    if (parsed.action) {
+      const def = defs.find((d) => d.key === parsed.action!.key);
+      // Only the parameters the action declares reach it — whatever else the model put in the block is dropped.
+      if (def) parsed.action.params = Object.fromEntries(Object.entries(parsed.action.params).filter(([k]) => def.params.some((p) => p.name === k)));
+      const entity = def ? await actionEntityFor(topic) : null;
+      const allowed = def && entity ? await def.allowed({ userId: input.userId }, entity, parsed.action.params) : null;
+      if (!def || !entity) {
+        cards.push(await addMessage(conv, { role: "assistant", kind: "refusal", source: "system", text: `לא אפשרי מכאן: הפעולה "${parsed.action.key}" לא קיימת במסך הזה.`, payload: { key: parsed.action.key, reason: `הפעולה "${parsed.action.key}" אינה מהפעולות של המסך הזה. מה שאפשר מכאן: ${defs.map((d) => d.title).join(", ") || "כלום"}.` } }));
+      } else if (allowed && !allowed.ok) {
+        cards.push(await addMessage(conv, { role: "assistant", kind: "refusal", source: "system", text: `לא אפשרי מכאן: ${allowed.reason}`, payload: { key: def.key, reason: allowed.reason } }));
+      } else {
+        const estimate = await def.estimate(parsed.action.params, entity);
+        cards.push(await addMessage(conv, {
+          role: "assistant", kind: "proposal", source: "model", text: def.title,
+          payload: { key: def.key, title: def.title, describe: def.describe(parsed.action.params, entity), params: parsed.action.params, consequential: def.consequential, estimate, status: "proposed" },
+        }));
+      }
+    }
+    if (parsed.needsCode) {
+      cards.push(await addMessage(conv, {
+        role: "assistant", kind: "declared_cost", source: "model", text: parsed.needsCode,
+        payload: { reason: parsed.needsCode, question, askedCallId: res.callId, estimate: codeReadEstimate(), status: "proposed" },
+      }));
+    }
     // The conversation's size is everything the model read this turn: on a
     // resumed session the CLI reports only the fresh tokens as `input`, and
     // the history comes back through the cache buckets.
     const contextSize = res.meta.inputTokens == null ? b.lastInputTokens : (res.meta.inputTokens ?? 0) + (res.meta.cacheReadTokens ?? 0) + (res.meta.cacheWriteTokens ?? 0);
     await patchConversation(conv, {
       contextHash,
-      cliBaseline: { ...(fresh ? {} : b), costUsd: res.meta.costUsd ?? (fresh ? 0 : b.costUsd), lastInputTokens: contextSize, started: true, transcriptCursor },
+      cliBaseline: { ...(fresh ? {} : b), costUsd: res.meta.costUsd ?? (fresh ? 0 : b.costUsd), lastInputTokens: contextSize, started: true, systemHash: SYSTEM_HASH, transcriptCursor },
     });
     const call = res.callId ? (await db.select().from(claudeCall).where(eq(claudeCall.id, res.callId)).limit(1))[0] ?? null : null;
-    return { conversation: await viewOf(conv), messages: [toMessage(userMsg, null), toMessage(a, call)], rolledOver, suggestions: suggestionsFor(topic.screen, input.ctx) };
+    return { conversation: await viewOf(conv), messages: [toMessage(userMsg, null), toMessage(a, call), ...cards.map((m) => toMessage(m, null))], rolledOver, suggestions: suggestionsFor(topic.screen, input.ctx) };
   } finally {
     busy.delete(conv.id);
   }
