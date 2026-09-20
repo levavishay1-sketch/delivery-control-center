@@ -25,9 +25,7 @@
     "conversation_summary": { "default": "haiku", "effort": "low", "maxUsdPerCall": 0.1 },
     "usage_insights": { "default": "sonnet", "effort": "medium", "maxUsdPerCall": 0.5 },
     "$interactive_comment": "A person's own Claude Code session, reported by the SessionEnd hook — recorded so the ledger is every call, never routed.",
-    "interactive_session": { "default": "sonnet" },
-    "retro": { "default": "sonnet", "effort": "medium" },
-    "client_letter": { "default": "haiku", "effort": "low" }
+    "interactive_session": { "default": "sonnet" }
   },
   "chat": {
     "$comment": "Opening values (claude-in-dcc §6.5, §6.6, §9.10); tuned by measurement in the control center, not by estimate (§6.8).",

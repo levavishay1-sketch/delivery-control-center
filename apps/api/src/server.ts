@@ -90,14 +90,11 @@ import {
   listPrompts,
   updatePrompt,
   previewAssessPrompt,
-  composeClientLetter,
   stopFlowRun,
   sendRunMessage,
   previewBreakdownPrompt,
   requirementCostSummary,
   requirementCostDetail,
-  getRetroRunView,
-  getRecentClientLetters,
   recordDecision,
   linkBugToTask,
   unlinkBugFromTask,
@@ -887,23 +884,6 @@ app.get("/workitems/:id/breakdown-preview", async (req) => {
   return previewBreakdownPrompt({ clientId: wi.clientId, workitemId: id });
 });
 
-// end-of-requirement improvement recommendations ("המלצות לשיפור") — its
-// own kick-off + polling routes, deliberately separate from the generic
-// flow-run ones below so a retro run is never mistaken for the latest
-// assess/breakdown/implement run by a screen still polling that one
-// (design notes, `requirement-retro-recommendations`).
-app.post("/workitems/:id/retro", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const wi = await locateWorkItem({ id });
-  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "retro", by: { userId: dev.id } });
-});
-app.get("/workitems/:id/retro", async (req) => {
-  const { id } = req.params as { id: string };
-  await locateWorkItem({ id }); // tenant check
-  return (await getRetroRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
-});
-
 /* ── Bug ↔ Task links (bug-change-request-lifecycle) ─────────────── */
 app.get("/workitems/:id/bug-links", async (req) => {
   const { id } = req.params as { id: string };
@@ -1146,26 +1126,6 @@ app.post("/workitems/:id/gaps", async (req, reply) => {
   const wi = await locateWorkItem({ id });
   const row = await proposeGap({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...b });
   return reply.code(201).send(row);
-});
-
-// compose (never send) a business-language message to the requirement's
-// requester, listing the open questions. Cheap model — this is rephrasing.
-app.post("/workitems/:id/gap-letter", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const { gapIds } = (req.body ?? {}) as { gapIds?: string[] };
-  const wi = await locateWorkItem({ id });
-  return composeClientLetter({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...(gapIds ? { gapIds } : {}) });
-});
-
-// every letter ever composed for this requirement, newest first — read
-// back, never re-runs the AI (a real gap a user hit live: losing an
-// unsaved letter by navigating away meant paying for a re-run just to
-// get the same text back).
-app.get("/workitems/:id/gap-letters", async (req) => {
-  const { id } = req.params as { id: string };
-  const wi = await locateWorkItem({ id });
-  return { letters: await getRecentClientLetters(wi.clientId, id) };
 });
 
 // per-run cost detail behind the requirement's total — what each AI

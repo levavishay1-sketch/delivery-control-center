@@ -42,7 +42,6 @@ const requirement: ScreenGlossary = {
     { key: "phase", kind: "field", title: "Phase", aliases: ["פאזה", "phase"], explain: "באיזה שלב הדרישה: intake (נקלטה), shaping (בעיצוב — פערים ופירוק), building (בבנייה), review (בבדיקה), done (הושלמה)." },
     { key: "ai_budget", kind: "field", title: "AI budget", aliases: ["תקציב AI", "תקציב"], explain: "כמה כסף מותר ל-AI להוציא על הדרישה הזו. 'default' = לפי תקציב הלקוח." },
     { key: "ai_cost", kind: "field", title: "עלות AI בפועל", aliases: ["עלות AI", "כמה עלה", "עלות"], explain: "כמה כסף ה-AI הוציא על הדרישה עד עכשיו — סכום כל הקריאות לקלוד עליה, מיומן הקריאות. לחיצה פותחת את הפירוט: כל קריאה, המודל, הטוקנים והעלות." },
-    { key: "client_letter", kind: "button", title: "מכתב ללקוח", aliases: ["נסח מכתב", "מכתב", "שאלות ללקוח"], explain: "ניסוח של השאלות הפתוחות בשפה עסקית, כדי לשלוח למי שביקש את הדרישה. DCC לא שולח — אתם מעתיקים ושולחים." },
     { key: "timeline", kind: "term", title: "Timeline", aliases: ["ציר זמן", "יומן"], explain: "כל מה שקרה בדרישה, לפי סדר: הערות, פערים, הרצות של קלוד, החלטות. שום דבר לא נמחק — תיקון הוא רשומה חדשה." },
     { key: "tfs", kind: "term", title: "TFS", aliases: ["azure devops", "ado"], explain: "Azure DevOps — המערכת שבה המשימות חיות באמת. DCC משקף ומעשיר, ולא מחליף אותה." },
   ],

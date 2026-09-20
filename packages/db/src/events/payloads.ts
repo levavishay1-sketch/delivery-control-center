@@ -154,27 +154,6 @@ const decisionMade = z.object({
   reason: z.string(),
 });
 
-/** A composed (never sent) message to the requirement's requester,
- *  listing open gaps in business language — `composeClientLetter`. Saved
- *  so it survives navigating away before copying it (a real gap a user
- *  hit live: losing an unsaved letter meant re-running the AI call just
- *  to get the same text back). `gapIds` are the gaps it was composed
- *  from, for context — not itself a source of truth for gap state. */
-const clientLetterComposed = z.object({
-  subject: z.string(),
-  body: z.string(),
-  gapCount: z.number().int().nonnegative(),
-  gapIds: z.array(z.string()).optional(),
-  /** This letter's own cost, duplicated here (alongside the separate
-   *  `claude.session` event every run also gets) so the letter-history
-   *  view can show each past letter's cost without correlating two
-   *  event streams (design notes, cost-visibility). */
-  costUsd: z.number().nonnegative().optional(),
-  inputTokens: z.number().int().nonnegative().optional(),
-  outputTokens: z.number().int().nonnegative().optional(),
-  model: z.string().optional(),
-});
-
 /** The routing policy — or a client's own retention period — was edited from
  *  the control center (claude-in-dcc §9.9, §9.10): which version became
  *  which, and exactly what changed. Every ledger row carries the version it
@@ -213,7 +192,6 @@ export const payloadSchemas: Registry = {
   "repo.linked": { 1: repoLinked },
   "repo.unlinked": { 1: repoUnlinked },
   "decision.made": { 1: decisionMade },
-  "client_letter.composed": { 1: clientLetterComposed },
   "policy.changed": { 1: policyChanged },
 };
 

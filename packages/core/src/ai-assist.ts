@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, recordClaudeCall, usd, withTenant, type CallEntityKind, type CallOutcome, type CallTrigger } from "@dcc/db";
-import { claudeCall, eventLog, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
+import { claudeCall, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
 import { route, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
 import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
 import { adoSend } from "./ado-http.ts";
@@ -54,7 +54,7 @@ const REPO_CACHE = path.join(os.homedir(), ".dcc-repos");
  * the user can leave the screen and come back to everything Claude did.
  */
 
-type FlowKind = "assess" | "breakdown" | "implement" | "retro";
+type FlowKind = "assess" | "breakdown" | "implement";
 
 const buffers = new Map<string, { lines: string[]; kind: FlowKind; workitemId: string; taskId?: string }>();
 
@@ -69,8 +69,8 @@ function pushLine(runId: string | undefined, line: string) {
 /* ── live control over a running claude process: stop it, or hand it
  * more text while it's still working (architecture: user-in-the-loop on a
  * background run, not just a spectator). Only runs started with a runId
- * (assess/breakdown/implement) are steerable — composeClientLetter and
- * other one-shot calls are unaffected. */
+ * (assess/breakdown/implement) are steerable — one-shot calls are
+ * unaffected. */
 type SteerableProc = { child: import("node:child_process").ChildProcessWithoutNullStreams; stdinOpen: boolean; stoppedByUser: boolean };
 const runningProcs = new Map<string, SteerableProc>();
 
@@ -191,9 +191,7 @@ export async function startFlowRun(input: {
         ? await runAssess({ ...input, runId, ...input.assessOpts })
         : input.kind === "implement"
           ? await runImplement({ ...input, taskId: input.taskId!, runId })
-          : input.kind === "retro"
-            ? await runRetro({ ...input, runId })
-            : await runBreakdown({ ...input, runId });
+          : await runBreakdown({ ...input, runId });
       await db.update(flowRun).set({
         state: "done", result: result as unknown as Record<string, unknown>,
         log: buffers.get(runId)?.lines ?? [], finishedAt: new Date(),
@@ -591,145 +589,6 @@ export async function requirementCostDetail(clientId: string, workitemId: string
   }));
 }
 
-/* ── retro: end-of-requirement improvement recommendations ──────────
- *
- * Runs once a requirement is done — analyzes its full event timeline,
- * cumulative cost (`requirementCostSummary`), and decision history
- * (`decision.made` events, `decision-history`) to produce concrete,
- * requirement-specific recommendations, never generic advice (design
- * notes, `requirement-retro-recommendations`). Deliberately read-only —
- * no repo checkout, no code changes — this is a report action.
- */
-
-export type RetroResult = {
-  summary: string;
-  tokenSavings: string[];
-  timeSavings: string[];
-  unnecessaryActions: string[];
-  reworkCausingDecisions: string[];
-  breakdownFeedback: string[];
-  emphasize: string[];
-};
-
-async function loadRequirementEvents(clientId: string, workitemId: string) {
-  return withTenant(clientId, (tx) =>
-    tx.select({ type: eventLog.type, occurredAt: eventLog.occurredAt, payload: eventLog.payload, actor: eventLog.actor })
-      .from(eventLog)
-      .where(and(eq(eventLog.workitemId, workitemId), isNull(eventLog.supersedes)))
-      .orderBy(eventLog.occurredAt),
-  );
-}
-
-/** One compact line per event — enough for the model to reconstruct what
- *  happened and when, without dumping full JSON payloads at it. */
-function describeTimelineEvent(e: { type: string; occurredAt: Date; payload: unknown; actor: unknown }): string {
-  const p = (e.payload ?? {}) as Record<string, unknown>;
-  const when = new Date(e.occurredAt).toISOString().slice(0, 16).replace("T", " ");
-  const bits =
-    e.type === "decision.made" ? `trigger=${p.trigger} — ${p.reason}` :
-    e.type === "claude.session" ? `${p.summary ?? ""} · model=${p.model ?? "?"} · $${typeof p.costUsd === "number" ? p.costUsd.toFixed(3) : "?"} · in=${p.tokensIn ?? "?"} out=${p.tokensOut ?? "?"}` :
-    e.type === "note.added" ? String(p.body ?? "").slice(0, 200) :
-    e.type === "gap.proposed" ? `gap: ${p.description ?? p.question ?? ""}` :
-    e.type === "task.progressed" ? `${p.from ?? "?"} → ${p.to ?? "?"}` :
-    JSON.stringify(p).slice(0, 200);
-  return `[${when}] ${e.type}: ${bits}`;
-}
-
-async function buildRetroPrompt(input: { clientId: string; workitemId: string }) {
-  const { wi } = await loadRequirementText(input.clientId, input.workitemId);
-  const events = await loadRequirementEvents(input.clientId, input.workitemId);
-  const cost = await requirementCostSummary(input.clientId, input.workitemId);
-  const decisions = events.filter((e) => e.type === "decision.made");
-
-  const costText = [
-    `Total AI cost: $${cost.totalUsd.toFixed(2)} across ${cost.runCount} run(s), ${cost.totalInputTokens} input / ${cost.totalOutputTokens} output tokens.`,
-    ...Object.entries(cost.byKind).map(([kind, b]) => `  - ${kind}: ${b.count} run(s), $${b.usd.toFixed(2)}`),
-  ].join("\n");
-
-  const decisionsText = decisions.length
-    ? decisions.map((d) => describeTimelineEvent(d)).join("\n")
-    : "(none recorded — no re-breakdowns, overrides, or reopenings on this requirement)";
-
-  const timelineText = events.map(describeTimelineEvent).join("\n");
-
-  const prompt = [
-    "You are reviewing a completed software requirement for a delivery team, to produce a retrospective.",
-    "The goal is to LEARN from what actually happened on THIS requirement — every recommendation must be",
-    "grounded in a specific event, decision, or cost figure below. Never give generic process advice that",
-    "could apply to any requirement.",
-    "",
-    `REQUIREMENT: ${wi.title}`,
-    "",
-    "COST SUMMARY:",
-    costText,
-    "",
-    "DECISION HISTORY (re-breakdowns, overrides, reopenings, and why):",
-    decisionsText,
-    "",
-    "FULL EVENT TIMELINE:",
-    timelineText,
-    "",
-    "Produce recommendations in these categories — each entry is one short, SPECIFIC, actionable sentence",
-    "tied to something that actually happened above (cite the event/decision/cost it's based on). Leave a",
-    "category as an empty array if the timeline genuinely gives no grounds for it — never pad with filler.",
-    "  tokenSavings — where AI tokens were spent that didn't need to be",
-    "  timeSavings — where elapsed time could have been shorter",
-    "  unnecessaryActions — actions/runs that turned out not to matter",
-    "  reworkCausingDecisions — decisions (from DECISION HISTORY) that caused rework, and what to do differently",
-    "  breakdownFeedback — how the task breakdown itself could have been better shaped",
-    "  emphasize — things that went well and are worth repeating next time",
-    "Also write a 2-4 sentence `summary` of the requirement's overall efficiency.",
-    "IMPORTANT: write every string value IN HEBREW.",
-    "",
-    'Respond with ONLY this JSON object, no prose:',
-    '{"summary": string, "tokenSavings": string[], "timeSavings": string[], "unnecessaryActions": string[], "reworkCausingDecisions": string[], "breakdownFeedback": string[], "emphasize": string[]}',
-  ].join("\n");
-
-  return { prompt, wi };
-}
-
-async function runRetro(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<RetroResult> {
-  pushLine(input.runId, "אוסף timeline, עלויות והיסטוריית החלטות…");
-  const { prompt } = await buildRetroPrompt(input);
-  pushLine(input.runId, "מנתח ומכין המלצות…");
-
-  const raw = await runClaudeJson<Partial<RetroResult>>(
-    process.cwd(), prompt, {
-      timeoutMs: 300000, maxTurns: 4, runId: input.runId,
-      ledger: { clientId: input.clientId, userId: input.by.userId, capability: "retro", trigger: input.trigger ?? "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: "המלצות לשיפור" },
-    },
-  );
-
-  const lines = (v: unknown): string[] => Array.isArray(v) ? v.filter(Boolean).map(String) : [];
-  return {
-    summary: raw.summary ?? "",
-    tokenSavings: lines(raw.tokenSavings),
-    timeSavings: lines(raw.timeSavings),
-    unnecessaryActions: lines(raw.unnecessaryActions),
-    reworkCausingDecisions: lines(raw.reworkCausingDecisions),
-    breakdownFeedback: lines(raw.breakdownFeedback),
-    emphasize: lines(raw.emphasize),
-  };
-}
-
-/** The latest retro run for a requirement — deliberately its OWN lookup,
- *  filtered to `kind = "retro"`, rather than reusing `getFlowRunView`'s
- *  "latest run of any kind": retro can be kicked off long after
- *  assess/breakdown/implement are done, and must never be mistaken for
- *  one of those in a screen that's still polling the generic flow-run
- *  endpoint (design notes, `requirement-retro-recommendations`). */
-export async function getRetroRunView(workitemId: string): Promise<FlowRunView | null> {
-  for (const [id, b] of buffers) {
-    if (b.workitemId === workitemId && !b.taskId && b.kind === "retro") {
-      return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
-    }
-  }
-  const [row] = await db.select().from(flowRun)
-    .where(and(eq(flowRun.workitemId, workitemId), isNull(flowRun.taskId), eq(flowRun.kind, "retro")))
-    .orderBy(desc(flowRun.startedAt)).limit(1);
-  return row ? viewOf(row) : null;
-}
-
 /** Local working copy for the repo — clone or pull. Returns null if we can't get one.
  *  Exported for `repo-onboarding/*` —
  *  same cache-clone mechanism `runImplement` uses, not a second checkout system.
@@ -1015,107 +874,6 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   await regenerateBrief(input.clientId, input.workitemId);
 
   return { ...res, repoUsed: built.repoName };
-}
-
-/* ── 1b. the letter to the requester ───────────────────────────────── */
-
-export type ClientLetter = {
-  subject: string; body: string; gapCount: number;
-  /** This specific composition's own cost — surfaced right away so it
-   *  reads as "an AI call, not a free rephrase" (a real gap a user hit
-   *  live: this call was invisible in both the per-run and cumulative
-   *  cost). Null only if the CLI's result line didn't carry usage. */
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null;
-};
-
-/**
- * Turns the open gaps into a message the REQUESTER can actually read — no
- * code, no jargon, questions numbered, options offered. We compose it and
- * the user sends it themselves (there is no channel to the client from
- * here, and pretending otherwise would be worse than useless).
- * Runs on the cheap model: this is rephrasing, not analysis.
- *
- * Saved as its own `client_letter.composed` event (not just returned) so
- * a person who navigates away before copying it doesn't have to pay for
- * another run to get the same text back — see `getLastClientLetter`.
- * Also recorded as a `claude.session` cost event like every other run,
- * so it shows up in `requirementCostSummary` instead of silently not
- * counting toward the requirement's AI spend.
- */
-export async function composeClientLetter(input: { clientId: string; workitemId: string; by: Dev; gapIds?: string[] }): Promise<ClientLetter> {
-  const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
-  const allOpen = await withTenant(input.clientId, (tx) =>
-    tx.select().from(gap)
-      .where(and(eq(gap.workitemId, input.workitemId), sql`${gap.state} in ('proposed','verified')`))
-      .orderBy(desc(gap.blocking), gap.createdAt),
-  );
-  // The caller picks which open gaps go out — not every gap belongs in
-  // front of the client (some are ours to decide). No selection given
-  // falls back to "all open", so an old caller keeps working.
-  const open = input.gapIds ? allOpen.filter((g) => input.gapIds!.includes(g.id)) : allOpen;
-  if (open.length === 0) throw new Error(input.gapIds ? "לא נבחר אף פער" : "אין פערים פתוחים — אין מה לשלוח");
-
-  const gapsText = open.map((g, i) => [
-    `${i + 1}. ${g.description}`,
-    g.why ? `   רקע: ${g.why}` : "",
-    (g.options as string[])?.length ? `   אפשרויות: ${(g.options as string[]).join(" / ")}` : "",
-    `   ${g.whoAnswers === "client" ? "החלטה של מבקש הדרישה" : "החלטה שלנו — הוזכר רק אם רלוונטי לו"}`,
-  ].filter(Boolean).join("\n")).join("\n\n");
-
-  const tmpl = await getPromptByKey("gaps.client_letter");
-  const vars = {
-    REQUIREMENT_TITLE: wi.title,
-    REQUIREMENT_TEXT: notes.map((n) => n.body).join("\n\n").slice(0, 4000),
-    GAPS: gapsText,
-  };
-  const prompt = tmpl
-    ? renderPrompt(tmpl.body, vars)
-    : `Write a short Hebrew business message asking these questions, no code or jargon:\n${gapsText}\n\nRespond with ONLY {"subject": string, "body": string}`;
-
-  let letterMeta: RunMeta | undefined;
-  const res = await runClaudeJson<{ subject?: string; body?: string }>(process.cwd(), prompt, {
-    timeoutMs: 180_000, maxTurns: 3, model: tmpl?.defaultModel || undefined, onMeta: (m) => { letterMeta = m; },
-    ledger: { clientId: input.clientId, userId: input.by.userId, capability: "client_letter", trigger: "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: "ניסוח מכתב ללקוח" },
-  });
-
-  const subject = res.subject ?? `שאלות פתוחות — ${wi.title}`;
-  const body = res.body ?? "";
-  const costUsd = letterMeta?.costUsd ?? null, inputTokens = letterMeta?.inputTokens ?? null, outputTokens = letterMeta?.outputTokens ?? null;
-  await appendEvent({
-    clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "client_letter.composed",
-    actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:gap_letter" },
-    payload: {
-      subject, body, gapCount: open.length, gapIds: open.map((g) => g.id),
-      costUsd: costUsd ?? undefined, inputTokens: inputTokens ?? undefined, outputTokens: outputTokens ?? undefined, model: letterMeta?.model ?? undefined,
-    },
-  });
-
-  return { subject, body, gapCount: open.length, costUsd, inputTokens, outputTokens };
-}
-
-export type ClientLetterHistoryItem = {
-  id: string; subject: string; body: string; gapCount: number; composedAt: string;
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null; model: string | null;
-};
-
-/** Every letter ever composed for this requirement, newest first — read
- *  back from `client_letter.composed` events rather than kept in memory,
- *  so none of them are lost by navigating away before copying one (a
- *  real gap a user hit live). Never regenerates anything. */
-export async function getRecentClientLetters(clientId: string, workitemId: string, limit = 20): Promise<ClientLetterHistoryItem[]> {
-  const rows = await withTenant(clientId, (tx) =>
-    tx.select({ id: eventLog.id, payload: eventLog.payload, occurredAt: eventLog.occurredAt })
-      .from(eventLog)
-      .where(and(eq(eventLog.workitemId, workitemId), eq(eventLog.type, "client_letter.composed"), isNull(eventLog.supersedes)))
-      .orderBy(desc(eventLog.occurredAt)).limit(limit),
-  );
-  return rows.map((row) => {
-    const p = row.payload as { subject: string; body: string; gapCount: number; costUsd?: number; inputTokens?: number; outputTokens?: number; model?: string };
-    return {
-      id: row.id, subject: p.subject, body: p.body, gapCount: p.gapCount, composedAt: new Date(row.occurredAt).toISOString(),
-      costUsd: p.costUsd ?? null, inputTokens: p.inputTokens ?? null, outputTokens: p.outputTokens ?? null, model: p.model ?? null,
-    };
-  });
 }
 
 /* ── 2. breakdown: propose tasks + dependencies ────────────────────── */

@@ -34,11 +34,10 @@ export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
-  precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, composeClientLetter,
+  precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt,
   stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, requirementCostSummary, requirementCostDetail,
-  getRetroRunView, getRecentClientLetters,
-  type AssessResult, type AssessGap, type ClientLetter, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
-  type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow, type RetroResult, type ClientLetterHistoryItem,
+  type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
+  type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {

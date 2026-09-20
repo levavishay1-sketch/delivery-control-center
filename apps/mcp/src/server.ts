@@ -113,7 +113,7 @@ server.registerTool(
   "get_cost_summary",
   {
     title: "Get requirement AI cost summary",
-    description: "The requirement's cumulative AI cost: total USD, tokens, run count, broken down by what kind of run (assess/breakdown/implement/gap_letter/retro/...).",
+    description: "The requirement's cumulative AI cost: total USD, tokens, run count, broken down by what kind of call (assess/breakdown/implement/chat/...).",
     inputSchema: { id: z.string().uuid() },
   },
   async ({ id }) => {
