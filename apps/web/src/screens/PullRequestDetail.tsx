@@ -86,7 +86,7 @@ function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; co
 }
 
 /** The review, written here and sent to the host: the person never has to open it. */
-function ReviewPanel({ repoId, number, isAuthor, login, onDone }: { repoId: string; number: number; isAuthor: boolean; login: string | null; onDone: () => void }) {
+function ReviewPanel({ repoId, number, base, isAuthor, login, onDone }: { repoId: string; number: number; base: string; isAuthor: boolean; login: string | null; onDone: () => void }) {
   const [decision, setDecision] = useState<ReviewDecision | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
@@ -95,13 +95,13 @@ function ReviewPanel({ repoId, number, isAuthor, login, onDone }: { repoId: stri
   // The host does not let a request's own author approve it or ask for changes on it, so that person gets the DCC approval instead.
   const options: { key: ReviewDecision; title: string; text: string }[] = isAuthor
     ? [
-        { key: "comment", title: "הערה", text: "לא מחליט, רק כותב מה חשבת. הבקשה נשארת פתוחה." },
-        { key: "dcc_approve", title: "אשר ב-DCC", text: "נרשם כאישור, והחסם אין אישור סקירה נעלם. בגיט־האוסט מתפרסמת הערה שאומרת מי אישר." },
+        { key: "comment", title: "רק הערה", text: "כותבים מה חשבתם, בלי להחליט. הבקשה נשארת פתוחה." },
+        { key: "dcc_approve", title: "אישור פנימי של DCC (לא רשמי)", text: "נרשם ב-DCC, והחסם אין אישור סקירה נעלם. בגיט־האוסט מתפרסמת הערה שאומרת מי אישר. זה לא אישור רשמי שלו." },
       ]
     : [
-        { key: "comment", title: "הערה", text: "לא מחליט, רק כותב מה חשבת. הבקשה נשארת פתוחה." },
-        { key: "approve", title: "אשר", text: "השינוי טוב. נספר כאישור, והמיזוג נפתח אם אין חסמים אחרים." },
-        { key: "request_changes", title: "בקש שינויים", text: "לא בצורה הזו. סימון אדום עד שמתקנים ומאשרים שוב." },
+        { key: "approve", title: `מאשר מיזוג ל-${base}`, text: "השינוי טוב. זה אישור רשמי בגיט־האוסט, והמיזוג נפתח אם אין חסמים אחרים." },
+        { key: "request_changes", title: "לא מאשר, צריך תיקון", text: "השינוי לא מוכן. הבקשה מסומנת באדום, והכותב צריך לתקן ולשלוח שוב. חובה לכתוב מה לתקן." },
+        { key: "comment", title: "רק הערה", text: "כותבים מה חשבתם, בלי להחליט. הבקשה נשארת פתוחה." },
       ];
   const needsText = decision === "comment" || decision === "request_changes";
   const send = async () => {
@@ -118,7 +118,7 @@ function ReviewPanel({ repoId, number, isAuthor, login, onDone }: { repoId: stri
     <div className="panel rv" style={{ marginBottom: 12 }}>
       <h4>הסקירה שלך</h4>
       <p className="ob-sub" style={{ marginBottom: 8 }}>עברתם על הקבצים? בחרו החלטה. היא נשלחת לגיט־האוסט{login ? ` בשם ${login}` : ""}, ואתם לא צריכים להיכנס אליו.</p>
-      {isAuthor && <div className="ob-note warn" style={{ marginBottom: 8 }}>הבקשה נפתחה בחשבון הזה, והגיט־האוסט לא מאפשר לכותב לאשר אותה בעצמו. אפשר לכתוב הערה, או לאשר ב-DCC: זה אישור שלנו, לא אישור רשמי של הגיט־האוסט.</div>}
+      {isAuthor && <div className="ob-note warn" style={{ marginBottom: 8 }}>את הבקשה הזו פתח חשבון הגיט־האוסט שבו DCC עובד עכשיו. הגיט־האוסט לא נותן לאותו חשבון לאשר את הבקשה של עצמו, כדי שתמיד עין שנייה תסתכל. לכן כאן אפשר להוסיף הערה או לתת אישור פנימי של DCC. אישור רשמי ניתן רק מחשבון גיט־האוסט של סוקר אחר.</div>}
       <div className="rv-opts" role="radiogroup" aria-label="החלטה">
         {options.map((o) => (
           <button key={o.key} type="button" role="radio" aria-checked={decision === o.key} className={`rv-o${decision === o.key ? " on" : ""}`} onClick={() => setDecision(o.key)}>
@@ -300,7 +300,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
           </div>
           <div className="dash">
             <div style={{ minWidth: 0 }}>
-              {pr.state === "open" && d && <ReviewPanel repoId={repoId} number={number} isAuthor={d.viewer.isAuthor} login={d.viewer.login} onDone={() => void load(true)} />}
+              {pr.state === "open" && d && <ReviewPanel repoId={repoId} number={number} base={pr.baseBranch} isAuthor={d.viewer.isAuthor} login={d.viewer.login} onDone={() => void load(true)} />}
               {blockers.length > 0 && <div className="panel" style={{ marginBottom: 12 }}>
                 <h4>מה חוסם מיזוג</h4>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>

@@ -160,3 +160,4 @@ The user does not want to open the host: DCC is the interface, the host is where
 - [x] 18.3 The timeline shows a review's own words (and a DCC approval as "… אישר ב-DCC"), so the developer reads what the reviewer wrote.
 - [ ] 18.4 Not yet checked end to end: a real review was not posted, so as not to leave a test comment on the user's own request. The first real send is the check.
 - [ ] 18.5 To come, by the user's own sequencing: each user acting as their own account on the host, permissions on who sees which requests, and notifications to the developer.
+- [x] 18.6 The card speaks the way the person thinks: "מאשר מיזוג ל-master", "לא מאשר, צריך תיקון", "רק הערה" (the host's approve, request changes and comment). For the request's own author the internal approval is named "אישור פנימי של DCC (לא רשמי)" and the notice says why and what an official approval needs — the host account of another reviewer.
