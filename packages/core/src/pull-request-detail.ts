@@ -158,7 +158,7 @@ function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boole
     ? { key: "review", ok: true, title: "אושר בסקירה", detail: "לפחות אדם אחד עבר על השינוי ואישר." }
     : pr.review === "changes_requested"
       ? { key: "review", ok: false, title: "התבקשו שינויים", detail: "סוקר ביקש תיקון לפני המיזוג. הפרטים בגיט־האוסט." }
-      : { key: "review", ok: false, title: "אין אישור סקירה", detail: "אף אחד עדיין לא אישר את השינוי. אפשר לבקש סקירה מכאן." });
+      : { key: "review", ok: false, title: "אין אישור סקירה", detail: "אף אחד עדיין לא אישר את השינוי. הסקירה והאישור נעשים בגיט־האוסט." });
   b.push(checksKnown
     ? pr.checks === "failing"
       ? { key: "checks", ok: false, title: "בדיקות אוטומטיות נכשלו", detail: "הריפו מריץ בדיקות, והן לא עברו על הגרסה הזו." }
@@ -186,7 +186,7 @@ function nextStepFor(pr: PullRequestRow, blockers: Blocker[], behind: number, be
   if (pr.draft) return { title: "סמנו את הבקשה כמוכנה לסקירה", detail: "כל עוד היא טיוטה, אף אחד לא מתבקש לעבור עליה והיא לא ניתנת למיזוג.", action: "open_host" };
   const review = blockers.find((b) => b.key === "review");
   if (review?.ok === false && pr.review === "changes_requested") return { title: "טפלו בשינויים שהתבקשו", detail: "סוקר ביקש תיקון. אחרי שהוא ייכנס, בקשו סקירה חוזרת.", action: "open_host" };
-  if (review?.ok === false) return { title: "בקשו סקירה", detail: "הכול ירוק חוץ מאישור. בחרו מי עובר על זה, והוא יקבל התראה.", action: "request_review" };
+  if (review?.ok === false) return { title: "בקשו סקירה", detail: "הכול ירוק חוץ מאישור. בגיט־האוסט בוחרים מי עובר על זה, והוא מקבל התראה.", action: "request_review" };
   if (blockers.some((b) => b.ok === false)) return { title: "יש חסימה שצריך לטפל בה", detail: "ראו את הרשימה למעלה. המיזוג ייפתח כשכל השורות ירוקות.", action: "open_host" };
   if (blockers.some((b) => b.ok === null && b.key === "checks")) return { title: "המתינו לסיום הבדיקות", detail: "הבדיקות עדיין רצות. כשיסתיימו, אפשר למזג.", action: "wait" };
   return { title: "אפשר למזג", detail: `כל התנאים מתקיימים. המיזוג יכניס את השינוי ל-${pr.baseBranch}, ומשם הצוות יקבל אותו ב-pull הבא.`, action: "merge" };
