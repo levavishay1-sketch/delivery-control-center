@@ -88,7 +88,7 @@ const BRANCH_STATUS: Record<BranchHealth["status"], { label: string; pill: strin
   default: { label: "ראשי", pill: "neutral" },
   open_pr: { label: "בקשה פתוחה", pill: "active" },
   work: { label: "בעבודה", pill: "neutral" },
-  stale: { label: "נשכח?", pill: "warning" },
+  stale: { label: "נסגרה בלי מיזוג", pill: "warning" },
   merged: { label: "כבר מוזג", pill: "healthy" },
 };
 
@@ -120,7 +120,7 @@ function Branches({ repoId }: { repoId: string }) {
           <div className="pr-tiles">
             <div><div className="l">בקשה פתוחה</div><div className="v">{count("open_pr")}</div></div>
             <div><div className="l">בעבודה</div><div className="v">{count("work")}</div></div>
-            <div><div className="l">נשכחו?</div><div className="v" style={{ color: count("stale") ? "var(--status-warning)" : undefined }}>{count("stale")}</div></div>
+            <div><div className="l">נסגרו בלי מיזוג</div><div className="v" style={{ color: count("stale") ? "var(--status-warning)" : undefined }}>{count("stale")}</div></div>
             <div><div className="l">אפשר למחוק</div><div className="v" style={{ color: count("merged") ? "var(--status-healthy)" : undefined }}>{count("merged")}</div></div>
           </div>
           <div className="panel" style={{ padding: 0, overflow: "hidden" }}>

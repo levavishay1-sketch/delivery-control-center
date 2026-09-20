@@ -91,6 +91,30 @@ master
 Claude commits and pushes only when asked, never pushes to or merges into
 `master`, and does not create a project branch on its own.
 
+### Branch names and what happens to a branch
+
+Name: `<type>/<short-description>` — lowercase English, words joined by
+hyphens. The type says who opened it and why:
+
+| prefix | opened by | example |
+|---|---|---|
+| `project/` | a person, off `master` | `project/pull-requests` |
+| `task/` | a person or DCC, off a project branch; keep the work-item key when there is one | `task/WI-1284-file-compare` |
+| `fix/` | a person, a small fix straight off `master` | `fix/map-click` |
+| `ai/onboarding/<run>` | DCC, one per onboarding run | `ai/onboarding/9c02a09e` |
+| `claude/` | a Claude Code desktop session, automatically | — |
+
+A project branch is about one subject: its name, its PR title and its
+OpenSpec change should describe the same thing. Work that grows into a
+second subject gets its own project branch instead of piling on.
+
+After a merge the branch is deleted (the repository deletes a PR's branch on
+merge by itself; the project branch goes when its final PR merges). A branch
+that was never merged and has been forgotten either gets a PR or is deleted
+after looking at what it holds — never left to accumulate. The "ענפים" tab of
+a pull request shows every branch of the repository and says which of these
+applies.
+
 ## This repo dogfoods itself
 
 Hooks (`hooks/`), skills (`skills/`), the `reviewer` subagent

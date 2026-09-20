@@ -124,3 +124,12 @@ Five things the user raised while in the onboarding's prepare stage and on the r
 - Replaced and removed: the unified-text diff of the onboarding review (component, endpoint, client call, styles, server function), and the per-request `branches` list.
 - Swept for the removed names (`getOnboardingDiff`, `getOnboardingFileDiff`, `fileDiff`, `DiffView`, `.ob-diff`, `BranchRow`): no hits outside history.
 - [x] 14.6 **The dot a branch springs from answered as if the line had been pressed.** The branch's connector ends exactly on that dot, and its press target was drawn above the dot. The press targets of all lines are now a layer underneath every dot, and the visible lines let presses through to it. Checked with a real click on the branch-point dot of the prepare-stage map: the commit's panel opened (message, author, link, folder).
+
+## 15. Branch rules
+
+Agreed with the user after the repository's stray branches were cleared (three deleted; the open request's branch kept).
+
+- [x] 15.1 Branch names and what happens to a branch are written in `CLAUDE.md` ("Branch names and what happens to a branch"): `<type>/<short-description>` with `project/`, `task/`, `fix/`, `ai/onboarding/<run>` and `claude/`; deleted after merge; a forgotten unmerged branch gets a request or is deleted after looking at it. The user declined a maximum lifetime for branches, so none is enforced — the branches tab no longer calls a branch forgotten because of its age, only because its request was closed unmerged.
+- [x] 15.2 DCC's own task branches are now named `task/<key>-…` (they were `feature/…`), matching the flow; the work item is still resolved from the key in the name, whatever the prefix.
+- [x] 15.3 The repository deletes a request's branch on merge by itself (setting turned on).
+- [ ] 15.4 Protecting `master` (a request required, no force-push, no deletion) was attempted and refused by the environment's permission check; waiting for the user to allow it or set it in GitHub.

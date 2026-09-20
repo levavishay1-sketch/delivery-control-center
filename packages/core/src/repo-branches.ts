@@ -36,20 +36,17 @@ export type BranchHealth = {
 
 export type RepoBranches = { defaultBranch: string; rows: BranchHealth[]; syncedAt: string };
 
-const STALE_DAYS = 7;
-
 function originOf(name: string): string {
   if (/^claude\//.test(name)) return "נוצר אוטומטית על ידי סשן של Claude Code בשולחן העבודה. כל סשן פותח ענף משלו, והוא לא נמחק לבד.";
   if (/^ai\/onboarding\//.test(name)) return "נוצר על ידי הרצת הטמעה של DCC, ענף אחד לכל הרצה.";
   if (/^project\//.test(name)) return "ענף פרויקט, לפי שיטת העבודה שלנו: ענף אחד לפרויקט, וממנו יוצאים ענפי המשימות.";
   if (/^(task|feature)\//.test(name)) return "ענף משימה, לפי שיטת העבודה שלנו.";
-  if (/^(cleanup|perf|fix|bug)\//.test(name)) return "ענף שנפתח ידנית לשינוי ממוקד.";
+  if (/^(fix|cleanup|perf|bug)\//.test(name)) return "ענף לשינוי קטן וממוקד, שנפתח ידנית.";
   return "לא ידוע מי פתח אותו. אפשר לראות את מי שכתב בו לאחרונה.";
 }
 
 function adviceFor(b: Pick<BranchHealth, "name" | "unique" | "behind" | "pr" | "lastAt">, base: string, isBase: boolean): { status: BranchStatus; advice: BranchHealth["advice"] } {
   if (isBase) return { status: "default", advice: { title: "הענף הראשי", detail: "הגרסה הרשמית של הריפו. לא נוגעים בו ישירות ולא מוחקים אותו.", tone: "neutral" } };
-  const days = b.lastAt ? (Date.now() - new Date(b.lastAt).getTime()) / 86_400_000 : 0;
   if (b.pr?.state === "OPEN") {
     return {
       status: "open_pr",
@@ -63,12 +60,13 @@ function adviceFor(b: Pick<BranchHealth, "name" | "unique" | "behind" | "pr" | "
     };
   }
   const closed = b.pr && b.pr.state !== "OPEN" && b.pr.state !== "MERGED";
-  if (days > STALE_DAYS || closed) {
+  // A branch is not called forgotten because of its age — long work is legitimate — but because its request was closed unmerged.
+  if (closed) {
     return {
       status: "stale",
       advice: {
-        title: "עבודה שלא הגיעה לשום מקום",
-        detail: `יש בו ${b.unique} commits שלא נכנסו ל-${base}, ואין עליהם בקשת מיזוג פתוחה${b.lastAt ? `, והפעילות האחרונה הייתה לפני ${Math.round(days)} ימים` : ""}. אם העבודה כבר לא רלוונטית, אפשר למחוק. אם היא כן, כדאי לפתוח בקשת מיזוג. עדיף להסתכל בה קודם.`,
+        title: "הבקשה שלו נסגרה בלי מיזוג",
+        detail: `יש בו ${b.unique} commits שלא נכנסו ל-${base}, והבקשה שנפתחה עליהם נסגרה בלי מיזוג. אם העבודה כבר לא רלוונטית, אפשר למחוק. אם היא כן, כדאי לפתוח בקשת מיזוג. עדיף להסתכל בה קודם.`,
         tone: "warning",
       },
     };

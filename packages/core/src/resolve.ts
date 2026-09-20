@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { withTenant } from "@dcc/db";
 import { workitem } from "@dcc/db/schema";
 
-/** `feature/WI-1284-tiered-discount` → `WI-1284`. Also bare `WI-1284`. */
+/** `task/WI-1284-tiered-discount` → `WI-1284`. Also bare `WI-1284`. */
 export function keyFromBranch(branch: string): string | null {
   const m = branch.match(/(?:^|\/)([A-Z]{2,5}-\d+)(?:-|$)/);
   return m?.[1] ?? null;

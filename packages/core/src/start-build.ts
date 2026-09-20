@@ -73,7 +73,7 @@ export async function startBuilding(input: { clientId: string; workitemId: strin
     }
 
     const slug = slugify(wi.title);
-    const branch = slug ? `feature/${key}-${slug}` : `feature/${key}`;
+    const branch = slug ? `task/${key}-${slug}` : `task/${key}`;
     const moved = wi.phase === "intake" || wi.phase === "shaping";
 
     if (moved) {

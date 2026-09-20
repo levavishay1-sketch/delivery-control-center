@@ -1366,7 +1366,7 @@ const slug = (s: string) =>
  *  everywhere (`runImplement`, `rollbackTask`, the delete precheck) so
  *  nothing extra needs to be persisted to find a task's branch again. */
 export const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
-  `feature/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
+  `task/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
 
 /** How many commits a task's branch has beyond the repo's default branch —
  *  0 means "never implemented" or "implemented but produced no changes". */

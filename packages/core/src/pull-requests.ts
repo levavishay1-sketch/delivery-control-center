@@ -84,13 +84,14 @@ function ghBin(): string | null {
   if (ghPath !== undefined) return ghPath;
   const candidates = [
     process.env.DCC_GH_BIN,
-    "gh",
-    path.join(process.env["ProgramFiles"] ?? "C:\Program Files", "GitHub CLI", "gh.exe"),
-    path.join(process.env["ProgramFiles(x86)"] ?? "C:\Program Files (x86)", "GitHub CLI", "gh.exe"),
+    path.join(process.env["ProgramFiles"] ?? "C:/Program Files", "GitHub CLI", "gh.exe"),
+    path.join(process.env["ProgramFiles(x86)"] ?? "C:/Program Files (x86)", "GitHub CLI", "gh.exe"),
     path.join(process.env.LOCALAPPDATA ?? "", "Programs", "GitHub CLI", "gh.exe"),
     "/usr/bin/gh", "/usr/local/bin/gh", "/opt/homebrew/bin/gh",
   ].filter(Boolean) as string[];
-  ghPath = candidates.find((c) => c === "gh" || existsSync(c)) ?? null;
+  // An installed copy is preferred; a bare "gh" (found through PATH) is the last resort, and is checked by ghAvailable().
+  // Trying "gh" first made a caller that never ran that check spawn a command that does not exist on the server's PATH.
+  ghPath = candidates.find((c) => existsSync(c)) ?? "gh";
   return ghPath;
 }
 
@@ -103,7 +104,7 @@ async function ghAvailable(): Promise<boolean> {
   // PATH did not have it after all; try the install locations before giving up.
   ghPath = undefined;
   const again = ([] as string[]).concat(
-    path.join(process.env["ProgramFiles"] ?? "C:\Program Files", "GitHub CLI", "gh.exe"),
+    path.join(process.env["ProgramFiles"] ?? "C:/Program Files", "GitHub CLI", "gh.exe"),
   ).find((c) => existsSync(c));
   ghPath = again ?? null;
   return !!again;
