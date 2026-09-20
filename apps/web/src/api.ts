@@ -14,6 +14,8 @@ const post = <T,>(p: string, body: unknown) =>
   fetch(`/api${p}`, { method: "POST", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const patch = <T,>(p: string, body: unknown) =>
   fetch(`/api${p}`, { method: "PATCH", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
+const put = <T,>(p: string, body: unknown) =>
+  fetch(`/api${p}`, { method: "PUT", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const del = <T,>(p: string, body?: unknown) =>
   fetch(`/api${p}`, body
     ? { method: "DELETE", headers: H, body: JSON.stringify(body) }
@@ -234,6 +236,48 @@ export const cancelProposal = (messageId: string) => post<{ message: ChatMessage
 export const getProposalPreview = (messageId: string) => get<{ prompt: string; promptHe: string }>(`/claude/proposals/${messageId}/preview`);
 export const runCodeQuestion = (messageId: string) => post<{ message: ChatMessage; answer: ChatMessage }>(`/claude/messages/${messageId}/run-code`, {});
 export const cancelCodeQuestion = (messageId: string) => post<{ message: ChatMessage }>(`/claude/messages/${messageId}/run-code/cancel`, {});
+
+/* conclusions and the policy editor (claude-in-dcc §9.3–§9.4, §9.9–§9.10) */
+export type InsightCluster = {
+  id: string | null; clientId: string; clientName: string; screen: string; questionKey: string; sampleQuestion: string;
+  count: number; firstAskedAt: string; lastAskedAt: string; aboveThreshold: boolean;
+  finding: string | null; recommendation: string | null; status: "new" | "open" | "task_opened" | "dismissed";
+  workitemId: string | null; analysedCount: number | null; analysedAt: string | null;
+};
+export type InsightCallRow = {
+  id: string; startedAt: string; clientName: string; userName: string; screen: string | null; capability: string; label: string;
+  modelUsed: string | null; policyRule: string | null; costUsd: number; outcome: string; errorText: string | null; conversationId: string | null; workitemId: string | null;
+};
+export type UnhelpfulRow = { id: string; createdAt: string; clientName: string; screen: string; question: string | null; answer: string; note: string | null; source: string | null; conversationId: string };
+export type InsightsView = {
+  month: string; threshold: number; estimate: { model: string; effort: string; usd: number | null };
+  clusters: InsightCluster[]; unanswered: InsightCallRow[]; unhelpful: UnhelpfulRow[]; failed: InsightCallRow[]; escalated: InsightCallRow[];
+};
+export const getInsights = (q: CenterQuery) => get<InsightsView>(`/claude/insights${qs(q)}`);
+export const analyseInsights = (body: { month?: string; clientId?: string }) => post<{ analysed: number; callId: string | null; costUsd: number | null; clusters: InsightCluster[] }>("/claude/insights/analyse", body);
+export const openImprovementTask = (id: string) => post<{ workitemId: string; created: boolean }>(`/claude/insights/${id}/task`, {});
+export const dismissInsight = (id: string) => post<{ status: string }>(`/claude/insights/${id}/dismiss`, {});
+
+export type PolicyCapability = { default: string; effort?: string; maxUsdPerCall?: number; maxInputTokens?: number; escalateOn?: Record<string, unknown>[]; downgradeOn?: Record<string, unknown>[] };
+export type PolicyPrice = { input: number; cacheWrite: number; cacheRead: number; output: number };
+export type PolicyDoc = {
+  version: number;
+  tiers: Record<string, { model: string; maxUsdPerCall: number }>;
+  /** `$comment` keys ride along from the file — a value that is a string is one of those. */
+  prices: Record<string, PolicyPrice | string>;
+  capabilities: Record<string, PolicyCapability | string>;
+  chat: { rolloverInputTokens: number; rolloverColdDays: number; retentionDays: number; declareCostAboveUsd: number; insightsMinRepeats: number };
+  guardrails: { killAfterStuckIterations: number; budgetWarnAtFraction: number };
+};
+export type PolicyChange = { path: string; from?: unknown; to?: unknown };
+export type PolicyView = {
+  policy: PolicyDoc;
+  lastChange: { at: string; byName: string | null; fromVersion: number; toVersion: number; changes: PolicyChange[] } | null;
+  retention: { defaultDays: number; clients: { clientId: string; clientName: string; days: number | null }[] };
+};
+export const getPolicy = () => get<PolicyView>("/claude/policy");
+export const putPolicy = (patch: Record<string, unknown>) => put<{ policy: PolicyDoc; changes: PolicyChange[] }>("/claude/policy", patch);
+export const setClientRetention = (clientId: string, days: number | null) => put<{ clientId: string; days: number | null }>(`/clients/${clientId}/claude-retention`, { days });
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
 

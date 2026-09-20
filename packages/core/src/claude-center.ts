@@ -25,14 +25,14 @@ export type CenterFilter = {
   offset?: number | undefined;
 };
 
-function period(month: string | undefined): { from: Date; to: Date; month: string } {
+export function period(month: string | undefined): { from: Date; to: Date; month: string } {
   const now = new Date();
   const m = /^\d{4}-\d{2}$/.test(month ?? "") ? month! : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [y, mo] = m.split("-").map(Number) as [number, number];
   return { from: new Date(y, mo - 1, 1), to: new Date(y, mo, 1), month: m };
 }
 
-const ESCALATED = sql`(${claudeCall.policyRule} like '%escalated%' or ${claudeCall.policyRule} like '%model overridden%')`;
+export const ESCALATED = sql`(${claudeCall.policyRule} like '%escalated%' or ${claudeCall.policyRule} like '%model overridden%')`;
 
 function where(f: CenterFilter, p: { from: Date; to: Date }): SQL {
   const parts: SQL[] = [sql`${claudeCall.startedAt} >= ${p.from} and ${claudeCall.startedAt} < ${p.to}`];

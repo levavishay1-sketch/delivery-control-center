@@ -175,6 +175,16 @@ const clientLetterComposed = z.object({
   model: z.string().optional(),
 });
 
+/** The routing policy — or a client's own retention period — was edited from
+ *  the control center (claude-in-dcc §9.9, §9.10): which version became
+ *  which, and exactly what changed. Every ledger row carries the version it
+ *  was routed under, so a cost change can be tied to this event. */
+const policyChanged = z.object({
+  fromVersion: z.number().int().nonnegative(),
+  toVersion: z.number().int().nonnegative(),
+  changes: z.array(z.object({ path: z.string().min(1), from: z.unknown().optional(), to: z.unknown().optional() })),
+});
+
 const matchConfirmed = z.object({
   eventId: z.string().uuid(),
   workitemId: z.string().uuid(),
@@ -204,6 +214,7 @@ export const payloadSchemas: Registry = {
   "repo.unlinked": { 1: repoUnlinked },
   "decision.made": { 1: decisionMade },
   "client_letter.composed": { 1: clientLetterComposed },
+  "policy.changed": { 1: policyChanged },
 };
 
 export const CURRENT_VERSION = 1;

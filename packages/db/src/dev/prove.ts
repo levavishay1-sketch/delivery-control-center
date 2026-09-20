@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { db, withTenant, closeDb } from "../client.ts";
 import { client, users, workitem } from "../schema/index.ts";
 import { eventLog } from "../schema/events.ts";
-import { claudeCall } from "../schema/claude.ts";
+import { claudeCall, claudeInsight } from "../schema/claude.ts";
 import { appendEvent, timeline } from "../events/index.ts";
 import { recordClaudeCall } from "../ledger/index.ts";
 
@@ -164,6 +164,20 @@ console.log("\n\x1b[1mclaude-in-dcc — the ledger is walled and append-only\x1b
   thin && !("costUsd" in (thin.payload as object))
     ? ok("the timeline event carries no cost — money is counted once")
     : bad("the timeline event duplicates the cost");
+}
+
+console.log("\n\x1b[1mclaude-in-dcc — conclusions are walled too\x1b[0m");
+{
+  const [ins] = await withTenant(cA!.id, (tx) =>
+    tx.insert(claudeInsight).values({ clientId: cA!.id, screen: "requirement", questionKey: "מה השלב הבא", sampleQuestion: "מה השלב הבא?", count: 5, createdBy: alice!.id }).returning());
+  const crossI = await withTenant(cB!.id, (tx) => tx.select().from(claudeInsight).where(sql`${claudeInsight.id} = ${ins!.id}`));
+  crossI.length === 0 ? ok("tenant B cannot read tenant A's conclusions") : bad("cross-tenant insight read leaked", crossI.length);
+  try {
+    await withTenant(cB!.id, (tx) => tx.insert(claudeInsight).values({ clientId: cA!.id, screen: "task", questionKey: "x", sampleQuestion: "x", createdBy: alice!.id }));
+    bad("tenant B wrote a conclusion tagged as tenant A");
+  } catch {
+    ok("tenant B cannot write conclusions for tenant A");
+  }
 }
 
 console.log(`\n${fail === 0 ? "\x1b[32m✓ all " + pass + " checks passed" : "\x1b[31m✗ " + fail + " failed, " + pass + " passed"}\x1b[0m\n`);

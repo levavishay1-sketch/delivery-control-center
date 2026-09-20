@@ -169,8 +169,15 @@ statement, not a policy.
 
 The editor in the control center writes the same file through the API,
 bumps `version`, and appends a `policy.changed` event on the internal
-client in the person's name. Every ledger row carries the version it was
-routed under, so a cost change can be tied to a policy edit.
+client in the person's name (from → to version, the changed paths with
+their old and new values). Every ledger row carries the version it was
+routed under, so a cost change can be tied to a policy edit. The editor
+changes values only — a capability is never added or removed from it, and
+an unknown one is refused. The file is written back in its own layout
+(sections indented, entries on one line), so a saved change reads as the
+changed lines in git. A client's own retention period is the same kind of
+change: `client.chat_retention_days`, recorded as `policy.changed` on that
+client, and the chat's `retain_until` uses it when it is set.
 
 ## 6. The control center — `#/claude` (§9)
 
@@ -185,11 +192,18 @@ routed under, so a cost change can be tied to a policy edit.
 - "Did not help" (§9.7) = marked by the person, **or** the same normalised
   question asked again in the same conversation within a minute. Both
   are shown, separately.
-- Insights are a named action (§9.8): "ניתוח שאלות" runs on a click. The
-  clustering (same normalised question on the same screen) is SQL, no
-  model; `usage_insights` (Sonnet) only writes the finding and the
-  recommendation for clusters above the threshold. "פתח משימת שיפור"
-  creates a requirement on the internal client linked to the cluster.
+- Insights are a named action (§9.8): "נתח שאלות" runs on a click. The
+  clustering (same normalised question on the same screen, two repeats or
+  more) is SQL, no model; `usage_insights` (Sonnet) only writes the finding
+  and the recommendation for clusters above the threshold that have none
+  yet or grew since, in one call for all of them. A worded cluster is a
+  `claude_insight` row (tenant-scoped, unique per client × screen ×
+  question): count, first and last asked, finding, recommendation, the
+  analysing call, `status` (`open` / `task_opened` / `dismissed`) and the
+  task it became. "פתח משימת שיפור" creates a requirement on the internal
+  client in the person's name, with the finding and the recommendation as
+  its first note; a second press returns the same task. Conclusions are
+  editable — a conclusion is not money.
 
 ## 7. What moves, what stays (§3)
 

@@ -20,6 +20,8 @@ export { openChat, askChat, markHelpful, listConversations, getConversation, res
 export { runProposal, cancelProposal, proposalPreview, runCodeQuestion, cancelCodeQuestion } from "./chat/proposals.ts";
 export { ACTIONS, actionsFor, actionEntityFor, runAction, ActionRefused, type ActionKey, type ActionDef, type ActionEntity } from "./actions/index.ts";
 export { GLOSSARY, glossaryFor, matchGlossary, type GlossaryEntry, type ScreenGlossary } from "./glossary/index.ts";
+export { insightsView, analyseInsights, openImprovementTask, dismissInsight, type InsightsView, type InsightCluster, type InsightCallRow, type UnhelpfulRow } from "./insights.ts";
+export { policyView, updatePolicy, setClientRetention, PolicyError, type PolicyView, type PolicyChange, type PolicyPatch } from "./policy-admin.ts";
 export { linkWorkItems, flowFor, taskFlowFor, clientTaskTree, allAdoTasks, type FlowNode, type FlowEdge, type TaskFlowNode, type TaskFlowEdge, type AdoTaskRow } from "./flow.ts";
 export { materializeTasksToAdo, pendingMaterializeCount, editTask, type MaterializeResult, type EditTaskResult } from "./task-ado-sync.ts";
 export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";

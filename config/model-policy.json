@@ -1,6 +1,6 @@
 {
   "$comment": "Model routing policy (architecture §6, claude-in-dcc §6.3/§8.3/§9.9). Config-as-code: this is the GLOBAL layer; client-level overrides deep-merge on top. Every call to Claude declares its capability; route() picks a tier, effort and cap from here, and the decision is written on the call's ledger row together with `version`, so a cost change can be tied to a policy edit. The router is rules, not a model. escalateOn/downgradeOn are lists: ANY entry matching triggers (keys within one entry are AND). Edited from the control center (מדיניות ושמירה), which bumps `version` and records who changed it.",
-  "version": 2,
+  "version": 4,
   "tiers": {
     "haiku": { "model": "claude-haiku-4-5-20251001", "maxUsdPerCall": 0.05 },
     "sonnet": { "model": "claude-sonnet-5", "maxUsdPerCall": 0.75 },

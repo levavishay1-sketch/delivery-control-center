@@ -126,16 +126,22 @@ async function activeConversation(clientId: string, topicKey: string, userId: st
 }
 
 async function createConversation(t: ResolvedTopic, userId: string, extra: Partial<typeof conversation.$inferInsert> = {}): Promise<ConvRow> {
+  const keepUntil = await retainUntil(t.clientId, new Date());
   const [row] = await withTenant(t.clientId, (tx) =>
     tx.insert(conversation).values({
       clientId: t.clientId, topicKey: t.key, topicKind: t.kind, topicId: t.id, topicTitle: t.title, createdBy: userId,
-      cliSessionId: randomUUID(), retainUntil: retainUntil(new Date()), ...extra,
+      cliSessionId: randomUUID(), retainUntil: keepUntil, ...extra,
     }).returning(),
   );
   return row!;
 }
 
-const retainUntil = (from: Date) => new Date(from.getTime() + chatPolicy().retentionDays * 864e5);
+/** How long a client keeps its conversations: its own period when one was set, else the policy's default (§9.10). */
+export async function retentionDaysFor(clientId: string): Promise<number> {
+  const [c] = await db.select({ days: client.chatRetentionDays }).from(client).where(eq(client.id, clientId)).limit(1);
+  return c?.days ?? chatPolicy().retentionDays;
+}
+const retainUntil = async (clientId: string, from: Date) => new Date(from.getTime() + (await retentionDaysFor(clientId)) * 864e5);
 
 async function patchConversation(c: ConvRow, patch: Partial<typeof conversation.$inferInsert>) {
   await withTenant(c.clientId, (tx) => tx.update(conversation).set(patch).where(eq(conversation.id, c.id)));
@@ -145,7 +151,7 @@ async function addMessage(c: ConvRow, m: Omit<typeof conversationMessage.$inferI
   const [row] = await withTenant(c.clientId, (tx) =>
     tx.insert(conversationMessage).values({ ...m, conversationId: c.id, clientId: c.clientId }).returning(),
   );
-  await patchConversation(c, { lastMessageAt: new Date(), retainUntil: retainUntil(new Date()) });
+  await patchConversation(c, { lastMessageAt: new Date(), retainUntil: await retainUntil(c.clientId, new Date()) });
   return row!;
 }
 
