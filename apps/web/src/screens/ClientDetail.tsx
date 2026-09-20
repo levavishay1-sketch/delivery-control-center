@@ -179,7 +179,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
                 <span style={{ display: "block", fontSize: 11, color: "var(--ink-400)", direction: "ltr" }}>{r.adoRepoRef ?? "—"}</span>
               </span>
               <span style={{ display: "flex", gap: 10 }}>
-                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--color-accent)", fontWeight: 600 }} onClick={() => nav(`#/repo/${r.id}`)}>✦ ניהול AI</a>
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--color-accent)", fontWeight: 600 }} onClick={() => nav(`#/repo/${r.id}`)}>✦ הטמעת AI</a>
                 <a style={{ fontSize: 11, cursor: "pointer" }} onClick={() => setEditRepo(r)}>ערוך</a>
                 <a style={{ fontSize: 11, cursor: "pointer" }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהלקוח? (ה-repository עצמו יישאר)`)) { await unlinkClientRepo(id, r.id); reload(); } }}>נתק</a>
                 <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={async () => { if (confirm(`למחוק לגמרי את ${r.name}? יימחק מכל הלקוחות והדרישות.`)) { await deleteRepo(r.id); reload(); } }}>מחק</a>

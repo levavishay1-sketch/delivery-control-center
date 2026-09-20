@@ -77,6 +77,12 @@ import {
   rejectTask,
   rollbackTask,
   pushTask,
+  codeMapForTask,
+  listPullRequests,
+  openLocalFolder,
+  FolderRefused,
+  pullRequestDetail,
+  pullRequestQuick,
   editTask,
   precheckTaskDelete,
   deleteTaskSurgical,
@@ -102,33 +108,40 @@ import {
   ChecksNotPassed,
   setTaskActive,
   checkAdoRemovedState,
+  OnboardingError,
   startOnboardingRun,
-  advanceRun,
-  cancelRun,
+  runOnboardingStage,
+  completeInitStage,
+  resumeOnboardingSession,
+  refreshReview,
+  approveReview,
+  cancelOnboardingRun,
+  updateOnboardingAutomation,
+  updateOnboardingModelChoices,
   getOnboardingRunView,
-  getLatestOnboardingRun,
+  getOnboardingFileVersions,
+  pullRequestFile,
+  submitReview,
+  ReviewRefused,
+  repoBranches,
   listOnboardingRuns,
-  submitStageInput,
-  updateRunAutomation,
-  updateRunModelChoices,
-  resetRunToStage,
-  stopRunExecution,
-  getRunFileDiff,
+  getLatestOnboardingRun,
   onboardingStageCatalogue,
-  listRunExecutions,
-  checkRepositoryRefresh,
-  repositoryRefreshMetrics,
-  onboardingRunCostSummary,
-  getOnboardingExecution,
-  updateOnboardingPromptBody,
-  listActiveOnboardingPrompts,
-  recoverInterruptedRuns,
-  seedOnboardingPrompts,
-  checkOnboardingPromptDrift,
+  authorizeOnboardingTerminal,
+  recoverOnboardingRuns,
+  getOnboardingAssistant,
+  askOnboardingAssistant,
+  resetOnboardingAssistant,
+  sendToOnboardingSession,
+  subscribeTerminal,
+  writeTerminalInput,
+  resizeTerminal,
+  killAllSessions,
   stopAllFlowRuns,
 } from "@dcc/core";
+import websocket from "@fastify/websocket";
 import { blocker, gap, task } from "@dcc/db/schema";
-import { AuthError, NotFound, actingUser, locateWorkItem } from "./context.ts";
+import { AuthError, NotFound, actingUser, actingUserFrom, locateWorkItem } from "./context.ts";
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? "info" }, bodyLimit: 40 * 1024 * 1024 });
 
@@ -143,6 +156,11 @@ app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body,
 app.setErrorHandler((err, _req, reply) => {
   if (err instanceof AuthError) return reply.code(401).send({ error: err.message });
   if (err instanceof NotFound) return reply.code(404).send({ error: err.message });
+  // Onboarding refuses with a message meant for the person ("the previous
+  // stage has not finished", "a run is already live") — show it, not a 500.
+  if (err instanceof OnboardingError) return reply.code(409).send({ error: err.message });
+  if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
+  if (err instanceof ReviewRefused) return reply.code(409).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
   if (typeof e.statusCode === "number" && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
@@ -200,155 +218,221 @@ app.delete("/repos/:id", async (req) => {
   return deleteRepo((req.params as { id: string }).id);
 });
 
-/* ── repository AI enablement — the 9-stage onboarding pipeline
- * (`repository-ai-enablement-v2`). The run advances on its own as far
- * as its automation policy allows; these routes are the person's
- * levers: start, run the next stage, answer a gate, change automation,
- * go back, stop the current AI call, cancel, and read everything. */
+/** Opens a DCC working folder in the machine's file manager (the API runs on that machine). */
+app.post("/open-folder", async (req) => {
+  await actingUser(req);
+  const b = z.object({ path: z.string().min(1).max(1000) }).parse(req.body);
+  return openLocalFolder(b.path);
+});
 
-/** The onboarding core throws actionable, user-facing messages (a live
- *  run already exists, the stage isn't waiting for input, an input was
- *  rejected, the run is advancing right now). The client needs to show
- *  that text, so they leave as 409s rather than a blank 500. */
-async function onboardingCall<T>(p: Promise<T>): Promise<T> {
-  try { return await p; } catch (e) {
-    const err = e as { statusCode?: number } | null;
-    if (err && typeof err === "object" && typeof err.statusCode !== "number") err.statusCode = 409;
-    throw e;
-  }
-}
+/* ── pull requests — every open request DCC can see, from every client
+ * (openspec/changes/pull-request-center). Read-only: merging stays on the host. */
 
-app.get("/onboarding/stages", async () => ({ stages: onboardingStageCatalogue() }));
+app.get("/pull-requests", async (req) => {
+  await actingUser(req);
+  const q = z.object({ refresh: z.string().optional() }).parse(req.query ?? {});
+  return listPullRequests({ refresh: q.refresh === "1" });
+});
+
+app.get("/repos/:id/pull-requests/:number/quick", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  return pullRequestQuick(id, Number(number));
+});
+
+app.get("/repos/:id/pull-requests/:number", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  const q = z.object({ refresh: z.string().optional() }).parse(req.query ?? {});
+  return pullRequestDetail(id, Number(number), { refresh: q.refresh === "1" });
+});
+
+app.get("/repos/:id/pull-requests/:number/file", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  const q = z.object({ path: z.string().min(1) }).parse(req.query);
+  return pullRequestFile(id, Number(number), q.path);
+});
+
+/** A review written in DCC, sent to the host as the operator (openspec/changes/pull-request-center). */
+app.post("/repos/:id/pull-requests/:number/review", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  const b = z.object({ decision: z.enum(["comment", "approve", "request_changes"]), text: z.string().max(4000).optional() }).parse(req.body ?? {});
+  return submitReview({ repoId: id, number: Number(number), decision: b.decision, text: b.text ?? "" });
+});
+
+/** Every branch of a repository, and what to do about each one. */
+app.get("/repos/:id/branches", async (req) => {
+  await actingUser(req);
+  const q = z.object({ refresh: z.string().optional() }).parse(req.query ?? {});
+  return repoBranches((req.params as { id: string }).id, { refresh: q.refresh === "1" });
+});
+
+/* ── repository onboarding — four stages around one live Claude Code
+ * session (`openspec/changes/repository-onboarding-native-init`). Each
+ * stage starts from its own button (or by the run's automation policy);
+ * the session itself is reached over the terminal socket below. */
+
+type RunParams = { id: string; runId: string };
+
+app.get("/onboarding/stages", async (req) => {
+  await actingUser(req);
+  return onboardingStageCatalogue();
+});
 
 app.post("/repos/:id/onboarding/runs", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({
-    automation: z.unknown().optional(),
-    modelChoices: z.unknown().optional(),
-    mode: z.enum(["initial", "refresh"]).optional(),
-    previousRunId: z.string().uuid().optional(),
-    /** Required when the policy auto-resolves gates: the person's explicit consent. */
-    consent: z.boolean().optional(),
-  }).parse(req.body ?? {});
-  const preset = (b.automation as { preset?: string } | undefined)?.preset;
-  const stages = (b.automation as { stages?: Record<string, { gate?: string }> } | undefined)?.stages ?? {};
-  const autoGates = preset === "automatic" || Object.values(stages).some((s) => s?.gate === "auto");
-  if (autoGates && !b.consent) throw Object.assign(new Error("הרצה שמאשרת שערים אוטומטית דורשת הסכמה מפורשת (consent: true)"), { statusCode: 400 });
-  return onboardingCall(startOnboardingRun(id, { userId: dev.id }, { automation: b.automation, modelChoices: b.modelChoices, mode: b.mode, previousRunId: b.previousRunId }));
+  const b = z.object({ automation: z.unknown().optional(), modelChoices: z.unknown().optional(), consent: z.boolean().optional() }).parse(req.body ?? {});
+  return startOnboardingRun(id, { userId: dev.id }, b);
 });
 
 app.get("/repos/:id/onboarding/latest-run", async (req) => {
-  const { id } = req.params as { id: string };
-  return getLatestOnboardingRun(id);
+  await actingUser(req);
+  return getLatestOnboardingRun((req.params as { id: string }).id);
 });
 
 app.get("/repos/:id/onboarding/runs", async (req) => {
-  const { id } = req.params as { id: string };
-  return { runs: await listOnboardingRuns(id) };
-});
-
-app.post("/repos/:id/onboarding/runs/:runId/advance", async (req) => {
   await actingUser(req);
-  const { id, runId } = req.params as { id: string; runId: string };
-  return onboardingCall(advanceRun(id, runId));
+  return { runs: await listOnboardingRuns((req.params as { id: string }).id) };
 });
 
 app.get("/repos/:id/onboarding/runs/:runId", async (req) => {
-  const { id, runId } = req.params as { id: string; runId: string };
-  return onboardingCall(getOnboardingRunView(id, runId));
+  await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return getOnboardingRunView(id, runId);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/stages/:stageKey/run", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId, stageKey } = req.params as RunParams & { stageKey: string };
+  return runOnboardingStage(id, runId, stageKey, { userId: dev.id });
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/init/complete", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return completeInitStage(id, runId, { userId: dev.id });
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/session/resume", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return resumeOnboardingSession(id, runId, { userId: dev.id });
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/review/refresh", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return refreshReview(id, runId);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/review/approve", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return approveReview(id, runId, { userId: dev.id });
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/cancel", async (req) => {
   const dev = await actingUser(req);
-  const { id, runId } = req.params as { id: string; runId: string };
-  await onboardingCall(cancelRun(id, runId, { userId: dev.id }));
-  return { cancelled: true };
-});
-
-app.post("/repos/:id/onboarding/runs/:runId/stages/:stageKey/input", async (req) => {
-  const dev = await actingUser(req);
-  const { id, runId, stageKey } = req.params as { id: string; runId: string; stageKey: string };
-  const b = z.object({ input: z.unknown() }).parse(req.body);
-  return onboardingCall(submitStageInput(id, runId, stageKey, b.input, { userId: dev.id }));
+  const { id, runId } = req.params as RunParams;
+  return cancelOnboardingRun(id, runId, { userId: dev.id });
 });
 
 app.patch("/repos/:id/onboarding/runs/:runId/automation", async (req) => {
   const dev = await actingUser(req);
-  const { id, runId } = req.params as { id: string; runId: string };
+  const { id, runId } = req.params as RunParams;
   const b = z.object({ automation: z.unknown(), consent: z.boolean().optional() }).parse(req.body);
-  const stages = (b.automation as { stages?: Record<string, { gate?: string }>; preset?: string } | undefined);
-  const autoGates = stages?.preset === "automatic" || Object.values(stages?.stages ?? {}).some((s) => s?.gate === "auto");
-  if (autoGates && !b.consent) throw Object.assign(new Error("אישור שערים אוטומטי דורש הסכמה מפורשת (consent: true)"), { statusCode: 400 });
-  return onboardingCall(updateRunAutomation(id, runId, b.automation, { userId: dev.id }));
+  return updateOnboardingAutomation(id, runId, b.automation, !!b.consent, { userId: dev.id });
 });
 
 app.patch("/repos/:id/onboarding/runs/:runId/model-choices", async (req) => {
   const dev = await actingUser(req);
-  const { id, runId } = req.params as { id: string; runId: string };
+  const { id, runId } = req.params as RunParams;
   const b = z.object({ choices: z.unknown() }).parse(req.body);
-  return onboardingCall(updateRunModelChoices(id, runId, b.choices, { userId: dev.id }));
+  return updateOnboardingModelChoices(id, runId, b.choices, { userId: dev.id });
 });
 
-app.post("/repos/:id/onboarding/runs/:runId/reset-to/:stageKey", async (req) => {
-  const dev = await actingUser(req);
-  const { id, runId, stageKey } = req.params as { id: string; runId: string; stageKey: string };
-  const b = z.object({ note: z.string().optional() }).parse(req.body ?? {});
-  await onboardingCall(resetRunToStage(id, runId, stageKey, { userId: dev.id }, b.note));
-  return { reset: true };
-});
-
-app.post("/repos/:id/onboarding/runs/:runId/stop-execution", async (req) => {
-  const dev = await actingUser(req);
-  const { id, runId } = req.params as { id: string; runId: string };
-  return onboardingCall(stopRunExecution(id, runId, { userId: dev.id }));
-});
-
-app.get("/repos/:id/onboarding/runs/:runId/diff", async (req) => {
-  const { id, runId } = req.params as { id: string; runId: string };
+app.get("/repos/:id/onboarding/runs/:runId/file", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as RunParams;
   const q = z.object({ path: z.string().min(1) }).parse(req.query);
-  return onboardingCall(getRunFileDiff(id, runId, q.path));
+  return getOnboardingFileVersions(id, runId, q.path);
 });
 
-app.get("/repos/:id/onboarding/runs/:runId/cost-summary", async (req) => {
-  const { runId } = req.params as { id: string; runId: string };
-  return onboardingRunCostSummary(runId);
+/* The Hebrew assistant next to the terminal: questions about the session, and
+ * instructions the person chooses to send to it (openspec/changes/onboarding-assistant). */
+app.get("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return getOnboardingAssistant(id, runId);
 });
 
-app.get("/repos/:id/onboarding/runs/:runId/executions", async (req) => {
-  const { id, runId } = req.params as { id: string; runId: string };
-  return { executions: await listRunExecutions(id, runId) };
+app.post("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  const b = z.object({ question: z.string().min(1).max(4000), screen: z.string().max(20_000).optional() }).parse(req.body);
+  return askOnboardingAssistant(id, runId, b.question, b.screen);
 });
 
-app.get("/repos/:id/onboarding/executions/:executionId", async (req) => {
-  const { id, executionId } = req.params as { id: string; executionId: string };
-  return getOnboardingExecution(id, executionId);
+app.delete("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return resetOnboardingAssistant(id, runId);
 });
 
-app.get("/onboarding/prompts", async () => {
-  const [prompts, drifted] = await Promise.all([listActiveOnboardingPrompts(), checkOnboardingPromptDrift()]);
-  const driftedKeys = new Set(drifted.map((d) => d.promptKey));
-  return { prompts: prompts.map((p) => ({ ...p, driftedFromCode: driftedKeys.has(p.promptKey) })) };
-});
-
-app.patch("/onboarding/prompts/:promptKey", async (req) => {
+app.post("/repos/:id/onboarding/runs/:runId/assistant/send", async (req) => {
   const dev = await actingUser(req);
-  const { promptKey } = req.params as { promptKey: string };
-  const b = z.object({ body: z.string().min(1) }).parse(req.body);
-  return updateOnboardingPromptBody({ promptKey, body: b.body, by: { userId: dev.id } });
+  const { id, runId } = req.params as RunParams;
+  const b = z.object({ text: z.string().min(1).max(8000), messageId: z.string().optional(), force: z.boolean().optional() }).parse(req.body);
+  return sendToOnboardingSession(id, runId, { userId: dev.id }, b);
 });
 
-// Knowledge lifecycle: deterministic staleness signals first, one AI
-// judgement only when a signal fires; acting on it is a refresh run.
-app.post("/repos/:id/onboarding/refresh-check", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  return onboardingCall(checkRepositoryRefresh(id, dev.id));
-});
-
-app.get("/repos/:id/onboarding/refresh-metrics", async (req) => {
-  const { id } = req.params as { id: string };
-  return repositoryRefreshMetrics(id);
+/** The run's terminal: the live Claude Code session plus DCC's own lines.
+ *  A browser cannot put headers on a WebSocket, so the first message
+ *  carries the same credentials the REST routes read from headers; nothing
+ *  is streamed before it checks out. */
+app.register(websocket);
+app.register(async (scope) => {
+  scope.get("/repos/:id/onboarding/runs/:runId/terminal", { websocket: true }, (socket, req) => {
+    const { id, runId } = req.params as RunParams;
+    let userId: string | null = null;
+    let unsubscribe: (() => void) | null = null;
+    const send = (m: unknown) => { if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(m)); };
+    const authTimer = setTimeout(() => { if (!userId) socket.close(4401, "auth timeout"); }, 10_000);
+    type Msg = { type?: string; token?: string; email?: string; data?: string; cols?: number; rows?: number };
+    const handle = async (m: Msg) => {
+      if (!userId) {
+        if (m.type !== "auth") return socket.close(4401, "auth required");
+        try {
+          const u = await actingUserFrom(m.token, m.email);
+          await authorizeOnboardingTerminal(id, runId);
+          userId = u.id;
+        } catch {
+          return socket.close(4403, "forbidden");
+        }
+        clearTimeout(authTimer);
+        const sub = subscribeTerminal(runId, (msg) => send(msg));
+        unsubscribe = sub.unsubscribe;
+        send({ type: "replay", data: sub.replay });
+        send({ type: "state", state: sub.state });
+        return;
+      }
+      if (m.type === "input" && typeof m.data === "string") writeTerminalInput(runId, m.data, userId);
+      else if (m.type === "resize") resizeTerminal(runId, Number(m.cols), Number(m.rows));
+    };
+    // One message at a time, in order: the client sends its size right after
+    // the auth message, and that must wait for the (async) check, not be
+    // judged — and the socket closed — while the check is still running.
+    let queue = Promise.resolve();
+    socket.on("message", (raw: Buffer) => {
+      let m: Msg;
+      try { m = JSON.parse(raw.toString()) as Msg; } catch { return; }
+      queue = queue.then(() => handle(m)).catch(() => socket.close(1011, "error"));
+    });
+    socket.on("close", () => { clearTimeout(authTimer); unsubscribe?.(); });
+  });
 });
 
 app.post("/clients/:id/repos", async (req, reply) => {
@@ -893,6 +977,14 @@ app.post("/tasks/:id/rollback", async (req) => {
 // the one deliberately-manual step: push a task's branch to the repo's
 // real remote (GitHub/ADO), using whatever git credentials are already
 // configured locally. Never automatic — the user decides when.
+app.get("/tasks/:id/code-map", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const clientId = await taskClient(id);
+  const d = await taskDetail(clientId, id);
+  return codeMapForTask({ clientId, workitemId: d.requirement.id, taskId: id });
+});
+
 app.post("/tasks/:id/push", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
@@ -1379,6 +1471,7 @@ if (dbKind === "pglite") {
     await reply.send({ stopping: true });
     setTimeout(() => {
       stopAllFlowRuns();
+      killAllSessions();
       app.close().then(() => import("@dcc/db").then((m) => m.closeDb())).finally(() => process.exit(0));
     }, 50);
   });
@@ -1387,31 +1480,10 @@ if (dbKind === "pglite") {
 if (import.meta.main) {
   const port = Number(process.env.PORT ?? 3001);
   app.listen({ port, host: "0.0.0.0" }).then(() => app.log.info(`dcc-api on :${port}`));
-  // An onboarding stage that was executing when the previous process
-  // died lands as Failed (retryable) instead of spinning forever.
-  recoverInterruptedRuns().then((n) => { if (n) app.log.warn(`onboarding: ${n} run(s) interrupted by the previous shutdown marked Failed`); }).catch((e) => app.log.error(e));
-
-  // PGlite dev convenience: `dev:reset` wipes the onboarding prompts along
-  // with everything else, and forgetting the manual re-seed step was
-  // recurring friction ("no active prompt for onboarding.v2.classify").
-  // Only fills genuinely missing keys — an existing active prompt, however
-  // old, is never touched; never runs against a real Postgres.
-  if (dbKind === "pglite") {
-    seedOnboardingPrompts().then(({ created }) => { if (created) app.log.info(`onboarding: seeded ${created} missing prompt(s) on the embedded database`); }).catch((e) => app.log.error(e));
-  }
-
-  // A code change to a prompt's wording (in seed-prompts.ts) never takes
-  // effect on its own — someone has to remember the exact `SEED_REPLACE=
-  // <key>` command, and until they do, the OLD active version keeps
-  // running silently after a normal `git pull` + restart (found live:
-  // discovery's broadened existing-artifact check shipped in code but sat
-  // inactive for days). Read-only, runs against any database — this never
-  // auto-replaces (an active version may be someone's deliberate edit
-  // from the Prompts screen), it only says out loud that code and the
-  // active prompt have diverged.
-  checkOnboardingPromptDrift().then((drifted) => {
-    for (const d of drifted) app.log.warn(`onboarding: prompt "${d.promptKey}" active version (v${d.activeVersion}) no longer matches the code — run SEED_REPLACE=${d.promptKey} npx tsx packages/core/src/repo-onboarding/seed-prompts.ts to roll it out (or ignore if that's a deliberate edit)`);
-  }).catch((e) => app.log.error(e));
+  // A git stage that was mid-flight when the previous process died is
+  // marked failed (its button reruns it); a live Claude session is marked
+  // disconnected and can be reopened from the same conversation.
+  recoverOnboardingRuns().then((n) => { if (n) app.log.warn(`onboarding: ${n} interrupted stage(s)/session(s) recovered after restart`); }).catch((e) => app.log.error(e));
 
   // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
   // un-openable if the process is killed mid-write, so always close it.
@@ -1425,6 +1497,7 @@ if (import.meta.main) {
       // spending) with no process left to record its result.
       const stopped = stopAllFlowRuns();
       if (stopped) app.log.warn(`${stopped} live claude run(s) stopped by shutdown`);
+      killAllSessions();
       app
         .close()
         .then(() => import("@dcc/db").then((m) => m.closeDb()))

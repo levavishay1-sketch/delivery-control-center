@@ -16,6 +16,8 @@ export default defineConfig({
       "/api": {
         target: process.env.DCC_API_URL ?? "http://localhost:3001",
         changeOrigin: true,
+        // The onboarding terminal is a WebSocket on the same /api prefix.
+        ws: true,
         rewrite: (p) => p.replace(/^\/api/, ""),
       },
     },

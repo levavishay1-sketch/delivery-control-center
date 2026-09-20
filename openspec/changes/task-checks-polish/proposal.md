@@ -1,5 +1,7 @@
 # Task/checks polish — round 2 feedback
 
+Status: **done** — all 23 tasks complete (see `tasks.md`).
+
 ## Why
 
 Live feedback after the `checks-lifecycle` change shipped, from actually

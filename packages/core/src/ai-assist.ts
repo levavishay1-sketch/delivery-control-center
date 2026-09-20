@@ -1,6 +1,6 @@
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -28,6 +28,9 @@ import { proposeGap } from "./gaps.ts";
 // keep every arg space-free (comma-separated --allowed-tools) to avoid quoting.
 const CLAUDE_BIN = process.env.DCC_CLAUDE_BIN || (process.platform === "win32" ? "claude.cmd" : "claude");
 const CLAUDE_VIA_SHELL = process.platform === "win32";
+// `--tools ""` (no tools) loses its empty value in the Windows shell, which then leaves ALL tools on;
+// a name that matches no tool leaves none (verified: the model reports no tools, input drops to ~0.8k tokens).
+const NO_TOOLS = "NoTools";
 // `os.homedir()`, not `os.tmpdir()` — found live: on this machine (and
 // plausibly others), the `TEMP`/`TMP` env vars Windows hands Node resolve
 // to the 8.3 short-name form of the profile directory (`C:\Users\
@@ -253,16 +256,6 @@ export type RunMeta = {
   outputTokens: number | null;
   durationMs: number | null;
   numTurns: number | null;
-  cacheReadTokens?: number | null;
-  cacheCreationTokens?: number | null;
-  /** `structured_output` from the CLI's result message when `jsonSchema` was passed. */
-  structuredOutput?: unknown;
-  /** `permission_denials` from the result message — every tool call the
-   *  run wanted to make and nobody could approve (v2.1.259+). */
-  permissionDenials?: unknown[];
-  /** Tool-call counts by tool name, from the stream's assistant events —
-   *  the raw material for "how much exploring did this run do". */
-  toolCalls?: Record<string, number>;
 };
 
 export type RunClaudeOpts = {
@@ -270,60 +263,27 @@ export type RunClaudeOpts = {
   /** `--effort <level>` — reasoning effort, independent of `--model`. */
   effort?: string;
   onMeta?: (meta: RunMeta) => void;
+  /** A lean, read-only call (see `runClaudeRaw`): the whole system prompt comes from a file. */
+  lean?: {
+    systemPromptFile: string;
+    /** Comma-separated built-in tools; none by default. */
+    tools?: string;
+    /** Keep the conversation on disk under this id, and open it again with `resume`. */
+    session?: { id: string; resume: boolean };
+    /** Folders the tools may read besides the working directory. */
+    addDirs?: string[];
+  };
+  /** Extra environment for the CLI process. */
+  env?: Record<string, string>;
   /** `Read(...)` deny patterns — passed as `--settings {"permissions":{"deny":[...]}}`. */
   denyRules?: string[];
-  /** Onboarding-only: run with `--restricted --tools <list>` — the built-in
-   *  tool set is exactly this list (no Bash unless named), file tools are
-   *  confined to `cwd`, and the REPOSITORY's own settings/hooks/`.mcp.json`
-   *  are not loaded (a `-p` run in an untrusted folder otherwise executes
-   *  them — see the permissions docs, "What runs before you trust a folder").
-   *  An empty list means no tools at all. */
-  restrictedTools?: string[];
-  /** Onboarding-only: `--json-schema` structured output (result carries
-   *  `structured_output`). On Windows the CLI is spawned through cmd.exe,
-   *  which mangles inline JSON, so the schema is NOT passed there — the
-   *  caller must also instruct the model in the prompt and fall back to
-   *  parsing text (see `runner.ts`). */
-  jsonSchema?: Record<string, unknown>;
-  /** Hard USD cap for the call, including subagents (`--max-budget-usd`). */
-  budgetUsd?: number;
-  /** `--permission-prompts none`: anything that would need a person is
-   *  denied explicitly and reported, instead of hanging or being silently
-   *  narrated as "I couldn't get approval" in the text. */
-  denyUnattendedPrompts?: boolean;
-  /** `--no-session-persistence` — a one-off analysis leaves no resumable transcript behind. */
-  noSessionPersistence?: boolean;
 };
-
-/** Which CLI flags this machine's `claude` supports — parsed once from
- *  `claude --version`. Newer flags are only passed when the version says
- *  so; an unknown version gets the conservative (older) argument set. */
-export type ClaudeCliCaps = { version: string | null; restricted: boolean; permissionPrompts: boolean; jsonSchema: boolean; maxBudget: boolean };
-let cliCaps: ClaudeCliCaps | null = null;
-export function claudeCliCaps(): ClaudeCliCaps {
-  if (cliCaps) return cliCaps;
-  let version: string | null = null;
-  try {
-    const out = execFileSync(CLAUDE_BIN, ["--version"], { encoding: "utf8", shell: CLAUDE_VIA_SHELL, windowsHide: true, timeout: 15_000 });
-    version = out.match(/(\d+)\.(\d+)\.(\d+)/)?.[0] ?? null;
-  } catch { version = null; }
-  const atLeast = (want: string) => {
-    if (!version) return false;
-    const a = version.split(".").map(Number), b = want.split(".").map(Number);
-    for (let i = 0; i < 3; i++) { if (a[i]! !== b[i]!) return a[i]! > b[i]!; }
-    return true;
-  };
-  cliCaps = { version, restricted: atLeast("2.1.248"), permissionPrompts: atLeast("2.1.259"), jsonSchema: atLeast("2.1.205"), maxBudget: atLeast("2.1.217") };
-  return cliCaps;
-}
 
 /** Run `claude -p` in `cwd` (prompt via stdin) and return the assistant's
  *  final text plus usage/cost metadata — no JSON parsing. This is the one
- *  place that actually spawns the CLI ("Runtime Adapter" in the
- *  `repository-ai-management` design); `runClaudeJson` below is a thin
+ *  place that actually spawns the CLI; `runClaudeJson` below is a thin
  *  JSON-parsing wrapper on top for every caller that wants structured
- *  output. Exported for `repo-ai/*` callers whose response is plain text
- *  (the `/init` bootstrap — see `repo-ai/bootstrap.ts`) rather than JSON. */
+ *  output. */
 export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts = {}): Promise<{ text: string; meta: RunMeta }> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain.
   // Read-only by default. `write` is only for implementation runs, and those
@@ -337,8 +297,8 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   // `--permission-mode plan`, Claude Code's real INTERACTIVE plan-then-
   // approve workflow, which expects the model to eventually call an
   // `ExitPlanMode` tool to present its plan for human approval — a tool
-  // that doesn't exist in headless `-p` mode. Found live (repo-onboarding
-  // Phase 6, `skills_evaluation`): a `read_only_plan` call spun to 29
+  // that doesn't exist in headless `-p` mode. Found live (a read-only
+  // analysis call): a `read_only_plan` call spun to 29
   // turns and its final text was just "`ExitPlanMode` isn't available...
   // so here is the finished analysis directly" — except that time it
   // DIDN'T re-emit the actual analysis, only a claim that it already had,
@@ -351,34 +311,31 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   // nothing for it to "accept" since Write/Edit aren't in the allowed-tools
   // list, but it carries none of `plan` mode's ExitPlanMode expectation.
   const steerable = !!opts.runId;
-  const caps = claudeCliCaps();
-  let args: string[];
-  if (opts.restrictedTools) {
-    // The onboarding pipeline's argument set: an explicit tool list, the
-    // repository's own configuration kept out, nothing waiting on a person.
-    args = ["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits", "--max-turns", String(opts.maxTurns ?? 40)];
-    if (caps.restricted) args.push("--restricted", "--strict-mcp-config", "--tools", opts.restrictedTools.join(",") || "");
-    else args.push("--allowed-tools", opts.restrictedTools.join(","), "--setting-sources", "user");
-    if (opts.denyUnattendedPrompts && caps.permissionPrompts) args.push("--permission-prompts", "none");
-    if (opts.jsonSchema && caps.jsonSchema && !CLAUDE_VIA_SHELL) args.push("--json-schema", JSON.stringify(opts.jsonSchema));
-    if (typeof opts.budgetUsd === "number" && caps.maxBudget) args.push("--max-budget-usd", String(opts.budgetUsd));
-    if (opts.noSessionPersistence) args.push("--no-session-persistence");
-  } else {
-    args = opts.write
-      ? [
-          "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
-          "--allowed-tools", "Read,Grep,Glob,Edit,Write,Bash",
-          "--max-turns", String(opts.maxTurns ?? 80),
-        ]
-      : [
-          "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
-          "--allowed-tools", "Read,Grep,Glob",
-          "--max-turns", String(opts.maxTurns ?? 40),
-        ];
-  }
+  const args: string[] = opts.write
+    ? [
+        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
+        "--allowed-tools", "Read,Grep,Glob,Edit,Write,Bash",
+        "--max-turns", String(opts.maxTurns ?? 80),
+      ]
+    : [
+        "-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "acceptEdits",
+        "--allowed-tools", "Read,Grep,Glob",
+        "--max-turns", String(opts.maxTurns ?? 40),
+      ];
   if (steerable) args.push("--input-format", "stream-json");
   if (opts.model) args.push("--model", opts.model);
   if (opts.effort) args.push("--effort", opts.effort);
+  // A lean call: the CLI's own system prompt, the user's skills/MCP servers and
+  // memory are replaced by one small prompt file (measured: ~1.9k tokens in
+  // instead of ~31k for a one-line request, so ~5x cheaper and faster). A file,
+  // not the inline flag: `shell: true` on Windows splits on spaces.
+  if (opts.lean) {
+    const l = opts.lean;
+    args.push("--system-prompt-file", l.systemPromptFile, "--tools", l.tools || NO_TOOLS, "--disable-slash-commands", "--strict-mcp-config", "--setting-sources", "local");
+    if (l.session) args.push(l.session.resume ? "--resume" : "--session-id", l.session.id);
+    else args.push("--no-session-persistence");
+    for (const d of l.addDirs ?? []) args.push("--add-dir", d);
+  }
   // `--settings` accepts either inline JSON or a file path (`claude --help`
   // confirms both) — a temp FILE is used here, not the inline JSON string
   // directly. Found live: on Windows, `claude.cmd` can only be spawned with
@@ -396,9 +353,8 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     writeFileSync(settingsFile, JSON.stringify({ permissions: { deny: opts.denyRules } }));
     args.push("--settings", settingsFile);
   }
-  const toolCalls: Record<string, number> = {};
   const raw = await new Promise<string>((resolve, reject) => {
-    const child = spawn(CLAUDE_BIN, args, { cwd, env: process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
+    const child = spawn(CLAUDE_BIN, args, { cwd, env: opts.env ? { ...process.env, ...opts.env } : process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     const proc: SteerableProc | null = steerable ? { child, stdinOpen: true, stoppedByUser: false } : null;
     if (proc) runningProcs.set(opts.runId!, proc);
     let out = "";
@@ -413,7 +369,6 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
       buf = parts.pop() ?? "";
       for (const ln of parts) {
         const trimmed = ln.trim();
-        countToolCalls(trimmed, toolCalls);
         if (!opts.runId) continue;
         const desc = describeEvent(trimmed);
         if (desc) for (const s of desc.split("\n")) pushLine(opts.runId, s);
@@ -440,12 +395,11 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   // {"type":"result","result":"…"} line — which also carries cost/usage.
   let text = raw.trim();
   const resultLine = raw.split("\n").reverse().find((l) => l.includes('"type":"result"'));
-  let meta: RunMeta = { model: opts.model ?? null, effort: opts.effort ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null, toolCalls };
+  let meta: RunMeta = { model: opts.model ?? null, effort: opts.effort ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null };
   try {
     const env = JSON.parse((resultLine ?? text).trim()) as {
       result?: string; total_cost_usd?: number; duration_ms?: number; num_turns?: number; is_error?: boolean; subtype?: string;
-      usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
-      structured_output?: unknown; permission_denials?: unknown[];
+      usage?: { input_tokens?: number; output_tokens?: number };
       modelUsage?: Record<string, unknown>;
     };
     if (typeof env.result === "string") text = env.result;
@@ -460,13 +414,8 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
       costUsd: typeof env.total_cost_usd === "number" ? env.total_cost_usd : null,
       inputTokens: env.usage?.input_tokens ?? null,
       outputTokens: env.usage?.output_tokens ?? null,
-      cacheReadTokens: env.usage?.cache_read_input_tokens ?? null,
-      cacheCreationTokens: env.usage?.cache_creation_input_tokens ?? null,
       durationMs: typeof env.duration_ms === "number" ? env.duration_ms : null,
       numTurns: typeof env.num_turns === "number" ? env.num_turns : null,
-      structuredOutput: env.structured_output,
-      permissionDenials: Array.isArray(env.permission_denials) ? env.permission_denials : undefined,
-      toolCalls,
     };
   } catch (e) {
     if (e instanceof Error && e.message.startsWith("claude run failed")) throw e;
@@ -476,19 +425,8 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   return { text, meta };
 }
 
-/** Tallies `tool_use` blocks in one stream-json assistant event. */
-function countToolCalls(line: string, into: Record<string, number>) {
-  if (!line.includes('"tool_use"')) return;
-  try {
-    const e = JSON.parse(line) as { type?: string; message?: { content?: { type?: string; name?: string }[] } };
-    if (e.type !== "assistant") return;
-    for (const c of e.message?.content ?? []) if (c.type === "tool_use" && typeof c.name === "string") into[c.name] = (into[c.name] ?? 0) + 1;
-  } catch { /* not an event line */ }
-}
-
-/** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back.
- *  Exported for `repo-ai/*` (P2 knowledge baseline, P3 recommendations). */
-export async function runClaudeJson<T>(cwd: string, prompt: string, opts: RunClaudeOpts = {}): Promise<T> {
+/** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back. */
+async function runClaudeJson<T>(cwd: string, prompt: string, opts: RunClaudeOpts = {}): Promise<T> {
   const { text } = await runClaudeRaw(cwd, prompt, opts);
   // pull the JSON object/array out of whatever the model wrapped it in
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, text];
@@ -741,7 +679,7 @@ export async function getRetroRunView(workitemId: string): Promise<FlowRunView |
 }
 
 /** Local working copy for the repo — clone or pull. Returns null if we can't get one.
- *  Exported for `repo-ai/*` (inventory scan, knowledge baseline, init, recommendations) —
+ *  Exported for `repo-onboarding/*` —
  *  same cache-clone mechanism `runImplement` uses, not a second checkout system.
  *
  *  Real bug found live (2026-09-16): reusing an existing cache clone used
@@ -755,12 +693,38 @@ export async function getRetroRunView(workitemId: string): Promise<FlowRunView |
  *  Fix: always reset to the actual default branch before pulling, not
  *  just pull blindly — same correctness as a fresh clone, without paying
  *  its full download cost every time. */
-export async function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+/** The local copy of a repository IF it is already there — never clones.
+ *  Read-only callers (screens) use this; work that needs a copy uses `ensureCheckout`. */
+export function existingCheckout(r: { id: string; localPath: string | null }): string | null {
+  if (r.localPath && existsSync(r.localPath)) return r.localPath;
+  const dir = path.join(REPO_CACHE, r.id);
+  return existsSync(path.join(dir, ".git")) ? dir : null;
+}
+
+/** One fetch per repository at a time: two callers (a second press, a retry
+ *  after a restart) must wait for the copy being made, not start a second
+ *  clone into the same directory. */
+const checkouts = new Map<string, Promise<string | null>>();
+export function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+  const running = checkouts.get(r.id);
+  if (running) return running;
+  const p = doCheckout(r).finally(() => checkouts.delete(r.id));
+  checkouts.set(r.id, p);
+  return p;
+}
+
+async function doCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
   if (r.localPath && existsSync(r.localPath)) return r.localPath;
   const gitUrl = r.adoRepoRef && /^(https?:\/\/|git@)/.test(r.adoRepoRef) ? r.adoRepoRef : null;
   if (!gitUrl) return r.localPath ?? null;
   mkdirSync(REPO_CACHE, { recursive: true });
   const dir = path.join(REPO_CACHE, r.id);
+  // A clone that was interrupted (the API restarted while it ran) leaves a
+  // directory full of files with no HEAD. Reusing it fails in confusing ways
+  // later, so it is thrown away and fetched again.
+  if (existsSync(path.join(dir, ".git")) && (await git(["rev-parse", "--verify", "--quiet", "HEAD"], dir)).code !== 0) {
+    rmSync(dir, { recursive: true, force: true });
+  }
   if (existsSync(path.join(dir, ".git"))) {
     await git(["reset", "--hard"], dir);
     await git(["clean", "-fd"], dir);
@@ -774,8 +738,16 @@ export async function ensureCheckout(r: { id: string; name: string; localPath: s
         p.on("close", (code) => res(code ?? 1));
         p.on("error", () => res(1));
       });
-    const code = await run(["clone", "--depth", "80", gitUrl, dir]);
-    if (code !== 0) return null;
+    // Clone beside the target and move it into place only once it succeeded,
+    // so a killed clone can never be mistaken for a usable copy.
+    const tmp = `${dir}.partial-${randomUUID().slice(0, 8)}`;
+    const code = await run(["clone", "--depth", "80", gitUrl, tmp]);
+    if (code !== 0 || (await git(["rev-parse", "--verify", "--quiet", "HEAD"], tmp)).code !== 0) {
+      rmSync(tmp, { recursive: true, force: true });
+      return null;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    renameSync(tmp, dir);
   }
   return dir;
 }
@@ -807,7 +779,7 @@ async function loadRequirementText(clientId: string, workitemId: string) {
   });
 }
 
-async function firstRepo(clientId: string, workitemId: string) {
+export async function firstRepo(clientId: string, workitemId: string) {
   return withTenant(clientId, async (tx) => {
     const linked = await tx
       .select({ id: repo.id, name: repo.name, localPath: repo.localPath, adoRepoRef: repo.adoRepoRef })
@@ -905,9 +877,9 @@ async function buildAssessPrompt(input: {
   const promptHe = tmpl?.bodyHe ? join(renderPrompt(tmpl.bodyHe, varsHe), contract?.bodyHe) : null;
   const model = input.model || tmpl?.defaultModel || undefined;
 
-  // Repository knowledge is no longer prepended here: an onboarded repo
-  // carries it in its own CLAUDE.md / skills, which the `claude -p` run
-  // loads natively from `cwd` (repository-ai-enablement-v2).
+  // Repository knowledge is not prepended here: an onboarded repo carries
+  // it in its own CLAUDE.md / skills, which the `claude -p` run loads
+  // natively from `cwd`.
   return { prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
 }
 
@@ -1356,7 +1328,7 @@ export type ImplementResult = {
  *  must run WITHOUT shell:true — Windows' cmd.exe re-splits a quoted
  *  argument at every space, which silently breaks any commit message
  *  with spaces (e.g. "t1: ..." becomes three separate pathspec args). */
-/** Exported for `repo-ai/*` — same reasoning as `ensureCheckout`. */
+/** Exported for `repo-onboarding/*` — same reasoning as `ensureCheckout`. */
 export function git(args: string[], cwd: string, opts?: { timeoutMs?: number }): Promise<{ code: number; out: string }> {
   return new Promise((res) => {
     // GIT_TERMINAL_PROMPT=0 stops git's own credential prompt from hanging
@@ -1393,8 +1365,8 @@ const slug = (s: string) =>
 /** Deterministic branch name for a task's implement run — same formula
  *  everywhere (`runImplement`, `rollbackTask`, the delete precheck) so
  *  nothing extra needs to be persisted to find a task's branch again. */
-const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
-  `feature/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
+export const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
+  `task/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
 
 /** How many commits a task's branch has beyond the repo's default branch —
  *  0 means "never implemented" or "implemented but produced no changes". */

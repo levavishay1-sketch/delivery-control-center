@@ -1,8 +1,9 @@
 # End-of-requirement improvement recommendations
 
-Status: **backlog** — captured for planning, not started. Depends on
-`run-cost-tracking` and `decision-history` (needs their data to exist
-before this can analyze anything real).
+Status: **done** — all 5 tasks complete (implemented in `f9c5f4f`, the
+"✦ המלצות לשיפור" action on a requirement's record screen). Originally
+written as a backlog item that depended on `run-cost-tracking` and
+`decision-history`.
 
 ## Why
 

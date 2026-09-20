@@ -3,6 +3,12 @@ export { recordDecision, type DecisionTrigger } from "./decisions.ts";
 export { linkBugToTask, unlinkBugFromTask, bugLinkedTasks, type LinkedTaskRow } from "./bugs.ts";
 export { startResearchWork, finishResearchWork, type ResearchWorkResult } from "./research-work.ts";
 export { recordSession, recordGitActivity, recordNote } from "./capture.ts";
+export { openLocalFolder, FolderRefused } from "./local-folder.ts";
+export { listPullRequests, type PullRequestRow, type PullRequestList } from "./pull-requests.ts";
+export { submitReview, ReviewRefused, type ReviewDecision } from "./pull-request-review.ts";
+export { repoBranches, type RepoBranches, type BranchHealth } from "./repo-branches.ts";
+export { pullRequestDetail, pullRequestFile, type FileVersions, pullRequestQuick, type PullRequestQuick, type PullRequestDetail, type Blocker, type NextStep, type FileGroup, type TimelineItem } from "./pull-request-detail.ts";
+export { codeMapForTask, codeMapForWorkspace, codeMapFrom, readCodeMapFacts, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapArrow, type CodeMapPlace, type CodeMapFacts } from "./code-map.ts";
 export { proposeGap, verifyGap } from "./gaps.ts";
 export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksNotPassed, setTaskActive, checkAdoRemovedState, syncTaskStateAfterCheckChange, type TaskInput, type TaskDetail } from "./tasks.ts";
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
@@ -36,11 +42,4 @@ export {
   updateGap, deleteGap, updateBlocker, deleteBlocker, updateTask, deleteDependency,
   updateConnection,
 } from "./crud.ts";
-export {
-  startOnboardingRun, advanceRun, cancelRun, getOnboardingRunView, getLatestOnboardingRun, listOnboardingRuns, submitStageInput,
-  updateRunAutomation, updateRunModelChoices, resetRunToStage, stopRunExecution, getRunFileDiff, onboardingStageCatalogue, listRunExecutions,
-  checkRepositoryRefresh, repositoryRefreshMetrics, onboardingRunCostSummary,
-  getOnboardingExecution, updateOnboardingPromptBody, listActiveOnboardingPrompts, presetPolicy, normalizePolicy, normalizeModelPolicy, STAGES as ONBOARDING_STAGES, recoverInterruptedRuns, seedOnboardingPrompts, checkOnboardingPromptDrift,
-  type OnboardingStatus, type RepositoryProfile as OnboardingRepositoryProfile, type AutomationPolicy, type AutomationPreset,
-  type RefreshResult, type RefreshMetrics, type OnboardingRunCostSummary, type OnboardingCostByStage, type ModelChoice, type ModelPolicy,
-} from "./repo-onboarding/index.ts";
+export * from "./repo-onboarding/index.ts";

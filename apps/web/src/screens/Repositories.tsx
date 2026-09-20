@@ -5,18 +5,15 @@ import { NewRepo } from "../forms.tsx";
 
 const STATUS_HE: Record<OnboardingStatus, { label: string; tone: "inactive" | "warning" | "healthy" | "critical" | "active" | "ai" }> = {
   Pending: { label: "טרם התחיל", tone: "inactive" },
-  Running: { label: "מתבצע", tone: "ai" },
+  Running: { label: "בתהליך", tone: "ai" },
   WaitingForUser: { label: "ממתין להחלטה", tone: "warning" },
-  AwaitingExternal: { label: "ממתין למיזוג PR", tone: "active" },
-  Completed: { label: "מוכן ל-AI", tone: "healthy" },
-  CompletedWithWarnings: { label: "מוכן ל-AI (אזהרות)", tone: "healthy" },
+  Completed: { label: "נמסר", tone: "healthy" },
   Failed: { label: "נכשל", tone: "critical" },
-  Skipped: { label: "דולג", tone: "inactive" },
   Cancelled: { label: "בוטל", tone: "inactive" },
 };
 
 type RepoRow = { id: string; name: string; adoRepoRef: string | null; clientId: string | null; clientName: string | null; linkedClients: number };
-type Latest = { status: OnboardingStatus; onboardingVersion: string; mode: string } | "NONE";
+type Latest = { status: OnboardingStatus } | "NONE";
 
 /**
  * Top-level Repositories screen — every repo across every client, one
@@ -33,7 +30,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
       setRows(r.repos);
       for (const repo of r.repos) {
         if (!repo.clientId) continue;
-        getLatestOnboardingRun(repo.id).then((v) => setStates((s) => ({ ...s, [repo.id]: v ? { status: v.status, onboardingVersion: v.onboardingVersion, mode: v.mode } : "NONE" }))).catch(() => {});
+        getLatestOnboardingRun(repo.id).then((v) => setStates((s) => ({ ...s, [repo.id]: v ? { status: v.status } : "NONE" }))).catch(() => {});
       }
     });
   };
@@ -71,12 +68,8 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
                   <td>
                     {!r.clientId
                       ? <span style={{ fontSize: 11, color: "var(--ink-400)" }}>לא זמין ל-repo משותף</span>
-                      : info && st !== "NONE" && st
-                        ? <span style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-                            <Pill tone={info.tone}>{info.label}</Pill>
-                            {st.onboardingVersion !== "v2" && <span style={{ fontSize: 10.5, color: "var(--ink-400)" }}>גרסה קודמת</span>}
-                            {st.mode === "refresh" && <span style={{ fontSize: 10.5, color: "var(--ink-400)" }}>רענון</span>}
-                          </span>
+                      : info
+                        ? <Pill tone={info.tone}>{info.label}</Pill>
                         : st === "NONE" ? <span style={{ fontSize: 11, color: "var(--ink-400)" }}>לא התחיל</span>
                         : <span style={{ fontSize: 11, color: "var(--ink-400)" }}>טוען…</span>}
                   </td>
