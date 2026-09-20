@@ -3,7 +3,7 @@ import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
 import { httpsRepoUrl } from "./ai-assist.ts";
 import { codeMapFrom, type CodeMap, type CodeMapCommit, type CodeMapFacts } from "./code-map.ts";
-import { ghJson, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
+import { DCC_APPROVAL, ghJson, ghLogin, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
 
 /**
  * One pull request, as its screen needs it
@@ -39,6 +39,8 @@ export type PullRequestDetail = {
   codeMap: CodeMap | null;
   /** Why the map could not be drawn, when it could not. */
   codeMapProblem: string | null;
+  /** The account DCC acts as on the host, and whether it is the request's own author — who the host will not let approve it. */
+  viewer: { login: string | null; isAuthor: boolean };
   freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
   /** What the branch is about, in a few lines. */
@@ -55,7 +57,7 @@ export type PullRequestDetail = {
 type GhCommit = { sha: string; commit: { message: string; author: { name: string; date: string } } };
 type GhFile = { filename: string; status?: string; additions: number; deletions: number; previous_filename?: string };
 type GhCompare = { ahead_by: number; behind_by: number; commits: GhCommit[]; files?: GhFile[]; merge_base_commit?: GhCommit };
-type GhReview = { state: string; author?: { login?: string } | null; submittedAt?: string };
+type GhReview = { state: string; body?: string; author?: { login?: string } | null; submittedAt?: string };
 type GhComment = { author?: { login?: string } | null; body: string; createdAt: string };
 
 const short = (sha: string) => sha.slice(0, 7);
@@ -154,11 +156,13 @@ function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boole
   b.push(pr.conflicts
     ? { key: "conflict", ok: false, title: "התנגשות מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
     : { key: "conflict", ok: pr.mergeable === null ? null : true, title: pr.mergeable === null ? "מצב המיזוג עדיין נבדק" : "אין התנגשות", detail: pr.mergeable === null ? "הגיט־האוסט עדיין בודק אם אפשר למזג. כדאי לרענן בעוד רגע." : "הגיט־האוסט מצא שאפשר למזג בלי הכרעה ידנית." });
-  b.push(pr.review === "approved"
+  b.push(pr.review === "approved" && pr.dccApprovedBy
+    ? { key: "review", ok: true, title: "אושר ב-DCC", detail: `${pr.dccApprovedBy} עבר על השינוי ואישר אותו ב-DCC. זה אישור של DCC, לא אישור רשמי של הגיט־האוסט.` }
+    : pr.review === "approved"
     ? { key: "review", ok: true, title: "אושר בסקירה", detail: "לפחות אדם אחד עבר על השינוי ואישר." }
     : pr.review === "changes_requested"
       ? { key: "review", ok: false, title: "התבקשו שינויים", detail: "סוקר ביקש תיקון לפני המיזוג. הפרטים בגיט־האוסט." }
-      : { key: "review", ok: false, title: "אין אישור סקירה", detail: "אף אחד עדיין לא אישר את השינוי. הסקירה והאישור נעשים בגיט־האוסט." });
+      : { key: "review", ok: false, title: "אין אישור סקירה", detail: "אף אחד עדיין לא אישר את השינוי. אפשר לעבור עליו ולאשר בכרטיס הסקירה שלך." });
   b.push(checksKnown
     ? pr.checks === "failing"
       ? { key: "checks", ok: false, title: "בדיקות אוטומטיות נכשלו", detail: "הריפו מריץ בדיקות, והן לא עברו על הגרסה הזו." }
@@ -186,7 +190,7 @@ function nextStepFor(pr: PullRequestRow, blockers: Blocker[], behind: number, be
   if (pr.draft) return { title: "סמנו את הבקשה כמוכנה לסקירה", detail: "כל עוד היא טיוטה, אף אחד לא מתבקש לעבור עליה והיא לא ניתנת למיזוג.", action: "open_host" };
   const review = blockers.find((b) => b.key === "review");
   if (review?.ok === false && pr.review === "changes_requested") return { title: "טפלו בשינויים שהתבקשו", detail: "סוקר ביקש תיקון. אחרי שהוא ייכנס, בקשו סקירה חוזרת.", action: "open_host" };
-  if (review?.ok === false) return { title: "בקשו סקירה", detail: "הכול ירוק חוץ מאישור. בגיט־האוסט בוחרים מי עובר על זה, והוא מקבל התראה.", action: "request_review" };
+  if (review?.ok === false) return { title: "בקשו סקירה", detail: "הכול ירוק חוץ מאישור. עברו על השינוי וכתבו את החלטתכם בכרטיס הסקירה שלך.", action: "request_review" };
   if (blockers.some((b) => b.ok === false)) return { title: "יש חסימה שצריך לטפל בה", detail: "ראו את הרשימה למעלה. המיזוג ייפתח כשכל השורות ירוקות.", action: "open_host" };
   if (blockers.some((b) => b.ok === null && b.key === "checks")) return { title: "המתינו לסיום הבדיקות", detail: "הבדיקות עדיין רצות. כשיסתיימו, אפשר למזג.", action: "wait" };
   return { title: "אפשר למזג", detail: `כל התנאים מתקיימים. המיזוג יכניס את השינוי ל-${pr.baseBranch}, ומשם הצוות יקבל אותו ב-pull הבא.`, action: "merge" };
@@ -295,12 +299,23 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   timeline.push({ at: pr.createdAt, kind: "opened", text: `הבקשה נפתחה על ידי ${pr.author}`, tone: "neutral" });
   for (const c of (ours?.commits ?? []).slice(-8)) timeline.push({ at: c.commit.author.date, kind: "commit", text: subject(c.commit.message), detail: `${short(c.sha)} · ${c.commit.author.name}` });
   for (const c of theirCommits.slice(-5)) timeline.push({ at: c.at, kind: "base", text: `${pr.baseBranch} התקדם: ${c.subject}`, detail: `${c.sha} · ${c.author}`, tag: overlap.length ? "נוגע באותם קבצים" : undefined, tone: overlap.length ? "warning" : undefined });
-  for (const rv of view?.reviews ?? []) timeline.push({ at: rv.submittedAt ?? pr.updatedAt, kind: "review", text: `${rv.author?.login ?? "מישהו"} ${rv.state === "APPROVED" ? "אישר את השינוי" : rv.state === "CHANGES_REQUESTED" ? "ביקש שינויים" : "הגיב בסקירה"}`, tone: rv.state === "APPROVED" ? "healthy" : "warning" });
+  for (const rv of view?.reviews ?? []) {
+    const said = (rv.body ?? "").replace(DCC_APPROVAL, "").replace(/^נסקר ואושר ב-DCC על ידי[^\n]*\n*/u, "").trim();
+    const dcc = rv.body?.match(DCC_APPROVAL);
+    timeline.push({
+      at: rv.submittedAt ?? pr.updatedAt, kind: "review",
+      text: dcc ? `${dcc[1] || "מישהו"} אישר ב-DCC` : `${rv.author?.login ?? "מישהו"} ${rv.state === "APPROVED" ? "אישר את השינוי" : rv.state === "CHANGES_REQUESTED" ? "ביקש שינויים" : "כתב הערת סקירה"}`,
+      ...(said ? { detail: said.slice(0, 300) } : {}),
+      tone: dcc || rv.state === "APPROVED" ? "healthy" : rv.state === "CHANGES_REQUESTED" ? "warning" : "neutral",
+    });
+  }
   for (const cm of (view?.comments ?? []).slice(-5)) timeline.push({ at: cm.createdAt, kind: "comment", text: `${cm.author?.login ?? "מישהו"} כתב הערה`, detail: subject(cm.body).slice(0, 120) });
   timeline.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
+  const login = await ghLogin();
   const value: PullRequestDetail = {
     pr, blockers, nextStep, codeMap, codeMapProblem,
+    viewer: { login, isAuthor: !!login && login.toLowerCase() === pr.author.toLowerCase() },
     freshness: ours && theirs ? { behind, behindTouching: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
     groups, topics: topicsOf(files), fileCount: files.length, timeline, body: view?.body ?? "",
     refs: mergeBase && ours?.commits?.length ? { base: mergeBase, head: ours.commits[ours.commits.length - 1]!.sha } : null,

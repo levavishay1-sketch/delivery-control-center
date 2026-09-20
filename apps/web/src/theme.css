@@ -713,3 +713,12 @@ a { color: var(--color-accent); }
 .pr-exp:hover, .pr-exp.on { background: var(--surface-tint-2); }
 .pr-inline { padding: 4px 16px 10px; border-bottom: 1px solid var(--divider); background: var(--surface-tint-2); }
 .pr-inline .t:first-child { border-top: none; }
+
+/* the review written in DCC (PullRequestDetail.tsx, ReviewPanel) */
+.rv-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 8px 0; }
+.rv-o { appearance: none; text-align: start; font: inherit; font-size: 12px; line-height: 1.5; padding: 8px 10px; border: 1px solid var(--border-hairline); border-radius: var(--radius-md); background: var(--surface); color: var(--ink-700); cursor: pointer; }
+.rv-o b { display: block; font-size: 13px; font-weight: 600; color: var(--ink-900); }
+.rv-o:hover { background: var(--surface-tint-2); }
+.rv-o.on { border: 2px solid var(--color-accent); background: var(--color-accent-muted); padding: 7px 9px; }
+.rv-ta { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--border-hairline); border-radius: var(--radius-md); background: var(--surface); color: var(--ink-900); resize: vertical; }
+.ob-note.ok { background: var(--status-healthy-bg); color: var(--status-healthy); }

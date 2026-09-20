@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
+import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, submitPullRequestReview, type ReviewDecision, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
@@ -82,6 +82,58 @@ function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; co
       ))}
       <p className="ob-sub">לחצו על קובץ כדי לראות אותו לפני ואחרי. הסקירה עצמה, ההערות והאישור נעשים בגיט־האוסט. <a href={`${url}/files`} target="_blank" rel="noreferrer">פתח את השינויים ב-GitHub ↗</a></p>
     </>
+  );
+}
+
+/** The review, written here and sent to the host: the person never has to open it. */
+function ReviewPanel({ repoId, number, isAuthor, login, onDone }: { repoId: string; number: number; isAuthor: boolean; login: string | null; onDone: () => void }) {
+  const [decision, setDecision] = useState<ReviewDecision | null>(null);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [sent, setSent] = useState<string | null>(null);
+  // The host does not let a request's own author approve it or ask for changes on it, so that person gets the DCC approval instead.
+  const options: { key: ReviewDecision; title: string; text: string }[] = isAuthor
+    ? [
+        { key: "comment", title: "הערה", text: "לא מחליט, רק כותב מה חשבת. הבקשה נשארת פתוחה." },
+        { key: "dcc_approve", title: "אשר ב-DCC", text: "נרשם כאישור, והחסם אין אישור סקירה נעלם. בגיט־האוסט מתפרסמת הערה שאומרת מי אישר." },
+      ]
+    : [
+        { key: "comment", title: "הערה", text: "לא מחליט, רק כותב מה חשבת. הבקשה נשארת פתוחה." },
+        { key: "approve", title: "אשר", text: "השינוי טוב. נספר כאישור, והמיזוג נפתח אם אין חסמים אחרים." },
+        { key: "request_changes", title: "בקש שינויים", text: "לא בצורה הזו. סימון אדום עד שמתקנים ומאשרים שוב." },
+      ];
+  const needsText = decision === "comment" || decision === "request_changes";
+  const send = async () => {
+    if (!decision) return;
+    setBusy(true); setErr(null); setSent(null);
+    try {
+      await submitPullRequestReview(repoId, number, decision, text);
+      setSent(decision === "dcc_approve" ? "האישור נרשם, והערה פורסמה בגיט־האוסט." : "הסקירה נשלחה לגיט־האוסט.");
+      setDecision(null); setText("");
+      onDone();
+    } catch (e) { setErr(e instanceof Error ? e.message.replace(/^Error:\s*/, "") : String(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="panel rv" style={{ marginBottom: 12 }}>
+      <h4>הסקירה שלך</h4>
+      <p className="ob-sub" style={{ marginBottom: 8 }}>עברתם על הקבצים? בחרו החלטה. היא נשלחת לגיט־האוסט{login ? ` בשם ${login}` : ""}, ואתם לא צריכים להיכנס אליו.</p>
+      {isAuthor && <div className="ob-note warn" style={{ marginBottom: 8 }}>הבקשה נפתחה בחשבון הזה, והגיט־האוסט לא מאפשר לכותב לאשר אותה בעצמו. אפשר לכתוב הערה, או לאשר ב-DCC: זה אישור שלנו, לא אישור רשמי של הגיט־האוסט.</div>}
+      <div className="rv-opts" role="radiogroup" aria-label="החלטה">
+        {options.map((o) => (
+          <button key={o.key} type="button" role="radio" aria-checked={decision === o.key} className={`rv-o${decision === o.key ? " on" : ""}`} onClick={() => setDecision(o.key)}>
+            <b>{o.title}</b>{o.text}
+          </button>
+        ))}
+      </div>
+      <textarea className="rv-ta" value={text} onChange={(e) => setText(e.target.value)} rows={3}
+        placeholder={needsText ? "מה חשבתם? כתבו כאן" : "אפשר להוסיף הערה (לא חובה)"} />
+      {err && <div className="ob-note crit" style={{ marginTop: 8 }}>{err}</div>}
+      {sent && <div className="ob-note ok" style={{ marginTop: 8 }}>{sent}</div>}
+      <div className="ob-actions" style={{ marginTop: 8 }}>
+        <button className="btn btn-primary btn-sm" disabled={!decision || busy || (needsText && !text.trim())} onClick={() => void send()}>{busy ? "שולח…" : "שלח סקירה"}</button>
+      </div>
+    </div>
   );
 }
 
@@ -248,6 +300,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
           </div>
           <div className="dash">
             <div style={{ minWidth: 0 }}>
+              {pr.state === "open" && d && <ReviewPanel repoId={repoId} number={number} isAuthor={d.viewer.isAuthor} login={d.viewer.login} onDone={() => void load(true)} />}
               {blockers.length > 0 && <div className="panel" style={{ marginBottom: 12 }}>
                 <h4>מה חוסם מיזוג</h4>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>

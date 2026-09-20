@@ -44,6 +44,8 @@ export type PullRequestRow = {
   mergeable: boolean | null;
   conflicts: boolean;
   review: ReviewState;
+  /** Set when the approval was made in DCC rather than by the host's own review: who gave it. */
+  dccApprovedBy: string | null;
   checks: ChecksState;
   /** Set when another open request's branch is this one's base. */
   parentId: string | null;
@@ -115,13 +117,14 @@ async function ghAvailable(): Promise<boolean> {
   return !!again;
 }
 
-const GH_FIELDS = "number,title,url,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,closedAt,changedFiles,additions,deletions,mergeable,reviewDecision,statusCheckRollup";
+const GH_FIELDS = "number,title,url,state,isDraft,author,headRefName,baseRefName,createdAt,updatedAt,closedAt,changedFiles,additions,deletions,mergeable,reviewDecision,reviews,statusCheckRollup";
 
 type GhPr = {
   number: number; title: string; url: string; state: string; isDraft: boolean;
   author?: { login?: string } | null; headRefName: string; baseRefName: string;
   createdAt: string; updatedAt: string; closedAt?: string | null; changedFiles?: number; additions?: number; deletions?: number;
   mergeable?: string; reviewDecision?: string | null;
+  reviews?: { state: string; body?: string; submittedAt?: string }[];
   statusCheckRollup?: { state?: string; conclusion?: string; status?: string }[] | null;
 };
 
@@ -132,6 +135,44 @@ function checksOf(pr: GhPr): ChecksState {
   if (norm.some((s) => s === "FAILURE" || s === "ERROR" || s === "TIMED_OUT")) return "failing";
   if (norm.some((s) => s === "IN_PROGRESS" || s === "PENDING" || s === "QUEUED")) return "running";
   return "passing";
+}
+
+/* ── reviews ──────────────────────────────────────────────────────── */
+
+/** The host does not let a request's own author approve it, so an approval made in DCC is posted as an
+ *  ordinary review comment that carries this mark (invisible when the host draws it). Reading the reviews
+ *  back for the mark keeps the host the only place the decision lives. */
+export const DCC_APPROVAL = /<!-- dcc-review:approved by="([^"]*)" -->/;
+export const dccApprovalMark = (name: string) => `<!-- dcc-review:approved by="${name.replace(/["<>]/g, "").replace(/--/g, "-").slice(0, 80)}" -->`;
+
+/** The host's own decision wins; an approval made in DCC counts until somebody asks for changes after it. */
+export function reviewOf(p: { reviewDecision?: string | null; reviews?: { state: string; body?: string; submittedAt?: string }[] }): { review: ReviewState; dccApprovedBy: string | null } {
+  let by: string | null = null;
+  for (const rv of [...(p.reviews ?? [])].sort((a, b) => (a.submittedAt ?? "").localeCompare(b.submittedAt ?? ""))) {
+    const m = rv.body?.match(DCC_APPROVAL);
+    if (m) by = m[1] || "DCC";
+    else if (rv.state === "CHANGES_REQUESTED") by = null;
+  }
+  if (p.reviewDecision === "APPROVED") return { review: "approved", dccApprovedBy: null };
+  if (p.reviewDecision === "CHANGES_REQUESTED") return { review: "changes_requested", dccApprovedBy: null };
+  return by ? { review: "approved", dccApprovedBy: by } : { review: "none", dccApprovedBy: null };
+}
+
+/** Which account `gh` acts as — the one a review is written by. */
+let ghUser: string | null | undefined;
+export async function ghLogin(): Promise<string | null> {
+  if (ghUser !== undefined) return ghUser;
+  const me = await ghJson<{ login?: string }>(["api", "user"]);
+  ghUser = me?.login ?? null;
+  return ghUser;
+}
+
+/** A `gh` call that changes something on the host: the caller needs its refusal, not just "it failed". */
+export async function ghExec(args: string[]): Promise<{ ok: boolean; out: string; err: string }> {
+  const bin = ghBin();
+  if (!bin) return { ok: false, out: "", err: "GitHub CLI לא מותקן" };
+  const r = await run(bin, args, 60_000);
+  return { ok: r.code === 0, out: r.out, err: r.err };
 }
 
 /** One `gh` call that returns JSON, or null when the host could not answer. */
@@ -176,7 +217,7 @@ const github: Provider = {
       deletions: p.deletions ?? 0,
       mergeable: p.mergeable === "MERGEABLE" ? true : p.mergeable === "CONFLICTING" ? false : null,
       conflicts: p.mergeable === "CONFLICTING",
-      review: p.reviewDecision === "APPROVED" ? "approved" : p.reviewDecision === "CHANGES_REQUESTED" ? "changes_requested" : "none",
+      ...reviewOf(p),
       checks: checksOf(p),
     }));
   },

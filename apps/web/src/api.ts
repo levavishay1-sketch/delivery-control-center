@@ -478,7 +478,7 @@ export type PullRequestRow = {
   state: "open" | "merged" | "closed"; draft: boolean; author: string; headBranch: string; baseBranch: string;
   createdAt: string; updatedAt: string; closedAt: string | null; changedFiles: number; additions: number; deletions: number;
   mergeable: boolean | null; conflicts: boolean; review: "approved" | "changes_requested" | "none";
-  checks: "passing" | "failing" | "running" | "none"; parentId: string | null;
+  checks: "passing" | "failing" | "running" | "none"; dccApprovedBy: string | null; parentId: string | null;
   repo: { id: string; name: string }; client: { id: string | null; name: string | null };
   flags: { key: string; text: string; tone: "critical" | "warning" | "healthy" | "neutral" }[]; waitingHours: number;
 };
@@ -500,6 +500,7 @@ export type PullRequestDetail = {
   nextStep: NextStep;
   codeMap: CodeMap | null;
   codeMapProblem: string | null;
+  viewer: { login: string | null; isAuthor: boolean };
   freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
   topics: { title: string; detail: string }[];
@@ -508,6 +509,9 @@ export type PullRequestDetail = {
   timeline: TimelineItem[];
   body: string;
 };
+export type ReviewDecision = "comment" | "approve" | "request_changes" | "dcc_approve";
+export const submitPullRequestReview = (repoId: string, number: number, decision: ReviewDecision, text: string) =>
+  post<{ posted: true }>(`/repos/${repoId}/pull-requests/${number}/review`, { decision, text });
 export const getPullRequestFile = (repoId: string, number: number, path: string) =>
   get<FileVersionsData>(`/repos/${repoId}/pull-requests/${number}/file?${new URLSearchParams({ path })}`);
 

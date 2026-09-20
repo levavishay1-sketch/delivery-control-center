@@ -121,6 +121,8 @@ import {
   getOnboardingRunView,
   getOnboardingFileVersions,
   pullRequestFile,
+  submitReview,
+  ReviewRefused,
   repoBranches,
   listOnboardingRuns,
   getLatestOnboardingRun,
@@ -158,6 +160,7 @@ app.setErrorHandler((err, _req, reply) => {
   // stage has not finished", "a run is already live") — show it, not a 500.
   if (err instanceof OnboardingError) return reply.code(409).send({ error: err.message });
   if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
+  if (err instanceof ReviewRefused) return reply.code(409).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
   if (typeof e.statusCode === "number" && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
@@ -249,6 +252,14 @@ app.get("/repos/:id/pull-requests/:number/file", async (req) => {
   const { id, number } = req.params as { id: string; number: string };
   const q = z.object({ path: z.string().min(1) }).parse(req.query);
   return pullRequestFile(id, Number(number), q.path);
+});
+
+/** A review written in DCC, sent to the host as the operator (openspec/changes/pull-request-center). */
+app.post("/repos/:id/pull-requests/:number/review", async (req) => {
+  const dev = await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  const b = z.object({ decision: z.enum(["comment", "approve", "request_changes", "dcc_approve"]), text: z.string().max(4000).optional() }).parse(req.body ?? {});
+  return submitReview({ repoId: id, number: Number(number), decision: b.decision, text: b.text ?? "", by: { userId: dev.id } });
 });
 
 /** Every branch of a repository, and what to do about each one. */
