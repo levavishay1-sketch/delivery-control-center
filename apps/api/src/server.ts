@@ -256,10 +256,10 @@ app.get("/repos/:id/pull-requests/:number/file", async (req) => {
 
 /** A review written in DCC, sent to the host as the operator (openspec/changes/pull-request-center). */
 app.post("/repos/:id/pull-requests/:number/review", async (req) => {
-  const dev = await actingUser(req);
+  await actingUser(req);
   const { id, number } = req.params as { id: string; number: string };
-  const b = z.object({ decision: z.enum(["comment", "approve", "request_changes", "dcc_approve"]), text: z.string().max(4000).optional() }).parse(req.body ?? {});
-  return submitReview({ repoId: id, number: Number(number), decision: b.decision, text: b.text ?? "", by: { userId: dev.id } });
+  const b = z.object({ decision: z.enum(["comment", "approve", "request_changes"]), text: z.string().max(4000).optional() }).parse(req.body ?? {});
+  return submitReview({ repoId: id, number: Number(number), decision: b.decision, text: b.text ?? "" });
 });
 
 /** Every branch of a repository, and what to do about each one. */

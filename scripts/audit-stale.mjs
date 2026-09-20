@@ -46,6 +46,8 @@ const RETIRED = [
   "onboarding_classify", "onboarding_discover", "onboarding_plan", "onboarding_generate", "onboarding_validate", "onboarding_refresh",
   "guardrail-templates", "security-profiles", "settings-adapter", "dcc-hooks.ts", "recoverInterruptedRuns", "checkOnboardingPromptDrift",
   "onboarding_translate", "translateOnboardingScreen", "translateScreenText", "onboarding-terminal-translation", "ob-tr-text",
+  // a review approved inside DCC instead of on the host, retired 2026-09-20: the decision is the host's own
+  "dcc_approve", "dccApprovedBy", "DCC_APPROVAL", "dccApprovalMark", "dcc-review:approved", "reviewOf(", "אישור פנימי של DCC",
   "repo_ai_profile", "repoAiProfile", "ai_component", "aiComponent", "repo_knowledge_snapshot", "repo_ai_recommendation",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;

@@ -1,8 +1,8 @@
 import { eq } from "drizzle-orm";
 import { db } from "@dcc/db";
-import { repo, users } from "@dcc/db/schema";
+import { repo } from "@dcc/db/schema";
 import { httpsRepoUrl } from "./ai-assist.ts";
-import { dccApprovalMark, ghExec, ghLogin, listPullRequests } from "./pull-requests.ts";
+import { ghExec, ghLogin, listPullRequests } from "./pull-requests.ts";
 
 /**
  * A review written in DCC and sent to the host
@@ -12,18 +12,18 @@ import { dccApprovalMark, ghExec, ghLogin, listPullRequests } from "./pull-reque
  * writes it there through the operator's own login. The host stays where the
  * decision lives — nothing is kept only in DCC.
  *
- * The one thing DCC cannot do is make the host accept what it refuses: a
- * request's own author cannot approve it or ask for changes on it there. For
- * that person an approval is posted as an ordinary review comment that says so
- * and carries a mark, and DCC reads the mark back (see `reviewOf`).
+ * DCC cannot make the host accept what it refuses: a request's own author cannot
+ * approve it or ask for changes on it there, so the account DCC acts as can only
+ * comment on a request it opened. That is said in words when it is tried, and it
+ * goes away when each person acts as their own account.
  */
 
-export type ReviewDecision = "comment" | "approve" | "request_changes" | "dcc_approve";
+export type ReviewDecision = "comment" | "approve" | "request_changes";
 
 /** A refusal with a message written for the person, not a failure to hide. */
 export class ReviewRefused extends Error {}
 
-export async function submitReview(input: { repoId: string; number: number; decision: ReviewDecision; text: string; by: { userId: string } }): Promise<{ posted: true }> {
+export async function submitReview(input: { repoId: string; number: number; decision: ReviewDecision; text: string }): Promise<{ posted: true }> {
   const text = input.text.trim().slice(0, 4000);
   const list = await listPullRequests({});
   const pr = list.rows.find((r) => r.repo.id === input.repoId && r.number === input.number);
@@ -40,26 +40,16 @@ export async function submitReview(input: { repoId: string; number: number; deci
     throw new ReviewRefused(input.decision === "comment" ? "כתבו את ההערה." : "כשמבקשים שינויים חייבים לכתוב מה לשנות.");
   }
   if (isAuthor && (input.decision === "approve" || input.decision === "request_changes")) {
-    throw new ReviewRefused("הגיט־האוסט לא מאפשר לכותב הבקשה לאשר אותה או לבקש בה שינויים. אפשר לכתוב הערה, או לאשר ב-DCC.");
+    throw new ReviewRefused("הבקשה הזו נפתחה בחשבון הגיט־האוסט שבו DCC עובד עכשיו, והגיט־האוסט לא נותן לאותו חשבון לאשר אותה או לבקש בה תיקון. אישור רשמי ייתן משתמש אחר, ואפשר לכתוב הערה. נטפל בזה כשכל משתמש יעבוד בחשבון שלו.");
   }
 
-  let flag: string;
-  let body = text;
-  if (input.decision === "approve") flag = "--approve";
-  else if (input.decision === "request_changes") flag = "--request-changes";
-  else if (input.decision === "comment") flag = "--comment";
-  else {
-    // Approval made in DCC: a comment on the host that says who gave it, with the mark DCC reads back.
-    const [u] = await db.select({ name: users.displayName, email: users.email }).from(users).where(eq(users.id, input.by.userId)).limit(1);
-    const name = u?.name || u?.email || "משתמש DCC";
-    flag = "--comment";
-    body = `נסקר ואושר ב-DCC על ידי ${name}.${text ? `\n\n${text}` : ""}\n\nזה אישור של DCC ולא אישור רשמי של הגיט־האוסט.\n\n${dccApprovalMark(name)}`;
-  }
+  const flag = input.decision === "approve" ? "--approve" : input.decision === "request_changes" ? "--request-changes" : "--comment";
+  const body = text;
 
   const res = await ghExec(["pr", "review", String(input.number), "--repo", url, flag, ...(body ? ["--body", body] : [])]);
   if (!res.ok) {
     const why = res.err.split("\n").find((l) => l.trim()) ?? "";
-    if (/own pull request/i.test(why)) throw new ReviewRefused("הגיט־האוסט לא מאפשר לכותב הבקשה לאשר אותה. אפשר לאשר ב-DCC.");
+    if (/own pull request/i.test(why)) throw new ReviewRefused("הגיט־האוסט לא נותן לכותב הבקשה לאשר אותה. אישור רשמי ייתן משתמש אחר.");
     throw new ReviewRefused(`הגיט־האוסט לא קיבל את הסקירה${why ? `: ${why.slice(0, 160)}` : "."}`);
   }
   return { posted: true };

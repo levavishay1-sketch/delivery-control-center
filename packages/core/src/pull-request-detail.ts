@@ -3,7 +3,7 @@ import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
 import { httpsRepoUrl } from "./ai-assist.ts";
 import { codeMapFrom, type CodeMap, type CodeMapCommit, type CodeMapFacts } from "./code-map.ts";
-import { DCC_APPROVAL, ghJson, ghLogin, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
+import { ghJson, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
 
 /**
  * One pull request, as its screen needs it
@@ -39,8 +39,6 @@ export type PullRequestDetail = {
   codeMap: CodeMap | null;
   /** Why the map could not be drawn, when it could not. */
   codeMapProblem: string | null;
-  /** The account DCC acts as on the host, and whether it is the request's own author — who the host will not let approve it. */
-  viewer: { login: string | null; isAuthor: boolean };
   freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
   /** What the branch is about, in a few lines. */
@@ -156,9 +154,7 @@ function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boole
   b.push(pr.conflicts
     ? { key: "conflict", ok: false, title: "התנגשות מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
     : { key: "conflict", ok: pr.mergeable === null ? null : true, title: pr.mergeable === null ? "מצב המיזוג עדיין נבדק" : "אין התנגשות", detail: pr.mergeable === null ? "הגיט־האוסט עדיין בודק אם אפשר למזג. כדאי לרענן בעוד רגע." : "הגיט־האוסט מצא שאפשר למזג בלי הכרעה ידנית." });
-  b.push(pr.review === "approved" && pr.dccApprovedBy
-    ? { key: "review", ok: true, title: "אושר ב-DCC", detail: `${pr.dccApprovedBy} עבר על השינוי ואישר אותו ב-DCC. זה אישור של DCC, לא אישור רשמי של הגיט־האוסט.` }
-    : pr.review === "approved"
+  b.push(pr.review === "approved"
     ? { key: "review", ok: true, title: "אושר בסקירה", detail: "לפחות אדם אחד עבר על השינוי ואישר." }
     : pr.review === "changes_requested"
       ? { key: "review", ok: false, title: "התבקשו שינויים", detail: "סוקר ביקש תיקון לפני המיזוג. הפרטים בגיט־האוסט." }
@@ -300,22 +296,19 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   for (const c of (ours?.commits ?? []).slice(-8)) timeline.push({ at: c.commit.author.date, kind: "commit", text: subject(c.commit.message), detail: `${short(c.sha)} · ${c.commit.author.name}` });
   for (const c of theirCommits.slice(-5)) timeline.push({ at: c.at, kind: "base", text: `${pr.baseBranch} התקדם: ${c.subject}`, detail: `${c.sha} · ${c.author}`, tag: overlap.length ? "נוגע באותם קבצים" : undefined, tone: overlap.length ? "warning" : undefined });
   for (const rv of view?.reviews ?? []) {
-    const said = (rv.body ?? "").replace(DCC_APPROVAL, "").replace(/^נסקר ואושר ב-DCC על ידי[^\n]*\n*/u, "").trim();
-    const dcc = rv.body?.match(DCC_APPROVAL);
+    const said = (rv.body ?? "").trim();
     timeline.push({
       at: rv.submittedAt ?? pr.updatedAt, kind: "review",
-      text: dcc ? `${dcc[1] || "מישהו"} אישר ב-DCC` : `${rv.author?.login ?? "מישהו"} ${rv.state === "APPROVED" ? "אישר את השינוי" : rv.state === "CHANGES_REQUESTED" ? "ביקש שינויים" : "כתב הערת סקירה"}`,
+      text: `${rv.author?.login ?? "מישהו"} ${rv.state === "APPROVED" ? "אישר את השינוי" : rv.state === "CHANGES_REQUESTED" ? "ביקש שינויים" : "כתב הערת סקירה"}`,
       ...(said ? { detail: said.slice(0, 300) } : {}),
-      tone: dcc || rv.state === "APPROVED" ? "healthy" : rv.state === "CHANGES_REQUESTED" ? "warning" : "neutral",
+      tone: rv.state === "APPROVED" ? "healthy" : rv.state === "CHANGES_REQUESTED" ? "warning" : "neutral",
     });
   }
   for (const cm of (view?.comments ?? []).slice(-5)) timeline.push({ at: cm.createdAt, kind: "comment", text: `${cm.author?.login ?? "מישהו"} כתב הערה`, detail: subject(cm.body).slice(0, 120) });
   timeline.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
-  const login = await ghLogin();
   const value: PullRequestDetail = {
     pr, blockers, nextStep, codeMap, codeMapProblem,
-    viewer: { login, isAuthor: !!login && login.toLowerCase() === pr.author.toLowerCase() },
     freshness: ours && theirs ? { behind, behindTouching: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
     groups, topics: topicsOf(files), fileCount: files.length, timeline, body: view?.body ?? "",
     refs: mergeBase && ours?.commits?.length ? { base: mergeBase, head: ours.commits[ours.commits.length - 1]!.sha } : null,
