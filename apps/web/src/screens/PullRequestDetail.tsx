@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
+import { TopicRows } from "../components/Topics.tsx";
 
 /**
  * One pull request, on a screen of its own (screens 2 to 5 of
@@ -261,11 +262,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
                     {d.topics.length > 0 && (
                       <div className="panel pr-topics">
                         <h4>על מה הענף</h4>
-                        {d.topics.map((t, i) => (
-                          <div className={`t${i < 3 && t.detail.startsWith("OpenSpec change") ? " main" : ""}`} key={t.title}>
-                            <span className="n">{t.title}</span><span className="c">{t.detail.replace("OpenSpec change · ", "")}</span>
-                          </div>
-                        ))}
+                        <TopicRows topics={d.topics} />
                       </div>
                     )}
                   </div>

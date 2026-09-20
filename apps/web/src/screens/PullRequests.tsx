@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { getPullRequest, listPullRequests, type PullRequestList, type PullRequestRow } from "../api.ts";
+import { getPullRequest, listPullRequests, type PullRequestDetail, type PullRequestList, type PullRequestRow } from "../api.ts";
+import { TopicRows } from "../components/Topics.tsx";
 import { PageHead, Pill } from "../ui.tsx";
 
 /**
@@ -22,24 +23,45 @@ function waited(hours: number): string {
 const TONE: Record<string, string> = { critical: "critical", warning: "warning", healthy: "healthy", neutral: "inactive" };
 
 function Row({ pr, depth, onOpen }: { pr: PullRequestRow; depth: number; onOpen: () => void }) {
+  // "What is it about" opens under the row; pressing the row itself still opens the request's own screen.
+  const [more, setMore] = useState(false);
+  const [detail, setDetail] = useState<PullRequestDetail | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const toggle = () => {
+    const next = !more;
+    setMore(next);
+    if (next && !detail) getPullRequest(pr.repo.id, pr.number).then((d) => { setDetail(d); setErr(null); }).catch((e) => setErr(e instanceof Error ? e.message : String(e)));
+  };
   return (
-    <button type="button" className="pr-row" style={{ paddingInlineStart: 12 + depth * 26 }} onClick={onOpen}
-      // Pointing at a row is a good sign it will be opened: start fetching now, so the click finds it ready.
-      onMouseEnter={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}
-      onFocus={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}>
-      <span className="pr-num">#{pr.number}</span>
-      <span className="pr-main">
-        <span className="pr-title">{pr.title}</span>
-        <span className="pr-meta">
-          {pr.author} · {waited(pr.waitingHours)} · {pr.changedFiles} קבצים
-          <span className="ob-code" style={{ marginInlineStart: 6 }}>{pr.headBranch} → {pr.baseBranch}</span>
-        </span>
-        <span className="pr-flags">
-          {pr.flags.map((f) => <Pill key={f.key} tone={(TONE[f.tone] ?? "inactive") as "critical"}>{f.text}</Pill>)}
-        </span>
-      </span>
-      <span className="pr-chev" aria-hidden="true">‹</span>
-    </button>
+    <div className="pr-item">
+      <div className="pr-line">
+        <button type="button" className="pr-row" style={{ paddingInlineStart: 12 + depth * 26 }} onClick={onOpen}
+          // Pointing at a row is a good sign it will be opened: start fetching now, so the click finds it ready.
+          onMouseEnter={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}
+          onFocus={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}>
+          <span className="pr-main">
+            <span className="pr-title br">{pr.headBranch}</span>
+            <span className="pr-meta pr-sub">#{pr.number} · {pr.title}</span>
+            <span className="pr-meta">{pr.author} · {waited(pr.waitingHours)} · {pr.changedFiles} קבצים · אל <span className="ob-code">{pr.baseBranch}</span></span>
+            <span className="pr-flags">
+              {pr.flags.map((f) => <Pill key={f.key} tone={(TONE[f.tone] ?? "inactive") as "critical"}>{f.text}</Pill>)}
+            </span>
+          </span>
+          <span className="pr-chev" aria-hidden="true">‹</span>
+        </button>
+        <button type="button" className={`pr-exp${more ? " on" : ""}`} aria-expanded={more} onClick={toggle}
+          title="על מה הענף הזה, בלי לפתוח את המסך שלו">
+          על מה הענף <span aria-hidden="true">{more ? "▴" : "▾"}</span>
+        </button>
+      </div>
+      {more && (
+        <div className="pr-inline pr-topics-inline">
+          {err ? <p className="ob-note crit">{err}</p>
+            : !detail ? <p className="ob-sub"><span className="spinner" style={{ width: 13, height: 13, marginInlineEnd: 8, verticalAlign: "middle" }} />טוען מהגיט־האוסט…</p>
+            : detail.topics.length ? <TopicRows topics={detail.topics} /> : <p className="ob-sub">אין מידע על הנושאים של הענף הזה.</p>}
+        </div>
+      )}
+    </div>
   );
 }
 
