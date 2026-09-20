@@ -114,6 +114,43 @@ function errMessage(e: unknown): string {
 
 const fmtWhen = (iso?: string) => (iso ? new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : null);
 
+/** A folder on this computer: its path, a button that opens it, and one that copies the path. */
+function FolderBlock({ folder, label = "נמצא במחשב הזה, בתיקייה" }: { folder: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const copy = async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(folder); ok = true; } catch { /* blocked or unavailable: fall back below */ }
+    if (!ok) {
+      // The older route works without the clipboard permission, from a plain button press.
+      const ta = document.createElement("textarea");
+      ta.value = folder;
+      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand("copy"); } catch { ok = false; }
+      ta.remove();
+    }
+    if (ok) { setErr(null); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    else setErr("הדפדפן חסם את ההעתקה. סמנו את הנתיב והעתיקו ידנית.");
+  };
+  const open = async () => {
+    setErr(null);
+    try { await openFolder(folder); } catch (e) { setErr(errMessage(e)); }
+  };
+  return (
+    <div className="fd">
+      <div className="k">{label}</div>
+      <div className="p">{folder}</div>
+      <div className="b">
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void open()}>פתח בסייר הקבצים</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => void copy()}>{copied ? "הועתק ✓" : "העתק נתיב"}</button>
+      </div>
+      {err && <div className="e">{err}</div>}
+    </div>
+  );
+}
+
 /** The floating details of one dot. */
 function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: number; yPct: number; onClose: () => void }) {
   useEffect(() => {
@@ -122,29 +159,6 @@ function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: n
     return () => removeEventListener("keydown", esc);
   }, [onClose]);
   const when = fmtWhen(node.at);
-  const [copied, setCopied] = useState(false);
-  const [folderErr, setFolderErr] = useState<string | null>(null);
-  const copy = async () => {
-    const text = node.folder!;
-    let ok = false;
-    try { await navigator.clipboard.writeText(text); ok = true; } catch { /* blocked or unavailable: fall back below */ }
-    if (!ok) {
-      // The older route works without the clipboard permission, from a plain button press.
-      const ta = document.createElement("textarea");
-      ta.value = text;
-      ta.style.cssText = "position:fixed;top:0;left:0;opacity:0";
-      document.body.appendChild(ta);
-      ta.select();
-      try { ok = document.execCommand("copy"); } catch { ok = false; }
-      ta.remove();
-    }
-    if (ok) { setFolderErr(null); setCopied(true); setTimeout(() => setCopied(false), 1500); }
-    else setFolderErr("הדפדפן חסם את ההעתקה. סמנו את הנתיב והעתיקו ידנית.");
-  };
-  const open = async () => {
-    setFolderErr(null);
-    try { await openFolder(node.folder!); } catch (e) { setFolderErr(errMessage(e)); }
-  };
   return (
     <div className="cm-pop" style={{ insetInlineStart: `${100 - xPct}%`, top: `${yPct}%` }} onClick={(e) => e.stopPropagation()}>
       <button type="button" className="x" aria-label="סגור" onClick={onClose}>×</button>
@@ -158,17 +172,7 @@ function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: n
         {typeof node.files === "number" && <span>{node.files} קבצים</span>}
       </div>
       {node.url && <div style={{ marginTop: 6 }}><a href={node.url} target="_blank" rel="noreferrer">פתח בגיט־האוסט ↗</a></div>}
-      {node.folder && (
-        <div className="fd">
-          <div className="k">נמצא במחשב הזה, בתיקייה</div>
-          <div className="p">{node.folder}</div>
-          <div className="b">
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void open()}>פתח בסייר הקבצים</button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => void copy()}>{copied ? "הועתק ✓" : "העתק נתיב"}</button>
-          </div>
-          {folderErr && <div className="e">{folderErr}</div>}
-        </div>
-      )}
+      {node.folder && <FolderBlock folder={node.folder} />}
     </div>
   );
 }
@@ -260,6 +264,15 @@ const LEGEND: { color: string; ring?: boolean; text: string }[] = [
  */
 export function CodeMapPanel({ map, title = "מצב הקוד", legend = true }: { map: CodeMap | null | undefined; title?: string; legend?: boolean }) {
   const [pick, setPick] = useState<{ id: string; node: CodeMapNode; xPct: number; yPct: number } | null>(null);
+  if (map?.problem) {
+    return (
+      <div className="cm">
+        <div className="cm-t">{title}</div>
+        <div className="ob-note warn">{map.problem.text}</div>
+        {map.problem.folder && <FolderBlock folder={map.problem.folder} label="התיקייה שנבדקה" />}
+      </div>
+    );
+  }
   if (!map?.lanes?.length) return null;
   const height = D.firstLaneY + (map.lanes.length - 1) * D.laneGap + 78;
   return (

@@ -469,7 +469,7 @@ export type CodeMapNode = {
 export type CodeMapLane = { id: string; label?: string; note?: string; place?: CodeMapPlace; nodes: CodeMapNode[]; from?: { lane: string; at: number } };
 export type CodeMapArrow = { from: string; to: string; label: string; state: "done" | "pending" };
 /** The one drawing DCC uses wherever git is involved; built on the server. */
-export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string };
+export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string; problem?: { text: string; folder?: string } };
 export const getTaskCodeMap = (taskId: string) => get<{ codeMap: CodeMap | null; branch: string | null; reason?: string }>(`/tasks/${taskId}/code-map`);
 
 export type PullRequestRow = {

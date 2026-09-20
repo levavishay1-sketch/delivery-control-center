@@ -60,7 +60,8 @@ export type CodeMapLane = {
 /** A transfer between lines: push, pull, a pull request, a merge. */
 export type CodeMapArrow = { from: string; to: string; label: string; state: "done" | "pending" };
 
-export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string };
+/** `problem`: the folder could not be read as a git repository — the map says so in words instead of drawing something wrong. */
+export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string; problem?: { text: string; folder?: string } };
 
 /* ── what git says ────────────────────────────────────────────────── */
 
@@ -89,11 +90,13 @@ export type CodeMapFacts = {
   repoUrl: string | null;
   /** The working folder these facts were read from. */
   dir: string | null;
+  /** Set when the folder could not be read; nothing else in the facts is meaningful then. */
+  unreadable: string | null;
 };
 
 const EMPTY: CodeMapFacts = {
   baseBranch: "main", branch: null, baselineSha: null, baselineCommit: null, baseBefore: [], baseAfter: [], ourCommits: [],
-  uncommittedFiles: 0, behind: 0, behindTouching: 0, pushed: false, merged: false, prUrl: null, prNumber: null, fetchedAt: null, repoUrl: null, dir: null,
+  uncommittedFiles: 0, behind: 0, behindTouching: 0, pushed: false, merged: false, prUrl: null, prNumber: null, fetchedAt: null, repoUrl: null, dir: null, unreadable: null,
 };
 
 const MAX_OURS = 8;
@@ -136,18 +139,26 @@ async function logCommits(dir: string, range: string, limit: number): Promise<Co
  *  a screen that polls every couple of seconds stays cheap; the result is
  *  memoised briefly on top of that. */
 export async function readCodeMapFacts(dir: string, input: { branch?: string | null; baselineSha?: string | null; prUrl?: string | null; prNumber?: number | null; ref?: string }): Promise<CodeMapFacts> {
-  if (!dir || !existsSync(dir)) return { ...EMPTY };
+  if (!dir || !existsSync(dir)) return { ...EMPTY, dir: dir ? displayPath(dir) : null, unreadable: "התיקייה לא קיימת במחשב הזה — ייתכן שנמחקה." };
+  // A folder that exists but is not a git repository (its parent clone was deleted, a clone was cut short) must be
+  // reported as that, never read further: git's error text would otherwise end up on the screen as if it were data.
+  const inside = await git(["rev-parse", "--is-inside-work-tree"], dir);
+  if (inside.code !== 0 || inside.out.trim() !== "true") {
+    return { ...EMPTY, dir: displayPath(dir), unreadable: "git לא מזהה בתיקייה הזו ריפו. כנראה העותק המקומי של הריפו נמחק או נפגע. אין בזה נזק לעבודה שב-GitHub; כדאי לבטל את ההרצה ולהתחיל חדשה." };
+  }
+  // Text out of git is data only when the command succeeded.
+  const okOut = async (args: string[]) => { const r = await git(args, dir); return r.code === 0 ? r.out.trim() : ""; };
   // A task's branch is read without checking it out, so the tip is a named ref rather than HEAD.
   const R = input.ref ?? "HEAD";
   const key = `${dir}|${R}|${input.branch ?? ""}|${input.baselineSha ?? ""}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < TTL_MS) return { ...hit.facts, prUrl: input.prUrl ?? hit.facts.prUrl, prNumber: input.prNumber ?? hit.facts.prNumber };
 
-  const head = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.trim().replace(/^origin\//, "");
+  const head = (await okOut(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])).replace(/^origin\//, "");
   const baseBranch = head || "main";
   const baseRef = `origin/${baseBranch}`;
-  const branch = input.branch ?? ((await git(["branch", "--show-current"], dir)).out.trim() || null);
-  const remote = (await git(["remote", "get-url", "origin"], dir)).out.trim();
+  const branch = input.branch ?? ((await okOut(["branch", "--show-current"])) || null);
+  const remote = await okOut(["remote", "get-url", "origin"]);
 
   let baseline = input.baselineSha ?? null;
   if (!baseline && branch) {
@@ -176,7 +187,7 @@ export async function readCodeMapFacts(dir: string, input: { branch?: string | n
   }
 
   // A worktree's `.git` is a file; the fetch record lives in the shared directory.
-  const common = (await git(["rev-parse", "--git-common-dir"], dir)).out.trim();
+  const common = await okOut(["rev-parse", "--git-common-dir"]);
   const fetchHead = common ? path.resolve(dir, common, "FETCH_HEAD") : "";
   if (fetchHead && existsSync(fetchHead)) { try { facts.fetchedAt = statSync(fetchHead).mtime.toISOString(); } catch { /* unreadable */ } }
 
@@ -200,6 +211,7 @@ function nodeFrom(c: CodeMapCommit, kind: CodeMapNodeKind, repoUrl: string | nul
 
 /** Facts → the drawing. The only place that decides what the map shows. */
 export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}): CodeMap {
+  if (f.unreadable) return { lanes: [], arrows: [], caption: f.unreadable, problem: { text: f.unreadable, folder: f.dir ?? undefined } };
   const base: CodeMapLane = { id: "base", label: f.baseBranch, place: "both", nodes: [] };
   for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, "other", f.repoUrl, `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`));
   const branchAt = base.nodes.length;
@@ -207,7 +219,7 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
   base.nodes.push(
     f.baselineCommit
       ? nodeFrom(f.baselineCommit, f.baseAfter.length ? "branchPoint" : "current", f.repoUrl, pointDetail)
-      : { kind: f.baseAfter.length ? "branchPoint" : "current", detail: pointDetail, sha: f.baselineSha ?? undefined },
+      : { kind: f.baseAfter.length ? "branchPoint" : "current", detail: pointDetail, sha: f.baselineSha?.slice(0, 7) },
   );
 
   const ourFiles = new Set(f.ourCommits.flatMap((c) => c.files));
