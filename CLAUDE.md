@@ -28,7 +28,13 @@
   entirely (`RuntimeError: Aborted()` inside Postgres's own WASM
   crash-recovery), reproduced identically via `dev:migrate` itself, with
   no fix short of `dev:reset` (no `pg_resetwal`/`pg_waldump` ships with
-  PGlite's embedded build). **Prefer `npm run -w @dcc/api start` (plain
+  PGlite's embedded build). **The same goes for any one-off script that
+  imports `@dcc/db`**, directly or through `@dcc/core`: a probe run with
+  `npx tsx` while the API is up is a second process on the same `.pgdata`,
+  and that alone is enough to corrupt it — confirmed twice on 2026-09-20,
+  both times costing a `dev:reset` + `dev:setup` and re-creating the local
+  clients. Stop the API first, or write the probe so it only touches git and
+  the filesystem. **Prefer `npm run -w @dcc/api start` (plain
   `tsx`, no watch) whenever a migration or one-off script might run
   concurrently**, and always stop the API process before `dev:migrate`/
   `dev:setup`/`dev:reset` rather than relying on watch-mode to restart

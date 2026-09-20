@@ -78,6 +78,8 @@ import {
   rollbackTask,
   pushTask,
   codeMapForTask,
+  listPullRequests,
+  getPullRequest,
   editTask,
   precheckTaskDelete,
   deleteTaskSurgical,
@@ -205,6 +207,21 @@ app.get("/users", async () => {
 app.delete("/repos/:id", async (req) => {
   await actingUser(req);
   return deleteRepo((req.params as { id: string }).id);
+});
+
+/* ── pull requests — every open request DCC can see, from every client
+ * (openspec/changes/pull-request-center). Read-only: merging stays on the host. */
+
+app.get("/pull-requests", async (req) => {
+  await actingUser(req);
+  const q = z.object({ refresh: z.string().optional() }).parse(req.query ?? {});
+  return listPullRequests({ refresh: q.refresh === "1" });
+});
+
+app.get("/repos/:id/pull-requests/:number", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  return getPullRequest(id, Number(number));
 });
 
 /* ── repository onboarding — four stages around one live Claude Code

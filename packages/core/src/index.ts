@@ -3,6 +3,7 @@ export { recordDecision, type DecisionTrigger } from "./decisions.ts";
 export { linkBugToTask, unlinkBugFromTask, bugLinkedTasks, type LinkedTaskRow } from "./bugs.ts";
 export { startResearchWork, finishResearchWork, type ResearchWorkResult } from "./research-work.ts";
 export { recordSession, recordGitActivity, recordNote } from "./capture.ts";
+export { listPullRequests, getPullRequest, type PullRequestRow, type PullRequestList, type PullRequestDetail } from "./pull-requests.ts";
 export { codeMapForTask, codeMapForWorkspace, codeMapFrom, readCodeMapFacts, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapArrow, type CodeMapPlace, type CodeMapFacts } from "./code-map.ts";
 export { proposeGap, verifyGap } from "./gaps.ts";
 export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksNotPassed, setTaskActive, checkAdoRemovedState, syncTaskStateAfterCheckChange, type TaskInput, type TaskDetail } from "./tasks.ts";

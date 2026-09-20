@@ -462,12 +462,37 @@ export type OnboardingCost = {
 };
 export type CodeMapPlace = "cloud" | "local" | "both";
 export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
-export type CodeMapNode = { kind: CodeMapNodeKind; title?: string };
+export type CodeMapNode = {
+  kind: CodeMapNodeKind; title?: string; sha?: string; subject?: string; author?: string; at?: string;
+  files?: number; url?: string; detail?: string;
+};
 export type CodeMapLane = { id: string; label?: string; note?: string; place?: CodeMapPlace; nodes: CodeMapNode[]; from?: { lane: string; at: number } };
 export type CodeMapArrow = { from: string; to: string; label: string; state: "done" | "pending" };
 /** The one drawing DCC uses wherever git is involved; built on the server. */
 export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string };
 export const getTaskCodeMap = (taskId: string) => get<{ codeMap: CodeMap | null; branch: string | null; reason?: string }>(`/tasks/${taskId}/code-map`);
+
+export type PullRequestRow = {
+  id: string; provider: "github" | "ado"; number: number; title: string; url: string;
+  state: "open" | "merged" | "closed"; draft: boolean; author: string; headBranch: string; baseBranch: string;
+  createdAt: string; updatedAt: string; changedFiles: number; additions: number; deletions: number;
+  mergeable: boolean | null; conflicts: boolean; review: "approved" | "changes_requested" | "none";
+  checks: "passing" | "failing" | "running" | "none"; parentId: string | null;
+  repo: { id: string; name: string }; client: { id: string | null; name: string | null };
+  flags: { key: string; text: string; tone: "critical" | "warning" | "healthy" | "neutral" }[]; waitingHours: number;
+};
+export type PullRequestList = {
+  rows: PullRequestRow[];
+  repos: { id: string; name: string; clientId: string | null; clientName: string | null; provider: "github" | "ado" | null; reason?: string }[];
+  syncedAt: string; problems: { repo: string; reason: string }[];
+};
+export type PullRequestDetail = {
+  pr: PullRequestRow; codeMap: CodeMap | null;
+  freshness: { behind: number; behindTouching: number; baseBranch: string; fetchedAt: string | null } | null;
+  files: { path: string; additions: number; deletions: number }[]; body: string;
+};
+export const listPullRequests = (refresh?: boolean) => get<PullRequestList>(`/pull-requests${refresh ? "?refresh=1" : ""}`);
+export const getPullRequest = (repoId: string, number: number) => get<PullRequestDetail>(`/repos/${repoId}/pull-requests/${number}`);
 
 export type OnboardingRunView = {
   repo: { id: string; name: string }; run: OnboardingRun; stages: OnboardingStage[]; events: OnboardingEvent[];

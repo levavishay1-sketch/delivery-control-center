@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { CodeMap, CodeMapLane, CodeMapNode, CodeMapNodeKind, CodeMapPlace } from "../api.ts";
 
 /**
@@ -59,7 +60,8 @@ function layout(map: CodeMap): Placed[] {
   return placed;
 }
 
-function Node({ kind, x, y, title }: { kind: CodeMapNodeKind; x: number; y: number; title?: string }) {
+function Node({ node, x, y, onPick, picked }: { node: CodeMapNode; x: number; y: number; onPick: () => void; picked: boolean }) {
+  const kind = node.kind;
   const r = D.radius[kind];
   const el = (() => {
     switch (kind) {
@@ -78,7 +80,56 @@ function Node({ kind, x, y, title }: { kind: CodeMapNodeKind; x: number; y: numb
       default: return <circle cx={x} cy={y} r={r} fill={D.color.other} />;
     }
   })();
-  return <g>{el}{title ? <title>{title}</title> : null}</g>;
+  const label = node.subject ?? node.title ?? "פרטים";
+  return (
+    <g className="cm-node" role="button" tabIndex={0} aria-label={label}
+      onClick={(e) => { e.stopPropagation(); onPick(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(); } }}>
+      {/* A dot is small; the invisible disc is what a finger or a mouse actually hits. */}
+      <circle cx={x} cy={y} r={Math.max(r + 8, 14)} fill="transparent" />
+      {picked && <circle cx={x} cy={y} r={r + 5} fill="none" stroke={D.color.ours} strokeWidth={1.5} />}
+      {el}
+      <title>{label}</title>
+    </g>
+  );
+}
+
+const KIND_HE: Record<CodeMapNodeKind, string> = {
+  other: "שינוי של מישהו אחר",
+  ours: "שינוי שלנו",
+  attention: "שינוי שנוגע בקבצים שלנו",
+  current: "המצב העדכני",
+  branchPoint: "נקודת ההתחלה של הענף",
+  pr: "בקשת מיזוג",
+  uncommitted: "שינויים שעוד לא נשמרו",
+  empty: "הענף ריק",
+};
+
+const fmtWhen = (iso?: string) => (iso ? new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : null);
+
+/** The floating details of one dot. */
+function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: number; yPct: number; onClose: () => void }) {
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    addEventListener("keydown", esc);
+    return () => removeEventListener("keydown", esc);
+  }, [onClose]);
+  const when = fmtWhen(node.at);
+  return (
+    <div className="cm-pop" style={{ insetInlineStart: `${100 - xPct}%`, top: `${yPct}%` }} onClick={(e) => e.stopPropagation()}>
+      <button type="button" className="x" aria-label="סגור" onClick={onClose}>×</button>
+      <div className="k">{KIND_HE[node.kind]}</div>
+      {node.subject && <div className="s">{node.subject}</div>}
+      {node.detail && <div className="d">{node.detail}</div>}
+      <div className="m">
+        {node.sha && <span className="sha">{node.sha}</span>}
+        {node.author && <span>{node.author}</span>}
+        {when && <span>{when}</span>}
+        {typeof node.files === "number" && <span>{node.files} קבצים</span>}
+      </div>
+      {node.url && <div style={{ marginTop: 6 }}><a href={node.url} target="_blank" rel="noreferrer">פתח בגיט־האוסט ↗</a></div>}
+    </div>
+  );
 }
 
 function Badge({ place, x, y, ours }: { place: CodeMapPlace; x: number; y: number; ours: boolean }) {
@@ -93,12 +144,12 @@ function Badge({ place, x, y, ours }: { place: CodeMapPlace; x: number; y: numbe
   );
 }
 
-export function CodeMapDrawing({ map }: { map: CodeMap }) {
+export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?: string | null; onPick?: (id: string, node: CodeMapNode, x: number, y: number) => void }) {
   const placed = layout(map);
   const height = D.firstLaneY + (map.lanes.length - 1) * D.laneGap + 78;
   const byId = new Map(placed.map((p) => [p.lane.id, p]));
   return (
-    <svg viewBox={`0 0 ${D.width} ${height}`} role="img" className="cm-svg" style={{ width: "100%", height: "auto" }}>
+    <svg viewBox={`0 0 ${D.width} ${height}`} role="img" className="cm-svg" style={{ width: "100%", height: "auto" }} data-h={height}>
       <title>מפת הקוד</title>
       <desc>{map.caption ?? "היכן העבודה יושבת מול הענף הראשי"}</desc>
       <defs>
@@ -122,7 +173,10 @@ export function CodeMapDrawing({ map }: { map: CodeMap }) {
               : <line x1={first} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} />}
             {p.lane.label && <text x={labelX} y={p.y - 32} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
             {p.lane.note && <text x={labelX} y={p.y - (p.lane.label ? 17 : 32)} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
-            {p.lane.nodes.map((n: CodeMapNode, i) => <Node key={i} kind={n.kind} x={p.xs[i]!} y={p.y} title={n.title} />)}
+            {p.lane.nodes.map((n: CodeMapNode, i) => (
+              <Node key={i} node={n} x={p.xs[i]!} y={p.y} picked={picked === `${p.lane.id}:${i}`}
+                onPick={() => onPick?.(`${p.lane.id}:${i}`, n, p.xs[i]!, p.y)} />
+            ))}
             {/* The base line keeps its badge above, so the arrow that arrives from below has a clear landing. */}
             {p.lane.place && <Badge place={p.lane.place} x={last - 16} y={p.y + (parent ? 24 : -24)} ours={!!parent} />}
           </g>
@@ -164,11 +218,17 @@ const LEGEND: { color: string; ring?: boolean; text: string }[] = [
  * `title` names the moment ("מצב הקוד"), the rest is the same everywhere.
  */
 export function CodeMapPanel({ map, title = "מצב הקוד", legend = true }: { map: CodeMap | null | undefined; title?: string; legend?: boolean }) {
+  const [pick, setPick] = useState<{ id: string; node: CodeMapNode; xPct: number; yPct: number } | null>(null);
   if (!map?.lanes?.length) return null;
+  const height = D.firstLaneY + (map.lanes.length - 1) * D.laneGap + 78;
   return (
-    <div className="cm">
-      <div className="cm-t">{title}</div>
-      <CodeMapDrawing map={map} />
+    <div className="cm" onClick={() => setPick(null)}>
+      <div className="cm-t">{title} <span className="cm-hint">· לחצו על נקודה לפרטים</span></div>
+      <div className="cm-wrap">
+        <CodeMapDrawing map={map} picked={pick?.id ?? null}
+          onPick={(id, node, x, y) => setPick((cur) => (cur?.id === id ? null : { id, node, xPct: (x / D.width) * 100, yPct: (y / height) * 100 }))} />
+        {pick && <NodePopover node={pick.node} xPct={pick.xPct} yPct={pick.yPct} onClose={() => setPick(null)} />}
+      </div>
       {map.caption && <p className="cm-cap">{map.caption}</p>}
       {legend && (
         <div className="cm-lg">

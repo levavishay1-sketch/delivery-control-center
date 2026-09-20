@@ -3,7 +3,7 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { withTenant } from "@dcc/db";
 import { task, workitem } from "@dcc/db/schema";
-import { existingCheckout, firstRepo, git, taskBranchName } from "./ai-assist.ts";
+import { existingCheckout, firstRepo, git, httpsRepoUrl, taskBranchName } from "./ai-assist.ts";
 
 /**
  * The code map: one picture of where a piece of work sits in git, drawn the
@@ -14,6 +14,9 @@ import { existingCheckout, firstRepo, git, taskBranchName } from "./ai-assist.ts
  * language. Adding a place that touches git means calling `codeMapFor…` here,
  * not inventing a drawing — and changing how the drawing reads is one change,
  * in one file, for every screen at once.
+ *
+ * Every dot is a real commit carrying its subject, author, time, file count
+ * and link, so pressing one can say what it actually was.
  */
 
 export type CodeMapPlace = "cloud" | "local" | "both";
@@ -21,7 +24,21 @@ export type CodeMapPlace = "cloud" | "local" | "both";
 /** What a dot on a line means. `attention` is a change that touches the same files as ours. */
 export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
 
-export type CodeMapNode = { kind: CodeMapNodeKind; title?: string };
+export type CodeMapNode = {
+  kind: CodeMapNodeKind;
+  /** Hover text; the panel shows the fields below when a dot is pressed. */
+  title?: string;
+  sha?: string;
+  subject?: string;
+  author?: string;
+  at?: string;
+  /** Files this commit touched, or files still unsaved. */
+  files?: number;
+  /** The commit or the pull request on the host. */
+  url?: string;
+  /** One line in Hebrew: what this dot is, for someone who does not read git. */
+  detail?: string;
+};
 
 export type CodeMapLane = {
   id: string;
@@ -44,43 +61,77 @@ export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: 
 
 /* ── what git says ────────────────────────────────────────────────── */
 
+export type CodeMapCommit = { sha: string; subject: string; author: string; at: string; files: string[] };
+
 export type CodeMapFacts = {
   baseBranch: string;
   branch: string | null;
   baselineSha: string | null;
-  /** Commits on our branch since the baseline, newest first. */
-  ourCommits: { sha: string; subject: string }[];
-  /** Files changed but not yet in any commit. */
+  /** The branch point itself, and a little of what came before it. */
+  baselineCommit: CodeMapCommit | null;
+  baseBefore: CodeMapCommit[];
+  /** What the base gained since we branched, oldest first. */
+  baseAfter: CodeMapCommit[];
+  /** Our commits since the baseline, oldest first. */
+  ourCommits: CodeMapCommit[];
   uncommittedFiles: number;
-  /** Commits the base gained since we branched. */
   behind: number;
-  /** Of those, how many touch a file we also changed. */
   behindTouching: number;
   pushed: boolean;
   merged: boolean;
   prUrl: string | null;
   prNumber: number | null;
-  /** When the local copy last heard from the host. */
   fetchedAt: string | null;
+  /** The repository on the host, for linking a commit. */
+  repoUrl: string | null;
 };
 
 const EMPTY: CodeMapFacts = {
-  baseBranch: "main", branch: null, baselineSha: null, ourCommits: [], uncommittedFiles: 0,
-  behind: 0, behindTouching: 0, pushed: false, merged: false, prUrl: null, prNumber: null, fetchedAt: null,
+  baseBranch: "main", branch: null, baselineSha: null, baselineCommit: null, baseBefore: [], baseAfter: [], ourCommits: [],
+  uncommittedFiles: 0, behind: 0, behindTouching: 0, pushed: false, merged: false, prUrl: null, prNumber: null, fetchedAt: null, repoUrl: null,
 };
 
-const MAX_COMMITS = 6;
+const MAX_OURS = 8;
+const MAX_BASE_AFTER = 12;
+const BEFORE = 2;
 const TTL_MS = 8_000;
 const cache = new Map<string, { at: number; facts: CodeMapFacts }>();
 
-const count = (out: string) => Number(out.trim()) || 0;
+const num = (out: string) => Number(out.trim()) || 0;
 const lines = (out: string) => out.split("\n").map((s) => s.trim()).filter(Boolean);
+
+/** One `git log` gives each commit and the files it touched: a record starts
+ *  with a NUL-separated header, and its file paths follow, one per line. */
+// A record separator and a field separator, so a subject or a path containing
+// either one is impossible: git writes them, the text never does.
+const RS = "\x1e";
+const FS = "\x1f";
+const LOG_FORMAT = `%x1e%h%x1f%an%x1f%aI%x1f%s`;
+
+function parseLog(out: string): CodeMapCommit[] {
+  const commits: CodeMapCommit[] = [];
+  for (const record of out.split(RS).slice(1)) {
+    const [sha, author, at, rest] = record.split(FS);
+    if (!sha || rest === undefined) continue;
+    const [subject, ...fileLines] = rest.split("\n");
+    commits.push({
+      sha: sha.trim(), author: (author ?? "").trim(), at: (at ?? "").trim(),
+      subject: (subject ?? "").trim(), files: fileLines.map((f) => f.trim()).filter(Boolean),
+    });
+  }
+  return commits;
+}
+
+async function logCommits(dir: string, range: string, limit: number): Promise<CodeMapCommit[]> {
+  const r = await git(["log", `--format=${LOG_FORMAT}`, "--name-only", "-n", String(limit), range], dir, { timeoutMs: 25_000 });
+  return r.code === 0 ? parseLog(r.out) : [];
+}
 
 /** Read the git facts of a working copy. Local commands only — no network, so
  *  a screen that polls every couple of seconds stays cheap; the result is
  *  memoised briefly on top of that. */
 export async function readCodeMapFacts(dir: string, input: { branch?: string | null; baselineSha?: string | null; prUrl?: string | null; prNumber?: number | null; ref?: string }): Promise<CodeMapFacts> {
-  if (!dir || !existsSync(dir)) return { ...EMPTY, ...input } as CodeMapFacts;
+  if (!dir || !existsSync(dir)) return { ...EMPTY };
   // A task's branch is read without checking it out, so the tip is a named ref rather than HEAD.
   const R = input.ref ?? "HEAD";
   const key = `${dir}|${R}|${input.branch ?? ""}|${input.baselineSha ?? ""}`;
@@ -91,32 +142,30 @@ export async function readCodeMapFacts(dir: string, input: { branch?: string | n
   const baseBranch = head || "main";
   const baseRef = `origin/${baseBranch}`;
   const branch = input.branch ?? ((await git(["branch", "--show-current"], dir)).out.trim() || null);
+  const remote = (await git(["remote", "get-url", "origin"], dir)).out.trim();
 
-  // The point the work started from: what was recorded, or where the branch left the base.
   let baseline = input.baselineSha ?? null;
   if (!baseline && branch) {
     const mb = await git(["merge-base", input.ref ?? branch, baseRef], dir);
     baseline = mb.code === 0 ? mb.out.trim() || null : null;
   }
 
-  const facts: CodeMapFacts = { ...EMPTY, baseBranch, branch, baselineSha: baseline };
+  const facts: CodeMapFacts = { ...EMPTY, baseBranch, branch, baselineSha: baseline, repoUrl: remote ? httpsRepoUrl(remote) : null };
   if (baseline) {
-    const log = await git(["log", "--format=%h\t%s", "-n", String(MAX_COMMITS + 1), `${baseline}..${R}`], dir, { timeoutMs: 20_000 });
-    facts.ourCommits = lines(log.out).map((l) => { const [sha, ...rest] = l.split("\t"); return { sha: sha!, subject: rest.join("\t") }; });
+    facts.ourCommits = (await logCommits(dir, `${baseline}..${R}`, MAX_OURS)).reverse();
+    facts.baseAfter = (await logCommits(dir, `${baseline}..${baseRef}`, MAX_BASE_AFTER)).reverse();
+    facts.baselineCommit = (await logCommits(dir, baseline, 1))[0] ?? null;
+    facts.baseBefore = (await logCommits(dir, `${baseline}~1`, BEFORE)).reverse();
     const behind = await git(["rev-list", "--count", `${R}..${baseRef}`], dir, { timeoutMs: 20_000 });
-    facts.behind = behind.code === 0 ? count(behind.out) : 0;
-    if (facts.behind > 0) {
-      const theirs = new Set(lines((await git(["diff", "--name-only", `${R}..${baseRef}`], dir, { timeoutMs: 20_000 })).out));
-      const ours = lines((await git(["diff", "--name-only", `${baseline}..${R}`], dir, { timeoutMs: 20_000 })).out);
-      facts.behindTouching = ours.filter((f) => theirs.has(f)).length;
-    }
+    facts.behind = behind.code === 0 ? num(behind.out) : 0;
+    const ourFiles = new Set(facts.ourCommits.flatMap((c) => c.files));
+    facts.behindTouching = facts.baseAfter.filter((c) => c.files.some((f) => ourFiles.has(f))).length;
   }
-  // Only meaningful for the copy that is actually checked out.
   if (R === "HEAD") facts.uncommittedFiles = lines((await git(["status", "--porcelain"], dir, { timeoutMs: 20_000 })).out).length;
 
   if (branch) {
-    const remote = await git(["rev-list", "--count", `origin/${branch}..${R}`], dir);
-    facts.pushed = remote.code === 0 && count(remote.out) === 0;
+    const remoteAhead = await git(["rev-list", "--count", `origin/${branch}..${R}`], dir);
+    facts.pushed = remoteAhead.code === 0 && num(remoteAhead.out) === 0;
     const merged = await git(["merge-base", "--is-ancestor", R, baseRef], dir);
     facts.merged = merged.code === 0 && facts.ourCommits.length > 0;
   }
@@ -133,19 +182,40 @@ export async function readCodeMapFacts(dir: string, input: { branch?: string | n
 /* ── the picture ──────────────────────────────────────────────────── */
 
 const he = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
+const commitUrl = (repoUrl: string | null, sha: string) => (repoUrl ? `${repoUrl}/commit/${sha}` : undefined);
+const filesLine = (n: number) => (n === 1 ? "קובץ אחד" : `${n} קבצים`);
+
+function nodeFrom(c: CodeMapCommit, kind: CodeMapNodeKind, repoUrl: string | null, detail: string): CodeMapNode {
+  return {
+    kind, sha: c.sha, subject: c.subject, author: c.author, at: c.at,
+    files: c.files.length || undefined, url: commitUrl(repoUrl, c.sha), detail,
+    title: `${c.sha} ${c.subject}`.slice(0, 90),
+  };
+}
 
 /** Facts → the drawing. The only place that decides what the map shows. */
-export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string; showBase?: boolean } = {}): CodeMap {
+export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}): CodeMap {
   const base: CodeMapLane = { id: "base", label: f.baseBranch, place: "both", nodes: [] };
-  // A little history before the branch point, so the line reads as a line.
-  base.nodes.push({ kind: "other" }, { kind: "other" });
+  for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, "other", f.repoUrl, `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`));
   const branchAt = base.nodes.length;
-  base.nodes.push({ kind: f.behind > 0 ? "branchPoint" : "current", title: f.baselineSha ?? undefined });
+  const pointDetail = `הנקודה שממנה הענף שלנו יצא. כל מה שהיה ב-${f.baseBranch} עד כאן נמצא גם אצלנו.`;
+  base.nodes.push(
+    f.baselineCommit
+      ? nodeFrom(f.baselineCommit, f.baseAfter.length ? "branchPoint" : "current", f.repoUrl, pointDetail)
+      : { kind: f.baseAfter.length ? "branchPoint" : "current", detail: pointDetail, sha: f.baselineSha ?? undefined },
+  );
+
+  const ourFiles = new Set(f.ourCommits.flatMap((c) => c.files));
+  f.baseAfter.forEach((c, i) => {
+    const touching = c.files.some((x) => ourFiles.has(x));
+    const newest = i === f.baseAfter.length - 1;
+    const detail = touching
+      ? `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ונוגע בקבצים שגם אנחנו שינינו.`
+      : `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ולא נוגע בקבצים שלנו.`;
+    base.nodes.push(nodeFrom(c, touching ? "attention" : newest ? "current" : "other", f.repoUrl, detail));
+  });
+
   if (f.behind > 0) {
-    const shown = Math.min(f.behind, 12);
-    const attention = Math.min(f.behindTouching, shown);
-    for (let i = 0; i < shown - 1; i++) base.nodes.push({ kind: i < attention ? "attention" : "other" });
-    base.nodes.push({ kind: "current" });
     base.note = f.behindTouching > 0
       ? `${he(f.behind, "שינוי אחד נכנס", "שינויים נכנסו")} מאז · ${he(f.behindTouching, "אחד נוגע", "נוגעים")} באותם קבצים`
       : `${he(f.behind, "שינוי אחד נכנס", "שינויים נכנסו")} מאז שהתחלנו`;
@@ -160,14 +230,25 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string; showB
     from: { lane: "base", at: branchAt },
     nodes: [],
   };
-  for (const c of f.ourCommits.slice(0, MAX_COMMITS).reverse()) ours.nodes.push({ kind: "ours", title: `${c.sha} ${c.subject}`.slice(0, 80) });
-  if (f.uncommittedFiles > 0) ours.nodes.push({ kind: "uncommitted", title: `${f.uncommittedFiles} קבצים שעוד לא נשמרו` });
-  if (f.prUrl) ours.nodes.push({ kind: "pr", title: f.prNumber ? `PR #${f.prNumber}` : "PR" });
-  if (!ours.nodes.length) ours.nodes.push({ kind: "empty", title: "עדיין אין commits" });
+  for (const c of f.ourCommits) ours.nodes.push(nodeFrom(c, "ours", f.repoUrl, `שינוי שנשמר בענף שלנו${f.pushed ? " וכבר נדחף לענן" : ", עדיין רק במחשב הזה"}.`));
+  if (f.uncommittedFiles > 0) {
+    ours.nodes.push({
+      kind: "uncommitted", files: f.uncommittedFiles,
+      subject: `${filesLine(f.uncommittedFiles)} שעוד לא נשמרו`,
+      detail: "שינויים שקיימים בתיקייה אבל עדיין לא נשמרו ב-git. הם ייכנסו ב-commit של המסירה, לפי מה שתאשרו בסקירה.",
+    });
+  }
+  if (f.prUrl) {
+    ours.nodes.push({
+      kind: "pr", url: f.prUrl, subject: f.prNumber ? `בקשת מיזוג #${f.prNumber}` : "בקשת מיזוג",
+      detail: `הענף מוצע למיזוג ל-${f.baseBranch}. המיזוג עצמו נעשה בגיט־האוסט, בלחיצה של אדם.`,
+    });
+  }
+  if (!ours.nodes.length) ours.nodes.push({ kind: "empty", subject: "עדיין אין commits", detail: "הענף נפתח, ועדיין לא נשמר בו שום שינוי." });
   ours.note = f.ourCommits.length
-    ? `${he(f.ourCommits.length, "commit אחד", "commits")}${f.uncommittedFiles ? ` · ${f.uncommittedFiles} קבצים שעוד לא נשמרו` : ""}`
+    ? `${he(f.ourCommits.length, "commit אחד", "commits")}${f.uncommittedFiles ? ` · ${filesLine(f.uncommittedFiles)} שעוד לא נשמרו` : ""}`
     : f.uncommittedFiles
-      ? `${f.uncommittedFiles} קבצים שעוד לא נשמרו`
+      ? `${filesLine(f.uncommittedFiles)} שעוד לא נשמרו`
       : "נפתח מהנקודה הזו";
 
   const arrows: CodeMapArrow[] = [];
@@ -177,11 +258,7 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string; showB
   else if (f.pushed && hasWork) arrows.push({ from: "ours", to: "base", label: "נדחף, עדיין בלי PR", state: "pending" });
   else if (hasWork) arrows.push({ from: "ours", to: "base", label: "טרם נדחף", state: "pending" });
 
-  return {
-    lanes: opts.showBase === false ? [ours] : [base, ours],
-    arrows,
-    caption: caption(f),
-  };
+  return { lanes: [base, ours], arrows, caption: caption(f) };
 }
 
 /** The one sentence under the drawing: what the picture means for the person. */
@@ -211,7 +288,7 @@ export async function codeMapForTask(input: { clientId: string; workitemId: stri
   const r = await firstRepo(input.clientId, input.workitemId);
   if (!r) return { codeMap: null, branch: null, reason: "אין repository מקושר לדרישה" };
   // Opening a screen must never start a clone: only a copy that already exists is read.
-  const dir = await existingCheckout(r);
+  const dir = existingCheckout(r);
   if (!dir) return { codeMap: null, branch: null, reason: "אין עותק מקומי של הריפו — הוא ייווצר בהרצה הבאה" };
   const branch = taskBranchName(wi?.key, t);
   const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);

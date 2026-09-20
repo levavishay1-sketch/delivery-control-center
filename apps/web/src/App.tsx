@@ -17,6 +17,7 @@ import { Budgets } from "./screens/Budgets.tsx";
 import { Settings } from "./screens/Settings.tsx";
 import { Prompts } from "./screens/Prompts.tsx";
 import { Repositories } from "./screens/Repositories.tsx";
+import { PullRequests } from "./screens/PullRequests.tsx";
 import { OnboardingScreen } from "./screens/onboarding/OnboardingScreen.tsx";
 import { Stub } from "./screens/Stub.tsx";
 
@@ -38,6 +39,7 @@ const NAV: { to: string; label: string; icon: React.ReactNode; badge?: boolean }
   { to: "#/requirements", label: "דרישות", icon: ICONS.folder },
   { to: "#/ado", label: "Azure DevOps", icon: ICONS.branch },
   { to: "#/repositories", label: "Repositories", icon: ICONS.repo },
+  { to: "#/pull-requests", label: "בקשות מיזוג", icon: ICONS.branch },
   { to: "#/work", label: "כל הדרישות", icon: ICONS.list },
   { to: "#/alerts", label: "התראות", icon: ICONS.bell, badge: true },
   { to: "#/budgets", label: "תקציבים", icon: ICONS.slash },
@@ -65,6 +67,7 @@ export function App() {
   else if (path === "/requirements" || path === "/projects") screen = <RequirementList nav={nav} />;
   else if (path === "/ado") screen = <AdoTasks nav={nav} />;
   else if (path === "/repositories") screen = <Repositories nav={nav} />;
+  else if (path === "/pull-requests") screen = <PullRequests />;
   else if (path.startsWith("/repo/")) screen = <OnboardingScreen id={path.slice(6)} nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
