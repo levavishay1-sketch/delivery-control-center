@@ -41,6 +41,8 @@ export type PullRequestDetail = {
   codeMapProblem: string | null;
   freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
+  /** What the branch is about, in a few lines. */
+  topics: Topic[];
   /** The two versions a file is compared between: where the branch left the base, and where it is now. */
   refs: { base: string; head: string } | null;
   fileCount: number;
@@ -58,7 +60,10 @@ type GhComment = { author?: { login?: string } | null; body: string; createdAt: 
 
 const short = (sha: string) => sha.slice(0, 7);
 const subject = (message: string) => message.split("\n")[0]!.trim();
-const asCommit = (c: GhCommit, files: string[] = []): CodeMapCommit => ({ sha: short(c.sha), subject: subject(c.commit.message), author: c.commit.author.name, at: c.commit.author.date, files });
+const asCommit = (c: GhCommit, files: string[] = []): CodeMapCommit => ({
+  sha: short(c.sha), subject: subject(c.commit.message), author: c.commit.author.name, at: c.commit.author.date, files,
+  body: c.commit.message.split("\n").slice(1).join("\n").trim() || undefined,
+});
 
 /* ── files, grouped the way a person reads them ───────────────────── */
 
@@ -94,6 +99,50 @@ function groupFiles(files: GhFile[]): FileGroup[] {
   }
   const order: FileGroupKey[] = ["code", "instructions", "config", "docs", "other", "build"];
   return order.filter((k) => out.has(k)).map((k) => out.get(k)!);
+}
+
+/* ── what the branch is about ─────────────────────────────────────── */
+
+export type Topic = { title: string; detail: string };
+
+const humanize = (slug: string) => { const t = slug.replace(/-/g, " "); return t.charAt(0).toUpperCase() + t.slice(1); };
+const filesLine = (n: number) => (n === 1 ? "1 file" : `${n} files`);
+
+/** The subjects a branch touches, worked out from where its files are — no model involved. Each
+ *  OpenSpec change it touches is a subject (its folder name is the subject's name); what is left
+ *  is grouped by the part of the repository it lives in. */
+function topicsOf(files: GhFile[]): Topic[] {
+  const changes = new Map<string, { n: number; removed: number }>();
+  const areas = new Map<string, number>();
+  for (const f of files) {
+    const m = f.filename.match(/^openspec\/changes\/([^/]+)\//);
+    if (m && m[1] !== "archive") {
+      const cur = changes.get(m[1]!) ?? { n: 0, removed: 0 };
+      cur.n++; if (f.status === "removed") cur.removed++;
+      changes.set(m[1]!, cur);
+      continue;
+    }
+    const parts = f.filename.split("/");
+    const area = parts.length > 2 && /^(apps|packages)$/.test(parts[0]!) ? `${parts[0]}/${parts[1]}` : parts.length > 1 ? parts[0]! : "repository root";
+    areas.set(area, (areas.get(area) ?? 0) + 1);
+  }
+  // The OpenSpec changes are the branch's real subjects and come first; the parts of the repository follow.
+  const out: (Topic & { n: number })[] = [];
+  let retired = 0;
+  let minor = 0;
+  const live = [...changes].filter(([, c]) => c.removed !== c.n).sort((a, b) => b[1].n - a[1].n);
+  // A change that was deleted outright is not a subject of this branch, only something it cleared away.
+  retired = changes.size - live.length;
+  live.forEach(([name, c], i) => {
+    // Past the first three, a change touched by a line or two is housekeeping, not a subject.
+    if (i >= 3 && c.n < 2) { minor++; return; }
+    out.push({ title: humanize(name), detail: `OpenSpec change · ${filesLine(c.n)}`, n: c.n });
+  });
+  if (minor) out.push({ title: "Other OpenSpec changes touched", detail: `${minor} ${minor === 1 ? "change" : "changes"}, a line or two each`, n: minor });
+  const shown = [...areas].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  for (const [area, n] of shown) out.push({ title: area === "repository root" ? "Files in the repository root" : `Code in ${area}`, detail: filesLine(n), n });
+  if (retired) out.push({ title: "Old OpenSpec changes removed", detail: `${retired} ${retired === 1 ? "change" : "changes"}`, n: retired });
+  return out.slice(0, 9).map(({ title, detail }) => ({ title, detail }));
 }
 
 /* ── what blocks a merge, in the order that matters ───────────────── */
@@ -213,6 +262,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
       uncommittedFiles: 0,
       behind,
       behindTouching: overlap.length,
+      perCommitFiles: false,
       pushed: true,
       merged: pr.state === "merged",
       prUrl: pr.url,
@@ -241,7 +291,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   const value: PullRequestDetail = {
     pr, blockers, nextStep, codeMap, codeMapProblem,
     freshness: ours && theirs ? { behind, behindTouching: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
-    groups, fileCount: files.length, timeline, body: view?.body ?? "",
+    groups, topics: topicsOf(files), fileCount: files.length, timeline, body: view?.body ?? "",
     refs: mergeBase && ours?.commits?.length ? { base: mergeBase, head: ours.commits[ours.commits.length - 1]!.sha } : null,
   };
   cache.set(key, { at: Date.now(), value });

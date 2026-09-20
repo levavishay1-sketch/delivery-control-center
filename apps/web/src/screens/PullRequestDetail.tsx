@@ -211,10 +211,14 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       <div className="panel pr-head">
         <div className="top">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="h1">{pr.title}</div>
-            <div className="l">
-              פתח {pr.author} · {waited(pr.waitingHours)} · <span className="ob-code">{pr.headBranch} → {pr.baseBranch}</span>
-            </div>
+            <div className="h1 br">{pr.headBranch}</div>
+            {d?.topics?.length ? (
+              <ul className="pr-topics" aria-label="What this branch is about">
+                {d.topics.map((t) => <li key={t.title}>{t.title}<span> · {t.detail}</span></li>)}
+              </ul>
+            ) : null}
+            <div className="l" dir="ltr" style={{ textAlign: "start" }}>#{pr.number} · {pr.title}</div>
+            <div className="l">פתח {pr.author} · {waited(pr.waitingHours)} · אל <span className="ob-code">{pr.baseBranch}</span></div>
           </div>
           <div className="flags">
             {pr.draft && <span className="pill inactive">טיוטה</span>}

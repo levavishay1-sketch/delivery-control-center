@@ -35,6 +35,8 @@ export type CodeMapNode = {
   at?: string;
   /** Files this commit touched, or files still unsaved. */
   files?: number;
+  /** What the commit's author wrote about it, after the first line — shown as it was written. */
+  message?: string;
   /** The commit or the pull request on the host. */
   url?: string;
   /** One line in Hebrew: what this dot is, for someone who does not read git. */
@@ -70,7 +72,7 @@ export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: 
 
 /* ── what git says ────────────────────────────────────────────────── */
 
-export type CodeMapCommit = { sha: string; subject: string; author: string; at: string; files: string[] };
+export type CodeMapCommit = { sha: string; subject: string; author: string; at: string; files: string[]; /** The rest of the commit message, after its first line. */ body?: string };
 
 export type CodeMapFacts = {
   baseBranch: string;
@@ -93,6 +95,8 @@ export type CodeMapFacts = {
   fetchedAt: string | null;
   /** The repository on the host, for linking a commit. */
   repoUrl: string | null;
+  /** false when a commit's `files` is not that commit's own list (a host answer that only knows the whole branch's files): the map then shows no per-commit count. */
+  perCommitFiles?: boolean;
   /** The working folder these facts were read from. */
   dir: string | null;
   /** Set when the folder could not be read; nothing else in the facts is meaningful then. */
@@ -119,17 +123,17 @@ const lines = (out: string) => out.split("\n").map((s) => s.trim()).filter(Boole
 // either one is impossible: git writes them, the text never does.
 const RS = "\x1e";
 const FS = "\x1f";
-const LOG_FORMAT = `%x1e%h%x1f%an%x1f%aI%x1f%s`;
+const LOG_FORMAT = `%x1e%h%x1f%an%x1f%aI%x1f%s%x1f%b%x1f`;
 
 function parseLog(out: string): CodeMapCommit[] {
   const commits: CodeMapCommit[] = [];
   for (const record of out.split(RS).slice(1)) {
-    const [sha, author, at, rest] = record.split(FS);
-    if (!sha || rest === undefined) continue;
-    const [subject, ...fileLines] = rest.split("\n");
+    const [sha, author, at, subject, body, filesText] = record.split(FS);
+    if (!sha || filesText === undefined) continue;
     commits.push({
       sha: sha.trim(), author: (author ?? "").trim(), at: (at ?? "").trim(),
-      subject: (subject ?? "").trim(), files: fileLines.map((f) => f.trim()).filter(Boolean),
+      subject: (subject ?? "").trim(), body: (body ?? "").trim() || undefined,
+      files: filesText.split("\n").map((f) => f.trim()).filter(Boolean),
     });
   }
   return commits;
@@ -210,7 +214,7 @@ const filesLine = (n: number) => (n === 1 ? "קובץ אחד" : `${n} קבצים
 function nodeFrom(c: CodeMapCommit, kind: CodeMapNodeKind, repoUrl: string | null, detail: string, where: { onHost: boolean; folder?: string } = { onHost: true }): CodeMapNode {
   return {
     kind, sha: c.sha, subject: c.subject, author: c.author, at: c.at,
-    files: c.files.length || undefined, url: where.onHost ? commitUrl(repoUrl, c.sha) : undefined, folder: where.folder, detail,
+    files: c.files.length || undefined, message: c.body ? c.body.slice(0, 1500) : undefined, url: where.onHost ? commitUrl(repoUrl, c.sha) : undefined, folder: where.folder, detail,
     title: `${c.sha} ${c.subject}`.slice(0, 90),
   };
 }
@@ -300,6 +304,7 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
   else if (f.pushed && hasWork) arrows.push({ from: "ours", to: "base", label: "הועלה, עדיין בלי בקשת מיזוג", state: "pending" });
   else if (hasWork) arrows.push({ from: "ours", to: "base", label: "טרם הועלה ל-GitHub", state: "pending" });
 
+  if (f.perCommitFiles === false) for (const lane of [base, ours]) for (const n of lane.nodes) delete n.files;
   return { lanes: [base, ours], arrows, caption: caption(f) };
 }
 

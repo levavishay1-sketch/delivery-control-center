@@ -465,7 +465,7 @@ export type CodeMapPlace = "cloud" | "local" | "both";
 export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
 export type CodeMapNode = {
   kind: CodeMapNodeKind; heading?: string; title?: string; sha?: string; subject?: string; author?: string; at?: string;
-  files?: number; url?: string; detail?: string; folder?: string;
+  files?: number; url?: string; detail?: string; folder?: string; message?: string;
 };
 export type CodeMapLane = { id: string; label?: string; note?: string; place?: CodeMapPlace; nodes: CodeMapNode[]; from?: { lane: string; at: number }; name?: string; url?: string; detail?: string; folder?: string };
 export type CodeMapArrow = { from: string; to: string; label: string; state: "done" | "pending" };
@@ -500,6 +500,7 @@ export type PullRequestDetail = {
   codeMapProblem: string | null;
   freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
+  topics: { title: string; detail: string }[];
   refs: { base: string; head: string } | null;
   fileCount: number;
   timeline: TimelineItem[];

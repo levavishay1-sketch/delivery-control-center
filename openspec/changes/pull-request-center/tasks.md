@@ -133,3 +133,10 @@ Agreed with the user after the repository's stray branches were cleared (three d
 - [x] 15.2 DCC's own task branches are now named `task/<key>-…` (they were `feature/…`), matching the flow; the work item is still resolved from the key in the name, whatever the prefix.
 - [x] 15.3 The repository deletes a request's branch on merge by itself (setting turned on).
 - [ ] 15.4 Protecting `master` (a request required, no force-push, no deletion) was attempted and refused by the environment's permission check; waiting for the user to allow it or set it in GitHub.
+
+## 16. The branch is the headline; a commit says what its author wrote
+
+- [x] 16.1 A request's header now leads with the branch's name, with a short list of what the branch is about under it, small, and the request's own title on a line below. The list is worked out from where the branch's files are — each OpenSpec change it touches is a subject (its folder name, shown as words), the rest is grouped by part of the repository, and changes it only deleted or touched by a line or two are folded into one line each. No model is involved, so it costs nothing and needs no translation; it is in English, as the branch and the commits are.
+- [x] 16.2 Pressing a commit shows the message its author wrote, in full (the first line as the heading, the rest under it), instead of a summary written by DCC. Also free.
+- [x] 16.3 A commit's file count is shown only where it is that commit's own. The host answers a whole branch's files at once, so on a request's screen each dot used to claim every file of the request (139); those dots now show no count rather than a wrong one.
+- Deliberately not built: Hebrew topics and Hebrew commit descriptions. They need a model to translate or summarise, which costs per call; the user chose English to keep this free.

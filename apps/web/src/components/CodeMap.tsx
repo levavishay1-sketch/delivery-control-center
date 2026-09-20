@@ -168,6 +168,7 @@ function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: n
       <button type="button" className="x" aria-label="סגור" onClick={onClose}>×</button>
       <div className="k">{node.heading ?? KIND_HE[node.kind]}</div>
       {node.subject && <div className={node.heading ? "s br" : "s"}>{node.subject}</div>}
+      {node.message && <div className="msg">{node.message}</div>}
       {node.detail && <div className="d">{node.detail}</div>}
       <div className="m">
         {node.sha && <span className="sha">{node.sha}</span>}
