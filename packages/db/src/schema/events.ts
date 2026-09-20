@@ -110,6 +110,7 @@ export type EventLink = {
     | "blocker"
     | "commit"
     | "session"
-    | "thread";
+    | "thread"
+    | "claude_call";
   ref: string;
 };

@@ -55,6 +55,36 @@ alter table event_log drop constraint if exists event_log_occurred_not_future;
 alter table event_log add constraint event_log_occurred_not_future
   check (occurred_at <= recorded_at + interval '5 minutes');
 
+-- 1b ── claude_call is insert-only too (claude-in-dcc §8) ────────────
+--  A cost record is money: never edited, never deleted — retention deletes
+--  conversation text, not ledger rows. The one permitted mutation is the
+--  same FK detach as event_log's: workitem_id going NULL when the work
+--  item is deleted, every other column untouched.
+create or replace function dcc_block_call_mutation() returns trigger
+language plpgsql as $$
+begin
+  if tg_op = 'UPDATE'
+     and old.workitem_id is not null
+     and new.workitem_id is null
+     and to_jsonb(new) - 'workitem_id' = to_jsonb(old) - 'workitem_id'
+  then
+    return new;
+  end if;
+  raise exception 'claude_call is append-only: % is not allowed.', tg_op
+    using errcode = 'restrict_violation';
+end;
+$$;
+
+drop trigger if exists claude_call_no_update on claude_call;
+create trigger claude_call_no_update
+  before update on claude_call
+  for each row execute function dcc_block_call_mutation();
+
+drop trigger if exists claude_call_no_delete on claude_call;
+create trigger claude_call_no_delete
+  before delete on claude_call
+  for each row execute function dcc_block_call_mutation();
+
 -- 2 ── the RLS-bound application role ────────────────────────────────
 do $$
 begin

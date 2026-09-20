@@ -32,8 +32,8 @@ smaller). Order matters — each group unblocks the next.
       `claude.session` event, then refresh the Brief
 - [x] 2.2 `recordGitActivity()` / `recordNote()` — normalise into events
 - [x] 2.3 Context Brief generator — assembled from structured state
-      (gaps, blockers, task counts, recent timeline); `summariseTimeline()`
-      is the model seam, no-LLM path ships in Phase 0
+      (gaps, blockers, task counts, recent timeline); no-LLM path ships
+      in Phase 0 (and stayed the design: claude-in-dcc §6.1)
 - [x] 2.4 `briefFor(workitemId)` — the exact SessionStart stdout payload
 - [x] 2.5 `resolveWorkItem()` — from the `WI-nnnn` branch convention
 - [x] 2.6 `demo.ts` proves the exit gate end to end
@@ -97,9 +97,8 @@ smaller). Order matters — each group unblocks the next.
 - [x] 7.6 Blocker response UI · gap verify UI · task progress UI
 - [x] 7.7 model routing — `config/model-policy.json` (global layer,
       escalate/downgrade rules), `route()` deterministic classifier,
-      `recordRouting()` → `model.routed` events, `POST /workitems/:id/route`,
-      `dcc.mjs route`, wired into the brief's LLM seam. `prove:routing`
-      10/10. Rendered in the Brief and timeline with model + rationale.
+      `prove:routing` 10/10. (Since claude-in-dcc, the decision is written
+      on every call's ledger row rather than as its own event.)
 - [x] 7.8a Flow/dependency visualisation — `workitem_dependency` table
       (migration 0003, syncs to ADO predecessor links later),
       `linkWorkItems` / `flowFor`, `GET /projects/:id/flow`,

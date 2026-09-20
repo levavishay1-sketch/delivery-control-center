@@ -2,7 +2,7 @@
 
 Status: **done** — all 5 tasks complete (implemented in `f9c5f4f`, the
 "✦ המלצות לשיפור" action on a requirement's record screen). Originally
-written as a backlog item that depended on `run-cost-tracking` and
+written as a backlog item that depended on the earlier cost-tracking change and
 `decision-history`.
 
 ## Why
@@ -16,7 +16,7 @@ requirement is run.
 
 A "המלצות לשיפור" (recommendations for improvement) button, available
 once a requirement is done. Clicking it has Claude analyze that
-requirement's full history — its cost records (`run-cost-tracking`) and
+requirement's full history — its cost records (the earlier cost-tracking change) and
 its decision history (`decision-history`) — and produce recommendations
 such as:
 - How to save tokens.
@@ -41,7 +41,7 @@ one requirement to the next.
 
 ## Impact
 
-- Depends on `run-cost-tracking` (needs real per-run cost data) and
+- Depends on the earlier cost-tracking change (needs real per-run cost data) and
   `decision-history` (needs real captured reasons) — build those first.
 - `packages/core` — a new analysis prompt that reads a requirement's
   full timeline + cost records + decision history and asks Claude to

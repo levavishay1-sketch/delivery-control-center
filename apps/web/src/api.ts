@@ -161,6 +161,40 @@ export type RequirementCostSummary = {
   byKind: Record<string, { count: number; usd: number }>;
 };
 export const getCostSummary = (id: string) => get<RequirementCostSummary>(`/workitems/${id}/cost`);
+
+/* ── Claude: the ledger and its control center (claude-in-dcc §8, §9) ── */
+export type ClaudeCallView = {
+  id: string; startedAt: string; finishedAt: string; durationMs: number | null;
+  clientId: string; clientName: string; userId: string; userName: string;
+  entityKind: string; entityId: string | null; workitemId: string | null; workitemTitle: string | null; screen: string | null;
+  capability: string; trigger: string; label: string;
+  conversationId: string | null; messageId: string | null; parentCallId: string | null;
+  modelRequested: string | null; modelUsed: string | null; effort: string | null; policyVersion: number | null; policyRule: string | null; numTurns: number | null;
+  inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number; costUsd: number; priceListVersion: number | null;
+  outcome: string; errorText: string | null; unanswered: boolean; sourceRef: string | null;
+  meta: Record<string, unknown>;
+};
+export type CenterBar = { key: string; label: string; usd: number; calls: number };
+export type ClaudeOverview = {
+  month: string;
+  tiles: {
+    costUsd: number; calls: number; budgetPct: number | null;
+    questions: number; answeredWithoutModel: number; answeredWithoutModelPct: number;
+    unhelpful: number; unhelpfulPct: number; reasked: number;
+    errors: number; timeouts: number; escalated: number; unanswered: number;
+  };
+  byClient: CenterBar[]; byCapability: CenterBar[]; byModel: CenterBar[]; byScreen: CenterBar[];
+  byUser: (CenterBar & { questions: number; withoutModelPct: number; unhelpfulPct: number })[];
+  policy: { version: number; defaults: number; escalated: number; manual: number; capped: number };
+  tokens: { input: number; cacheRead: number; cacheWrite: number; output: number; cacheSharePct: number };
+};
+export type CenterQuery = Partial<{ month: string; clientId: string; userId: string; capability: string; model: string; outcome: string; escalated: "1"; workitemId: string; limit: number; offset: number }>;
+const qs = (q: CenterQuery) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v)); const s = p.toString(); return s ? `?${s}` : ""; };
+export const getClaudeOverview = (q: CenterQuery) => get<ClaudeOverview>(`/claude/overview${qs(q)}`);
+export const getClaudeCalls = (q: CenterQuery) => get<{ rows: ClaudeCallView[]; total: number; month: string }>(`/claude/calls${qs(q)}`);
+export const getClaudeCall = (id: string) => get<ClaudeCallView>(`/claude/calls/${id}`);
+/** Every call behind a requirement's total, all time — one ledger row each. */
+export const getWorkitemCalls = (id: string) => get<{ calls: ClaudeCallView[] }>(`/workitems/${id}/calls`);
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
 
@@ -197,11 +231,6 @@ export type ClientLetterHistoryItem = {
 };
 /** Every letter ever composed for this requirement, newest first — read back, never re-runs the AI. */
 export const getGapLetters = (id: string) => get<{ letters: ClientLetterHistoryItem[] }>(`/workitems/${id}/gap-letters`);
-export type CostDetailRow = {
-  id: string; occurredAt: string; kind: string; label: string; model: string | null;
-  costUsd: number; inputTokens: number; outputTokens: number; durationMs: number | null; numTurns: number | null;
-};
-export const getCostDetail = (id: string) => get<{ rows: CostDetailRow[] }>(`/workitems/${id}/cost-detail`);
 export type BreakdownResult = {
   depth: number;
   tasks: {
@@ -456,10 +485,12 @@ export type OnboardingStage = {
 };
 export type OnboardingEvent = { id: string; type: string; payload: Record<string, unknown>; actorUserId: string | null; occurredAt: string };
 export type OnboardingCost = {
-  totalCostUsd: number; apiCalls: number; inputTokens: number; outputTokens: number; apiDurationMs: number;
-  /** What the Hebrew assistant has cost — its own line, not part of the session. */
+  /** Ledger rows for this run plus what the live process spent since the last slice (`liveUsd`, not yet recorded). */
+  totalCostUsd: number; liveUsd: number; apiCalls: number; inputTokens: number; outputTokens: number; apiDurationMs: number;
+  /** What the Hebrew assistant has cost — its own ledger rows, not part of the session. */
   assistant: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
-  byStage: { stageKey: OnboardingStageKey; model: string | null; effort: string | null; costUsd: number }[];
+  byStage: { stageKey: string; model: string | null; effort: string | null; costUsd: number }[];
+  calls: ClaudeCallView[];
 };
 export type CodeMapPlace = "cloud" | "local" | "both";
 export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";

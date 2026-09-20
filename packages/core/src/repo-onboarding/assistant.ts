@@ -97,6 +97,9 @@ const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…`
 
 export type AssistantInput = {
   runId: string;
+  clientId: string;
+  /** The person asking — every call is recorded in their name. */
+  userId: string;
   question: string;
   /** The text on the terminal screen right now. */
   screen?: string;
@@ -143,7 +146,12 @@ export async function askAssistant(input: AssistantInput): Promise<AssistantAnsw
 
     const call = (s: Store, prompt: string) =>
       runClaudeRaw(cwd, prompt, {
-        model: assistantModel(),
+        ledger: {
+          clientId: input.clientId, userId: input.userId, capability: "onboarding_assistant", trigger: "chat",
+          entity: { kind: "onboarding_run", id: runId }, screen: "onboarding", label: "העוזר של ההטמעה",
+          // `total_cost_usd` of a resumed conversation is cumulative; the row is the difference.
+          baseline: { costUsd: s.costSoFar },
+        },
         maxTurns: 8,
         timeoutMs: 180_000,
         env: { MAX_THINKING_TOKENS: "0" },

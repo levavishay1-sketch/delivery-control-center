@@ -14,7 +14,8 @@ export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksN
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
-export { route, recommend, recordRouting, loadPolicy, type Capability, type Effort, type RoutingDecision, type RoutingSignals } from "./routing.ts";
+export { route, recommend, loadPolicy, reloadPolicy, savePolicy, chatPolicy, priceFor, estimateUsd, type Capability, type Effort, type Policy, type RoutingDecision, type RoutingSignals } from "./routing.ts";
+export { claudeOverview, claudeCalls, claudeCallById, callsForEntity, type CenterFilter, type ClaudeOverview, type ClaudeCallView, type CenterBar } from "./claude-center.ts";
 export { linkWorkItems, flowFor, taskFlowFor, clientTaskTree, allAdoTasks, type FlowNode, type FlowEdge, type TaskFlowNode, type TaskFlowEdge, type AdoTaskRow } from "./flow.ts";
 export { materializeTasksToAdo, pendingMaterializeCount, editTask, type MaterializeResult, type EditTaskResult } from "./task-ado-sync.ts";
 export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";

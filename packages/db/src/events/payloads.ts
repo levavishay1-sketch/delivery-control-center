@@ -97,11 +97,15 @@ const statusChanged = z.object({
   viaAdo: z.boolean().default(false),
 });
 
-const modelRouted = z.object({
-  capability: z.string(), // "brief" | "matching" | "gap_detection" | "execution" | "review" | ...
-  model: z.string(),
-  budgetUsd: z.number().nonnegative().optional(),
-  rationale: z.string(),
+/** A call to Claude on this work item happened. The ledger row it links to
+ *  (`links: [{rel: "claude_call"}]`) holds who, which model, tokens and
+ *  cost — deliberately none of that here, so money is counted once
+ *  (claude-in-dcc §8.2). */
+const claudeCall = z.object({
+  callId: z.string().uuid(),
+  capability: z.string(),
+  label: z.string().default(""),
+  outcome: z.string().default("ok"),
 });
 
 const reviewCompleted = z.object({
@@ -192,7 +196,7 @@ export const payloadSchemas: Registry = {
   "blocker.raised": { 1: blockerRaised },
   "blocker.answered": { 1: blockerAnswered },
   "status.changed": { 1: statusChanged },
-  "model.routed": { 1: modelRouted },
+  "claude.call": { 1: claudeCall },
   "ado.synced": { 1: adoSynced },
   "note.added": { 1: noteAdded },
   "requirement.updated": { 1: requirementUpdated },

@@ -17,7 +17,9 @@
     "dev:reset": "node -e \"require('node:fs').rmSync('.pgdata',{recursive:true,force:true})\"",
     "dev:setup": "node src/dev/setup.ts",
     "dev:migrate": "node src/dev/migrate.ts",
-    "dev:prove": "node src/dev/prove.ts"
+    "dev:prove": "node src/dev/prove.ts",
+    "dev:adopt": "node src/dev/adopt-migrations.ts",
+    "dev:backfill-ledger": "node src/dev/backfill-ledger.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

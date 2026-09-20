@@ -1,4 +1,4 @@
-import { appendEvent } from "@dcc/db";
+import { appendEvent, recordClaudeCall } from "@dcc/db";
 import { regenerateBrief } from "./brief/generate.ts";
 
 /**
@@ -46,6 +46,18 @@ export async function recordSession(input: {
       costUsd: input.session.costUsd,
     },
   });
+  // A person's own Claude Code session is a call to Claude like any other:
+  // one ledger row, so the ledger is every call (claude-in-dcc §8.1). The
+  // event above is the timeline entry; `sourceRef` ties the two together and
+  // keeps the row from being copied again by the back-fill.
+  await recordClaudeCall({
+    clientId: input.clientId, userId: input.dev.userId, workitemId: input.workitemId,
+    entityKind: input.workitemId ? "workitem" : "none", entityId: input.workitemId,
+    capability: "interactive_session", trigger: "hook", label: input.session.summary.slice(0, 200),
+    startedAt: input.occurredAt ?? new Date(), modelUsed: input.session.model,
+    inputTokens: input.session.tokensIn ?? 0, outputTokens: input.session.tokensOut ?? 0, costUsd: input.session.costUsd ?? 0,
+    sourceRef: `event:${ev!.id}`,
+  }).catch(() => { /* the session was captured; a ledger row failing to write must not lose it */ });
   if (input.workitemId) await regenerateBrief(input.clientId, input.workitemId);
   return ev;
 }

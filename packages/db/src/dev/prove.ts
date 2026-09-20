@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { db, withTenant, closeDb } from "../client.ts";
 import { client, users, workitem } from "../schema/index.ts";
 import { eventLog } from "../schema/events.ts";
+import { claudeCall } from "../schema/claude.ts";
 import { appendEvent, timeline } from "../events/index.ts";
+import { recordClaudeCall } from "../ledger/index.ts";
 
 /**
  * Proves the two foundational decisions that are painful to reverse:
@@ -131,6 +133,37 @@ console.log("\n\x1b[1m01 — correction via supersedes\x1b[0m");
     ? ok("correction is a new row; original still present")
     : bad("supersedes chain wrong", now.length);
   void corrected;
+}
+
+console.log("\n\x1b[1mclaude-in-dcc — the ledger is walled and append-only\x1b[0m");
+{
+  const call = await recordClaudeCall({
+    clientId: cA!.id, userId: alice!.id, workitemId: wiA.id, entityKind: "workitem", entityId: wiA.id,
+    capability: "gap_detection", trigger: "button", label: "prove", startedAt: new Date(),
+    inputTokens: 10, outputTokens: 5, costUsd: 0.0123,
+  });
+  const cross = await withTenant(cB!.id, (tx) => tx.select().from(claudeCall).where(sql`${claudeCall.id} = ${call.id}`));
+  cross.length === 0 ? ok("tenant B cannot read tenant A's call") : bad("cross-tenant ledger read leaked", cross.length);
+  try {
+    await withTenant(cA!.id, (tx) => tx.update(claudeCall).set({ costUsd: "0" }).where(sql`${claudeCall.id} = ${call.id}`));
+    bad("UPDATE on claude_call was allowed");
+  } catch {
+    ok("UPDATE on claude_call is rejected");
+  }
+  try {
+    await withTenant(cA!.id, (tx) => tx.delete(claudeCall).where(sql`${claudeCall.id} = ${call.id}`));
+    bad("DELETE on claude_call was allowed");
+  } catch {
+    ok("DELETE on claude_call is rejected");
+  }
+  const tl = await timeline(cA!.id, wiA.id);
+  const thin = tl.find((e) => e.type === "claude.call");
+  thin && thin.links.some((l) => l.rel === "claude_call" && l.ref === call.id)
+    ? ok("a claude.call event links the timeline to the ledger row")
+    : bad("no claude.call event with a ledger link");
+  thin && !("costUsd" in (thin.payload as object))
+    ? ok("the timeline event carries no cost — money is counted once")
+    : bad("the timeline event duplicates the cost");
 }
 
 console.log(`\n${fail === 0 ? "\x1b[32m✓ all " + pass + " checks passed" : "\x1b[31m✗ " + fail + " failed, " + pass + " passed"}\x1b[0m\n`);

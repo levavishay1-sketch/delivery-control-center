@@ -154,6 +154,10 @@ export type RunSession = {
   base?: SessionTotals;
   /** What the Hebrew assistant has cost — its own line, never part of the session's cost. */
   assistant?: AssistantTotals;
+  /** Up to where the session's spend is already in the `claude_call` ledger
+   *  (claude-in-dcc design §1: a live session is recorded in slices). This is
+   *  a cursor, never a total — the money is only in the ledger. */
+  ledgerCursor?: SessionTotals & { stageKey?: string | null; at?: string };
 };
 
 export type AssistantTotals = { costUsd: number; calls: number; inputTokens: number; outputTokens: number };
@@ -205,4 +209,5 @@ export type DeliverResult = {
   note?: string;
 };
 
-export type StageUsage = { costAtStart?: number; costAtEnd?: number; model?: string | null; effort?: string | null };
+/** The model and effort the session ran with while this stage was open — its cost is in the ledger, sliced by stage. */
+export type StageUsage = { model?: string | null; effort?: string | null };

@@ -1,6 +1,6 @@
 # Requirement retro recommendations — tasks
 
-Appetite: **standard**. Blocked on `run-cost-tracking` and
+Appetite: **standard**. Blocked on the earlier cost-tracking change and
 `decision-history` shipping first — both done.
 
 ## 1. Analysis
@@ -45,7 +45,7 @@ Appetite: **standard**. Blocked on `run-cost-tracking` and
       ניתוח" button render correctly. Deliberately did NOT click "הרץ
       ניתוח" — that spawns a real, costed `claude -p` call, and this
       session's standing rule (also applied in
-      `compiled-components-call-graph`, `run-cost-tracking`) is to never
+      `compiled-components-call-graph`, the earlier cost-tracking change) is to never
       trigger one purely to test a feature without being explicitly
       asked. So: the kick-off/poll/render machinery is verified: the
       actual quality of the recommendations Claude produces against a

@@ -14,14 +14,14 @@ in React component state, nowhere durable.
 
 - Every composed letter is now saved as its own `client_letter.composed`
   event (`packages/db/src/events/payloads.ts`) the moment it's
-  generated — subject, body, gap count, and (per `run-cost-tracking`)
+  generated — subject, body, gap count, and (per the earlier cost-tracking change)
   its own cost/model/tokens.
 - A "📄 מכתבים אחרונים (N)" list replaces the old single "last letter"
   link — every letter ever composed for the requirement, newest first,
   in a floating window; picking one opens it full, with its own detailed
   cost.
 - `composeClientLetter` gained a `by: Dev` param and is now cost-tracked
-  like every other AI run (`run-cost-tracking`'s own gap: see that
+  like every other AI run (the earlier cost-tracking change's own gap: see that
   change's notes) — the two features shipped together since the same
   user report touched both at once.
 
