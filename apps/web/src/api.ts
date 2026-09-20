@@ -302,18 +302,6 @@ export type AssessResult = {
   title: string; summary: string; whatChanges: string[]; baked: boolean; rationale: string[];
   gaps: AssessGap[]; repoUsed: string | null;
 };
-export type ClientLetter = {
-  subject: string; body: string; gapCount: number;
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null;
-};
-export const composeGapLetter = (id: string, gapIds: string[]) =>
-  post<ClientLetter>(`/workitems/${id}/gap-letter`, { gapIds });
-export type ClientLetterHistoryItem = {
-  id: string; subject: string; body: string; gapCount: number; composedAt: string;
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null; model: string | null;
-};
-/** Every letter ever composed for this requirement, newest first — read back, never re-runs the AI. */
-export const getGapLetters = (id: string) => get<{ letters: ClientLetterHistoryItem[] }>(`/workitems/${id}/gap-letters`);
 export type BreakdownResult = {
   depth: number;
   tasks: {
@@ -351,18 +339,6 @@ export const materializeTasks = (id: string) => post<MaterializeResult>(`/workit
 export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
 export const startAssess = (id: string, opts?: { promptKey?: string; customEmphasis?: string; model?: string }) =>
   post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, opts ?? {});
-export type RetroResult = {
-  summary: string; tokenSavings: string[]; timeSavings: string[]; unnecessaryActions: string[];
-  reworkCausingDecisions: string[]; breakdownFeedback: string[]; emphasize: string[];
-};
-export type RetroRun = {
-  id: string | null; kind: string | null;
-  state: "running" | "done" | "error" | "idle" | "rolled_back" | "stopped";
-  lines: string[]; result: RetroResult | null; error: string | null;
-  startedAt?: string | null; finishedAt?: string | null;
-};
-export const startRetro = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/retro`, {});
-export const getRetro = (id: string) => get<RetroRun>(`/workitems/${id}/retro`);
 export const previewAssess = (id: string, promptKey: string, customEmphasis?: string) =>
   get<{ prompt: string; promptHe: string | null; model: string | null; templateTitle: string }>(
     `/workitems/${id}/assess-preview?${new URLSearchParams({ promptKey, ...(customEmphasis ? { customEmphasis } : {}) })}`,

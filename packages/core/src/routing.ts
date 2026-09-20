@@ -22,9 +22,7 @@ export type Capability =
   | "chat_code_read"
   | "conversation_summary"
   | "usage_insights"
-  | "interactive_session"
-  | "retro"
-  | "client_letter";
+  | "interactive_session";
 
 export type Tier = "haiku" | "sonnet" | "opus";
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";

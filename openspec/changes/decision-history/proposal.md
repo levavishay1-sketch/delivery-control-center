@@ -9,8 +9,8 @@ consistently *why* a course-changing decision was made. When a task
 gets re-broken-down, closed, reopened, or a requirement changes
 direction, the reasoning behind that choice isn't captured anywhere —
 so looking back later, it's possible to see that something happened but
-not why, which blocks the retrospective/learning goal in
-`requirement-retro-recommendations`.
+not why, which blocks the learning goal — the end-of-work
+recommendations the one chat gives on a requirement (`claude-in-dcc`).
 
 ## What changes
 
@@ -35,7 +35,7 @@ decisions caused extra work.
   fixed enum.
 - This proposal is about *capturing* the reason at the moment of
   decision — analyzing the captured reasons for patterns/recommendations
-  is `requirement-retro-recommendations`, a separate, dependent change.
+  is the chat's recommendations on the requirement (`claude-in-dcc`).
 
 ## Impact
 

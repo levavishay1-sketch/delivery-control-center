@@ -57,6 +57,11 @@ const RETIRED = [
   "onboarding_assistant", "onboarding-assistant", "askAssistant", "assistantMessages", "resetAssistant", "markAssistantSent", "assistantBusy",
   "assistantModel", "assistant.json", "askOnboardingAssistant", "getOnboardingAssistant", "resetOnboardingAssistant", "AssistantTotals",
   "Assistant.tsx", "onboarding.assistant.sent", "AssistantMessage",
+  // the end-of-requirement recommendations run and the composed letter to the requester, retired 2026-09-21:
+  // both are answers of the one chat now (openspec/changes/claude-in-dcc, stage 5)
+  "runRetro", "getRetroRunView", "RetroModal", "RetroResult", "RetroRun", "startRetro", "getRetro(", "/retro", "\"retro\"", "retro:",
+  "requirement-retro-recommendations", "composeClientLetter", "getRecentClientLetters", "client_letter", "clientLetter", "ClientLetter",
+  "gap-letter", "gapLetter", "gap_letter", "composeGapLetter", "getGapLetters", "letterHistory", "letterPicker", "letterDetail",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
 // docs/history/ holds the design records the user asked to keep. Everything else — the replacing

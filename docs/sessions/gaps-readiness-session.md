@@ -40,10 +40,10 @@ Each gap now carries:
 - `blocking`: urgency flag
 
 ### 5. Cheap client-facing letters
-- New template: `gaps.client_letter` (haiku model)
-- Converts open gaps to business Hebrew message
+- A prompt template on the cheap model turned the open gaps into a business-Hebrew message
 - No code, no jargon, numbered questions with lettered option buttons
 - User copies and sends themselves (no automatic client channel)
+- Since `claude-in-dcc` the message is an answer of the one chat (a chip on the requirement's conversation); the template, the endpoint and the composer are gone
 
 ## Implementation Files
 
@@ -53,8 +53,8 @@ Each gap now carries:
 
 **Backend**
 - `packages/core/src/gaps.ts` — proposeGap(), verifyGap() (records dismissal reasons as notes)
-- `packages/core/src/ai-assist.ts` — buildAssessPrompt() appends contract template; composeClientLetter() generates business letter
-- `apps/api/src/server.ts` — POST /workitems/:id/gap-letter endpoint; updated /assess to accept {promptKey, customEmphasis, model}
+- `packages/core/src/ai-assist.ts` — buildAssessPrompt() appends contract template; a letter composer (since moved into the chat)
+- `apps/api/src/server.ts` — a letter endpoint (since removed); updated /assess to accept {promptKey, customEmphasis, model}
 
 **Frontend**
 - `apps/web/src/screens/Record.tsx` — Gap cards enriched with whoAnswers pill, why box, impactIfWrong, option buttons; "✉ נסח פערים ללקוח" opens letter modal

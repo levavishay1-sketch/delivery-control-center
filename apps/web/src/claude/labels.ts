@@ -31,8 +31,6 @@ export const CAPABILITY_HE: Record<string, string> = {
   conversation_summary: "סיכום שיחה",
   usage_insights: "ניתוח שאלות",
   interactive_session: "סשן Claude Code",
-  retro: "המלצות לשיפור",
-  client_letter: "מכתב ללקוח",
 };
 export const capabilityLabel = (c: string | null | undefined) => (c ? CAPABILITY_HE[c] ?? c : "—");
 

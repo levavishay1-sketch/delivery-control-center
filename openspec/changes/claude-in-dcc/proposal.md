@@ -46,9 +46,9 @@ bolted next to it. Three things change for the person using DCC:
   door to Claude.
 - Adds the "קלוד" screen with five tabs, and moves the routing policy to a
   versioned document edited from it.
-- Folds the onboarding assistant into the one chat; turns the retro and the
-  client letter into chat topics; replaces the four cost displays with one
-  `CostLine`.
+- Folds the onboarding assistant into the one chat; the end-of-work
+  recommendations and the letter to the requester become answers of the
+  chat; replaces the four cost displays with one `CostLine`.
 
 ## Principles this follows
 

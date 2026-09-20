@@ -15,9 +15,9 @@ import type { EventActor } from "../schema/events.ts";
  *   npm run -w @dcc/db dev:backfill-ledger
  */
 
+// Kinds of runs that no longer exist keep their old name as the capability — history is not rewritten.
 const KIND_TO_CAPABILITY: Record<string, string> = {
   assess: "gap_detection", breakdown: "decomposition", implement: "execution", check: "execution",
-  retro: "retro", gap_letter: "client_letter",
 };
 const isDuplicate = (e: unknown) => /duplicate|unique/i.test(String((e as Error).message ?? e));
 

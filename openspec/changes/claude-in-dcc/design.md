@@ -205,15 +205,21 @@ client, and the chat's `retain_until` uses it when it is set.
   its first note; a second press returns the same task. Conclusions are
   editable — a conclusion is not money.
 
-## 7. What moves, what stays (§3)
+## 7. What is a button, what is the chat (§3)
 
-| Today | Rule | After |
-| --- | --- | --- |
-| assess, breakdown, implement | a named process (§3.1–3.3) | stay as buttons, in the registry, requestable from the chat |
-| onboarding `/init` | a named process | stays; its cost is ledger slices |
-| retro | read-only analysis (§3.4) | deleted; a chip in the requirement's conversation |
-| client letter | text a person edits (§3.4) | deleted; a chip; the letter is a message to copy from |
-| onboarding assistant | a conversation (§4.1) | deleted; the one chat on topic `run:<id>`; "send to session" is a registry action |
+- A **named process** — the readiness check, the breakdown, the
+  development of a task, the onboarding `/init` — is a button on its
+  screen and an entry in the action registry; the chat can propose it and
+  the person runs it (§3.1–3.3). Its cost is ledger rows (the onboarding
+  session as slices).
+- **Read-only analysis and text a person edits** (§3.4) — the
+  recommendations for a finished requirement, the message to the requester
+  about its open questions — are answers of the chat: chips in the
+  requirement's conversation, written from the facts the screen hands over,
+  the message copied by the person and never sent by DCC. No separate run,
+  no separate screen.
+- **A conversation** (§4.1) is always the one chat: on an onboarding run it
+  is the topic `run:<id>`, and "send to session" is a registry action.
 
 ## 8. Shared components (§4.7, §6.7, §11.4)
 
