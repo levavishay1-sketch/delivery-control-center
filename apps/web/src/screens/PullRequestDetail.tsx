@@ -244,7 +244,6 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
   if (!head) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><p className="ob-sub" style={{ marginTop: 12 }}>טוען את הבקשה…</p></>;
 
   const { pr, nextStep, blockers } = head;
-  const canMerge = pr.state === "open" && blockers.every((b) => b.ok !== false);
   const loading = (what: string) => <p className="ob-sub"><span className="spinner" style={{ width: 13, height: 13, marginInlineEnd: 8, verticalAlign: "middle" }} />טוען {what} מהגיט־האוסט…</p>;
 
   return (
@@ -271,9 +270,6 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
         </div>
         <div className="ob-actions">
           <a className="btn btn-primary btn-sm" href={pr.url} target="_blank" rel="noreferrer">פתח ב-GitHub ↗</a>
-          <button className="btn btn-secondary btn-sm" disabled title="בשלב הבא">עדכן את הענף</button>
-          <button className="btn btn-secondary btn-sm" disabled title="בשלב הבא">בקש סקירה</button>
-          <button className="btn btn-secondary btn-sm" disabled={!canMerge} title={canMerge ? "" : "יש חסימות פתוחות"}>מזג</button>
         </div>
       </div>
 
