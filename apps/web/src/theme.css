@@ -578,6 +578,11 @@ a { color: var(--color-accent); }
 .cm-pop .sha { font-family: var(--mono); direction: ltr; unicode-bidi: isolate; background: var(--surface-muted); border: 1px solid var(--border-soft); border-radius: 4px; padding: 0 5px; }
 .cm-pop .x { position: absolute; inset-inline-end: 6px; top: 4px; border: none; background: none; cursor: pointer; color: var(--ink-500); font-size: 15px; line-height: 1; padding: 2px 5px; }
 .cm-pop a { font-size: 11.5px; }
+.cm-pop .fd { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--divider); }
+.cm-pop .fd .k { color: var(--ink-500); }
+.cm-pop .fd .p { font-family: var(--mono); font-size: 11px; direction: ltr; text-align: left; unicode-bidi: isolate; overflow-wrap: anywhere; background: var(--surface-muted); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 7px; margin: 4px 0 6px; }
+.cm-pop .fd .b { display: flex; gap: 6px; flex-wrap: wrap; }
+.cm-pop .fd .e { color: var(--status-critical); font-size: 11px; margin-top: 5px; }
 .cm-lg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-inline-end: 5px; vertical-align: middle; }
 
 /* בקשות מיזוג (screens/PullRequests.tsx) */

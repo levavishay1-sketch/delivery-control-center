@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { withTenant } from "@dcc/db";
 import { task, workitem } from "@dcc/db/schema";
 import { existingCheckout, firstRepo, git, httpsRepoUrl, taskBranchName } from "./ai-assist.ts";
+import { displayPath } from "./local-folder.ts";
 
 /**
  * The code map: one picture of where a piece of work sits in git, drawn the
@@ -38,6 +39,8 @@ export type CodeMapNode = {
   url?: string;
   /** One line in Hebrew: what this dot is, for someone who does not read git. */
   detail?: string;
+  /** For work that exists only on this computer: the folder it sits in. */
+  folder?: string;
 };
 
 export type CodeMapLane = {
@@ -84,11 +87,13 @@ export type CodeMapFacts = {
   fetchedAt: string | null;
   /** The repository on the host, for linking a commit. */
   repoUrl: string | null;
+  /** The working folder these facts were read from. */
+  dir: string | null;
 };
 
 const EMPTY: CodeMapFacts = {
   baseBranch: "main", branch: null, baselineSha: null, baselineCommit: null, baseBefore: [], baseAfter: [], ourCommits: [],
-  uncommittedFiles: 0, behind: 0, behindTouching: 0, pushed: false, merged: false, prUrl: null, prNumber: null, fetchedAt: null, repoUrl: null,
+  uncommittedFiles: 0, behind: 0, behindTouching: 0, pushed: false, merged: false, prUrl: null, prNumber: null, fetchedAt: null, repoUrl: null, dir: null,
 };
 
 const MAX_OURS = 8;
@@ -150,7 +155,7 @@ export async function readCodeMapFacts(dir: string, input: { branch?: string | n
     baseline = mb.code === 0 ? mb.out.trim() || null : null;
   }
 
-  const facts: CodeMapFacts = { ...EMPTY, baseBranch, branch, baselineSha: baseline, repoUrl: remote ? httpsRepoUrl(remote) : null };
+  const facts: CodeMapFacts = { ...EMPTY, baseBranch, branch, baselineSha: baseline, repoUrl: remote ? httpsRepoUrl(remote) : null, dir: displayPath(dir) };
   if (baseline) {
     facts.ourCommits = (await logCommits(dir, `${baseline}..${R}`, MAX_OURS)).reverse();
     facts.baseAfter = (await logCommits(dir, `${baseline}..${baseRef}`, MAX_BASE_AFTER)).reverse();
@@ -230,10 +235,16 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
     from: { lane: "base", at: branchAt },
     nodes: [],
   };
-  for (const c of f.ourCommits) ours.nodes.push(nodeFrom(c, "ours", f.repoUrl, `שינוי שנשמר בענף שלנו${f.pushed ? " וכבר נדחף לענן" : ", עדיין רק במחשב הזה"}.`));
+  // Work that exists only on this computer says where: commits not pushed yet, unsaved files, an empty branch.
+  const here = f.dir ?? undefined;
+  for (const c of f.ourCommits) {
+    const node = nodeFrom(c, "ours", f.repoUrl, `שינוי שנשמר בענף שלנו${f.pushed ? " וכבר נדחף לענן" : ", עדיין רק במחשב הזה"}.`);
+    if (!f.pushed) node.folder = here;
+    ours.nodes.push(node);
+  }
   if (f.uncommittedFiles > 0) {
     ours.nodes.push({
-      kind: "uncommitted", files: f.uncommittedFiles,
+      kind: "uncommitted", files: f.uncommittedFiles, folder: here,
       subject: `${filesLine(f.uncommittedFiles)} שעוד לא נשמרו`,
       detail: "שינויים שקיימים בתיקייה אבל עדיין לא נשמרו ב-git. הם ייכנסו ב-commit של המסירה, לפי מה שתאשרו בסקירה.",
     });
@@ -244,7 +255,7 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
       detail: `הענף מוצע למיזוג ל-${f.baseBranch}. המיזוג עצמו נעשה בגיט־האוסט, בלחיצה של אדם.`,
     });
   }
-  if (!ours.nodes.length) ours.nodes.push({ kind: "empty", subject: "עדיין אין commits", detail: "הענף נפתח, ועדיין לא נשמר בו שום שינוי." });
+  if (!ours.nodes.length) ours.nodes.push({ kind: "empty", subject: "עדיין אין commits", detail: "הענף נפתח, ועדיין לא נשמר בו שום שינוי.", folder: here });
   ours.note = f.ourCommits.length
     ? `${he(f.ourCommits.length, "commit אחד", "commits")}${f.uncommittedFiles ? ` · ${filesLine(f.uncommittedFiles)} שעוד לא נשמרו` : ""}`
     : f.uncommittedFiles

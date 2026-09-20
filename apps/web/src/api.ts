@@ -464,7 +464,7 @@ export type CodeMapPlace = "cloud" | "local" | "both";
 export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
 export type CodeMapNode = {
   kind: CodeMapNodeKind; title?: string; sha?: string; subject?: string; author?: string; at?: string;
-  files?: number; url?: string; detail?: string;
+  files?: number; url?: string; detail?: string; folder?: string;
 };
 export type CodeMapLane = { id: string; label?: string; note?: string; place?: CodeMapPlace; nodes: CodeMapNode[]; from?: { lane: string; at: number } };
 export type CodeMapArrow = { from: string; to: string; label: string; state: "done" | "pending" };
@@ -493,6 +493,8 @@ export type PullRequestDetail = {
 };
 export const listPullRequests = (refresh?: boolean) => get<PullRequestList>(`/pull-requests${refresh ? "?refresh=1" : ""}`);
 export const getPullRequest = (repoId: string, number: number) => get<PullRequestDetail>(`/repos/${repoId}/pull-requests/${number}`);
+
+export const openFolder = (path: string) => post<{ opened: string }>("/open-folder", { path });
 
 export type OnboardingRunView = {
   repo: { id: string; name: string }; run: OnboardingRun; stages: OnboardingStage[]; events: OnboardingEvent[];

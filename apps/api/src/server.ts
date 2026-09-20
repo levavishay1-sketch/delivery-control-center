@@ -79,6 +79,8 @@ import {
   pushTask,
   codeMapForTask,
   listPullRequests,
+  openLocalFolder,
+  FolderRefused,
   getPullRequest,
   editTask,
   precheckTaskDelete,
@@ -152,6 +154,7 @@ app.setErrorHandler((err, _req, reply) => {
   // Onboarding refuses with a message meant for the person ("the previous
   // stage has not finished", "a run is already live") — show it, not a 500.
   if (err instanceof OnboardingError) return reply.code(409).send({ error: err.message });
+  if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
   if (typeof e.statusCode === "number" && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
@@ -207,6 +210,13 @@ app.get("/users", async () => {
 app.delete("/repos/:id", async (req) => {
   await actingUser(req);
   return deleteRepo((req.params as { id: string }).id);
+});
+
+/** Opens a DCC working folder in the machine's file manager (the API runs on that machine). */
+app.post("/open-folder", async (req) => {
+  await actingUser(req);
+  const b = z.object({ path: z.string().min(1).max(1000) }).parse(req.body);
+  return openLocalFolder(b.path);
 });
 
 /* ── pull requests — every open request DCC can see, from every client
