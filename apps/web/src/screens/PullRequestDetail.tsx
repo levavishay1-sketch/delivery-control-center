@@ -3,6 +3,7 @@ import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQu
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
+import { errText } from "./onboarding/labels.ts";
 
 /**
  * One pull request, on a screen of its own (screens 2 to 5 of
@@ -106,7 +107,7 @@ function ReviewPanel({ repoId, number, base, onDone }: { repoId: string; number:
       setSent("הסקירה נשלחה לגיט־האוסט.");
       setDecision(null); setText("");
       onDone();
-    } catch (e) { setErr(e instanceof Error ? e.message.replace(/^Error:\s*/, "") : String(e)); } finally { setBusy(false); }
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
   return (
     <div className="panel rv" style={{ marginBottom: 12 }}>
