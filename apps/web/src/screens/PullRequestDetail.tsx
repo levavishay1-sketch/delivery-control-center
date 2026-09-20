@@ -212,11 +212,6 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
         <div className="top">
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="h1 br">{pr.headBranch}</div>
-            {d?.topics?.length ? (
-              <ul className="pr-topics" aria-label="What this branch is about">
-                {d.topics.map((t) => <li key={t.title}>{t.title}<span> · {t.detail}</span></li>)}
-              </ul>
-            ) : null}
             <div className="l" dir="ltr" style={{ textAlign: "start" }}>#{pr.number} · {pr.title}</div>
             <div className="l">פתח {pr.author} · {waited(pr.waitingHours)} · אל <span className="ob-code">{pr.baseBranch}</span></div>
           </div>
@@ -258,9 +253,23 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
               </div>
               {!d
                 ? <div className="panel">{loading("את מפת הקוד")}</div>
-                : d.codeMap
-                  ? <CodeMapPanel map={d.codeMap} />
-                  : <div className="ob-note warn">{d.codeMapProblem ?? "אין מידע על מיקום הענף."}</div>}
+                : (
+                  <div className="pr-maprow">
+                    <div className="map">
+                      {d.codeMap ? <CodeMapPanel map={d.codeMap} /> : <div className="ob-note warn">{d.codeMapProblem ?? "אין מידע על מיקום הענף."}</div>}
+                    </div>
+                    {d.topics.length > 0 && (
+                      <div className="panel pr-topics">
+                        <h4>על מה הענף</h4>
+                        {d.topics.map((t, i) => (
+                          <div className={`t${i < 3 && t.detail.startsWith("OpenSpec change") ? " main" : ""}`} key={t.title}>
+                            <span className="n">{t.title}</span><span className="c">{t.detail.replace("OpenSpec change · ", "")}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
             </div>
             <div className="rail">
               <div className="panel">

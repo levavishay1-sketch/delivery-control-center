@@ -695,6 +695,13 @@ a { color: var(--color-accent); }
 
 /* the branch is the headline of its request; what it is about hangs under it, small */
 .pr-head .h1.br { font-family: var(--mono); direction: ltr; text-align: start; unicode-bidi: isolate; font-size: 16px; overflow-wrap: anywhere; }
-.pr-topics { direction: ltr; text-align: start; margin: 4px 0 6px; padding-inline-start: 18px; font-size: 11.5px; color: var(--ink-700); line-height: 1.55; }
-.pr-topics span { color: var(--ink-500); }
 .cm-pop .msg { direction: ltr; text-align: left; unicode-bidi: isolate; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 11.5px; line-height: 1.5; color: var(--ink-700); margin-top: 6px; max-height: 150px; overflow: auto; background: var(--surface-muted); border-radius: 6px; padding: 5px 7px; }
+
+/* what the branch is about sits beside its map, and drops under it when there is no room */
+.pr-maprow { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; }
+.pr-maprow .map { flex: 1 1 360px; min-width: 0; }
+.pr-topics { flex: 1 1 210px; max-width: 100%; }
+.pr-topics .t { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--divider); font-size: 11.5px; direction: ltr; text-align: left; }
+.pr-topics .t .n { color: var(--ink-700); flex: 1 1 50%; min-width: 0; overflow-wrap: break-word; }
+.pr-topics .t.main .n { color: var(--color-accent-dark); font-weight: 500; }
+.pr-topics .t .c { color: var(--ink-500); flex: 0 1 45%; text-align: right; }
