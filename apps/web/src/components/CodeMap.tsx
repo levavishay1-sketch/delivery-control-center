@@ -206,22 +206,17 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
         <marker id="cm-ar-mute" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 z" fill={D.color.other} /></marker>
       </defs>
 
-      {placed.map((p) => {
-        const first = p.xs[0] ?? D.right;
-        const last = p.xs[p.xs.length - 1] ?? first;
-        const parent = p.lane.from ? byId.get(p.lane.from.lane) : undefined;
-        const px = parent ? parent.xs[p.lane.from!.at] ?? first : first;
-        const py = parent ? parent.y : p.y;
-        // Labels hang above the line, starting at the point the line starts, so they
-        // never sit on the dots and never collide with an arrow label.
-        const labelX = Math.min(D.width - 8, first + 6);
-        // The line that has no parent starts a little before its first dot, so a lane with one or two dots still reads as a line.
-        const lineStart = parent ? first : Math.min(D.width - 24, first + D.lead);
-        return (
-          <g key={p.lane.id}>
-            {parent
-              ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} fill="none" stroke={D.color.ours} strokeWidth={2} />
-              : <line x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} />}
+      {/* The pressable strips come first, underneath everything: a branch's curve ends on the dot of the line it
+          springs from, and drawn on top of that dot it would take the press meant for the dot. */}
+      <g>
+        {placed.map((p) => {
+          const first = p.xs[0] ?? D.right;
+          const last = p.xs[p.xs.length - 1] ?? first;
+          const parent = p.lane.from ? byId.get(p.lane.from.lane) : undefined;
+          const px = parent ? parent.xs[p.lane.from!.at] ?? first : first;
+          const py = parent ? parent.y : p.y;
+          const lineStart = parent ? first : Math.min(D.width - 24, first + D.lead);
+          return <g key={p.lane.id}>
             {/* A wide invisible strip over the whole line, curve included: pressing it says which branch it is. */}
             {(() => {
               const at = (parent ? (px + last) / 2 : (lineStart + last) / 2);
@@ -237,6 +232,26 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
                 ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} {...hit} />
                 : <line x1={lineStart} y1={p.y} x2={Math.min(last, lineStart - 24)} y2={p.y} {...hit} />;
             })()}
+          </g>;
+        })}
+      </g>
+
+      {placed.map((p) => {
+        const first = p.xs[0] ?? D.right;
+        const last = p.xs[p.xs.length - 1] ?? first;
+        const parent = p.lane.from ? byId.get(p.lane.from.lane) : undefined;
+        const px = parent ? parent.xs[p.lane.from!.at] ?? first : first;
+        const py = parent ? parent.y : p.y;
+        // Labels hang above the line, starting at the point the line starts, so they
+        // never sit on the dots and never collide with an arrow label.
+        const labelX = Math.min(D.width - 8, first + 6);
+        // The line that has no parent starts a little before its first dot, so a lane with one or two dots still reads as a line.
+        const lineStart = parent ? first : Math.min(D.width - 24, first + D.lead);
+        return (
+          <g key={p.lane.id}>
+            {parent
+              ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} fill="none" stroke={D.color.ours} strokeWidth={2} pointerEvents="none" />
+              : <line x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} pointerEvents="none" />}
             {p.lane.label && <text x={labelX} y={p.y - 32} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
             {p.lane.note && <text x={labelX} y={p.y - (p.lane.label ? 17 : 32)} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
             {p.lane.nodes.map((n: CodeMapNode, i) => (
