@@ -195,6 +195,30 @@ export const getClaudeCalls = (q: CenterQuery) => get<{ rows: ClaudeCallView[]; 
 export const getClaudeCall = (id: string) => get<ClaudeCallView>(`/claude/calls/${id}`);
 /** Every call behind a requirement's total, all time — one ledger row each. */
 export const getWorkitemCalls = (id: string) => get<{ calls: ClaudeCallView[] }>(`/workitems/${id}/calls`);
+
+/* the one chat (claude-in-dcc §4) */
+export type TopicRef = { kind: "wi" | "task" | "pr" | "run" | "app"; id?: string | null };
+export type ChatContext = { screen?: string | null; facts?: Record<string, unknown>; suggestions?: string[]; actions?: string[] };
+export type ChatMessage = {
+  id: string; conversationId: string; role: string; kind: string; text: string; source: string;
+  callId: string | null; payload: Record<string, unknown>; helpful: boolean | null; helpfulSource: string | null; createdAt: string;
+  cost: { model: string | null; effort: string | null; inputTokens: number; outputTokens: number; cacheReadTokens: number; costUsd: number } | null;
+};
+export type ConversationView = {
+  id: string; clientId: string; clientName: string | null; topicKey: string; topicKind: string; topicId: string | null; topicTitle: string;
+  status: string; continuedFrom: string | null; continuesAs: string | null; createdBy: string; createdByName: string | null;
+  lastMessageAt: string; createdAt: string; retainUntil: string | null; messageCount: number; costUsd: number; calls: number; lastText: string | null;
+};
+export type GlossaryEntry = { key: string; title: string; aliases?: string[]; explain: string; press?: string; kind: "button" | "term" | "field" };
+export type ScreenGlossary = { screen: string; about: string; entries: GlossaryEntry[] };
+export type ChatOpen = { topic: { key: string; kind: string; id: string | null; title: string; screen: string }; conversation: ConversationView | null; messages: ChatMessage[]; glossary: ScreenGlossary | null; suggestions: string[] };
+export type ChatAnswer = { conversation: ConversationView; messages: ChatMessage[]; rolledOver: boolean; suggestions: string[] };
+export const openChat = (body: { topic: TopicRef; context?: ChatContext }) => post<ChatOpen>("/claude/chat/open", body);
+export const askChat = (body: { topic: TopicRef; context?: ChatContext; question: string }) => post<ChatAnswer>("/claude/chat/ask", body);
+export const markHelpful = (messageId: string, helpful: boolean, note?: string) => post<{ helpful: boolean }>(`/claude/messages/${messageId}/helpful`, { helpful, note });
+export const getConversations = (q: { clientId?: string; userId?: string; limit?: number } = {}) => get<{ conversations: ConversationView[] }>(`/claude/conversations${qs(q as CenterQuery)}`);
+export const getConversation = (id: string) => get<{ conversation: ConversationView; messages: ChatMessage[]; topic: TopicRef; suggestions: string[]; glossary: ScreenGlossary | null }>(`/claude/conversations/${id}`);
+export const getGlossary = (screen: string) => get<ScreenGlossary>(`/claude/glossary/${screen}`);
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
 
@@ -487,8 +511,8 @@ export type OnboardingEvent = { id: string; type: string; payload: Record<string
 export type OnboardingCost = {
   /** Ledger rows for this run plus what the live process spent since the last slice (`liveUsd`, not yet recorded). */
   totalCostUsd: number; liveUsd: number; apiCalls: number; inputTokens: number; outputTokens: number; apiDurationMs: number;
-  /** What the Hebrew assistant has cost — its own ledger rows, not part of the session. */
-  assistant: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
+  /** What the chat has cost on this run — its own ledger rows, not part of the session. */
+  chat: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
   byStage: { stageKey: string; model: string | null; effort: string | null; costUsd: number }[];
   calls: ClaudeCallView[];
 };
@@ -603,15 +627,6 @@ export const updateOnboardingAutomation = (repoId: string, runId: string, automa
 export const updateOnboardingModelChoices = (repoId: string, runId: string, choices: ModelPolicy) => patch<ModelPolicy>(`${ob(repoId, runId)}/model-choices`, { choices });
 export const getOnboardingFile = (repoId: string, runId: string, path: string) =>
   get<FileVersionsData>(`${ob(repoId, runId)}/file?${new URLSearchParams({ path })}`);
-export type AssistantMessage = { id: string; role: "user" | "assistant"; text: string; at: string; send?: { text: string; sentAt?: string; forced?: boolean } };
-export const getOnboardingAssistant = (repoId: string, runId: string) =>
-  get<{ messages: AssistantMessage[]; model: string; busy: boolean }>(`${ob(repoId, runId)}/assistant`);
-export const askOnboardingAssistant = (repoId: string, runId: string, question: string, screen: string) =>
-  post<{ message: AssistantMessage; costUsd: number }>(`${ob(repoId, runId)}/assistant`, { question, screen });
-export const resetOnboardingAssistant = (repoId: string, runId: string) => del<{ reset: boolean }>(`${ob(repoId, runId)}/assistant`);
-/** `busy`: the session does not look idle; `force` sends anyway. */
-export const sendToOnboardingSession = (repoId: string, runId: string, body: { text: string; messageId?: string; force?: boolean }) =>
-  post<{ sent: true; confirmed: boolean } | { sent: false; busy: true; reason: string }>(`${ob(repoId, runId)}/assistant/send`, body);
 /** The run's terminal socket, through the same `/api` proxy as every call. */
 export const onboardingTerminalUrl = (repoId: string, runId: string) =>
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api${ob(repoId, runId)}/terminal`;

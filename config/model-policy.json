@@ -19,7 +19,6 @@
     "execution": { "default": "sonnet", "effort": "high", "escalateOn": [{ "breadth": 5 }, { "ambiguity": "high" }, { "novelty": "high" }], "downgradeOn": [{ "mechanical": true }] },
     "$onboarding_comment": "The onboarding session is Claude Code's own /init, run once per repository; what it writes steers every later session there for months, so it gets a strong default. A person can change model and effort per run, or type /model and /effort in the session itself. Its cost is recorded as ledger slices, one per stage of the run.",
     "onboarding_init": { "default": "sonnet", "effort": "high" },
-    "onboarding_assistant": { "default": "sonnet", "effort": "low" },
     "$chat_comment": "The one chat. It answers from the facts the screen hands it; step zero answers glossary and fact questions with no call at all. Haiku, no thinking, short answers. A call whose input passes maxInputTokens is refused and recorded — the sign that the delta discipline broke.",
     "chat": { "default": "haiku", "effort": "low", "maxInputTokens": 60000 },
     "chat_code_read": { "default": "sonnet", "effort": "medium" },

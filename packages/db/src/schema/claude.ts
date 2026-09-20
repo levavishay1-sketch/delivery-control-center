@@ -49,7 +49,7 @@ export const conversation = pgTable(
     /** What the CLI already reported for `cli_session_id` (cumulative) — the
      *  baseline the next call's row is the difference from. Bookkeeping, not
      *  a total: the money is in `claude_call`. */
-    cliBaseline: jsonb("cli_baseline").$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+    cliBaseline: jsonb("cli_baseline").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     /** Hash of the screen context last handed to the model — only what changed is sent. */
     contextHash: text("context_hash"),
     lastMessageAt: timestamp("last_message_at", { withTimezone: true }).notNull().defaultNow(),

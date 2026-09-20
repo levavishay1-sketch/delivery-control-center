@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CallsTable } from "../claude/CallsTable.tsx";
 import { CostLine } from "../claude/CostLine.tsx";
 import { capabilityLabel, fmtUsd } from "../claude/labels.ts";
+import { useClaudeContext } from "../claude/context.ts";
 import {
   answerBlocker, composeGapLetter, correctNote, deleteBlocker, deleteGap, deleteRequirement,
   getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, getGapLetters, getRetro, startRetro, unlinkRepoFromReq, uploadAttachment, verifyGap,
@@ -148,6 +149,33 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     const iv = setInterval(check, 2000);
     return () => { alive = false; clearInterval(iv); };
   }, [id]);
+
+  // What the one chat knows about this screen (a hook — above the early returns).
+  useClaudeContext(d ? (() => {
+    const w = d.workitem;
+    const gaps = d.gaps.filter((g) => g.state === "proposed" || g.state === "verified");
+    const blocker = d.blockers.find((b) => b.state === "open");
+    const live = d.tasks.filter((t) => t.state !== "dropped");
+    const done = live.filter((t) => t.state === "done").length;
+    const inTfs = live.filter((t) => t.linkedAdoId).length;
+    const nextStep = blocker ? `לענות על החוסם: ${blocker.question}`
+      : gaps.length ? `לסגור את ${gaps.length} הפערים הפתוחים, ואז להריץ "פירוק למשימות"`
+      : live.length === 0 ? (w.phase === "intake" ? 'להריץ "בחינת בשלות", ואז "פירוק למשימות"' : 'להריץ "פירוק למשימות"')
+      : inTfs < live.length ? "לאשר את המשימות ליצירה ב-TFS"
+      : done < live.length ? `העבודה בבנייה — ${done} מתוך ${live.length} משימות הושלמו` : "כל המשימות הושלמו — הדרישה מוכנה לסגירה";
+    return {
+      screen: "requirement",
+      topic: { kind: "wi" as const, id: w.id, title: w.title },
+      facts: {
+        "שם הדרישה": w.title, "מפתח": w.key ?? "(עדיין אין)", "לקוח": w.clientId, "שלב (phase)": w.phase, "סוג": w.type, "עדיפות": w.priority, "סיכון": w.risk, "מבצע": w.executor,
+        "תאריך יעד": w.dueDate ?? "(לא נקבע)", "פערים פתוחים": gaps.map((g) => g.description), "חוסם פתוח": blocker?.question ?? null,
+        "משימות": live.length ? `${done} מתוך ${live.length} הושלמו, ${inTfs} נוצרו ב-TFS` : "עדיין אין משימות",
+        "עלות AI בפועל": cost ? `$${cost.totalUsd.toFixed(2)} ב-${cost.runCount} קריאות` : "עדיין לא נרשמה",
+        "הצעד הבא": nextStep, nextStep, status: w.phase, aiCostUsd: cost?.totalUsd ?? 0, openGaps: gaps.map((g) => g.description), blocker: blocker?.question ?? null,
+      },
+      suggestions: ["מה השלב הבא?", "מה זה פער?", "כמה עלה עד עכשיו?"],
+    };
+  })() : null);
 
   if (err) return (
     <div className="empty" style={{ textAlign: "center" }}>

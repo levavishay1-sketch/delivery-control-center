@@ -21,6 +21,7 @@ import { PullRequests } from "./screens/PullRequests.tsx";
 import { PullRequestDetailScreen, type Tab } from "./screens/PullRequestDetail.tsx";
 import { OnboardingScreen } from "./screens/onboarding/OnboardingScreen.tsx";
 import { ClaudeCenter, type CenterTab } from "./screens/ClaudeCenter.tsx";
+import { ClaudeChat } from "./claude/ClaudeChat.tsx";
 import { Stub } from "./screens/Stub.tsx";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
@@ -79,7 +80,10 @@ export function App() {
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
   else if (path === "/budgets") screen = <Budgets />;
-  else if (path === "/claude" || path.startsWith("/claude/")) screen = <ClaudeCenter tab={(path.split("/")[2] as CenterTab) || "overview"} nav={nav} />;
+  else if (path === "/claude" || path.startsWith("/claude/")) {
+    const [, , tab, openId] = path.split("/");
+    screen = <ClaudeCenter tab={(tab as CenterTab) || "overview"} openId={openId} nav={nav} />;
+  }
   else if (path === "/audit") screen = <AuditTrail nav={nav} />;
   else if (path === "/settings") screen = <Settings nav={nav} />;
   else if (path === "/prompts") screen = <Prompts />;
@@ -123,6 +127,8 @@ export function App() {
       <div className="canvas">
         <div className="workspace">{screen}</div>
       </div>
+      {/* the one chat — mounted once, over every screen (claude-in-dcc §4.1, §11.1) */}
+      <ClaudeChat nav={nav} />
     </div>
   );
 }

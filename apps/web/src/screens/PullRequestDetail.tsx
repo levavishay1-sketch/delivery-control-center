@@ -3,6 +3,8 @@ import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQu
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
+import { useClaudeContext } from "../claude/context.ts";
+import { GlossaryHint } from "../claude/GlossaryHint.tsx";
 import { errText } from "./onboarding/labels.ts";
 
 /**
@@ -145,6 +147,7 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
             <p className="ob-sub" style={{ marginTop: 3 }}>הבקשה פתוחה ומוכנה לסקירה. התהליך יעבור אתכם על מה שנכנס, ובסוף תחליטו.</p>
           </div>
           <button className="btn btn-primary" onClick={() => setOpen(true)}>התחל בתהליך אישור PR</button>
+          <GlossaryHint screen="pull_request" entry="review" />
         </div>
         {sent && <div className="ob-note ok" style={{ marginTop: 8 }}>{sent}</div>}
       </div>
@@ -322,6 +325,24 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
   useEffect(() => { void load(); }, [load]);
 
   const go = (t: Tab) => nav(`#/pull-requests/${repoId}/${number}${t === "overview" ? "" : `/${t}`}`);
+
+  // What the one chat knows about this screen (above the early returns — a hook).
+  const h = d ?? q;
+  useClaudeContext(h ? {
+    screen: "pull_request",
+    topic: { kind: "pr", id: `${repoId}/${number}`, title: `בקשת מיזוג #${number} · ${h.pr.repo.name}` },
+    facts: {
+      "כותרת": h.pr.title, "מענף": h.pr.headBranch, "לענף": h.pr.baseBranch, "מצב": h.pr.state === "open" ? (h.pr.draft ? "פתוחה (טיוטה)" : "פתוחה") : h.pr.state === "merged" ? "מוזגה" : "נסגרה",
+      "סקירה": h.pr.review === "approved" ? "מאושרת" : h.pr.review === "changes_requested" ? "התבקשו תיקונים" : "אין עדיין",
+      "בדיקות": h.pr.checks === "passing" ? "עברו" : h.pr.checks === "failing" ? "נכשלו" : h.pr.checks === "running" ? "רצות" : "אין",
+      "התנגשות": h.pr.conflicts ? "יש" : "אין", "ממתינה": `${Math.round(h.pr.waitingHours)} שעות`,
+      ...(d?.freshness ? { "מאחורי הבסיס": `${d.freshness.behind} קומיטים, ${d.freshness.behindTouching} מהם נוגעים בקבצים של הבקשה` } : {}),
+      "מה חוסם": h.blockers.filter((b) => b.ok === false).map((b) => `${b.title}: ${b.detail}`),
+      "הצעד הבא": `${h.nextStep.title} — ${h.nextStep.detail}`, nextStep: `${h.nextStep.title} — ${h.nextStep.detail}`,
+      status: h.pr.state, blocker: h.blockers.find((b) => b.ok === false)?.title ?? null,
+    },
+    suggestions: ["למה הבקשה לא עדכנית?", "אפשר למזג עכשיו?", "מה ההבדל בין ענף פרויקט לענף משימה?"],
+  } : null);
 
   if (err) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><div className="ob-note crit" style={{ marginTop: 12 }}>{err}</div></>;
   const head = d ?? q;

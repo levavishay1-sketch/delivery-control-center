@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { getClaudeCalls, getClaudeOverview, getClients, type ClaudeCallView, type ClaudeOverview } from "../api.ts";
-import { PageHead } from "../ui.tsx";
+import { getClaudeCalls, getClaudeOverview, getClients, getConversations, type ClaudeCallView, type ClaudeOverview, type ConversationView } from "../api.ts";
+import { PageHead, Pill } from "../ui.tsx";
 import { CallsTable } from "../claude/CallsTable.tsx";
 import { CostLine } from "../claude/CostLine.tsx";
-import { CAPABILITY_HE, MODEL_OPTIONS, OUTCOME_HE, capabilityLabel, fmtInt, fmtUsd, modelLabel, screenLabel } from "../claude/labels.ts";
+import { GlossaryHint } from "../claude/GlossaryHint.tsx";
+import { chatCommand, useClaudeContext } from "../claude/context.ts";
+import { CAPABILITY_HE, MODEL_OPTIONS, OUTCOME_HE, capabilityLabel, fmtInt, fmtUsd, fmtWhen, modelLabel, screenLabel } from "../claude/labels.ts";
 
 /**
  * Claude's control center (claude-in-dcc §9): the one place with every
@@ -15,7 +17,7 @@ export type CenterTab = "overview" | "calls" | "conversations" | "insights" | "p
 const TABS: { key: CenterTab; label: string; ready: boolean }[] = [
   { key: "overview", label: "סקירה", ready: true },
   { key: "calls", label: "קריאות", ready: true },
-  { key: "conversations", label: "שיחות", ready: false },
+  { key: "conversations", label: "שיחות", ready: true },
   { key: "insights", label: "מסקנות", ready: false },
   { key: "policy", label: "מדיניות ושמירה", ready: false },
 ];
@@ -30,12 +32,15 @@ const monthOptions = () => {
   return out;
 };
 
-export function ClaudeCenter({ tab, nav }: { tab: CenterTab; nav: (h: string) => void }) {
+export function ClaudeCenter({ tab, openId, nav }: { tab: CenterTab; openId?: string | undefined; nav: (h: string) => void }) {
   const months = useMemo(monthOptions, []);
   const [month, setMonth] = useState(months[0]!.value);
   const [clientId, setClientId] = useState("");
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => { getClients().then((r) => setClients(r.clients.map((c) => ({ id: c.id, name: c.name })))).catch(() => {}); }, []);
+  // `#/claude/conversations/<id>` opens that conversation in the chat itself.
+  useEffect(() => { if (openId) chatCommand({ type: "openConversation", id: openId }); }, [openId]);
+  useClaudeContext({ screen: "claude", topic: { kind: "app" }, facts: { "לשונית": tab, "חודש": month }, suggestions: ["מה זה \"נענו בלי מודל\"?", "מה זה הסלמה?", "איך מורידים עלות?"] });
 
   const current = TABS.find((t) => t.key === tab) ?? TABS[0]!;
   return (
@@ -55,8 +60,67 @@ export function ClaudeCenter({ tab, nav }: { tab: CenterTab; nav: (h: string) =>
           <button key={t.key} className="tab" role="tab" aria-selected={tab === t.key} disabled={!t.ready} title={t.ready ? undefined : "בשלב הבא של השינוי"} onClick={() => nav(`#/claude/${t.key}`)}>{t.label}</button>
         ))}
       </div>
-      {current.key === "calls" ? <CallsTab month={month} clientId={clientId} nav={nav} /> : <OverviewTab month={month} clientId={clientId} nav={nav} />}
+      {current.key === "calls" ? <CallsTab month={month} clientId={clientId} nav={nav} />
+        : current.key === "conversations" ? <ConversationsTab clientId={clientId} nav={nav} />
+        : <OverviewTab month={month} clientId={clientId} nav={nav} />}
     </>
+  );
+}
+
+/* ── שיחות ─────────────────────────────────────────────────────────── */
+
+const TOPIC_KIND_HE: Record<string, string> = { wi: "דרישה", task: "משימה", pr: "בקשת מיזוג", run: "הטמעת מאגר", app: "המערכת" };
+const dayOf = (iso: string) => {
+  const d = new Date(iso), t = new Date();
+  const diff = Math.floor((new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 864e5);
+  return diff <= 0 ? "היום" : diff === 1 ? "אתמול" : diff < 7 ? "השבוע" : "ישן יותר";
+};
+
+function ConversationsTab({ clientId, nav }: { clientId: string; nav: (h: string) => void }) {
+  const [rows, setRows] = useState<ConversationView[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { setRows(null); getConversations(clientId ? { clientId } : {}).then((r) => setRows(r.conversations)).catch((e) => setErr(String(e))); }, [clientId]);
+  if (err) return <div className="empty">{err}</div>;
+  if (!rows) return <div className="spin">טוען…</div>;
+  const groups = ["היום", "אתמול", "השבוע", "ישן יותר"].map((g) => ({ g, rows: rows.filter((r) => dayOf(r.lastMessageAt) === g) })).filter((x) => x.rows.length);
+  return (
+    <div className="dash">
+      <div>
+        {rows.length === 0 && <div className="empty">עדיין אין שיחות. הצ'אט נפתח מהכפתור למטה משמאל, מכל מסך.</div>}
+        {groups.map(({ g, rows: rs }) => (
+          <div key={g} style={{ marginBottom: 22 }}>
+            <p className="section-lbl">{g}</p>
+            <div className="rowlist">
+              {rs.map((c) => (
+                <div key={c.id} className="cv-row" onClick={() => chatCommand({ type: "openConversation", id: c.id })}>
+                  <span className="ic">{(TOPIC_KIND_HE[c.topicKind] ?? "?").slice(0, 1)}</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div className="t">{TOPIC_KIND_HE[c.topicKind] ?? c.topicKind} · {c.topicTitle}</div>
+                    <div className="s">{c.createdByName} · {fmtInt(c.messageCount)} הודעות · {fmtWhen(c.lastMessageAt)}{c.lastText ? ` — "${c.lastText}"` : ""}</div>
+                  </div>
+                  <div className="r">
+                    <CostLine costUsd={c.costUsd} note={`${fmtInt(c.calls)} קריאות · ${fmtInt(Math.max(0, Math.floor(c.messageCount / 2) - c.calls))} מהמערכת`} />
+                    {c.status === "active" ? <Pill tone="healthy">פעילה</Pill> : c.status === "rolled" ? <Pill tone="inactive">התגלגלה להמשך</Pill> : <Pill tone="inactive">נמחקה לפי השמירה</Pill>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {rows.length > 0 && <p className="ob-sub">לחיצה על שיחה פותחת אותה בצ'אט. <a onClick={() => nav("#/claude/calls")}>הקריאות שמאחורי העלויות ←</a></p>}
+      </div>
+      <div className="rail">
+        <div className="panel">
+          <h4>איך שיחות נפתחות</h4>
+          <div className="ob-explain" style={{ marginTop: 0 }}>
+            <div><b>לבד</b><span>המסך שאתם בו קובע את הנושא: דרישה, משימה, בקשת מיזוג, הטמעה — או "המערכת" כשאין ישות.</span></div>
+            <div><b>נפרד</b><span>לכל נושא שיחה אחת לכל אדם. חוזרים אליה אחרי שבוע ומוצאים אותה כפי שהייתה.</span></div>
+            <div><b>המשך</b><span>שיחה שהתארכה או התקררה ממשיכה בשיחה חדשה עם סיכום קצר. הסיכום הוא קריאה שנרשמת ועולה כסף — כמו כל קריאה.</span></div>
+            <div><b>נשמר</b><span>מה שראיתם נשאר על המסך גם אם המודל כבר לא נושא אותו איתו.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -102,11 +166,11 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
           <a className="stat-link" onClick={() => nav("#/claude/calls")}>כל הקריאות ←</a>
         </div>
         <div className="stat-tile">
-          <div className="stat-top"><div><div className="lbl">נענו בלי מודל</div><div className="num">{t.questions > 0 ? `${t.answeredWithoutModelPct}%` : "—"}</div></div><span className="badge-soft healthy">✓</span></div>
+          <div className="stat-top"><div><div className="lbl">נענו בלי מודל<GlossaryHint screen="claude" entry="without_model" /></div><div className="num">{t.questions > 0 ? `${t.answeredWithoutModelPct}%` : "—"}</div></div><span className="badge-soft healthy">✓</span></div>
           <div className="stat-sub muted">{t.questions > 0 ? `${fmtInt(t.answeredWithoutModel)} מתוך ${fmtInt(t.questions)} שאלות בצ'אט` : "הצ'אט מגיע בשלב הבא"}</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-top"><div><div className="lbl">"לא עזר"</div><div className="num">{t.questions > 0 ? `${t.unhelpfulPct}%` : "—"}</div></div><span className="badge-soft warning">!</span></div>
+          <div className="stat-top"><div><div className="lbl">"לא עזר"<GlossaryHint screen="claude" entry="unhelpful" /></div><div className="num">{t.questions > 0 ? `${t.unhelpfulPct}%` : "—"}</div></div><span className="badge-soft warning">!</span></div>
           <div className="stat-sub muted">{t.questions > 0 ? `${fmtInt(t.unhelpful)} תשובות · ${fmtInt(t.reasked)} נשאלו שוב מיד` : "נמדד מהצ'אט"}</div>
         </div>
         <div className="stat-tile">
@@ -138,7 +202,7 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
           <div className="panel">
             <h4>המדיניות בפועל</h4>
             <div className="stat-line"><span className="l">קריאות לפי ברירת המחדל</span><span>{fmtInt(o.policy.defaults)}</span></div>
-            <div className="stat-line"><span className="l">הוסלמו לפי כלל</span><span>{fmtInt(o.policy.escalated)}</span></div>
+            <div className="stat-line"><span className="l">הוסלמו לפי כלל<GlossaryHint screen="claude" entry="escalated" /></span><span>{fmtInt(o.policy.escalated)}</span></div>
             <div className="stat-line"><span className="l">נבחרו ידנית</span><span>{fmtInt(o.policy.manual)}</span></div>
             <div className="stat-line"><span className="l">נדחו בתקרה</span><span>{fmtInt(o.policy.capped)}</span></div>
             <p className="ob-sub" style={{ marginTop: 8 }}>גרסת מדיניות {o.policy.version}. כל קריאה נושאת את הגרסה שלפיה נותבה.</p>
@@ -146,7 +210,7 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
           <div className="panel">
             <h4>טוקנים</h4>
             <div className="stat-line"><span className="l">קלט</span><span>{fmtInt(o.tokens.input)}</span></div>
-            <div className="stat-line"><span className="l">נקראו מהמטמון</span><span>{fmtInt(o.tokens.cacheRead)} ({o.tokens.cacheSharePct}%)</span></div>
+            <div className="stat-line"><span className="l">נקראו מהמטמון<GlossaryHint screen="claude" entry="cache" /></span><span>{fmtInt(o.tokens.cacheRead)} ({o.tokens.cacheSharePct}%)</span></div>
             <div className="stat-line"><span className="l">נכתבו למטמון</span><span>{fmtInt(o.tokens.cacheWrite)}</span></div>
             <div className="stat-line"><span className="l">פלט</span><span>{fmtInt(o.tokens.output)}</span></div>
             <p className="ob-sub" style={{ marginTop: 8 }}>קריאה מהמטמון עולה עשירית ממחיר הקלט. שיעור נמוך אומר שהחלק הקבוע של הפרומפט קצר מדי או משתנה.</p>

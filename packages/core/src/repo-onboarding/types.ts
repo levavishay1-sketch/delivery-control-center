@@ -152,15 +152,11 @@ export type RunSession = {
   status?: SessionStatus;
   /** What earlier processes of the same conversation spent — a resume starts a new process. */
   base?: SessionTotals;
-  /** What the Hebrew assistant has cost — its own line, never part of the session's cost. */
-  assistant?: AssistantTotals;
   /** Up to where the session's spend is already in the `claude_call` ledger
    *  (claude-in-dcc design §1: a live session is recorded in slices). This is
    *  a cursor, never a total — the money is only in the ledger. */
   ledgerCursor?: SessionTotals & { stageKey?: string | null; at?: string };
 };
-
-export type AssistantTotals = { costUsd: number; calls: number; inputTokens: number; outputTokens: number };
 
 export type SessionTotals = { costUsd: number; inputTokens: number; outputTokens: number; apiDurationMs: number };
 export const sessionTotals = (s: RunSession): SessionTotals => ({
