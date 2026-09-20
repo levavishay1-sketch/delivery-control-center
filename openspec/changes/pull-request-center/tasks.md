@@ -97,3 +97,13 @@ Six mockups were approved before this round: the list, the request (four tabs �
 - [x] 11.7 The drawing is capped at 560px wide, so its text cannot balloon on a wide screen, and a line ends at its last dot.
 - [ ] 11.8 The action screens (update branch, request review, merge) are designed and their buttons are in place but disabled — the next piece of work.
 - [x] 11.9 Verified live on this repository's own pull request #2: the blockers (draft, no review, no checks, no parent), the next step, 132 files in five groups, 9 timeline items, the map with the 8 commits and the request's node, and each tab's address.
+
+## 12. Speed — a request took 12 to 18 seconds to open
+
+Reported by the user from the browser's network tab: two calls to the same request, 5.5s and 12.4s, with the second waiting on the server for most of it. Measured cause: the three calls to the host ran one after another, one of them (`commits?sha=…`, listing the base's history before the branch point) took ~8s by itself, another (`compare`) returns a 1.2MB payload because it carries every file's patch, and every tab switch asked the server again — twice, because the screen mounted twice.
+
+- [x] 12.1 The calls to the host that do not depend on each other run together (request, and what each side gained), and repositories are asked in parallel.
+- [x] 12.2 The 8-second history call is gone. The drawing gives its base line a short lead-in instead, so one or two dots still read as a line.
+- [x] 12.3 The server keeps a request's detail for 45 seconds (a forced refresh skips it); the screen keeps what it has fetched and shares one call between two mounts, so a tab switch costs ~0.2s instead of a full load.
+- [x] 12.4 **Progressive loading.** The header, what blocks the merge and the next step come from the list the server already holds (~0.2s) and appear at once; the map, files, timeline and branches fill in behind them, each with a short "loading from GitHub" line. Pointing at a row in the list starts the heavy fetch, so the click often finds it ready.
+- [ ] 12.5 What remains is the host itself: the `compare` call for a 132-file request is 1.2MB and 2 to 5 seconds, and GitHub offers no way to leave the patches out. For ordinary requests (a handful of files) it is a fraction of that.

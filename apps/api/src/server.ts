@@ -82,6 +82,7 @@ import {
   openLocalFolder,
   FolderRefused,
   pullRequestDetail,
+  pullRequestQuick,
   editTask,
   precheckTaskDelete,
   deleteTaskSurgical,
@@ -226,6 +227,12 @@ app.get("/pull-requests", async (req) => {
   await actingUser(req);
   const q = z.object({ refresh: z.string().optional() }).parse(req.query ?? {});
   return listPullRequests({ refresh: q.refresh === "1" });
+});
+
+app.get("/repos/:id/pull-requests/:number/quick", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  return pullRequestQuick(id, Number(number));
 });
 
 app.get("/repos/:id/pull-requests/:number", async (req) => {

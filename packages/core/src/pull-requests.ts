@@ -222,7 +222,8 @@ export async function listPullRequests(opts: { refresh?: boolean } = {}): Promis
   if (refs.length && !(await ghAvailable())) {
     for (const r of refs) watched.push({ id: r.id, name: r.name, clientId: r.clientId, clientName: r.clientName, provider: "github", reason: "GitHub CLI לא מותקן — התקינו gh והתחברו" });
   } else {
-    for (const r of refs) {
+    // One repository's host call must not wait for another's.
+    await Promise.all(refs.map(async (r) => {
       watched.push({ id: r.id, name: r.name, clientId: r.clientId, clientName: r.clientName, provider: "github" });
       for (const p of PROVIDERS) {
         try {
@@ -232,7 +233,7 @@ export async function listPullRequests(opts: { refresh?: boolean } = {}): Promis
           problems.push({ repo: r.name, reason: e instanceof Error ? e.message.slice(0, 160) : String(e) });
         }
       }
-    }
+    }));
   }
 
   // A request whose base is another open request's branch hangs under it, at any depth.

@@ -138,7 +138,30 @@ function nextStepFor(pr: PullRequestRow, blockers: Blocker[], behind: number, be
 
 /* ── the whole thing ──────────────────────────────────────────────── */
 
+/** What the screen can show at once: the header, what blocks the merge and the next step come from
+ *  the list already held, with no further call to the host. The heavy parts (the map, the files, the
+ *  timeline) arrive separately, so a person sees something useful immediately and the rest fills in. */
+export type PullRequestQuick = { pr: PullRequestRow; blockers: Blocker[]; nextStep: NextStep };
+
+export async function pullRequestQuick(repoId: string, number: number): Promise<PullRequestQuick> {
+  const list = await listPullRequests({});
+  const pr = list.rows.find((r) => r.repo.id === repoId && r.number === number);
+  if (!pr) throw new Error("בקשת המיזוג לא נמצאה");
+  const blockers = blockersFor(pr, !!pr.parentId, pr.checks !== "none");
+  return { pr, blockers, nextStep: nextStepFor(pr, blockers, 0, 0) };
+}
+
+/** A request's detail costs several calls to the host; a person switching tabs
+ *  should not pay for them again. Kept briefly, and skipped on an explicit refresh. */
+const cache = new Map<string, { at: number; value: PullRequestDetail }>();
+const TTL_MS = 45_000;
+
 export async function pullRequestDetail(repoId: string, number: number, opts: { refresh?: boolean } = {}): Promise<PullRequestDetail> {
+  const key = `${repoId}:${number}`;
+  if (!opts.refresh) {
+    const hit = cache.get(key);
+    if (hit && Date.now() - hit.at < TTL_MS) return hit.value;
+  }
   const list = await listPullRequests({ refresh: opts.refresh });
   const pr = list.rows.find((r) => r.repo.id === repoId && r.number === number);
   if (!pr) throw new Error("בקשת המיזוג לא נמצאה");
@@ -146,13 +169,18 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
   const slug = url ? url.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "") : null;
 
-  // A line needs more than one dot to read as a line, so a little of the base's history before the branch point comes too.
-  const view = slug ? await ghJson<{ body?: string; files?: GhFile[]; reviews?: GhReview[]; comments?: GhComment[] }>(["pr", "view", String(number), "--repo", url!, "--json", "body,files,reviews,comments"]) : null;
-  // Both directions: what the branch gained, and what the base gained since.
-  const ours = slug ? await ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.baseBranch}...${pr.headBranch}`]) : null;
+  // Three independent questions to the host, asked together rather than one after the other:
+  // what the request holds, what the branch gained, and what the base gained since.
+  const [view, ours, theirs] = slug
+    ? await Promise.all([
+        ghJson<{ body?: string; files?: GhFile[]; reviews?: GhReview[]; comments?: GhComment[] }>(["pr", "view", String(number), "--repo", url!, "--json", "body,files,reviews,comments"]),
+        ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.baseBranch}...${pr.headBranch}`]),
+        ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.headBranch}...${pr.baseBranch}`]),
+      ])
+    : [null, null, null];
+  // The base's history before the branch point is not fetched: listing it took ~8s on the host,
+  // more than everything else on this screen together. The drawing gives its line a short lead-in instead.
   const mergeBase = ours?.merge_base_commit?.sha ?? null;
-  const before = slug && mergeBase ? await ghJson<GhCommit[]>(["api", `repos/${slug}/commits?sha=${mergeBase}&per_page=3`]) : null;
-  const theirs = slug ? await ghJson<GhCompare>(["api", `repos/${slug}/compare/${pr.headBranch}...${pr.baseBranch}`]) : null;
 
   // The compare API names a file `filename` and says what happened to it; `gh pr view`
   // only gives `path`. Prefer compare, fall back to the view when it is unavailable.
@@ -176,7 +204,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
       branch: pr.headBranch,
       baselineSha: mergeBase ? short(mergeBase) : null,
       baselineCommit: ours.merge_base_commit ? asCommit(ours.merge_base_commit) : null,
-      baseBefore: (before ?? []).slice(1, 3).reverse().map((c) => asCommit(c)),
+      baseBefore: [],
       baseAfter: theirCommits.map((c) => ({ ...c, files: overlap.length ? [...theirFiles].filter((f) => ourPaths.has(f)) : [] })),
       ourCommits: (ours.commits ?? []).map((c) => asCommit(c, [...ourPaths])),
       uncommittedFiles: 0,
@@ -212,9 +240,11 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
     .filter((x) => x.repo.id === repoId)
     .map((x) => ({ name: x.headBranch, ahead: null, behind: x.number === pr.number ? behind : null, prNumber: x.number, current: x.number === pr.number, updatedAt: x.updatedAt, author: x.author }));
 
-  return {
+  const value: PullRequestDetail = {
     pr, blockers, nextStep, codeMap, codeMapProblem,
     freshness: ours && theirs ? { behind, behindTouching: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
     groups, fileCount: files.length, timeline, branches, body: view?.body ?? "",
   };
+  cache.set(key, { at: Date.now(), value });
+  return value;
 }

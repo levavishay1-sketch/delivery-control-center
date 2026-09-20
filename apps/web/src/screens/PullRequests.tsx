@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { listPullRequests, type PullRequestList, type PullRequestRow } from "../api.ts";
+import { getPullRequest, listPullRequests, type PullRequestList, type PullRequestRow } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 
 /**
@@ -23,7 +23,10 @@ const TONE: Record<string, string> = { critical: "critical", warning: "warning",
 
 function Row({ pr, depth, onOpen }: { pr: PullRequestRow; depth: number; onOpen: () => void }) {
   return (
-    <button type="button" className="pr-row" style={{ paddingInlineStart: 12 + depth * 26 }} onClick={onOpen}>
+    <button type="button" className="pr-row" style={{ paddingInlineStart: 12 + depth * 26 }} onClick={onOpen}
+      // Pointing at a row is a good sign it will be opened: start fetching now, so the click finds it ready.
+      onMouseEnter={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}
+      onFocus={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}>
       <span className="pr-num">#{pr.number}</span>
       <span className="pr-main">
         <span className="pr-title">{pr.title}</span>

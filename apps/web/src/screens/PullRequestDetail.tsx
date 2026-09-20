@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getPullRequest, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
+import { cachedPullRequest, getPullRequest, getPullRequestQuick, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 
 /**
@@ -97,9 +97,13 @@ function Timeline({ items }: { items: TimelineItem[] }) {
 }
 
 export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: string; number: number; tab: Tab; nav: (h: string) => void }) {
-  const [d, setD] = useState<Detail | null>(null);
+  // Something already fetched for this request paints immediately; the refresh happens behind it.
+  const [d, setD] = useState<Detail | null>(() => cachedPullRequest(repoId, number));
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // The header, the blockers and the next step arrive first; the heavy parts fill in behind them.
+  const [q, setQ] = useState<PullRequestQuick | null>(null);
+  useEffect(() => { let live = true; getPullRequestQuick(repoId, number).then((r) => { if (live) setQ(r); }).catch(() => {}); return () => { live = false; }; }, [repoId, number]);
 
   const load = useCallback(async (refresh?: boolean) => {
     setBusy(true);
@@ -110,10 +114,12 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
   const go = (t: Tab) => nav(`#/pull-requests/${repoId}/${number}${t === "overview" ? "" : `/${t}`}`);
 
   if (err) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><div className="ob-note crit" style={{ marginTop: 12 }}>{err}</div></>;
-  if (!d) return <p className="ob-sub">טוען…</p>;
+  const head = d ?? q;
+  if (!head) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><p className="ob-sub" style={{ marginTop: 12 }}>טוען את הבקשה…</p></>;
 
-  const { pr, nextStep } = d;
-  const canMerge = d.blockers.every((b) => b.ok !== false);
+  const { pr, nextStep, blockers } = head;
+  const canMerge = blockers.every((b) => b.ok !== false);
+  const loading = (what: string) => <p className="ob-sub"><span className="spinner" style={{ width: 13, height: 13, marginInlineEnd: 8, verticalAlign: "middle" }} />טוען {what} מהגיט־האוסט…</p>;
 
   return (
     <div className="pr-screen">
@@ -148,7 +154,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       <div className="pr-tabs">
         {TABS.map((t) => (
           <button key={t.key} type="button" className={`pr-tab${tab === t.key ? " on" : ""}`} onClick={() => go(t.key)}>
-            {t.label}{t.key === "files" && d.fileCount ? ` · ${d.fileCount}` : ""}
+            {t.label}{t.key === "files" && d?.fileCount ? ` · ${d.fileCount}` : pr.changedFiles && t.key === "files" ? ` · ${pr.changedFiles}` : ""}
           </button>
         ))}
       </div>
@@ -165,20 +171,22 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
               <div className="panel" style={{ marginBottom: 12 }}>
                 <h4>מה חוסם מיזוג</h4>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>
-                {d.blockers.map((b) => <BlockerRow key={b.key} b={b} />)}
+                {blockers.map((b) => <BlockerRow key={b.key} b={b} />)}
               </div>
-              {d.codeMap
-                ? <CodeMapPanel map={d.codeMap} />
-                : <div className="ob-note warn">{d.codeMapProblem ?? "אין מידע על מיקום הענף."}</div>}
+              {!d
+                ? <div className="panel">{loading("את מפת הקוד")}</div>
+                : d.codeMap
+                  ? <CodeMapPanel map={d.codeMap} />
+                  : <div className="ob-note warn">{d.codeMapProblem ?? "אין מידע על מיקום הענף."}</div>}
             </div>
             <div className="rail">
               <div className="panel">
                 <h4>עובדות</h4>
                 <div className="ob-kv">
-                  <div><div className="l">commits</div><div className="v">{d.freshness?.ahead ?? "—"}</div></div>
-                  <div><div className="l">קבצים</div><div className="v">{d.fileCount}</div></div>
-                  <div><div className="l">היעד התקדם</div><div className="v">{d.freshness ? `${d.freshness.behind}` : "—"}</div></div>
-                  <div><div className="l">מתוכם באותם קבצים</div><div className="v" style={{ color: d.freshness?.behindTouching ? "var(--status-warning)" : undefined }}>{d.freshness?.behindTouching ?? "—"}</div></div>
+                  <div><div className="l">commits</div><div className="v">{d?.freshness?.ahead ?? "—"}</div></div>
+                  <div><div className="l">קבצים</div><div className="v">{d?.fileCount ?? pr.changedFiles}</div></div>
+                  <div><div className="l">היעד התקדם</div><div className="v">{d?.freshness ? `${d.freshness.behind}` : "—"}</div></div>
+                  <div><div className="l">מתוכם באותם קבצים</div><div className="v" style={{ color: d?.freshness?.behindTouching ? "var(--status-warning)" : undefined }}>{d?.freshness?.behindTouching ?? "—"}</div></div>
                 </div>
               </div>
               <div className="panel">
@@ -192,9 +200,10 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
         </>
       )}
 
-      {tab === "files" && <Files groups={d.groups} count={d.fileCount} url={pr.url} />}
-      {tab === "timeline" && <Timeline items={d.timeline} />}
-      {tab === "branches" && (
+      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
+      {tab === "timeline" && (d ? <Timeline items={d.timeline} /> : <div className="panel">{loading("את היומן")}</div>)}
+      {tab === "branches" && !d && <div className="panel">{loading("את הענפים")}</div>}
+      {tab === "branches" && d && (
         <div className="panel">
           <h4>ענפים פתוחים בריפו</h4>
           {d.branches.map((b) => (

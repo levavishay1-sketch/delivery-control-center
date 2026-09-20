@@ -506,8 +506,24 @@ export type PullRequestDetail = {
   body: string;
 };
 export const listPullRequests = (refresh?: boolean) => get<PullRequestList>(`/pull-requests${refresh ? "?refresh=1" : ""}`);
-export const getPullRequest = (repoId: string, number: number, refresh?: boolean) =>
-  get<PullRequestDetail>(`/repos/${repoId}/pull-requests/${number}${refresh ? "?refresh=1" : ""}`);
+export type PullRequestQuick = { pr: PullRequestRow; blockers: PrBlocker[]; nextStep: NextStep };
+export const getPullRequestQuick = (repoId: string, number: number) => get<PullRequestQuick>(`/repos/${repoId}/pull-requests/${number}/quick`);
+
+/** What the screen already has, so switching tabs paints at once instead of asking again. */
+const prDetails = new Map<string, PullRequestDetail>();
+const prInflight = new Map<string, Promise<PullRequestDetail>>();
+export const cachedPullRequest = (repoId: string, number: number) => prDetails.get(`${repoId}:${number}`) ?? null;
+export function getPullRequest(repoId: string, number: number, refresh?: boolean): Promise<PullRequestDetail> {
+  const key = `${repoId}:${number}`;
+  const running = prInflight.get(key);
+  // Two mounts of the same screen — a tab switch, or React mounting twice in development — share one call.
+  if (running && !refresh) return running;
+  const p = get<PullRequestDetail>(`/repos/${repoId}/pull-requests/${number}${refresh ? "?refresh=1" : ""}`)
+    .then((d) => { prDetails.set(key, d); return d; })
+    .finally(() => { if (prInflight.get(key) === p) prInflight.delete(key); });
+  prInflight.set(key, p);
+  return p;
+}
 
 export const openFolder = (path: string) => post<{ opened: string }>("/open-folder", { path });
 

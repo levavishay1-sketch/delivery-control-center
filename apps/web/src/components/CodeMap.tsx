@@ -20,6 +20,7 @@ const D = {
   maxSpacing: 70,
   minSpacing: 24,
   curveDx: 60,
+  lead: 36,
   radius: { other: 4, ours: 5, attention: 5, current: 7, branchPoint: 6, pr: 12, uncommitted: 6, empty: 6 },
   color: {
     line: "var(--border-hairline)",
@@ -211,11 +212,13 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
         // Labels hang above the line, starting at the point the line starts, so they
         // never sit on the dots and never collide with an arrow label.
         const labelX = Math.min(D.width - 8, first + 6);
+        // The line that has no parent starts a little before its first dot, so a lane with one or two dots still reads as a line.
+        const lineStart = parent ? first : Math.min(D.width - 24, first + D.lead);
         return (
           <g key={p.lane.id}>
             {parent
               ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} fill="none" stroke={D.color.ours} strokeWidth={2} />
-              : <line x1={first} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} />}
+              : <line x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} />}
             {p.lane.label && <text x={labelX} y={p.y - 32} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
             {p.lane.note && <text x={labelX} y={p.y - (p.lane.label ? 17 : 32)} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
             {p.lane.nodes.map((n: CodeMapNode, i) => (
