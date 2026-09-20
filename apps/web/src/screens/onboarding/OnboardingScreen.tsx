@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  approveOnboardingReview, cancelOnboardingRun, completeOnboardingInit, getOnboardingDiff, getOnboardingRun, getOnboardingStages, getRepos, getUsers,
+  approveOnboardingReview, cancelOnboardingRun, completeOnboardingInit, getOnboardingFile, getOnboardingRun, getOnboardingStages, getRepos, getUsers,
   listOnboardingRuns, refreshOnboardingReview, resumeOnboardingSession, runOnboardingStage, startOnboardingRun, updateOnboardingAutomation,
   updateOnboardingModelChoices,
   type AutomationPolicy, type DeliverResult, type Effort, type InitResult, type ModelPolicy, type OnboardingRunSummary, type OnboardingRunView,
@@ -8,6 +8,7 @@ import {
 } from "../../api.ts";
 import { PageHead, Pill } from "../../ui.tsx";
 import { CodeMapPanel } from "../../components/CodeMap.tsx";
+import { FileCompare } from "../../components/FileCompare.tsx";
 import { Assistant } from "./Assistant.tsx";
 import { RunTerminal } from "./Terminal.tsx";
 import { AutomationEditor, AutomationPanel, CostPanel, EventLogPanel, ModelEditor, ModelPanel, RunsPanel } from "./rail.tsx";
@@ -352,11 +353,6 @@ function Working({ text }: { text: string }) {
 function ReviewBody(p: StageCardProps & { map?: ReactNode }) {
   const r = (p.stage.result ?? { changedFiles: [], checkedAt: "" }) as ReviewResult;
   const [open, setOpen] = useState<string | null>(null);
-  const [diff, setDiff] = useState<{ path: string; diff: string; binary: boolean } | null>(null);
-  useEffect(() => {
-    if (!open) { setDiff(null); return; }
-    getOnboardingDiff(p.view.run.repoId, p.view.run.id, open).then(setDiff).catch((e) => setDiff({ path: open, diff: errText(e), binary: false }));
-  }, [open, r.checkedAt, p.view.run.repoId, p.view.run.id]);
   return (
     <div style={{ display: "grid", gap: 10 }}>
       {p.map}
@@ -376,7 +372,7 @@ function ReviewBody(p: StageCardProps & { map?: ReactNode }) {
                 <span className="add">+{f.additions}</span>
                 <span className="del">−{f.deletions}</span>
               </button>
-              {open === f.path && (diff?.path === f.path ? <DiffView diff={diff.diff} binary={diff.binary} /> : <p className="ob-sub" style={{ margin: "6px 4px" }}>טוען…</p>)}
+              {open === f.path && <FileCompare key={`${f.path}|${r.checkedAt}`} load={() => getOnboardingFile(p.view.run.repoId, p.view.run.id, f.path)} />}
             </div>
           ))}
         </div>
@@ -385,21 +381,6 @@ function ReviewBody(p: StageCardProps & { map?: ReactNode }) {
         <button className="btn btn-primary" disabled={!!p.busy} onClick={p.onApprove}>{p.busy === "approve" ? "מאשר…" : "✓ אשר ועבור למסירה"}</button>
       </div>
     </div>
-  );
-}
-
-function DiffView({ diff, binary }: { diff: string; binary: boolean }) {
-  // Opens right under its row; if the row was near the bottom of the window, bring the diff into view.
-  const ref = useRef<HTMLPreElement>(null);
-  useEffect(() => { ref.current?.scrollIntoView({ block: "nearest" }); }, []);
-  if (binary) return <p className="ob-sub" style={{ margin: "6px 4px" }}>קובץ בינארי — אין תצוגת שינויים.</p>;
-  return (
-    <pre className="ob-diff" ref={ref}>
-      {diff.split("\n").map((l, i) => {
-        const cls = l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("index ") ? "meta" : l.startsWith("@@") ? "hunk" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : undefined;
-        return <span key={i} className={cls}>{l || " "}{cls ? "" : "\n"}</span>;
-      })}
-    </pre>
   );
 }
 

@@ -3,7 +3,7 @@ import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
 import { httpsRepoUrl } from "./ai-assist.ts";
 import { codeMapFrom, type CodeMap, type CodeMapCommit, type CodeMapFacts } from "./code-map.ts";
-import { ghJson, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
+import { ghJson, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
 
 /**
  * One pull request, as its screen needs it
@@ -27,12 +27,10 @@ export type NextStep = { title: string; detail: string; action: "update_branch" 
 
 export type FileGroupKey = "code" | "instructions" | "docs" | "config" | "build" | "other";
 
-export type PullRequestFile = { path: string; status: string; additions: number; deletions: number; note?: string };
+export type PullRequestFile = { path: string; status: string; additions: number; deletions: number; note?: string; /** The name it had before, when it was renamed. */ from?: string };
 export type FileGroup = { key: FileGroupKey; title: string; note?: string; files: PullRequestFile[]; additions: number; deletions: number };
 
 export type TimelineItem = { at: string; kind: "commit" | "review" | "comment" | "base" | "opened" | "pushed" | "merged" | "dcc"; text: string; detail?: string; tag?: string; tone?: "warning" | "healthy" | "neutral" };
-
-export type BranchRow = { name: string; ahead: number | null; behind: number | null; prNumber: number | null; current: boolean; updatedAt: string | null; author: string | null };
 
 export type PullRequestDetail = {
   pr: PullRequestRow;
@@ -43,16 +41,17 @@ export type PullRequestDetail = {
   codeMapProblem: string | null;
   freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
+  /** The two versions a file is compared between: where the branch left the base, and where it is now. */
+  refs: { base: string; head: string } | null;
   fileCount: number;
   timeline: TimelineItem[];
-  branches: BranchRow[];
   body: string;
 };
 
 /* ── what the host says ───────────────────────────────────────────── */
 
 type GhCommit = { sha: string; commit: { message: string; author: { name: string; date: string } } };
-type GhFile = { filename: string; status?: string; additions: number; deletions: number };
+type GhFile = { filename: string; status?: string; additions: number; deletions: number; previous_filename?: string };
 type GhCompare = { ahead_by: number; behind_by: number; commits: GhCommit[]; files?: GhFile[]; merge_base_commit?: GhCommit };
 type GhReview = { state: string; author?: { login?: string } | null; submittedAt?: string };
 type GhComment = { author?: { login?: string } | null; body: string; createdAt: string };
@@ -71,6 +70,9 @@ const GROUPS: { key: FileGroupKey; title: string; note?: string; match: (p: stri
   { key: "code", title: "קוד", match: (p) => /\.(ts|tsx|js|jsx|mjs|cjs|cs|py|go|rb|java|sql|css|html)$/i.test(p) },
 ];
 
+/** The host says "removed" and "renamed"; both would shorten to R, so the letters are named. */
+const STATUS_LETTER: Record<string, string> = { added: "A", modified: "M", removed: "D", renamed: "R", copied: "A", changed: "M" };
+
 const GENERATED = /Entities\.cs$|OptionSets\.cs$|\.designer\.cs$|\.g\.ts$|packages\//i;
 
 function groupFiles(files: GhFile[]): FileGroup[] {
@@ -85,8 +87,9 @@ function groupFiles(files: GhFile[]): FileGroup[] {
   for (const f of files) {
     const g = GROUPS.find((x) => x.match(f.filename)) ?? { key: "other" as FileGroupKey, title: "אחר" };
     add(g, {
-      path: f.filename, status: (f.status ?? "modified").charAt(0).toUpperCase(), additions: f.additions, deletions: f.deletions,
+      path: f.filename, status: STATUS_LETTER[f.status ?? "modified"] ?? "M", additions: f.additions, deletions: f.deletions,
       ...(GENERATED.test(f.filename) ? { note: "נוצר אוטומטית — לא לערוך ידנית" } : {}),
+      ...(f.previous_filename ? { from: f.previous_filename } : {}),
     });
   }
   const order: FileGroupKey[] = ["code", "instructions", "config", "docs", "other", "build"];
@@ -235,16 +238,72 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   for (const cm of (view?.comments ?? []).slice(-5)) timeline.push({ at: cm.createdAt, kind: "comment", text: `${cm.author?.login ?? "מישהו"} כתב הערה`, detail: subject(cm.body).slice(0, 120) });
   timeline.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
-  // The other open branches of this repository, from the requests we already have.
-  const branches: BranchRow[] = list.rows
-    .filter((x) => x.repo.id === repoId)
-    .map((x) => ({ name: x.headBranch, ahead: null, behind: x.number === pr.number ? behind : null, prNumber: x.number, current: x.number === pr.number, updatedAt: x.updatedAt, author: x.author }));
-
   const value: PullRequestDetail = {
     pr, blockers, nextStep, codeMap, codeMapProblem,
     freshness: ours && theirs ? { behind, behindTouching: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
-    groups, fileCount: files.length, timeline, branches, body: view?.body ?? "",
+    groups, fileCount: files.length, timeline, body: view?.body ?? "",
+    refs: mergeBase && ours?.commits?.length ? { base: mergeBase, head: ours.commits[ours.commits.length - 1]!.sha } : null,
   };
   cache.set(key, { at: Date.now(), value });
+  keptForFiles.set(key, { at: Date.now(), value });
   return value;
+}
+
+/* ── one file, before and after ───────────────────────────────────── */
+
+/** Past this, a file is shown as "too big to compare here" and linked, not loaded. */
+const MAX_FILE_BYTES = 400_000;
+
+export type FileVersions = {
+  path: string;
+  /** The file as it was before the change; null when it did not exist. */
+  before: string | null;
+  /** The file as it is after the change; null when it was removed. */
+  after: string | null;
+  binary: boolean;
+  tooLarge: boolean;
+  /** Where the two versions live on the host. */
+  beforeUrl: string | null;
+  afterUrl: string | null;
+};
+
+const encodePath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
+
+/** Opening a file needs only the two versions' addresses, which the detail already worked out. That is kept
+ *  longer than the detail itself, so a file opened a minute later does not repeat the four calls to the host. */
+const keptForFiles = new Map<string, { at: number; value: PullRequestDetail }>();
+const FILE_TTL_MS = 3 * 60_000;
+
+export async function pullRequestFile(repoId: string, number: number, filePath: string): Promise<FileVersions> {
+  if (!filePath || filePath.includes("..") || filePath.startsWith("/")) throw new Error("נתיב לא חוקי");
+  const kept = keptForFiles.get(`${repoId}:${number}`);
+  const d = kept && Date.now() - kept.at < FILE_TTL_MS ? kept.value : await pullRequestDetail(repoId, number);
+  const file = d.groups.flatMap((g) => g.files).find((f) => f.path === filePath);
+  if (!file) throw new Error("הקובץ הזה לא נמצא בבקשה");
+  if (!d.refs) throw new Error("אין כרגע מידע מהגיט־האוסט על הגרסאות. נסו לרענן.");
+  const [r] = await db.select({ adoRepoRef: repo.adoRepoRef }).from(repo).where(eq(repo.id, repoId)).limit(1);
+  const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
+  const slug = url ? url.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "") : null;
+  if (!slug || !url) throw new Error("אין כתובת GitHub לריפו הזה");
+
+  const oldPath = file.from ?? file.path;
+  const isNew = file.status === "A";
+  const isGone = file.status === "D";
+  const fetchAt = (p: string, ref: string) =>
+    ghText(["api", `repos/${slug}/contents/${encodePath(p)}?ref=${ref}`, "-H", "Accept: application/vnd.github.raw"]);
+  const [before, after] = await Promise.all([
+    isNew ? Promise.resolve(null) : fetchAt(oldPath, d.refs.base),
+    isGone ? Promise.resolve(null) : fetchAt(file.path, d.refs.head),
+  ]);
+  const values = [before, after].filter((v): v is string => v !== null);
+  const binary = values.some((v) => v.includes("\u0000"));
+  const tooLarge = values.some((v) => Buffer.byteLength(v) > MAX_FILE_BYTES);
+  return {
+    path: file.path,
+    before: binary || tooLarge ? null : before,
+    after: binary || tooLarge ? null : after,
+    binary, tooLarge,
+    beforeUrl: isNew ? null : `${url}/blob/${d.refs.base}/${encodePath(oldPath)}`,
+    afterUrl: isGone ? null : `${url}/blob/${d.pr.headBranch}/${encodePath(file.path)}`,
+  };
 }

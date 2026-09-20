@@ -206,10 +206,11 @@ const he = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${ma
 const commitUrl = (repoUrl: string | null, sha: string) => (repoUrl ? `${repoUrl}/commit/${sha}` : undefined);
 const filesLine = (n: number) => (n === 1 ? "קובץ אחד" : `${n} קבצים`);
 
-function nodeFrom(c: CodeMapCommit, kind: CodeMapNodeKind, repoUrl: string | null, detail: string): CodeMapNode {
+/** `onHost`: the commit exists on the host, so it has a page there. `folder`: it also exists in a folder on this computer. */
+function nodeFrom(c: CodeMapCommit, kind: CodeMapNodeKind, repoUrl: string | null, detail: string, where: { onHost: boolean; folder?: string } = { onHost: true }): CodeMapNode {
   return {
     kind, sha: c.sha, subject: c.subject, author: c.author, at: c.at,
-    files: c.files.length || undefined, url: commitUrl(repoUrl, c.sha), detail,
+    files: c.files.length || undefined, url: where.onHost ? commitUrl(repoUrl, c.sha) : undefined, folder: where.folder, detail,
     title: `${c.sha} ${c.subject}`.slice(0, 90),
   };
 }
@@ -217,18 +218,21 @@ function nodeFrom(c: CodeMapCommit, kind: CodeMapNodeKind, repoUrl: string | nul
 /** Facts → the drawing. The only place that decides what the map shows. */
 export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}): CodeMap {
   if (f.unreadable) return { lanes: [], arrows: [], caption: f.unreadable, problem: { text: f.unreadable, folder: f.dir ?? undefined } };
+  // The folder the facts were read from: everything the map shows that exists there can be opened from it.
+  const here = f.dir ?? undefined;
   const base: CodeMapLane = {
     id: "base", label: f.baseBranch, place: "both", nodes: [],
     name: f.baseBranch,
+    folder: here,
     url: f.repoUrl ? `${f.repoUrl}/tree/${encodeURIComponent(f.baseBranch)}` : undefined,
     detail: `הענף הראשי של הריפו — הגרסה הרשמית, שכולם עובדים ממנה. כל שינוי מתמזג אליו בסוף, ורק אז הצוות מקבל אותו.`,
   };
-  for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, "other", f.repoUrl, `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`));
+  for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, "other", f.repoUrl, `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`, { onHost: true, folder: here }));
   const branchAt = base.nodes.length;
   const pointDetail = `הנקודה שממנה הענף שלנו יצא. כל מה שהיה ב-${f.baseBranch} עד כאן נמצא גם אצלנו.`;
   base.nodes.push(
     f.baselineCommit
-      ? nodeFrom(f.baselineCommit, f.baseAfter.length ? "branchPoint" : "current", f.repoUrl, pointDetail)
+      ? nodeFrom(f.baselineCommit, f.baseAfter.length ? "branchPoint" : "current", f.repoUrl, pointDetail, { onHost: true, folder: here })
       : { kind: f.baseAfter.length ? "branchPoint" : "current", detail: pointDetail, sha: f.baselineSha?.slice(0, 7) },
   );
 
@@ -239,7 +243,7 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
     const detail = touching
       ? `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ונוגע בקבצים שגם אנחנו שינינו.`
       : `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ולא נוגע בקבצים שלנו.`;
-    base.nodes.push(nodeFrom(c, touching ? "attention" : newest ? "current" : "other", f.repoUrl, detail));
+    base.nodes.push(nodeFrom(c, touching ? "attention" : newest ? "current" : "other", f.repoUrl, detail, { onHost: true, folder: here }));
   });
 
   if (f.behind > 0) {
@@ -259,15 +263,15 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
     name: f.branch ?? undefined,
     // A branch that was never pushed has no page on the host to open.
     url: f.pushed && f.repoUrl && f.branch ? `${f.repoUrl}/tree/${encodeURIComponent(f.branch)}` : undefined,
-    folder: f.pushed ? undefined : f.dir ?? undefined,
-    detail: `הענף שבו העבודה הזו נעשית. ${f.pushed ? "הוא קיים בענן וגם במחשב." : "הוא קיים רק במחשב הזה, ועדיין לא נדחף."}${f.ourCommits.length ? ` יש בו ${he(f.ourCommits.length, "commit אחד", "commits")} שלא נמצאים ב-${f.baseBranch}.` : " עדיין לא נשמר בו שום שינוי."}`,
+    folder: here,
+    detail: `הענף שבו העבודה הזו נעשית. ${f.pushed ? "הוא כבר הועלה ל-GitHub, ויש לו עותק גם במחשב הזה." : "הוא קיים רק במחשב הזה ועדיין לא הועלה ל-GitHub."}${f.ourCommits.length ? ` יש בו ${he(f.ourCommits.length, "commit אחד", "commits")} שעוד לא נמצאים ב-${f.baseBranch}: העלאה לא מכניסה אותם לשם, את זה עושה בקשת מיזוג.` : " עדיין לא נשמר בו שום שינוי."}`,
   };
-  // Work that exists only on this computer says where: commits not pushed yet, unsaved files, an empty branch.
-  const here = f.dir ?? undefined;
+  // A commit is where it exists: pushed → a page on the host and the folder; not pushed → the folder only.
   for (const c of f.ourCommits) {
-    const node = nodeFrom(c, "ours", f.repoUrl, `שינוי שנשמר בענף שלנו${f.pushed ? " וכבר נדחף לענן" : ", עדיין רק במחשב הזה"}.`);
-    if (!f.pushed) node.folder = here;
-    ours.nodes.push(node);
+    ours.nodes.push(nodeFrom(c, "ours", f.repoUrl, f.pushed
+      ? `שינוי שנשמר בענף שלנו. הענף כבר הועלה ל-GitHub, אבל השינוי הזה עדיין לא נמצא ב-${f.baseBranch}${f.prUrl ? ": בקשת המיזוג מבקשת להכניס אותו." : ", ועוד אין בקשת מיזוג שמבקשת להכניס אותו."}`
+      : "שינוי שנשמר בענף שלנו, עדיין רק במחשב הזה. הוא יופיע ב-GitHub אחרי שהענף יועלה.",
+      { onHost: f.pushed, folder: here }));
   }
   if (f.uncommittedFiles > 0) {
     ours.nodes.push({
@@ -279,7 +283,7 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
   if (f.prUrl) {
     ours.nodes.push({
       kind: "pr", url: f.prUrl, subject: f.prNumber ? `בקשת מיזוג #${f.prNumber}` : "בקשת מיזוג",
-      detail: `הענף מוצע למיזוג ל-${f.baseBranch}. המיזוג עצמו נעשה בגיט־האוסט, בלחיצה של אדם.`,
+      detail: `בקשת מיזוג היא בקשה, לא העלאה: הענף כבר נמצא ב-GitHub. הבקשה מציעה להכניס אותו ל-${f.baseBranch}, והמיזוג עצמו נעשה בגיט־האוסט, בלחיצה של אדם.`,
     });
   }
   if (!ours.nodes.length) ours.nodes.push({ kind: "empty", subject: "עדיין אין commits", detail: "הענף נפתח, ועדיין לא נשמר בו שום שינוי.", folder: here });
@@ -292,9 +296,9 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
   const arrows: CodeMapArrow[] = [];
   const hasWork = f.ourCommits.length > 0 || f.uncommittedFiles > 0;
   if (f.merged) arrows.push({ from: "ours", to: "base", label: `נמזג ל-${f.baseBranch}`, state: "done" });
-  else if (f.prUrl) arrows.push({ from: "ours", to: "base", label: f.prNumber ? `PR #${f.prNumber} · ממתין למיזוג` : "ממתין למיזוג", state: "pending" });
-  else if (f.pushed && hasWork) arrows.push({ from: "ours", to: "base", label: "נדחף, עדיין בלי PR", state: "pending" });
-  else if (hasWork) arrows.push({ from: "ours", to: "base", label: "טרם נדחף", state: "pending" });
+  else if (f.prUrl) arrows.push({ from: "ours", to: "base", label: f.prNumber ? `בקשה #${f.prNumber} · ממתינה למיזוג` : "ממתינה למיזוג", state: "pending" });
+  else if (f.pushed && hasWork) arrows.push({ from: "ours", to: "base", label: "הועלה, עדיין בלי בקשת מיזוג", state: "pending" });
+  else if (hasWork) arrows.push({ from: "ours", to: "base", label: "טרם הועלה ל-GitHub", state: "pending" });
 
   return { lanes: [base, ours], arrows, caption: caption(f) };
 }

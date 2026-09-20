@@ -1,3 +1,4 @@
+import type { FileVersionsData } from "./components/FileCompare.tsx";
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK_TOKEN = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
 /** auth headers only — no content-type (added per-request when there's a body) */
@@ -488,10 +489,9 @@ export type PullRequestList = {
 };
 export type PrBlocker = { key: string; ok: boolean | null; title: string; detail: string };
 export type NextStep = { title: string; detail: string; action: "update_branch" | "request_review" | "merge" | "open_host" | "wait" };
-export type PullRequestFile = { path: string; status: string; additions: number; deletions: number; note?: string };
+export type PullRequestFile = { path: string; status: string; additions: number; deletions: number; note?: string; from?: string };
 export type FileGroup = { key: string; title: string; note?: string; files: PullRequestFile[]; additions: number; deletions: number };
 export type TimelineItem = { at: string; kind: string; text: string; detail?: string; tag?: string; tone?: "warning" | "healthy" | "neutral" };
-export type BranchRow = { name: string; ahead: number | null; behind: number | null; prNumber: number | null; current: boolean; updatedAt: string | null; author: string | null };
 export type PullRequestDetail = {
   pr: PullRequestRow;
   blockers: PrBlocker[];
@@ -500,11 +500,24 @@ export type PullRequestDetail = {
   codeMapProblem: string | null;
   freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
+  refs: { base: string; head: string } | null;
   fileCount: number;
   timeline: TimelineItem[];
-  branches: BranchRow[];
   body: string;
 };
+export const getPullRequestFile = (repoId: string, number: number, path: string) =>
+  get<FileVersionsData>(`/repos/${repoId}/pull-requests/${number}/file?${new URLSearchParams({ path })}`);
+
+/** Every branch of a repository and what to do about it. */
+export type BranchHealth = {
+  name: string; status: "default" | "merged" | "open_pr" | "work" | "stale";
+  unique: number; behind: number; pr: { number: number; state: string; draft: boolean } | null;
+  lastAt: string | null; lastBy: string | null; lastMessage: string | null; origin: string;
+  advice: { title: string; detail: string; tone: "healthy" | "warning" | "critical" | "neutral" }; url: string | null;
+};
+export type RepoBranches = { defaultBranch: string; rows: BranchHealth[]; syncedAt: string };
+export const getRepoBranches = (repoId: string, refresh?: boolean) => get<RepoBranches>(`/repos/${repoId}/branches${refresh ? "?refresh=1" : ""}`);
+
 export const listPullRequests = (refresh?: boolean) => get<PullRequestList>(`/pull-requests${refresh ? "?refresh=1" : ""}`);
 export type PullRequestQuick = { pr: PullRequestRow; blockers: PrBlocker[]; nextStep: NextStep };
 export const getPullRequestQuick = (repoId: string, number: number) => get<PullRequestQuick>(`/repos/${repoId}/pull-requests/${number}/quick`);
@@ -551,8 +564,8 @@ export const cancelOnboardingRun = (repoId: string, runId: string) => post<{ can
 export const updateOnboardingAutomation = (repoId: string, runId: string, automation: AutomationPolicy | { preset: AutomationPreset }, consent?: boolean) =>
   patch<AutomationPolicy>(`${ob(repoId, runId)}/automation`, { automation, consent });
 export const updateOnboardingModelChoices = (repoId: string, runId: string, choices: ModelPolicy) => patch<ModelPolicy>(`${ob(repoId, runId)}/model-choices`, { choices });
-export const getOnboardingDiff = (repoId: string, runId: string, path: string) =>
-  get<{ path: string; diff: string; binary: boolean }>(`${ob(repoId, runId)}/diff?${new URLSearchParams({ path })}`);
+export const getOnboardingFile = (repoId: string, runId: string, path: string) =>
+  get<FileVersionsData>(`${ob(repoId, runId)}/file?${new URLSearchParams({ path })}`);
 export type AssistantMessage = { id: string; role: "user" | "assistant"; text: string; at: string; send?: { text: string; sentAt?: string; forced?: boolean } };
 export const getOnboardingAssistant = (repoId: string, runId: string) =>
   get<{ messages: AssistantMessage[]; model: string; busy: boolean }>(`${ob(repoId, runId)}/assistant`);

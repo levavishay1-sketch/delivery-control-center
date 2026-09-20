@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
-import { cachedPullRequest, getPullRequest, getPullRequestQuick, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
+import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
+import { FileCompare } from "../components/FileCompare.tsx";
 
 /**
  * One pull request, on a screen of its own (screens 2 to 5 of
@@ -37,8 +38,9 @@ function BlockerRow({ b }: { b: PrBlocker }) {
   );
 }
 
-function Files({ groups, count, url }: { groups: FileGroup[]; count: number; url: string }) {
+function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; count: number; url: string; repoId: string; number: number }) {
   const [only, setOnly] = useState<string | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   const shown = only ? groups.filter((g) => g.key === only) : groups;
   const add = groups.reduce((n, g) => n + g.additions, 0);
   const del = groups.reduce((n, g) => n + g.deletions, 0);
@@ -61,18 +63,95 @@ function Files({ groups, count, url }: { groups: FileGroup[]; count: number; url
             <span className="l" style={{ marginInlineStart: "auto" }}><span className="plus">+{g.additions}</span> <span className="minus">−{g.deletions}</span></span>
           </div>
           {g.files.slice(0, 30).map((f) => (
-            <div className="pr-file-row" key={f.path}>
-              <span className={`st ${f.status === "A" ? "a" : f.status === "D" ? "d" : "m"}`}>{f.status}</span>
-              <span className="path">{f.path}</span>
-              {f.note && <span className="pill warning">{f.note}</span>}
-              <span className="plus">+{f.additions}</span>
-              <span className="minus">−{f.deletions}</span>
+            <div key={f.path}>
+              <div className={`pr-file-row click${open === f.path ? " open" : ""}`} role="button" tabIndex={0} aria-expanded={open === f.path}
+                onClick={() => setOpen(open === f.path ? null : f.path)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(open === f.path ? null : f.path); } }}>
+                <span className={`st ${f.status === "A" ? "a" : f.status === "D" ? "d" : "m"}`}>{f.status}</span>
+                <span className="path">{f.path}</span>
+                {f.note && <span className="pill warning">{f.note}</span>}
+                <span className="plus">+{f.additions}</span>
+                <span className="minus">−{f.deletions}</span>
+              </div>
+              {open === f.path && <div className="pr-file-open"><FileCompare load={() => getPullRequestFile(repoId, number, f.path)} /></div>}
             </div>
           ))}
           {g.files.length > 30 && <div className="pr-file-row"><span className="l">ועוד {g.files.length - 30} קבצים בקבוצה הזו</span></div>}
         </div>
       ))}
-      <p className="ob-sub">הסקירה עצמה, ההערות והאישור נעשים בגיט־האוסט. כאן רואים מה נכנס. <a href={`${url}/files`} target="_blank" rel="noreferrer">פתח את השינויים ב-GitHub ↗</a></p>
+      <p className="ob-sub">לחצו על קובץ כדי לראות אותו לפני ואחרי. הסקירה עצמה, ההערות והאישור נעשים בגיט־האוסט. <a href={`${url}/files`} target="_blank" rel="noreferrer">פתח את השינויים ב-GitHub ↗</a></p>
+    </>
+  );
+}
+
+const BRANCH_STATUS: Record<BranchHealth["status"], { label: string; pill: string }> = {
+  default: { label: "ראשי", pill: "neutral" },
+  open_pr: { label: "בקשה פתוחה", pill: "active" },
+  work: { label: "בעבודה", pill: "neutral" },
+  stale: { label: "נשכח?", pill: "warning" },
+  merged: { label: "כבר מוזג", pill: "healthy" },
+};
+
+function Branches({ repoId }: { repoId: string }) {
+  const [data, setData] = useState<RepoBranches | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async (refresh?: boolean) => {
+    setBusy(true);
+    try { setData(await getRepoBranches(repoId, refresh)); setErr(null); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
+  }, [repoId]);
+  useEffect(() => { void load(); }, [load]);
+
+  const count = (s: BranchHealth["status"]) => data?.rows.filter((r) => r.status === s).length ?? 0;
+  return (
+    <>
+      <div className="panel" style={{ marginBottom: 12 }}>
+        <h4>מה זה ענף, ולמה יש כאלה</h4>
+        <p className="ob-sub">
+          ענף הוא עותק עבודה מקביל של הריפו. כל מי שמתחיל עבודה — אדם, סשן של Claude Code או הרצה של DCC — פותח לעצמו ענף, כדי לא לשבור את
+          {data ? ` ${data.defaultBranch}` : " הענף הראשי"}. כשהעבודה מוכנה, בקשת מיזוג מכניסה אותה לענף הראשי, ואז הענף כבר לא נחוץ.
+          ענפים לא נמחקים לבד, ולכן הם מצטברים. כאן רואים איפה כל אחד עומד.
+        </p>
+      </div>
+      {err && <div className="ob-note crit" style={{ marginBottom: 10 }}>{err}</div>}
+      {!data && !err && <div className="panel"><p className="ob-sub"><span className="spinner" style={{ width: 13, height: 13, marginInlineEnd: 8, verticalAlign: "middle" }} />טוען את הענפים מהגיט־האוסט…</p></div>}
+      {data && (
+        <>
+          <div className="pr-tiles">
+            <div><div className="l">בקשה פתוחה</div><div className="v">{count("open_pr")}</div></div>
+            <div><div className="l">בעבודה</div><div className="v">{count("work")}</div></div>
+            <div><div className="l">נשכחו?</div><div className="v" style={{ color: count("stale") ? "var(--status-warning)" : undefined }}>{count("stale")}</div></div>
+            <div><div className="l">אפשר למחוק</div><div className="v" style={{ color: count("merged") ? "var(--status-healthy)" : undefined }}>{count("merged")}</div></div>
+          </div>
+          <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
+            <div className="pr-group">
+              <b>{data.rows.length} ענפים</b>
+              <button className="btn btn-secondary btn-sm" style={{ marginInlineStart: "auto" }} disabled={busy} onClick={() => void load(true)}>{busy ? "מסנכרן…" : "↻ סנכרן"}</button>
+            </div>
+            {data.rows.map((b) => (
+              <div className="pr-br" key={b.name}>
+                <div className="top">
+                  <span className="ob-code" style={{ minWidth: 0, overflowWrap: "anywhere" }}>{b.name}</span>
+                  <span className={`pill ${BRANCH_STATUS[b.status].pill}`}>{BRANCH_STATUS[b.status].label}</span>
+                  {b.pr && <span className="l">בקשה #{b.pr.number}{b.pr.state === "MERGED" ? " (מוזגה)" : b.pr.state === "CLOSED" ? " (נסגרה)" : ""}</span>}
+                  {b.url && <a className="l" style={{ marginInlineStart: "auto" }} href={b.url} target="_blank" rel="noreferrer">פתח ב-GitHub ↗</a>}
+                </div>
+                {b.status !== "default" && (
+                  <div className="l">
+                    {b.unique === 0 ? `אין בו שום דבר שלא נמצא ב-${data.defaultBranch}` : `${b.unique} commits שאינם ב-${data.defaultBranch}`}
+                    {b.behind > 0 ? ` · ${data.defaultBranch} התקדם ב-${b.behind} מאז שנפתח` : ""}
+                    {b.lastAt ? ` · פעילות אחרונה ${fmtDate(b.lastAt)}${b.lastBy ? ` (${b.lastBy})` : ""}` : ""}
+                  </div>
+                )}
+                {b.lastMessage && b.status !== "default" && <div className="l">"{b.lastMessage}"</div>}
+                <div className="l">איך הגיע לכאן: {b.origin}</div>
+                <div className={`adv ${b.advice.tone}`}><b>{b.advice.title}.</b> {b.advice.detail}</div>
+              </div>
+            ))}
+          </div>
+          <p className="ob-sub" style={{ marginTop: 8 }}>מחיקה נעשית בגיט־האוסט, ורק אחרי שרואים שמה שבענף כבר לא נחוץ. ההיסטוריה של מה שמוזג נשארת גם אחרי המחיקה.</p>
+        </>
+      )}
     </>
   );
 }
@@ -200,24 +279,9 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
         </>
       )}
 
-      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
+      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
       {tab === "timeline" && (d ? <Timeline items={d.timeline} /> : <div className="panel">{loading("את היומן")}</div>)}
-      {tab === "branches" && !d && <div className="panel">{loading("את הענפים")}</div>}
-      {tab === "branches" && d && (
-        <div className="panel">
-          <h4>ענפים פתוחים בריפו</h4>
-          {d.branches.map((b) => (
-            <div className="pr-rl" key={b.name}>
-              <span className="ob-code" style={{ flex: 1, minWidth: 0 }}>{b.name}</span>
-              {b.current && <span className="pill neutral">אתם כאן</span>}
-              {b.behind !== null && b.behind > 0 && <span className="pill warning">{b.behind} מאחור</span>}
-              {b.prNumber && <span className="l">#{b.prNumber}</span>}
-              <span className="l">{b.author}</span>
-            </div>
-          ))}
-          <p className="ob-sub" style={{ marginTop: 8 }}>מוצגים ענפים שיש להם בקשת מיזוג פתוחה. מפת הענפים המלאה של הריפו תתווסף בשלב הבא.</p>
-        </div>
-      )}
+      {tab === "branches" && <Branches repoId={repoId} />}
     </div>
   );
 }

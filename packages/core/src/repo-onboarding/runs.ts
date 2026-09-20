@@ -5,7 +5,7 @@ import { db, withTenant } from "@dcc/db";
 import { repo, repoAiEvent, repositoryOnboardingRun, repositoryOnboardingStage } from "@dcc/db/schema";
 import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { recommend } from "../routing.ts";
-import { changedFiles, fileDiff } from "./changes.ts";
+import { changedFiles, fileVersions } from "./changes.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { appendRepoAiEvent } from "./events.ts";
 import { assistantBusy, assistantMessages, assistantModel, askAssistant, markAssistantSent, resetAssistant } from "./assistant.ts";
@@ -513,10 +513,10 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
   };
 }
 
-export async function getOnboardingFileDiff(repoId: string, runId: string, filePath: string) {
+export async function getOnboardingFileVersions(repoId: string, runId: string, filePath: string) {
   const { run } = await loadRun(repoId, runId);
   if (!run.workspacePath || !run.baselineSha) throw new OnboardingError("אין עותק מבודד עדיין");
-  return fileDiff(run.workspacePath, run.baselineSha, filePath);
+  return fileVersions(run.workspacePath, run.baselineSha, filePath);
 }
 
 export async function listOnboardingRuns(repoId: string) {

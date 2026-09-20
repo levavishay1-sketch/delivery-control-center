@@ -137,6 +137,14 @@ export async function ghJson<T>(args: string[]): Promise<T | null> {
   try { return JSON.parse(r.out || "null") as T; } catch { return null; }
 }
 
+/** One `gh` call whose answer is text (a file's contents), or null when the host could not give it. */
+export async function ghText(args: string[]): Promise<string | null> {
+  const bin = ghBin();
+  if (!bin) return null;
+  const r = await run(bin, args, 30_000);
+  return r.code === 0 ? r.out : null;
+}
+
 const github: Provider = {
   id: "github",
   async list(r) {

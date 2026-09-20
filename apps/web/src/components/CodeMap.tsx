@@ -222,11 +222,21 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
             {parent
               ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} fill="none" stroke={D.color.ours} strokeWidth={2} />
               : <line x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} />}
-            {/* A wide invisible strip along the line: pressing the line says which branch it is. */}
-            <line className="cm-lane" x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke="transparent" strokeWidth={22} strokeLinecap="round"
-              role="button" tabIndex={0} aria-label={`ענף ${p.lane.name ?? p.lane.label ?? ""}`}
-              onClick={(e) => { e.stopPropagation(); onPick?.(`lane:${p.lane.id}`, laneNode(p.lane), (lineStart + last) / 2, p.y); }}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick?.(`lane:${p.lane.id}`, laneNode(p.lane), (lineStart + last) / 2, p.y); } }} />
+            {/* A wide invisible strip over the whole line, curve included: pressing it says which branch it is. */}
+            {(() => {
+              const at = (parent ? (px + last) / 2 : (lineStart + last) / 2);
+              const pick = () => onPick?.(`lane:${p.lane.id}`, laneNode(p.lane), at, p.y);
+              const hit = {
+                className: "cm-lane", fill: "none", stroke: "transparent", strokeWidth: 22, strokeLinecap: "round" as const, pointerEvents: "stroke" as const,
+                role: "button", tabIndex: 0, "aria-label": `ענף ${p.lane.name ?? p.lane.label ?? ""}`,
+                onClick: (e: { stopPropagation: () => void }) => { e.stopPropagation(); pick(); },
+                onKeyDown: (e: { key: string; preventDefault: () => void }) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } },
+              };
+              // A lane with a single dot has a zero-length straight part; the curve that joins it to its parent is what can be pressed.
+              return parent
+                ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} {...hit} />
+                : <line x1={lineStart} y1={p.y} x2={Math.min(last, lineStart - 24)} y2={p.y} {...hit} />;
+            })()}
             {p.lane.label && <text x={labelX} y={p.y - 32} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
             {p.lane.note && <text x={labelX} y={p.y - (p.lane.label ? 17 : 32)} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
             {p.lane.nodes.map((n: CodeMapNode, i) => (
@@ -266,7 +276,7 @@ const LEGEND: { color: string; ring?: boolean; text: string }[] = [
   { color: D.color.ours, text: "שינוי שלנו" },
   { color: D.color.attention, text: "דורש תשומת לב" },
   { color: D.color.current, text: "המצב העדכני" },
-  { color: D.color.ours, ring: true, text: "נקודת התחלה או PR" },
+  { color: D.color.ours, ring: true, text: "נקודת התחלה או בקשת מיזוג" },
 ];
 
 /**
@@ -301,6 +311,7 @@ export function CodeMapPanel({ map, title = "מצב הקוד", legend = true }: 
             <span key={l.text}><i style={l.ring ? { background: "var(--surface)", border: `2px solid ${l.color}` } : { background: l.color }} />{l.text}</span>
           ))}
           <span>תווית = איפה הקוד נמצא · חץ מקווקו = פעולה שעוד לא קרתה</span>
+          <span>העלאה = שליחת הענף ל-GitHub · בקשת מיזוג = הצעה להכניס אותו לענף הראשי. אחת לא מחליפה את השנייה.</span>
         </div>
       )}
     </div>

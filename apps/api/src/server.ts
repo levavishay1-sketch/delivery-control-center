@@ -119,7 +119,9 @@ import {
   updateOnboardingAutomation,
   updateOnboardingModelChoices,
   getOnboardingRunView,
-  getOnboardingFileDiff,
+  getOnboardingFileVersions,
+  pullRequestFile,
+  repoBranches,
   listOnboardingRuns,
   getLatestOnboardingRun,
   onboardingStageCatalogue,
@@ -242,6 +244,20 @@ app.get("/repos/:id/pull-requests/:number", async (req) => {
   return pullRequestDetail(id, Number(number), { refresh: q.refresh === "1" });
 });
 
+app.get("/repos/:id/pull-requests/:number/file", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  const q = z.object({ path: z.string().min(1) }).parse(req.query);
+  return pullRequestFile(id, Number(number), q.path);
+});
+
+/** Every branch of a repository, and what to do about each one. */
+app.get("/repos/:id/branches", async (req) => {
+  await actingUser(req);
+  const q = z.object({ refresh: z.string().optional() }).parse(req.query ?? {});
+  return repoBranches((req.params as { id: string }).id, { refresh: q.refresh === "1" });
+});
+
 /* ── repository onboarding — four stages around one live Claude Code
  * session (`openspec/changes/repository-onboarding-native-init`). Each
  * stage starts from its own button (or by the run's automation policy);
@@ -327,11 +343,11 @@ app.patch("/repos/:id/onboarding/runs/:runId/model-choices", async (req) => {
   return updateOnboardingModelChoices(id, runId, b.choices, { userId: dev.id });
 });
 
-app.get("/repos/:id/onboarding/runs/:runId/diff", async (req) => {
+app.get("/repos/:id/onboarding/runs/:runId/file", async (req) => {
   await actingUser(req);
   const { id, runId } = req.params as RunParams;
   const q = z.object({ path: z.string().min(1) }).parse(req.query);
-  return getOnboardingFileDiff(id, runId, q.path);
+  return getOnboardingFileVersions(id, runId, q.path);
 });
 
 /* The Hebrew assistant next to the terminal: questions about the session, and

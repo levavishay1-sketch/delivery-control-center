@@ -1,7 +1,7 @@
 export {
   OnboardingError,
   startOnboardingRun, runOnboardingStage, completeInitStage, resumeOnboardingSession, refreshReview, approveReview, cancelOnboardingRun,
-  updateOnboardingAutomation, updateOnboardingModelChoices, getOnboardingRunView, getOnboardingFileDiff, listOnboardingRuns, getLatestOnboardingRun,
+  updateOnboardingAutomation, updateOnboardingModelChoices, getOnboardingRunView, getOnboardingFileVersions, listOnboardingRuns, getLatestOnboardingRun,
   onboardingStageCatalogue, authorizeOnboardingTerminal, recoverOnboardingRuns,
   getOnboardingAssistant, askOnboardingAssistant, resetOnboardingAssistant, sendToOnboardingSession,
 } from "./runs.ts";
