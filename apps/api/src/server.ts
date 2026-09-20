@@ -81,7 +81,7 @@ import {
   listPullRequests,
   openLocalFolder,
   FolderRefused,
-  getPullRequest,
+  pullRequestDetail,
   editTask,
   precheckTaskDelete,
   deleteTaskSurgical,
@@ -231,7 +231,8 @@ app.get("/pull-requests", async (req) => {
 app.get("/repos/:id/pull-requests/:number", async (req) => {
   await actingUser(req);
   const { id, number } = req.params as { id: string; number: string };
-  return getPullRequest(id, Number(number));
+  const q = z.object({ refresh: z.string().optional() }).parse(req.query ?? {});
+  return pullRequestDetail(id, Number(number), { refresh: q.refresh === "1" });
 });
 
 /* ── repository onboarding — four stages around one live Claude Code

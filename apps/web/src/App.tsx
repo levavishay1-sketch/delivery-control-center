@@ -18,6 +18,7 @@ import { Settings } from "./screens/Settings.tsx";
 import { Prompts } from "./screens/Prompts.tsx";
 import { Repositories } from "./screens/Repositories.tsx";
 import { PullRequests } from "./screens/PullRequests.tsx";
+import { PullRequestDetailScreen, type Tab } from "./screens/PullRequestDetail.tsx";
 import { OnboardingScreen } from "./screens/onboarding/OnboardingScreen.tsx";
 import { Stub } from "./screens/Stub.tsx";
 
@@ -67,7 +68,11 @@ export function App() {
   else if (path === "/requirements" || path === "/projects") screen = <RequirementList nav={nav} />;
   else if (path === "/ado") screen = <AdoTasks nav={nav} />;
   else if (path === "/repositories") screen = <Repositories nav={nav} />;
-  else if (path === "/pull-requests") screen = <PullRequests />;
+  else if (path === "/pull-requests") screen = <PullRequests nav={nav} />;
+  else if (path.startsWith("/pull-requests/")) {
+    const [repoId, num, tab] = path.slice("/pull-requests/".length).split("/");
+    screen = <PullRequestDetailScreen repoId={repoId!} number={Number(num)} tab={(tab as Tab) || "overview"} nav={nav} />;
+  }
   else if (path.startsWith("/repo/")) screen = <OnboardingScreen id={path.slice(6)} nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;

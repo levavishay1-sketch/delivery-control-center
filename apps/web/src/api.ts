@@ -486,13 +486,28 @@ export type PullRequestList = {
   repos: { id: string; name: string; clientId: string | null; clientName: string | null; provider: "github" | "ado" | null; reason?: string }[];
   syncedAt: string; problems: { repo: string; reason: string }[];
 };
+export type PrBlocker = { key: string; ok: boolean | null; title: string; detail: string };
+export type NextStep = { title: string; detail: string; action: "update_branch" | "request_review" | "merge" | "open_host" | "wait" };
+export type PullRequestFile = { path: string; status: string; additions: number; deletions: number; note?: string };
+export type FileGroup = { key: string; title: string; note?: string; files: PullRequestFile[]; additions: number; deletions: number };
+export type TimelineItem = { at: string; kind: string; text: string; detail?: string; tag?: string; tone?: "warning" | "healthy" | "neutral" };
+export type BranchRow = { name: string; ahead: number | null; behind: number | null; prNumber: number | null; current: boolean; updatedAt: string | null; author: string | null };
 export type PullRequestDetail = {
-  pr: PullRequestRow; codeMap: CodeMap | null;
-  freshness: { behind: number; behindTouching: number; baseBranch: string; fetchedAt: string | null } | null;
-  files: { path: string; additions: number; deletions: number }[]; body: string;
+  pr: PullRequestRow;
+  blockers: PrBlocker[];
+  nextStep: NextStep;
+  codeMap: CodeMap | null;
+  codeMapProblem: string | null;
+  freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
+  groups: FileGroup[];
+  fileCount: number;
+  timeline: TimelineItem[];
+  branches: BranchRow[];
+  body: string;
 };
 export const listPullRequests = (refresh?: boolean) => get<PullRequestList>(`/pull-requests${refresh ? "?refresh=1" : ""}`);
-export const getPullRequest = (repoId: string, number: number) => get<PullRequestDetail>(`/repos/${repoId}/pull-requests/${number}`);
+export const getPullRequest = (repoId: string, number: number, refresh?: boolean) =>
+  get<PullRequestDetail>(`/repos/${repoId}/pull-requests/${number}${refresh ? "?refresh=1" : ""}`);
 
 export const openFolder = (path: string) => post<{ opened: string }>("/open-folder", { path });
 

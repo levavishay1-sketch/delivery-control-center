@@ -31,15 +31,15 @@ Azure DevOps → verification. Tick each task as it lands.
 
 ## 4. API · `apps/api`
 
-- [ ] 4.1 List (filters, grouping, hierarchy), one request, its timeline, the repository's branch map
+- [x] 4.1 List (filters, grouping, hierarchy), one request with its blockers, next step, map, files, timeline and branches
 - [ ] 4.2 Mark seen, per user
 - [ ] 4.3 Refresh now
 
 ## 5. Screens · `apps/web`
 
-- [ ] 5.1 "בקשות מיזוג" in the sidebar with a count; the list with filters, client and repository grouping, nested children, and the "since you were away" strip
-- [ ] 5.2 One request: branch drawing, the freshness sentence in Hebrew, facts, checks, what it contains
-- [ ] 5.3 Live timeline
+- [x] 5.1 "בקשות מיזוג" in the sidebar with a count; the list with filters, client and repository grouping, nested children, and the "since you were away" strip
+- [x] 5.2 One request: branch drawing, the freshness sentence in Hebrew, facts, checks, what it contains
+- [x] 5.3 Live timeline
 - [ ] 5.4 Branch map for a repository
 - [ ] 5.5 A card on the client screen and on the repository screen linking into the filtered list
 
@@ -83,3 +83,17 @@ change of design be one change, not one per screen.
 - The GitHub CLI was not on PATH for an API started before it was installed; it is now looked for in its install locations.
 - Work that exists only on this computer now says where: a dot that is local-only (commits not pushed, unsaved files, an empty branch) carries its folder, and its panel shows the path with "open in file manager" and "copy path" — the counterpart of the host link on a commit. Opening goes through `POST /open-folder`, which resolves the path (symlinks and `..` included) and refuses anything outside DCC's own working folders: checked against `C:\Windows`, an escape through `..`, a missing folder and an ordinary user folder — all refused with a message; the run's own folder opened a real Explorer window. "Copy" uses the clipboard API and falls back to the older route; both are blocked in the preview pane (a scripted click is not a real user gesture), so it was not seen working there — a real click in the browser is the check that remains.
 - The map printed git's own error text as if it were data ("fatal: not a git repository" as the base branch, a 40-character id on a dot) for a working folder whose parent clone had been deleted. It trusted the text of a git command without its exit code. The map now checks the folder is a git work tree before reading anything, uses a command's text only when it succeeded, and says in words when the folder cannot be read (with the folder and the buttons to open or copy it) instead of drawing something wrong. The branch-point fallback shows the short id like every other dot. One component, one place — so the fix applies to every screen at once, which is the point of having one map.
+
+## 11. The six screens, agreed with the user
+
+Six mockups were approved before this round: the list, the request (four tabs — סקירה, קבצים, יומן, ענפים), and the action screen. A seventh drawing, the map of how the screens connect, was explanation only and is not built.
+
+- [x] 11.1 The request has a screen and an address of its own (`#/pull-requests/<repo>/<number>[/tab]`), with a back link and a breadcrumb. It no longer expands inside the list row, and every tab is its own address that can be sent to someone.
+- [x] 11.2 "מה חוסם מיזוג" — four conditions (conflict, review, checks, a parent request), each with ✓ / ✗ / – and a sentence saying what it means. A draft adds a fifth. The merge button stays disabled while any is red.
+- [x] 11.3 "הצעד הבא" — one sentence naming what to do and why, computed from the blockers and from how far the base has moved.
+- [x] 11.4 Files grouped as code, instructions, config, docs, other and build output, with counts, per-group totals, a filter, and a note on files that are generated or should not be there.
+- [x] 11.5 Timeline from the host: the opening, the commits, the base's own commits since the branch point — flagged when they touch the same files — plus reviews and comments.
+- [x] 11.6 **The map now comes from the host, not from a local clone.** That was the bug behind the wrong drawing the user saw: this machine's copy held only `master`, so the branch read as empty and "on this computer only". Two compare calls give what each side gained, the merge base gives the branch point, and a third call brings a little of the base's history so a line reads as a line. When the host cannot answer, the screen says so instead of drawing.
+- [x] 11.7 The drawing is capped at 560px wide, so its text cannot balloon on a wide screen, and a line ends at its last dot.
+- [ ] 11.8 The action screens (update branch, request review, merge) are designed and their buttons are in place but disabled — the next piece of work.
+- [x] 11.9 Verified live on this repository's own pull request #2: the blockers (draft, no review, no checks, no parent), the next step, 132 files in five groups, 9 timeline items, the map with the 8 commits and the request's node, and each tab's address.

@@ -4,7 +4,8 @@ export { linkBugToTask, unlinkBugFromTask, bugLinkedTasks, type LinkedTaskRow } 
 export { startResearchWork, finishResearchWork, type ResearchWorkResult } from "./research-work.ts";
 export { recordSession, recordGitActivity, recordNote } from "./capture.ts";
 export { openLocalFolder, FolderRefused } from "./local-folder.ts";
-export { listPullRequests, getPullRequest, type PullRequestRow, type PullRequestList, type PullRequestDetail } from "./pull-requests.ts";
+export { listPullRequests, type PullRequestRow, type PullRequestList } from "./pull-requests.ts";
+export { pullRequestDetail, type PullRequestDetail, type Blocker, type NextStep, type FileGroup, type TimelineItem, type BranchRow } from "./pull-request-detail.ts";
 export { codeMapForTask, codeMapForWorkspace, codeMapFrom, readCodeMapFacts, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapArrow, type CodeMapPlace, type CodeMapFacts } from "./code-map.ts";
 export { proposeGap, verifyGap } from "./gaps.ts";
 export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksNotPassed, setTaskActive, checkAdoRemovedState, syncTaskStateAfterCheckChange, type TaskInput, type TaskDetail } from "./tasks.ts";

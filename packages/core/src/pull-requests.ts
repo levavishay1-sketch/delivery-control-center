@@ -4,8 +4,7 @@ import path from "node:path";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@dcc/db";
 import { client, repo } from "@dcc/db/schema";
-import { existingCheckout, httpsRepoUrl } from "./ai-assist.ts";
-import { codeMapForWorkspace, readCodeMapFacts, type CodeMap } from "./code-map.ts";
+import { httpsRepoUrl } from "./ai-assist.ts";
 
 /**
  * Pull requests across every client, from the hosts DCC is connected to
@@ -129,6 +128,15 @@ function checksOf(pr: GhPr): ChecksState {
   return "passing";
 }
 
+/** One `gh` call that returns JSON, or null when the host could not answer. */
+export async function ghJson<T>(args: string[]): Promise<T | null> {
+  const bin = ghBin();
+  if (!bin) return null;
+  const r = await run(bin, args, 30_000);
+  if (r.code !== 0) return null;
+  try { return JSON.parse(r.out || "null") as T; } catch { return null; }
+}
+
 const github: Provider = {
   id: "github",
   async list(r) {
@@ -248,48 +256,4 @@ export async function listPullRequests(opts: { refresh?: boolean } = {}): Promis
   const list: PullRequestList = { rows, repos: watched, syncedAt: new Date().toISOString(), problems };
   cache = { at: Date.now(), list };
   return list;
-}
-
-/* ── one request ──────────────────────────────────────────────────── */
-
-export type PullRequestDetail = {
-  pr: PullRequestRow;
-  codeMap: CodeMap | null;
-  /** Straight from the local copy, when there is one: how far the base has moved. */
-  freshness: { behind: number; behindTouching: number; baseBranch: string; fetchedAt: string | null } | null;
-  files: { path: string; additions: number; deletions: number }[];
-  body: string;
-};
-
-type GhFile = { path: string; additions?: number; deletions?: number };
-
-export async function getPullRequest(repoId: string, number: number, opts: { refresh?: boolean } = {}): Promise<PullRequestDetail> {
-  const list = await listPullRequests({ refresh: opts.refresh });
-  const pr = list.rows.find((r) => r.repo.id === repoId && r.number === number);
-  if (!pr) throw new Error("בקשת המיזוג לא נמצאה");
-  const [r] = await db.select({ id: repo.id, adoRepoRef: repo.adoRepoRef, localPath: sql<string | null>`null` }).from(repo).where(eq(repo.id, repoId)).limit(1);
-  const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
-
-  let files: PullRequestDetail["files"] = [];
-  let body = "";
-  if (url) {
-    const view = await run(ghBin() ?? "gh", ["pr", "view", String(number), "--repo", url, "--json", "body,files"]);
-    if (view.code === 0) {
-      const parsed = JSON.parse(view.out || "{}") as { body?: string; files?: GhFile[] };
-      body = parsed.body ?? "";
-      files = (parsed.files ?? []).map((f) => ({ path: f.path, additions: f.additions ?? 0, deletions: f.deletions ?? 0 }));
-    }
-  }
-
-  // The drawing and the freshness numbers come from the local copy when it exists.
-  const dir = existingCheckout({ id: repoId, localPath: null });
-  let codeMap: CodeMap | null = null;
-  let freshness: PullRequestDetail["freshness"] = null;
-  if (dir) {
-    const ref = `origin/${pr.headBranch}`;
-    codeMap = await codeMapForWorkspace(dir, { branch: pr.headBranch, ref, prUrl: pr.url, prNumber: pr.number }).catch(() => null);
-    const facts = await readCodeMapFacts(dir, { branch: pr.headBranch, ref }).catch(() => null);
-    if (facts) freshness = { behind: facts.behind, behindTouching: facts.behindTouching, baseBranch: facts.baseBranch, fetchedAt: facts.fetchedAt };
-  }
-  return { pr, codeMap, freshness, files, body };
 }
