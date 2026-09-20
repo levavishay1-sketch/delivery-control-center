@@ -77,12 +77,16 @@ the declared cost, as data), `helpful`, `helpful_note`, `created_at`.
   session (`--session-id` / `--resume`); a roll-over starts a new session
   and never touches what is shown.
 - **Roll-over (§6.5)** happens before a question when the last call's input
-  tokens passed the threshold or the conversation has been cold longer than
-  the threshold: a `conversation_summary` call (Haiku, trigger `rollover`,
-  recorded like any call), a new conversation with `continued_from`, the
-  summary as its first `system_note`. Both thresholds are policy values.
-  DCC rolls over well below the CLI's own compaction point so the summary
-  is always DCC's — named, recorded, costed (§9.8).
+  tokens passed the threshold, the conversation has been cold longer than
+  the threshold, or the chat's rules (its system prompt) changed since the
+  session began — a session's history holds answers given under the old
+  rules, and it would keep steering by them. Then: a `conversation_summary`
+  call (Haiku, trigger `rollover`, recorded like any call), a new
+  conversation with `continued_from`, the summary as its first
+  `system_note`. The two thresholds are policy values; the rules are
+  identified by a hash kept in the conversation's baseline. DCC rolls over
+  well below the CLI's own compaction point so the summary is always
+  DCC's — named, recorded, costed (§9.8).
 - **Retention (§9.10):** `retain_until = last_message_at + retention days`
   (policy default, per-client override). A daily job archives expired
   conversations: text replaced by a fixed sentence, `status = archived`,

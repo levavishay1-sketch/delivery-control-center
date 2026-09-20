@@ -78,6 +78,7 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
     },
     liveFacts: () => ({ "המסך בטרמינל עכשיו": (screenRef.current?.() ?? "").slice(-3500) }),
     suggestions: ["מה הוא רוצה ממני עכשיו?", "מה הוא עשה עד עכשיו?", "מה ההשלכות של כל אפשרות?", "איך ממשיכים מכאן?"],
+    actions: ["send_to_session"],
   } : null);
 
   const act = async (name: string, fn: () => Promise<unknown>) => {

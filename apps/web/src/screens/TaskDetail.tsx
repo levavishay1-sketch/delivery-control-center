@@ -155,6 +155,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       status: d.task.state, nextStep: !d.task.approvedAt ? "לאשר את המשימה, ואז להריץ את הפיתוח" : d.task.state === "done" ? "המשימה הושלמה" : d.task.state === "failed_checks" ? "בדיקות נכשלו — להחליט אם לתקן או לאשר בכל זאת" : "להריץ את הפיתוח, ואז לדחוף את הענף",
     },
     suggestions: ["מה זה בדיקה?", "מה יקרה אם אלחץ על פיתוח?", "מה השלב הבא?"],
+    actions: ["implement", "approve_task"],
   } : null);
 
   if (err) return <div className="empty">{err}</div>;

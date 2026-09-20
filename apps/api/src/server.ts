@@ -74,7 +74,6 @@ import {
   clientTaskTree,
   allAdoTasks,
   materializeTasksToAdo,
-  approveTask,
   rejectTask,
   rollbackTask,
   pushTask,
@@ -137,6 +136,13 @@ import {
   getConversation,
   ChatError,
   glossaryFor,
+  runProposal,
+  cancelProposal,
+  proposalPreview,
+  runCodeQuestion,
+  cancelCodeQuestion,
+  runAction,
+  ActionRefused,
   subscribeTerminal,
   writeTerminalInput,
   resizeTerminal,
@@ -164,6 +170,8 @@ app.setErrorHandler((err, _req, reply) => {
   // stage has not finished", "a run is already live") — show it, not a 500.
   if (err instanceof OnboardingError) return reply.code(409).send({ error: err.message });
   if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
+  // The registry refuses with a sentence for the person ("the task is not approved yet") — show it, not a 500.
+  if (err instanceof ActionRefused || err instanceof ChatError) return reply.code(409).send({ error: err.message });
   if (err instanceof ReviewRefused) return reply.code(409).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
@@ -406,6 +414,28 @@ app.get("/claude/conversations/:id", async (req, reply) => {
   const c = await getConversation(id);
   if (!c) return reply.code(404).send({ error: "conversation" });
   return c;
+});
+
+/* a proposal runs only from here — the person's click (§5.2); a declared-cost question the same */
+app.post("/claude/proposals/:id/run", async (req) => {
+  const dev = await actingUser(req);
+  return runProposal((req.params as { id: string }).id, dev.id);
+});
+app.post("/claude/proposals/:id/cancel", async (req) => {
+  const dev = await actingUser(req);
+  return cancelProposal((req.params as { id: string }).id, dev.id);
+});
+app.get("/claude/proposals/:id/preview", async (req) => {
+  const dev = await actingUser(req);
+  return proposalPreview((req.params as { id: string }).id, dev.id);
+});
+app.post("/claude/messages/:id/run-code", async (req) => {
+  const dev = await actingUser(req);
+  return runCodeQuestion((req.params as { id: string }).id, dev.id);
+});
+app.post("/claude/messages/:id/run-code/cancel", async (req) => {
+  const dev = await actingUser(req);
+  return cancelCodeQuestion((req.params as { id: string }).id, dev.id);
 });
 
 app.get("/claude/glossary/:screen", async (req, reply) => {
@@ -778,7 +808,8 @@ app.post("/workitems/:id/assess", async (req) => {
     model: z.string().optional(),
   }).parse(req.body ?? {});
   const wi = await locateWorkItem({ id });
-  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "assess", by: { userId: dev.id }, assessOpts: b });
+  // The button and the chat's proposal are two doors to the same registry entry (claude-in-dcc §5.1).
+  return runAction("assess", b, { kind: "wi", id, clientId: wi.clientId, workitemId: id }, { userId: dev.id }, "button");
 });
 
 // render (never run) one readiness-check tier's actual prompt — powers
@@ -801,7 +832,7 @@ app.post("/workitems/:id/breakdown", async (req) => {
   if (b.reason?.trim()) {
     await recordDecision({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, trigger: "rebreakdown", reason: b.reason });
   }
-  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "breakdown", by: { userId: dev.id } });
+  return runAction("breakdown", {}, { kind: "wi", id, clientId: wi.clientId, workitemId: id }, { userId: dev.id }, "button");
 });
 
 // render (never run) the breakdown prompt — same "what will be sent"
@@ -978,10 +1009,8 @@ app.post("/tasks/:id/implement", async (req) => {
   const { id } = req.params as { id: string };
   const clientId = await taskClient(id);
   const d = await taskDetail(clientId, id);
-  if (!d.task.approvedAt) throw new Error("המשימה טרם אושרה — יש לאשר אותה בשלב הפירוק לפני שאפשר לתת ל-Claude לפתח.");
-  return startFlowRun({
-    clientId, workitemId: d.requirement.id, taskId: id, kind: "implement", by: { userId: dev.id },
-  });
+  // The registry's `allowed` is the approval gate; the button and the chat's proposal pass through the same one.
+  return runAction("implement", {}, { kind: "task", id, clientId, workitemId: d.requirement.id }, { userId: dev.id }, "button");
 });
 
 app.get("/tasks/:id/flow-run", async (req) => {
@@ -1023,8 +1052,8 @@ app.post("/tasks/:id/push", async (req) => {
 app.post("/tasks/:id/approve", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional(), prompt: z.string().optional() }).parse(req.body);
-  return approveTask(b.clientId, id, { userId: dev.id }, { intent: b.intent, appetite: b.appetite, prompt: b.prompt });
+  const { clientId, ...patch } = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional(), prompt: z.string().optional() }).parse(req.body);
+  return runAction("approve_task", patch, { kind: "task", id, clientId, workitemId: null }, { userId: dev.id }, "button");
 });
 
 app.post("/tasks/:id/reject", async (req) => {

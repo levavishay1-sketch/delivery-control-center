@@ -186,7 +186,10 @@ export function PromptPreviewModal({
    *  it's filled. */
   reasonField?: { label: string; value: string; onChange: (v: string) => void };
 }) {
-  const [lang, setLang] = useState<"he" | "en">("he");
+  const [pick, setLang] = useState<"he" | "en">("he");
+  // Not every prompt has a Hebrew rendering; an empty tab would read as "nothing will be sent".
+  const hasHe = !!data?.promptHe?.trim();
+  const lang = pick === "he" && !hasHe ? "en" : pick;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
@@ -209,9 +212,11 @@ export function PromptPreviewModal({
         ) : data ? (
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-              <button className={`btn btn-sm ${lang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("he")}>עברית</button>
-              <CopyBtn text={data.promptHe} />
-              <span style={{ width: 1, height: 16, background: "var(--border-hairline)", margin: "0 4px" }} />
+              {hasHe ? <>
+                <button className={`btn btn-sm ${lang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("he")}>עברית</button>
+                <CopyBtn text={data.promptHe} />
+                <span style={{ width: 1, height: 16, background: "var(--border-hairline)", margin: "0 4px" }} />
+              </> : <span className="ob-sub">לפעולה הזו אין תצוגה בעברית — זה הפרומפט עצמו, כפי שיישלח</span>}
               <button className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("en")}>English</button>
               <CopyBtn text={data.prompt} />
             </div>
