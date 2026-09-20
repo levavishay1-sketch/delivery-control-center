@@ -7,6 +7,7 @@ import {
   type OnboardingStage, type OnboardingStageDefinition, type OnboardingStageKey, type PrepareResult, type ReviewResult,
 } from "../../api.ts";
 import { PageHead, Pill } from "../../ui.tsx";
+import { CodeMapPanel } from "../../components/CodeMap.tsx";
 import { Assistant } from "./Assistant.tsx";
 import { RunTerminal } from "./Terminal.tsx";
 import { AutomationEditor, AutomationPanel, CostPanel, EventLogPanel, ModelEditor, ModelPanel, RunsPanel } from "./rail.tsx";
@@ -258,6 +259,9 @@ function StageBody(p: StageCardProps) {
   const waitingText = p.runnable ? "עוד לא רץ. לחצו על \"הרץ שלב\" כדי להתחיל." : "השלב הזה יהיה זמין אחרי שהשלבים שלפניו יסתיימו.";
   const stageCost = view.cost.byStage.find((s) => s.stageKey === stage.stageKey);
 
+  // Every stage that touches git opens with the same picture.
+  const map = <CodeMapPanel map={view.codeMap} />;
+
   if (stage.stageKey === "prepare") {
     if (stage.status === "Running") return <Working text="מושך את הריפו ופותח ענף… בריפו גדול זה לוקח דקה או שתיים. ההתקדמות מופיעה בטרמינל." />;
     if (stage.status !== "Completed") return <p className="ob-sub">{waitingText}</p>;
@@ -273,7 +277,8 @@ function StageBody(p: StageCardProps) {
     ].filter(Boolean);
     return (
       <>
-        <p className="ob-sub" style={{ marginBottom: 10 }}>עותק מבודד על ענף חדש. הריפו שלך לא נגע.</p>
+        {map}
+        <p className="ob-sub" style={{ margin: "10px 0" }}>עותק מבודד על ענף חדש. הריפו שלך לא נגע.</p>
         <div className="ob-kv">
           <div><div className="l">ענף</div><div className="v ob-code">{r.branch}</div></div>
           <div><div className="l">נקודת התחלה</div><div className="v ob-code">{shortSha(r.baselineSha)}</div></div>
@@ -315,18 +320,20 @@ function StageBody(p: StageCardProps) {
   }
 
   if (stage.stageKey === "review") {
-    if (stage.status === "WaitingForUser") return <ReviewBody {...p} />;
+    if (stage.status === "WaitingForUser") return <ReviewBody {...p} map={map} />;
     if (stage.status !== "Completed") return <p className="ob-sub">{waitingText}</p>;
     const r = stage.result as ReviewResult;
     return <p style={{ fontSize: 13 }}>{r.auto ? "אושר לפי מדיניות האוטומציה" : `אושר על ידי ${p.users[r.approvedBy ?? ""] ?? "—"}`} · {r.changedFiles.length} קבצים עוברים למסירה.</p>;
   }
 
   if (stage.status === "Running") return <Working text="עושה commit על שמך, push לענף ופותח PR…" />;
+  if (stage.status !== "Completed" && p.runnable) return <div style={{ display: "grid", gap: 10 }}>{map}<p className="ob-sub">{`יבצע commit על שמך, push לענף ${view.run.branchName ?? ""} ויפתח PR. main לא ישתנה עד שתמזגו.`}</p></div>;
   if (stage.status !== "Completed") return <p className="ob-sub">{p.runnable ? `עוד לא רץ. יבצע commit על שמך, push לענף ${view.run.branchName ?? ""} ויפתח PR, ואז יסגור את הסשן.` : waitingText}</p>;
   const r = stage.result as DeliverResult;
   return (
     <>
-      <div className="ob-kv">
+      {map}
+      <div className="ob-kv" style={{ marginTop: 10 }}>
         <div><div className="l">commit</div><div className="v ob-code">{r.commitSha ?? "—"}</div></div>
         <div><div className="l">ענף</div><div className="v ob-code">{r.branch}</div></div>
         <div><div className="l">Pull Request</div><div className="v">{r.prUrl ? <a href={r.prUrl} target="_blank" rel="noreferrer">#{r.prNumber ?? "PR"}</a> : r.compareUrl ? <a href={r.compareUrl} target="_blank" rel="noreferrer">פתיחה ידנית</a> : "—"}</div></div>
@@ -342,7 +349,7 @@ function Working({ text }: { text: string }) {
   return <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="spinner" style={{ width: 16, height: 16 }} /><span className="ob-sub" style={{ fontSize: 12.5 }}>{text}</span></div>;
 }
 
-function ReviewBody(p: StageCardProps) {
+function ReviewBody(p: StageCardProps & { map?: ReactNode }) {
   const r = (p.stage.result ?? { changedFiles: [], checkedAt: "" }) as ReviewResult;
   const [open, setOpen] = useState<string | null>(null);
   const [diff, setDiff] = useState<{ path: string; diff: string; binary: boolean } | null>(null);
@@ -352,6 +359,7 @@ function ReviewBody(p: StageCardProps) {
   }, [open, r.checkedAt, p.view.run.repoId, p.view.run.id]);
   return (
     <div style={{ display: "grid", gap: 10 }}>
+      {p.map}
       <div className="ob-note warn">שום דבר לא יוצא מהמחשב עד שתאשרו. רוצים לשנות משהו? בקשו מ-Claude בטרמינל שלמטה, ואז רעננו את הרשימה.</div>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 650 }}>מה השתנה ({r.changedFiles.length} קבצים)</span>

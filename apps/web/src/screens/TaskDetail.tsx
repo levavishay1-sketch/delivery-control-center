@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getTask, getTaskRun, implementTask, previewImplement, progressTask, editTask, rollbackTask, pushTask,
+  getTask, getTaskRun, implementTask, previewImplement, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
   type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
 import { PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { StepRail } from "./WorkflowTab.tsx";
 
 /**
@@ -64,6 +65,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
   const [pushResult, setPushResult] = useState<{ pushed: boolean; reason?: string; branchUrl?: string; compareUrl?: string } | null>(null);
+  // The same picture the onboarding stages draw, for this task's branch.
+  const [codeMap, setCodeMap] = useState<{ codeMap: CodeMap | null; branch: string | null; reason?: string } | null>(null);
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
   const [delLoading, setDelLoading] = useState(false);
   const [delAckSubtree, setDelAckSubtree] = useState(false);
@@ -101,6 +104,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
   const load = useCallback(() => { getTask(id).then(setD).catch((e) => setErr(String(e))); }, [id]);
   const loadPrompt = useCallback(() => { previewImplement(id).then(setPromptPreview).catch(() => setPromptPreview(null)); }, [id]);
+  const loadCodeMap = useCallback(() => { getTaskCodeMap(id).then(setCodeMap).catch(() => setCodeMap(null)); }, [id]);
   const refreshRun = useCallback(async () => {
     try {
       const r = await getTaskRun(id);
@@ -108,7 +112,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     } catch { /* ignore */ }
   }, [id, load]);
 
-  useEffect(() => { load(); refreshRun(); loadPrompt(); }, [load, refreshRun, loadPrompt]);
+  useEffect(() => { load(); refreshRun(); loadPrompt(); loadCodeMap(); }, [load, refreshRun, loadPrompt, loadCodeMap]);
   const running = run?.state === "running";
   useEffect(() => {
     if (!running) return;
@@ -262,6 +266,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     setRollingBack(true); setErr(null); setRollbackMsg(null);
     try {
       const r = await rollbackTask(id);
+      loadCodeMap();
       setRollbackMsg(r.rolledBack ? "✓ שינויי הקוד בוטלו — ה-branch אופס לבסיס. המשימה נקייה כמו לפני שפותחה." : (r.reason ?? "אין מה לבטל."));
       load();
       await refreshRun();
@@ -274,6 +279,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     setPushing(true); setErr(null); setPushResult(null);
     try {
       const r = await pushTask(id);
+      loadCodeMap();
       setPushResult(r);
     } catch (e) { setErr(String(e)); }
     finally { setPushing(false); }
@@ -732,7 +738,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                     </div>
                   )}
 
-                  <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, display: "flex", gap: 8 }}>
+                  {codeMap?.codeMap
+                    ? <div style={{ marginTop: 14 }}><CodeMapPanel map={codeMap.codeMap} title={`מצב הקוד · ${codeMap.branch ?? ""}`} /></div>
+                    : codeMap?.reason
+                      ? <p className="ob-sub" style={{ marginTop: 14, fontSize: 12, color: "var(--ink-500)" }}>{codeMap.reason}</p>
+                      : null}
+
+                  <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, marginTop: 14, display: "flex", gap: 8 }}>
                     <button className="btn btn-primary" disabled={pushing || rollingBack} onClick={push}>
                       {pushing ? "דוחף…" : "⬆ Push ל-GitHub"}
                     </button>

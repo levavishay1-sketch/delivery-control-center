@@ -3,6 +3,7 @@ import { rmSync } from "node:fs";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, withTenant } from "@dcc/db";
 import { repo, repoAiEvent, repositoryOnboardingRun, repositoryOnboardingStage } from "@dcc/db/schema";
+import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { recommend } from "../routing.ts";
 import { changedFiles, fileDiff } from "./changes.ts";
 import { deliverWorkspace } from "./deliver.ts";
@@ -477,6 +478,14 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
   const totals = sessionTotals(session);
   const total = totals.costUsd;
   const rec = recommend("onboarding_init");
+  // The same picture the task screens draw, built from this run's worktree.
+  const deliver = (stages.find((s) => s.stageKey === "deliver")?.result ?? {}) as Partial<DeliverResult>;
+  let codeMap: CodeMap | null = null;
+  if (run.workspacePath) {
+    codeMap = await codeMapForWorkspace(run.workspacePath, {
+      branch: run.branchName, baselineSha: run.baselineSha, prUrl: deliver.prUrl ?? null, prNumber: deliver.prNumber ?? null,
+    }).catch(() => null);
+  }
   const cost = {
     totalCostUsd: total,
     apiCalls: session.apiCalls ?? 0,
@@ -499,6 +508,7 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
     automation: normalizePolicy(run.automation),
     modelChoices: normalizeModelPolicy(run.modelChoices),
     recommended: { init: { model: rec.model, effort: rec.effort } },
+    codeMap,
     cost,
   };
 }

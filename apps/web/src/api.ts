@@ -460,10 +460,19 @@ export type OnboardingCost = {
   assistant: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
   byStage: { stageKey: OnboardingStageKey; model: string | null; effort: string | null; costUsd: number }[];
 };
+export type CodeMapPlace = "cloud" | "local" | "both";
+export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
+export type CodeMapNode = { kind: CodeMapNodeKind; title?: string };
+export type CodeMapLane = { id: string; label?: string; note?: string; place?: CodeMapPlace; nodes: CodeMapNode[]; from?: { lane: string; at: number } };
+export type CodeMapArrow = { from: string; to: string; label: string; state: "done" | "pending" };
+/** The one drawing DCC uses wherever git is involved; built on the server. */
+export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string };
+export const getTaskCodeMap = (taskId: string) => get<{ codeMap: CodeMap | null; branch: string | null; reason?: string }>(`/tasks/${taskId}/code-map`);
+
 export type OnboardingRunView = {
   repo: { id: string; name: string }; run: OnboardingRun; stages: OnboardingStage[]; events: OnboardingEvent[];
   definitions: OnboardingStageDefinition[]; automation: AutomationPolicy; modelChoices: ModelPolicy;
-  recommended: { init: { model: string; effort: Effort } }; cost: OnboardingCost;
+  recommended: { init: { model: string; effort: Effort } }; codeMap: CodeMap | null; cost: OnboardingCost;
 };
 export type OnboardingRunSummary = { id: string; status: OnboardingStatus; currentStageKey: OnboardingStageKey | null; startedAt: string; completedAt: string | null; branchName: string | null };
 

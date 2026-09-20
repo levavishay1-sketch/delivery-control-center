@@ -693,6 +693,14 @@ export async function getRetroRunView(workitemId: string): Promise<FlowRunView |
  *  Fix: always reset to the actual default branch before pulling, not
  *  just pull blindly — same correctness as a fresh clone, without paying
  *  its full download cost every time. */
+/** The local copy of a repository IF it is already there — never clones.
+ *  Read-only callers (screens) use this; work that needs a copy uses `ensureCheckout`. */
+export function existingCheckout(r: { id: string; localPath: string | null }): string | null {
+  if (r.localPath && existsSync(r.localPath)) return r.localPath;
+  const dir = path.join(REPO_CACHE, r.id);
+  return existsSync(path.join(dir, ".git")) ? dir : null;
+}
+
 export async function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
   if (r.localPath && existsSync(r.localPath)) return r.localPath;
   const gitUrl = r.adoRepoRef && /^(https?:\/\/|git@)/.test(r.adoRepoRef) ? r.adoRepoRef : null;
@@ -745,7 +753,7 @@ async function loadRequirementText(clientId: string, workitemId: string) {
   });
 }
 
-async function firstRepo(clientId: string, workitemId: string) {
+export async function firstRepo(clientId: string, workitemId: string) {
   return withTenant(clientId, async (tx) => {
     const linked = await tx
       .select({ id: repo.id, name: repo.name, localPath: repo.localPath, adoRepoRef: repo.adoRepoRef })
@@ -1331,7 +1339,7 @@ const slug = (s: string) =>
 /** Deterministic branch name for a task's implement run — same formula
  *  everywhere (`runImplement`, `rollbackTask`, the delete precheck) so
  *  nothing extra needs to be persisted to find a task's branch again. */
-const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
+export const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
   `feature/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
 
 /** How many commits a task's branch has beyond the repo's default branch —

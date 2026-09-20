@@ -77,6 +77,7 @@ import {
   rejectTask,
   rollbackTask,
   pushTask,
+  codeMapForTask,
   editTask,
   precheckTaskDelete,
   deleteTaskSurgical,
@@ -914,6 +915,14 @@ app.post("/tasks/:id/rollback", async (req) => {
 // the one deliberately-manual step: push a task's branch to the repo's
 // real remote (GitHub/ADO), using whatever git credentials are already
 // configured locally. Never automatic — the user decides when.
+app.get("/tasks/:id/code-map", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const clientId = await taskClient(id);
+  const d = await taskDetail(clientId, id);
+  return codeMapForTask({ clientId, workitemId: d.requirement.id, taskId: id });
+});
+
 app.post("/tasks/:id/push", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };

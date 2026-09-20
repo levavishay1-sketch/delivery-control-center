@@ -62,3 +62,15 @@ Azure DevOps → verification. Tick each task as it lands.
 - [ ] 8.2 Live against the real repositories: the list matches what the hosts show, the freshness numbers match a manual `git rev-list`, and the drawing matches the real branch layout
 - [ ] 8.3 Each action run once against a real request, including a real conflict
 - [ ] 8.4 Costs and timings of one sync cycle recorded here
+
+## 9. The code map — one drawing, everywhere git is involved
+
+Built first, because every screen below depends on it and the user asked that a
+change of design be one change, not one per screen.
+
+- [x] 9.1 `packages/core/src/code-map.ts` — the model (lanes, dots, place badges, arrows), the git reading behind it (local commands only, memoised ~8s, no network on a screen poll), and the builder that turns facts into the picture plus its one Hebrew sentence
+- [x] 9.2 `codeMapForWorkspace` (a working copy) and `codeMapForTask` (a branch read by name, without checking it out). Reading a screen never starts a clone: `existingCheckout` replaces `ensureCheckout` for read-only callers
+- [x] 9.3 `apps/web/src/components/CodeMap.tsx` — the only place that draws it. Geometry and colour live in one `D` object at the top; screens pass a map and nothing else
+- [x] 9.4 Added to every screen that touches git, as an addition — nothing existing was moved or removed: onboarding prepare, review and deliver, and the task screen beside push and rollback (refreshed after both)
+- [x] 9.5 Verified: built from this repository's own git (3 commits, 12 uncommitted, pushed, base `master`, fetch time — matches `git` by hand) and rendered in the running app through Vite for the fresh, behind-by-12 and pushed cases. Three overlap bugs found and fixed there (labels on the line, the base badge under the arrow's landing, the arrow label over the branch name)
+- [ ] 9.6 Not yet seen inside a real onboarding run or task screen — the trade repository has no run since the cleanup, and the map only renders when there is a workspace. To be checked on the next run
