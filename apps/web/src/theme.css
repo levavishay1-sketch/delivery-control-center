@@ -731,3 +731,29 @@ a { color: var(--color-accent); }
 .rv-o.on { border: 2px solid var(--color-accent); background: var(--color-accent-muted); padding: 7px 9px; }
 .rv-ta { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--border-hairline); border-radius: var(--radius-md); background: var(--surface); color: var(--ink-900); resize: vertical; }
 .ob-note.ok { background: var(--status-healthy-bg); color: var(--status-healthy); }
+
+/* ── Claude in DCC (claude/CostLine.tsx, claude/CallsTable.tsx, screens/ClaudeCenter.tsx) ── */
+/* the one cost line: model · effort · tokens · cost, the same everywhere */
+.cost-line { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-500); white-space: nowrap; flex-wrap: wrap; }
+.cost-line.md { font-size: 12.5px; }
+.cost-line b { color: var(--ink-700); font-weight: 600; }
+.cost-line .sep { color: var(--ink-400); }
+.cost-line .usd { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; font-weight: 650; color: var(--ink-900); }
+.cost-line .tok { direction: ltr; unicode-bidi: isolate; }
+.cost-line.free .usd { color: var(--status-healthy); }
+/* bars in the control center */
+.bars { display: grid; gap: 8px; }
+.bar { display: grid; grid-template-columns: 150px 1fr 74px; gap: 10px; align-items: center; font-size: 12.5px; }
+.bar .n { color: var(--ink-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .v { text-align: end; direction: ltr; font-variant-numeric: tabular-nums; font-weight: 600; }
+.meter-fill.ai { background: linear-gradient(90deg, #9b6bf2, var(--status-ai)); }
+.meter-fill.healthy { background: linear-gradient(90deg, #22b989, var(--status-healthy)); }
+/* the calls table: an open row and its detail */
+.wtable.calls tbody tr.open td { background: var(--color-accent-muted); border-bottom: none; }
+.wtable.calls .mono { font-family: var(--mono); font-size: 11.5px; direction: ltr; unicode-bidi: isolate; }
+.wtable.calls .num { text-align: end; direction: ltr; font-variant-numeric: tabular-nums; }
+.wtable .muted { color: var(--ink-500); }
+.wtable .small { font-size: 11.5px; }
+.badge-soft.critical { background: var(--status-critical-bg); color: var(--status-critical); }
+.badge-soft { font-weight: 700; font-size: 15px; }
+.tab:disabled { cursor: default; opacity: .5; }

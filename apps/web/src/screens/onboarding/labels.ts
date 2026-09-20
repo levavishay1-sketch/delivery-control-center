@@ -50,23 +50,9 @@ export function presetPolicy(preset: AutomationPreset, defs: readonly Onboarding
   return { preset, stages } as AutomationPolicy;
 }
 
-export const MODEL_OPTIONS = [
-  { value: "claude-sonnet-5", label: "Sonnet 5" },
-  { value: "claude-opus-5", label: "Opus 5" },
-  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5" },
-];
-export const modelLabel = (id: string | null | undefined) => (id ? MODEL_OPTIONS.find((m) => m.value === id)?.label ?? id : "—");
-
-export const EFFORTS: Effort[] = ["low", "medium", "high", "xhigh", "max"];
-export const EFFORT_HE: Record<Effort, string> = { low: "נמוך", medium: "בינוני", high: "גבוה", xhigh: "גבוה מאוד", max: "מקסימלי" };
-export const effortLabel = (e: string | null | undefined) => (e ? EFFORT_HE[e as Effort] ?? e : "—");
-
-export const fmtUsd = (n: number) => `$${n.toFixed(2)}`;
-export const fmtInt = (n: number) => Math.round(n).toLocaleString("en-US");
-export const fmtDuration = (ms: number) => {
-  const s = Math.round(ms / 1000);
-  return s < 60 ? `${s} שנ'` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} דק'`;
-};
+// Model, effort and money read the same on every screen — one source (claude/labels.ts).
+import { modelLabel, effortLabel } from "../../claude/labels.ts";
+export { MODEL_OPTIONS, modelLabel, EFFORTS, EFFORT_HE, effortLabel, fmtUsd, fmtInt, fmtDuration } from "../../claude/labels.ts";
 export const fmtTime = (iso: string) => new Date(iso).toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
 export const fmtDate = (iso: string) => new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 export const shortSha = (sha: string | null | undefined) => (sha ? sha.slice(0, 7) : "—");

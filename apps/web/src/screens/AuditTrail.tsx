@@ -15,7 +15,7 @@ function actionText(type: string, p: Record<string, unknown>): string {
     case "task.progressed": return `Task ${p.from} → ${p.to}`;
     case "blocker.raised": return `Raised a blocker — "${String(p.question ?? "").slice(0, 55)}"`;
     case "blocker.answered": return `Answered a blocker`;
-    case "model.routed": return `Routed ${p.capability} → ${p.model}`;
+    case "claude.call": return `Claude — ${p.capability}: ${String(p.label ?? "").slice(0, 50)}${p.outcome && p.outcome !== "ok" ? ` (${p.outcome})` : ""}`;
     case "review.completed": return `Review — ${p.verdict}${p.blockingCount ? ` (${p.blockingCount} blocking)` : ""}`;
     case "claude.session": return `Claude session — ${String(p.summary ?? "").slice(0, 55)}`;
     case "git.activity": return `${p.kind} on ${p.branch}`;
@@ -65,7 +65,7 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
           <label>Action</label>
           <select value={q.type} onChange={(e) => set("type", e.target.value)}>
             <option value="">All actions</option>
-            {["note.added", "gap.proposed", "gap.verified", "tasks.proposed", "task.progressed", "blocker.raised", "blocker.answered", "model.routed", "review.completed", "git.activity"].map((t) => <option key={t} value={t}>{t}</option>)}
+            {["note.added", "gap.proposed", "gap.verified", "tasks.proposed", "task.progressed", "blocker.raised", "blocker.answered", "claude.call", "claude.session", "review.completed", "git.activity"].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div className="field"><label>From</label><input type="date" value={q.from} onChange={(e) => set("from", e.target.value)} /></div>

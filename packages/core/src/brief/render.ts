@@ -1,5 +1,3 @@
-import type { TimelineSummary } from "../summarise.ts";
-
 export type BriefModel = {
   key: string | null;
   title: string;
@@ -27,7 +25,7 @@ const line = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ");
  * it becomes the next session's context. Compact by design: a few
  * thousand tokens, not the whole timeline.
  */
-export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
+export function renderBrief(m: BriefModel): string {
   const out: string[] = [];
   const id = m.key ?? "(no key)";
   out.push(`# ${id} — ${m.title}`);
@@ -88,26 +86,22 @@ export function renderBrief(m: BriefModel, narrative: TimelineSummary): string {
 
   out.push("");
   out.push("## Recent timeline");
-  if (narrative.mode === "summarised") {
-    out.push(narrative.text);
-  } else {
-    for (const e of m.recentTimeline) {
-      const p = e.payload as Record<string, unknown>;
-      const gist =
-        (p.summary as string) ||
-        (p.body as string) ||
-        (p.answer as string) ||
-        (p.description as string) ||
-        (p.question as string) ||
-        (p.model ? `${p.capability} → ${p.model} (${p.rationale ?? ""})` : "") ||
-        (p.verdict ? `${p.verdict}${p.blockingCount ? ` — ${p.blockingCount} blocking` : ""} (${p.findingCount ?? 0} findings)` : "") ||
-        (p.taskCount ? `${p.taskCount} tasks, ${p.dependencyCount} deps` : "") ||
-        (p.to ? `${p.from ?? "?"} → ${p.to}` : "") ||
-        (p.outcome ? `→ ${p.outcome}` : "") ||
-        `${p.kind ?? ""} ${p.branch ? `on ${p.branch}` : ""}`.trim() ||
-        e.type;
-      out.push(`- \`${line(e.occurredAt)}\` **${e.source}** ${e.type} — ${String(gist).slice(0, 200)}`);
-    }
+  for (const e of m.recentTimeline) {
+    const p = e.payload as Record<string, unknown>;
+    const gist =
+      (p.summary as string) ||
+      (p.body as string) ||
+      (p.answer as string) ||
+      (p.description as string) ||
+      (p.question as string) ||
+      (p.callId ? `${p.capability}: ${p.label ?? ""}` : "") ||
+      (p.verdict ? `${p.verdict}${p.blockingCount ? ` — ${p.blockingCount} blocking` : ""} (${p.findingCount ?? 0} findings)` : "") ||
+      (p.taskCount ? `${p.taskCount} tasks, ${p.dependencyCount} deps` : "") ||
+      (p.to ? `${p.from ?? "?"} → ${p.to}` : "") ||
+      (p.outcome ? `→ ${p.outcome}` : "") ||
+      `${p.kind ?? ""} ${p.branch ? `on ${p.branch}` : ""}`.trim() ||
+      e.type;
+    out.push(`- \`${line(e.occurredAt)}\` **${e.source}** ${e.type} — ${String(gist).slice(0, 200)}`);
   }
 
   out.push("");

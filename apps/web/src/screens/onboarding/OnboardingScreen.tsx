@@ -163,7 +163,7 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
             choices={view.modelChoices} defs={defs} recommended={view.recommended} busy={busy === "model"} disabled={runOver}
             onSave={(p) => act("model", () => updateOnboardingModelChoices(id, run.id, p))}
           />
-          <CostPanel cost={view.cost} title={title} />
+          <CostPanel cost={view.cost} title={title} nav={nav} />
           <EventLogPanel events={view.events} title={title} users={users} />
           <RunsPanel runs={runs} current={run.id} onPick={(rid) => { setSelected(null); setRunId(rid); }} />
         </div>

@@ -3,19 +3,15 @@ import { withTenant } from "@dcc/db";
 import { blocker, contextBrief, gap, review, task, workitem } from "@dcc/db/schema";
 import { eventLog } from "@dcc/db/schema";
 import { renderBrief, type BriefModel } from "./render.ts";
-import { summariseTimeline } from "../summarise.ts";
 
 /**
  * Regenerate a WorkItem's Context Brief (architecture §10).
  *
- * Phase 0 brief is ASSEMBLED from structured state — open gaps, blocker,
- * task counts, decisions, the recent timeline — not LLM-summarised. It
- * is already what the SessionStart hook injects, so the next session
- * starts from the flow, not from zero.
- *
- * `summariseTimeline()` is the seam where a policy-chosen model condenses
- * the free-text event bodies once an API key is configured. Without one
- * it returns the raw recent lines. Either way the Brief is fresh on
+ * The brief is ASSEMBLED from structured state — open gaps, blocker, task
+ * counts, decisions, the recent timeline — never LLM-summarised: the
+ * system hands the facts over, it does not send a model to read them
+ * (claude-in-dcc §6.1). It is what the SessionStart hook injects, so the
+ * next session starts from the flow, not from zero, and it is fresh on
  * every new event.
  */
 export async function regenerateBrief(clientId: string, workitemId: string): Promise<void> {
@@ -94,8 +90,7 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
 
   if (!model) return;
 
-  const narrative = await summariseTimeline(model.recentTimeline);
-  const body = renderBrief(model, narrative);
+  const body = renderBrief(model);
 
   const lastEventId = await withTenant(clientId, async (tx) => {
     const [row] = await tx
@@ -115,12 +110,12 @@ export async function regenerateBrief(clientId: string, workitemId: string): Pro
         clientId,
         body,
         currentAsOfEvent: lastEventId,
-        modelUsed: narrative.modelUsed,
+        modelUsed: "assembled/v0",
         updatedAt: new Date(),
       })
       .onConflictDoUpdate({
         target: contextBrief.workitemId,
-        set: { body, currentAsOfEvent: lastEventId, modelUsed: narrative.modelUsed, updatedAt: new Date() },
+        set: { body, currentAsOfEvent: lastEventId, modelUsed: "assembled/v0", updatedAt: new Date() },
       }),
   );
 }

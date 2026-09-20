@@ -250,9 +250,10 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const kick = async (what: "assess" | "breakdown") => {
     setErr(null); setSendErr(null); setSendData(null); setPendingKick(what); setSendLoading(true);
     try {
-      setSendData(what === "assess"
+      const r = what === "assess"
         ? await previewAssess(wi.id, assessPromptKey, isCustom ? assessCustomEmphasis : undefined)
-        : await previewBreakdown(wi.id));
+        : await previewBreakdown(wi.id);
+      setSendData({ prompt: r.prompt, promptHe: r.promptHe ?? "" });
     } catch (e) { setSendErr(String(e)); }
     finally { setSendLoading(false); }
   };

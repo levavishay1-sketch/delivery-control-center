@@ -32,9 +32,10 @@ import {
   proposeGap,
   proposeTasks,
   raiseBlocker,
-  recordRouting,
-  route,
-  type Capability,
+  claudeOverview,
+  claudeCalls,
+  claudeCallById,
+  callsForEntity,
   recordGitActivity,
   recordNote,
   recordSession,
@@ -370,10 +371,10 @@ app.get("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
-  await actingUser(req);
+  const dev = await actingUser(req);
   const { id, runId } = req.params as RunParams;
   const b = z.object({ question: z.string().min(1).max(4000), screen: z.string().max(20_000).optional() }).parse(req.body);
-  return askOnboardingAssistant(id, runId, b.question, b.screen);
+  return askOnboardingAssistant(id, runId, b.question, b.screen, { userId: dev.id });
 });
 
 app.delete("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
@@ -1077,6 +1078,15 @@ app.get("/workitems/:id/cost-detail", async (req) => {
   return { rows: await requirementCostDetail(wi.clientId, id) };
 });
 
+// the same rows as the ledger shows them — what the web's cost detail and
+// the control center both render through one component (claude-in-dcc §8.2)
+app.get("/workitems/:id/calls", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return { calls: await callsForEntity(wi.clientId, { workitemId: id }) };
+});
+
 app.post("/gaps/:id/verify", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
@@ -1241,34 +1251,38 @@ app.post("/workitems/:id/depends-on", async (req, reply) => {
   return reply.code(201).send({ linked: true });
 });
 
-/* ── model routing ───────────────────────────────────────────────── */
+/* ── Claude's control center (claude-in-dcc §9) — every number is a slice of the ledger ── */
 
-app.post("/workitems/:id/route", async (req, reply) => {
-  const dev = await actingUser(req);
+const centerQuery = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  clientId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  capability: z.string().optional(),
+  model: z.string().optional(),
+  outcome: z.string().optional(),
+  escalated: z.enum(["1", "true"]).optional(),
+  workitemId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().optional(),
+  offset: z.coerce.number().int().optional(),
+});
+const centerFilter = (q: z.infer<typeof centerQuery>) => ({ ...q, escalated: !!q.escalated });
+
+app.get("/claude/overview", async (req) => {
+  await actingUser(req);
+  return claudeOverview(centerFilter(centerQuery.parse(req.query ?? {})));
+});
+
+app.get("/claude/calls", async (req) => {
+  await actingUser(req);
+  return claudeCalls(centerFilter(centerQuery.parse(req.query ?? {})));
+});
+
+app.get("/claude/calls/:id", async (req, reply) => {
+  await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z
-    .object({
-      capability: z.enum(["brief", "matching", "narrative", "gap_detection", "decomposition", "review", "execution"]),
-      signals: z
-        .object({
-          ambiguity: z.enum(["low", "medium", "high"]).optional(),
-          breadth: z.number().int().optional(),
-          reversible: z.boolean().optional(),
-          openGaps: z.number().int().optional(),
-          novelty: z.enum(["low", "medium", "high"]).optional(),
-          recentEvents: z.number().int().optional(),
-          mechanical: z.boolean().optional(),
-        })
-        .default({}),
-      record: z.boolean().default(true),
-    })
-    .parse(req.body);
-  const wi = await locateWorkItem({ id });
-  const decision = route(b.capability as Capability, b.signals);
-  if (b.record) {
-    await recordRouting({ clientId: wi.clientId, workitemId: wi.id, by: { userId: dev.id }, decision });
-  }
-  return reply.code(200).send(decision);
+  const row = await claudeCallById(id);
+  if (!row) return reply.code(404).send({ error: "call" });
+  return row;
 });
 
 /* ── tasks ────────────────────────────────────────────────────────── */

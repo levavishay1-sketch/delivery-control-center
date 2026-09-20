@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
+import { CallsTable } from "../claude/CallsTable.tsx";
+import { CostLine } from "../claude/CostLine.tsx";
+import { capabilityLabel, fmtUsd } from "../claude/labels.ts";
 import {
   answerBlocker, composeGapLetter, correctNote, deleteBlocker, deleteGap, deleteRequirement,
-  getBrief, getCostDetail, getDetail, getFlowRun, getCostSummary, getGapLetters, getRetro, startRetro, unlinkRepoFromReq, uploadAttachment, verifyGap,
-  type Blocker, type ClientLetter, type ClientLetterHistoryItem, type CostDetailRow, type EventRow, type Gap, type RequirementCostSummary, type RetroRun, type WorkItemDetail,
+  getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, getGapLetters, getRetro, startRetro, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  type Blocker, type ClaudeCallView, type ClientLetter, type ClientLetterHistoryItem, type EventRow, type Gap, type RequirementCostSummary, type RetroRun, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
@@ -21,7 +24,7 @@ const post = async (path: string, body: unknown) => {
 const TABS = ["Overview", "Timeline", "Dependencies"] as const;
 type Tab = (typeof TABS)[number];
 
-const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "model.routed", "review.completed"]);
+const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "claude.call", "review.completed"]);
 const isAi = (e: EventRow) => e.actor.kind !== "user" || AI_TYPES.has(e.type);
 const fmt = (t: string) => new Date(t).toISOString().slice(0, 16).replace("T", " ");
 /** decision.made trigger → Hebrew label, for the Timeline's highlighted
@@ -84,13 +87,16 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   // first open (a real bug a user hit live: a second composed letter
   // never appeared because the list had already been cached from
   // before it existed).
+  // The calls behind the total — the same ledger rows the control center
+  // shows, through the same table; always re-fetched on open (a stale
+  // cached list once hid a letter that had just been composed).
   const [costDetailOpen, setCostDetailOpen] = useState(false);
-  const [costDetail, setCostDetail] = useState<CostDetailRow[] | null>(null);
+  const [costDetail, setCostDetail] = useState<ClaudeCallView[] | null>(null);
   const [costDetailLoading, setCostDetailLoading] = useState(false);
   const openCostDetail = () => {
     setCostDetailOpen(true);
     setCostDetailLoading(true);
-    getCostDetail(id).then((r) => setCostDetail(r.rows)).catch(() => {}).finally(() => setCostDetailLoading(false));
+    getWorkitemCalls(id).then((r) => setCostDetail(r.calls)).catch(() => {}).finally(() => setCostDetailLoading(false));
   };
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
   const [uploading, setUploading] = useState(false);
@@ -490,7 +496,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
       {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
       {retroOpen && <RetroModal workitemId={wi.id} onClose={() => setRetroOpen(false)} />}
-      {costDetailOpen && <CostDetailModal rows={costDetail} loading={costDetailLoading} summary={cost} onClose={() => setCostDetailOpen(false)} />}
+      {costDetailOpen && <CallsModal rows={costDetail} loading={costDetailLoading} summary={cost} nav={nav} onClose={() => setCostDetailOpen(false)} />}
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
@@ -754,73 +760,32 @@ function RetroModal({ workitemId, onClose }: { workitemId: string; onClose: () =
   );
 }
 
-const COST_KIND_LABELS: Record<string, string> = {
-  assess: "בחינת בשלות", breakdown: "פירוק למשימות", implement: "פיתוח משימה",
-  check: "בדיקה", gap_letter: "ניסוח מכתב ללקוח", retro: "המלצות לשיפור", other: "אחר",
-};
-const fmtDuration = (ms: number | null) => {
-  if (ms == null) return "—";
-  const s = ms / 1000;
-  return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
-};
-
-/** What a requirement's "עלות AI בפועל" total is actually made of — one
- *  row per AI run, newest first (design notes, cost-visibility: a user
- *  could see the total but nothing behind it). */
-function CostDetailModal({ rows, loading, summary, onClose }: {
-  rows: CostDetailRow[] | null; loading: boolean; summary: RequirementCostSummary | null; onClose: () => void;
+/** What a requirement's "עלות AI בפועל" total is actually made of — the
+ *  ledger rows behind it, through the same table the control center uses
+ *  (claude-in-dcc §8.2: one record, one way to show it). */
+function CallsModal({ rows, loading, summary, nav, onClose }: {
+  rows: ClaudeCallView[] | null; loading: boolean; summary: RequirementCostSummary | null; nav: (h: string) => void; onClose: () => void;
 }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px", zIndex: 100 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(760px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(980px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <h2 style={{ fontSize: 17, fontWeight: 650 }}>פירוט עלות AI</h2>
           <a onClick={onClose} style={{ cursor: "pointer", fontSize: 15, color: "var(--ink-500)" }}>✕</a>
         </div>
-        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>כל הרצת AI שהשתתפה בעלות הכוללת של הדרישה הזו, לפי הפרמטרים בפועל שקבעו את החישוב.</p>
+        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>כל קריאה לקלוד על הדרישה הזו — מיומן הקריאות, כמו במרכז הבקרה. לחיצה על שורה פותחת את הפרטים.</p>
 
         {summary && (
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 16, padding: "10px 14px", background: "var(--surface-muted)", borderRadius: 10 }}>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>סה"כ</div><div style={{ fontSize: 15, fontWeight: 700 }}>${summary.totalUsd.toFixed(4)}</div></div>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>הרצות</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.runCount}</div></div>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>טוקני קלט</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.totalInputTokens.toLocaleString()}</div></div>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>טוקני פלט</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.totalOutputTokens.toLocaleString()}</div></div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginBottom: 16, padding: "10px 14px", background: "var(--surface-muted)", borderRadius: 10 }}>
+            <CostLine size="md" inputTokens={summary.totalInputTokens} outputTokens={summary.totalOutputTokens} costUsd={summary.totalUsd} note={`${summary.runCount} קריאות`} />
             {Object.entries(summary.byKind).map(([kind, b]) => (
-              <div key={kind}><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>{COST_KIND_LABELS[kind] ?? kind}</div><div style={{ fontSize: 13, fontWeight: 600 }}>${b.usd.toFixed(4)} <span style={{ fontWeight: 400, color: "var(--ink-400)" }}>({b.count})</span></div></div>
+              <span key={kind} className="cost-line"><b>{capabilityLabel(kind)}</b><span className="sep">·</span>{b.count}<span className="sep">·</span><span className="usd">{fmtUsd(b.usd)}</span></span>
             ))}
           </div>
         )}
 
         {loading && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 0" }}><span className="spinner" style={{ width: 16, height: 16 }} /><span style={{ fontSize: 13, color: "var(--ink-500)" }}>טוען…</span></div>}
-
-        {rows && rows.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border-hairline)", textAlign: "right" }}>
-                  {["מתי", "מה", "מודל", "משך", "צעדים", "טוקני קלט", "טוקני פלט", "עלות"].map((h) => (
-                    <th key={h} style={{ padding: "6px 8px", fontWeight: 600, color: "var(--ink-500)", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid var(--border-hairline)" }}>
-                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap", color: "var(--ink-400)", fontFamily: "ui-monospace, monospace", fontSize: 11 }}>{fmt(r.occurredAt)}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.label || (COST_KIND_LABELS[r.kind] ?? r.kind)}</td>
-                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{r.model ?? "—"}</td>
-                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{fmtDuration(r.durationMs)}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.numTurns ?? "—"}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.inputTokens.toLocaleString()}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.outputTokens.toLocaleString()}</td>
-                    <td style={{ padding: "6px 8px", fontWeight: 600, whiteSpace: "nowrap" }}>${r.costUsd.toFixed(4)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {rows && rows.length === 0 && !loading && <div className="empty">עדיין לא נרשמה אף הרצת AI על הדרישה הזו.</div>}
+        {rows && <CallsTable rows={rows} showClient={false} showOn={false} nav={nav} emptyText="עדיין לא נרשמה אף קריאה לקלוד על הדרישה הזו." />}
       </div>
     </div>
   );

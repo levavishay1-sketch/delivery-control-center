@@ -2,6 +2,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@dcc/db";
 import {
   blocker,
+  claudeCall,
   client,
   clientBudget,
   eventLog,
@@ -9,6 +10,9 @@ import {
   users,
   workitem,
 } from "@dcc/db/schema";
+
+/** Month-to-date, the period every AI-cost tile means. */
+const MONTH_START = sql`date_trunc('month', now())`;
 
 /**
  * The dashboard payload, shaped for the approved visual template:
@@ -35,9 +39,11 @@ export async function dashboard(forUserId: string) {
   const [openItems] = await db.select({ n: sql<number>`count(*)::int` }).from(workitem).where(sql`${workitem.phase} not in ('done','archived')`);
   const [newItems] = await db.select({ n: sql<number>`count(*)::int` }).from(workitem).where(sql`${workitem.createdAt} >= ${monthAgo}`);
   const [blockedItems] = await db.select({ n: sql<number>`count(distinct ${blocker.workitemId})::int` }).from(blocker).where(sql`${blocker.state} = 'open'`);
-  const [spend] = await db.select({ spent: sql<number>`coalesce(sum(${clientBudget.spentUsd}),0)::float`, budget: sql<number>`coalesce(sum(${clientBudget.monthlyUsd}),0)::float` }).from(clientBudget);
+  // The month's AI spend is a sum over the ledger — the one place cost is counted (claude-in-dcc §8.2).
+  const [spend] = await db.select({ spent: sql<number>`coalesce(sum(${claudeCall.costUsd}),0)::float` }).from(claudeCall).where(sql`${claudeCall.startedAt} >= ${MONTH_START}`);
+  const [budgetRow] = await db.select({ budget: sql<number>`coalesce(sum(${clientBudget.monthlyUsd}),0)::float` }).from(clientBudget);
   const spent = spend?.spent ?? 0;
-  const budget = spend?.budget ?? 0;
+  const budget = budgetRow?.budget ?? 0;
 
   const stats = {
     initiatives: initiatives?.n ?? 0,
@@ -78,12 +84,12 @@ export async function dashboard(forUserId: string) {
     .orderBy(desc(workitem.updatedAt))
     .limit(4);
 
-  // AI spend per requirement subtree, from routed model calls
+  // This month's AI spend per requirement, from the ledger
   const wiSpendAll = await db
-    .select({ workitemId: eventLog.workitemId, spent: sql<number>`coalesce(sum((${eventLog.payload}->>'budgetUsd')::float),0)::float`, calls: sql<number>`count(*)::int` })
-    .from(eventLog)
-    .where(sql`${eventLog.type} = 'model.routed'`)
-    .groupBy(eventLog.workitemId);
+    .select({ workitemId: claudeCall.workitemId, spent: sql<number>`coalesce(sum(${claudeCall.costUsd}),0)::float`, calls: sql<number>`count(*)::int` })
+    .from(claudeCall)
+    .where(sql`${claudeCall.workitemId} is not null and ${claudeCall.startedAt} >= ${MONTH_START}`)
+    .groupBy(claudeCall.workitemId);
   const spendByWi = new Map(wiSpendAll.map((r) => [r.workitemId, r]));
 
   const initiativesList = initRows.map((p) => ({
@@ -177,15 +183,25 @@ export async function listInitiatives() {
 
 export async function listBudgets() {
   const rows = await db
-    .select({ clientId: clientBudget.clientId, clientName: client.name, monthlyUsd: clientBudget.monthlyUsd, spentUsd: clientBudget.spentUsd })
+    .select({ clientId: clientBudget.clientId, clientName: client.name, monthlyUsd: clientBudget.monthlyUsd })
     .from(clientBudget)
     .innerJoin(client, eq(client.id, clientBudget.clientId))
     .orderBy(client.name);
-  return rows.map((r) => ({
-    clientId: r.clientId, clientName: r.clientName,
-    monthlyUsd: Number(r.monthlyUsd), spentUsd: Number(r.spentUsd),
-    pct: Number(r.monthlyUsd) > 0 ? Math.round((Number(r.spentUsd) / Number(r.monthlyUsd)) * 100) : 0,
-  }));
+  // Spend is a sum over the ledger, month to date — never a cached column.
+  const spend = await db
+    .select({ clientId: claudeCall.clientId, spent: sql<number>`coalesce(sum(${claudeCall.costUsd}),0)::float` })
+    .from(claudeCall)
+    .where(sql`${claudeCall.startedAt} >= ${MONTH_START}`)
+    .groupBy(claudeCall.clientId);
+  const spentBy = new Map(spend.map((s) => [s.clientId, s.spent]));
+  return rows.map((r) => {
+    const spentUsd = Math.round((spentBy.get(r.clientId) ?? 0) * 100) / 100;
+    return {
+      clientId: r.clientId, clientName: r.clientName,
+      monthlyUsd: Number(r.monthlyUsd), spentUsd,
+      pct: Number(r.monthlyUsd) > 0 ? Math.round((spentUsd / Number(r.monthlyUsd)) * 100) : 0,
+    };
+  });
 }
 
 export async function listAlerts(forUserId: string) {

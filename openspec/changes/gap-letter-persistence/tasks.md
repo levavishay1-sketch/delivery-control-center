@@ -30,6 +30,6 @@ Appetite: **small**. User-reported live bug, fixed same session.
 - [x] 3.2 Verified live against REAL pilot data: the Altshuler Trade
       requirement with 3 real historical letters shows all 3 in the
       list (was silently showing fewer before the related
-      `run-cost-tracking` cache fix — same underlying data, a separate
+      the earlier cost-tracking change cache fix — same underlying data, a separate
       frontend bug, documented there)
 - [x] 3.3 `npm run typecheck` clean
