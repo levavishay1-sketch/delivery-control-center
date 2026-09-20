@@ -1,5 +1,11 @@
 # Phase 0 — Walking Skeleton
 
+Status: **mostly done** — 43 of 50 tasks complete. Open (see `tasks.md`):
+real-Postgres proof and migration path (1.13, 1.14), a dry run against a
+real Claude Code session (3.5), the ALTSHULER_TRADE pilot and its
+write-up (6.3, 6.4), and the client/workitem policy layers and ADO
+predecessor-link sync (7.9, 7.10).
+
 ## Why
 
 The central pain is lost context and no visibility across stages. The

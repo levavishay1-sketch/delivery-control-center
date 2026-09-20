@@ -1,5 +1,7 @@
 # Checks lifecycle — a task's verification is not the task
 
+Status: **done** — all 24 tasks complete (see `tasks.md`).
+
 ## Why
 
 A task's own prompt could always say "run the tests" in prose, but

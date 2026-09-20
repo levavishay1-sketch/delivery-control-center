@@ -1,5 +1,7 @@
 # Task-level inactive + bidirectional TFS "Removed" sync
 
+Status: **done** — all 20 tasks complete (see `tasks.md`).
+
 ## Why
 
 Deleting either side (DCC or TFS) was ruled out as the default: a DCC
