@@ -113,6 +113,9 @@ function errMessage(e: unknown): string {
   return body || "לא הצלחתי לפתוח את התיקייה";
 }
 
+/** What pressing a line shows: the branch it draws. */
+const laneNode = (l: CodeMapLane): CodeMapNode => ({ kind: "other", heading: "ענף", subject: l.name ?? l.label, detail: l.detail, url: l.url, folder: l.folder });
+
 const fmtWhen = (iso?: string) => (iso ? new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" }) : null);
 
 /** A folder on this computer: its path, a button that opens it, and one that copies the path. */
@@ -163,8 +166,8 @@ function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: n
   return (
     <div className="cm-pop" style={{ insetInlineStart: `${100 - xPct}%`, top: `${yPct}%` }} onClick={(e) => e.stopPropagation()}>
       <button type="button" className="x" aria-label="סגור" onClick={onClose}>×</button>
-      <div className="k">{KIND_HE[node.kind]}</div>
-      {node.subject && <div className="s">{node.subject}</div>}
+      <div className="k">{node.heading ?? KIND_HE[node.kind]}</div>
+      {node.subject && <div className={node.heading ? "s br" : "s"}>{node.subject}</div>}
       {node.detail && <div className="d">{node.detail}</div>}
       <div className="m">
         {node.sha && <span className="sha">{node.sha}</span>}
@@ -219,6 +222,11 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
             {parent
               ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} fill="none" stroke={D.color.ours} strokeWidth={2} />
               : <line x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} />}
+            {/* A wide invisible strip along the line: pressing the line says which branch it is. */}
+            <line className="cm-lane" x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke="transparent" strokeWidth={22} strokeLinecap="round"
+              role="button" tabIndex={0} aria-label={`ענף ${p.lane.name ?? p.lane.label ?? ""}`}
+              onClick={(e) => { e.stopPropagation(); onPick?.(`lane:${p.lane.id}`, laneNode(p.lane), (lineStart + last) / 2, p.y); }}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick?.(`lane:${p.lane.id}`, laneNode(p.lane), (lineStart + last) / 2, p.y); } }} />
             {p.lane.label && <text x={labelX} y={p.y - 32} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
             {p.lane.note && <text x={labelX} y={p.y - (p.lane.label ? 17 : 32)} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
             {p.lane.nodes.map((n: CodeMapNode, i) => (
@@ -280,7 +288,7 @@ export function CodeMapPanel({ map, title = "מצב הקוד", legend = true }: 
   const height = D.firstLaneY + (map.lanes.length - 1) * D.laneGap + 78;
   return (
     <div className="cm" onClick={() => setPick(null)}>
-      <div className="cm-t">{title} <span className="cm-hint">· לחצו על נקודה לפרטים</span></div>
+      <div className="cm-t">{title} <span className="cm-hint">· לחצו על נקודה או על קו לפרטים</span></div>
       <div className="cm-wrap">
         <CodeMapDrawing map={map} picked={pick?.id ?? null}
           onPick={(id, node, x, y) => setPick((cur) => (cur?.id === id ? null : { id, node, xPct: (x / D.width) * 100, yPct: (y / height) * 100 }))} />

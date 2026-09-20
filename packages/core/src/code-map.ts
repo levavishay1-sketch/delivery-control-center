@@ -55,6 +55,11 @@ export type CodeMapLane = {
   nodes: CodeMapNode[];
   /** Where this line leaves another one. */
   from?: { lane: string; at: number };
+  /** Pressing the line itself says what it is: the branch's full name, where it lives, and a link. */
+  name?: string;
+  url?: string;
+  detail?: string;
+  folder?: string;
 };
 
 /** A transfer between lines: push, pull, a pull request, a merge. */
@@ -212,7 +217,12 @@ function nodeFrom(c: CodeMapCommit, kind: CodeMapNodeKind, repoUrl: string | nul
 /** Facts → the drawing. The only place that decides what the map shows. */
 export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}): CodeMap {
   if (f.unreadable) return { lanes: [], arrows: [], caption: f.unreadable, problem: { text: f.unreadable, folder: f.dir ?? undefined } };
-  const base: CodeMapLane = { id: "base", label: f.baseBranch, place: "both", nodes: [] };
+  const base: CodeMapLane = {
+    id: "base", label: f.baseBranch, place: "both", nodes: [],
+    name: f.baseBranch,
+    url: f.repoUrl ? `${f.repoUrl}/tree/${encodeURIComponent(f.baseBranch)}` : undefined,
+    detail: `הענף הראשי של הריפו — הגרסה הרשמית, שכולם עובדים ממנה. כל שינוי מתמזג אליו בסוף, ורק אז הצוות מקבל אותו.`,
+  };
   for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, "other", f.repoUrl, `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`));
   const branchAt = base.nodes.length;
   const pointDetail = `הנקודה שממנה הענף שלנו יצא. כל מה שהיה ב-${f.baseBranch} עד כאן נמצא גם אצלנו.`;
@@ -246,6 +256,11 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
     place: f.pushed ? "both" : "local",
     from: { lane: "base", at: branchAt },
     nodes: [],
+    name: f.branch ?? undefined,
+    // A branch that was never pushed has no page on the host to open.
+    url: f.pushed && f.repoUrl && f.branch ? `${f.repoUrl}/tree/${encodeURIComponent(f.branch)}` : undefined,
+    folder: f.pushed ? undefined : f.dir ?? undefined,
+    detail: `הענף שבו העבודה הזו נעשית. ${f.pushed ? "הוא קיים בענן וגם במחשב." : "הוא קיים רק במחשב הזה, ועדיין לא נדחף."}${f.ourCommits.length ? ` יש בו ${he(f.ourCommits.length, "commit אחד", "commits")} שלא נמצאים ב-${f.baseBranch}.` : " עדיין לא נשמר בו שום שינוי."}`,
   };
   // Work that exists only on this computer says where: commits not pushed yet, unsaved files, an empty branch.
   const here = f.dir ?? undefined;
