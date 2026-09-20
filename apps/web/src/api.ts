@@ -415,93 +415,88 @@ export const startResearchWork = (id: string) =>
 export const finishResearchWork = (id: string, conclusion: string) =>
   post<{ finished: boolean }>(`/workitems/${id}/research/finish`, { conclusion });
 
-/* ── repository AI enablement — the 9-stage onboarding pipeline
- * (`repository-ai-enablement-v2`). The run advances on its own as far as
- * its automation policy allows; this client is the person's levers. ── */
-export type OnboardingStatus = "Pending" | "Running" | "WaitingForUser" | "AwaitingExternal" | "Completed" | "CompletedWithWarnings" | "Failed" | "Skipped" | "Cancelled";
-export type StageKind = "deterministic" | "ai" | "human" | "mixed";
-export type LifecyclePhase = "requirement" | "understanding" | "planning" | "implementation" | "testing" | "review" | "deployment" | "future_sessions";
-export type ModelChoice = { model?: string; effort?: string };
-export type ModelPolicy = Record<string, ModelChoice>;
-export type StageDefinition = {
-  key: string; order: number; kind: StageKind; gate: boolean; autoApprovable: boolean; writesRepo: boolean; reversible: "yes" | "partial" | "external";
-  title_he: string; short_he: string; why_he: string; what_he: string; value_he: string; supports: LifecyclePhase[]; output_he: string; impact_he: string;
-  /** Present only for the stages with an AI call — the routing capability
-   *  and the policy's model+effort recommendation for it (before any
-   *  per-run override). */
-  capability: string | null; recommended: { model: string; tier: string; effort: string } | null;
+/* ── repository onboarding — four stages around one live Claude Code
+ * session (`repository-onboarding-native-init`). ── */
+export type OnboardingStatus = "Pending" | "Running" | "WaitingForUser" | "Completed" | "Failed" | "Cancelled";
+export type OnboardingStageKey = "prepare" | "init" | "review" | "deliver";
+export type OnboardingStageDefinition = {
+  key: OnboardingStageKey; order: number; kind: "deterministic" | "ai" | "human"; gate: boolean;
+  title_he: string; short_he: string; why_he: string; what_he: string; output_he: string;
 };
 export type AutomationPreset = "step_by_step" | "guided" | "automatic" | "custom";
-export type StagePolicy = { run: "auto" | "manual"; gate?: "approve" | "auto" };
-export type AutomationPolicy = { preset: AutomationPreset; stages: Record<string, StagePolicy> };
+export type StageAutomation = { run: "auto" | "manual"; gate?: "auto" | "human" };
+export type AutomationPolicy = { preset: AutomationPreset; stages: Record<OnboardingStageKey, StageAutomation> };
+export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+export type ModelChoice = { model?: string; effort?: Effort };
+export type ModelPolicy = Partial<Record<OnboardingStageKey, ModelChoice>>;
+export type SessionState = "none" | "live" | "ended" | "disconnected";
+export type OnboardingSession = {
+  id?: string; state: SessionState; startedAt?: string; endedAt?: string; exitCode?: number | null; model?: string; effort?: string;
+  apiCalls?: number;
+  status?: { costUsd: number; apiDurationMs: number; inputTokens: number; outputTokens: number; model: string | null; effort: string | null; linesAdded: number; linesRemoved: number };
+};
+export type ChangedFile = { path: string; status: string; additions: number; deletions: number };
+export type ExistingSetup = { claudeMdLines: number | null; agentsMd: boolean; rules: number; skills: number; hooks: number; agents: number; settings: boolean };
+export type PrepareResult = { branch: string; baselineSha: string; defaultBranch: string | null; fileCount: number; existing: ExistingSetup };
+export type InitResult = { sessionId: string; changedFiles: number; completedBy: string };
+export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean };
+export type DeliverResult = {
+  branch: string; base: string; commitSha: string | null; filesCommitted: number; remote: string | null; pushed: boolean;
+  prNumber: number | null; prUrl: string | null; compareUrl: string | null; localOnly: boolean; note?: string;
+};
 export type OnboardingRun = {
-  id: string; repoId: string; clientId: string; status: OnboardingStatus; currentStageKey: string | null;
-  onboardingVersion: string; mode: "initial" | "refresh"; previousRunId: string | null; automation: unknown; modelChoices: unknown; reviewNote: string | null;
-  workspaceKind: string | null; workspacePath: string | null; defaultBranch: string | null;
-  baselineSha: string | null; branchName: string | null; triggeredBy: string;
-  startedAt: string; completedAt: string | null; cancelledAt: string | null; cancelledBy: string | null;
+  id: string; repoId: string; clientId: string; status: OnboardingStatus; currentStageKey: OnboardingStageKey | null;
+  workspacePath: string | null; defaultBranch: string | null; baselineSha: string | null; branchName: string | null;
+  session: OnboardingSession; triggeredBy: string; startedAt: string; completedAt: string | null; cancelledAt: string | null;
 };
 export type OnboardingStage = {
-  id: string; runId: string; stageKey: string; stageOrder: number; status: OnboardingStatus; attempt: number;
-  startedAt: string | null; completedAt: string | null; result: unknown; warnings: string[]; errors: string[];
-  claudeExecutionId: string | null; sourceCommitSha: string | null; history: unknown[]; updatedAt: string;
-};
-export type OnboardingArtifact = {
-  id: string; artifactKey: string; kind: string; path: string; action: string; loading: "always" | "on_demand" | "never";
-  justification: string; consumers: string[]; watchedPaths: string[]; sourceOfTruth: string | null;
-  estimatedTokens: number | null; lines: number | null; contentHash: string | null; status: string; createdAt: string; updatedAt: string;
+  id: string; stageKey: OnboardingStageKey; stageOrder: number; status: OnboardingStatus;
+  startedAt: string | null; completedAt: string | null; result: unknown; errors: string[]; updatedAt: string;
 };
 export type OnboardingEvent = { id: string; type: string; payload: Record<string, unknown>; actorUserId: string | null; occurredAt: string };
-export type OnboardingRunView = {
-  run: OnboardingRun; stages: OnboardingStage[]; profile: unknown; artifacts: OnboardingArtifact[]; events: OnboardingEvent[];
-  automation: AutomationPolicy; modelChoices: ModelPolicy; driving: boolean; stageDefinitions: StageDefinition[];
-  repo: { id: string; name: string; adoRepoRef: string | null; localPath: string | null; defaultBranch: string };
+export type OnboardingCost = {
+  totalCostUsd: number; apiCalls: number; inputTokens: number; outputTokens: number; apiDurationMs: number;
+  /** What the Hebrew assistant has cost — its own line, not part of the session. */
+  assistant: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
+  byStage: { stageKey: OnboardingStageKey; model: string | null; effort: string | null; costUsd: number }[];
 };
-export const getOnboardingStages = () => get<{ stages: StageDefinition[] }>("/onboarding/stages");
-export const startOnboardingRun = (repoId: string, body: { automation?: AutomationPolicy | { preset: AutomationPreset }; modelChoices?: ModelPolicy; consent?: boolean; mode?: "initial" | "refresh"; previousRunId?: string } = {}) =>
+export type OnboardingRunView = {
+  repo: { id: string; name: string }; run: OnboardingRun; stages: OnboardingStage[]; events: OnboardingEvent[];
+  definitions: OnboardingStageDefinition[]; automation: AutomationPolicy; modelChoices: ModelPolicy;
+  recommended: { init: { model: string; effort: Effort } }; cost: OnboardingCost;
+};
+export type OnboardingRunSummary = { id: string; status: OnboardingStatus; currentStageKey: OnboardingStageKey | null; startedAt: string; completedAt: string | null; branchName: string | null };
+
+const ob = (repoId: string, runId: string) => `/repos/${repoId}/onboarding/runs/${runId}`;
+export const getOnboardingStages = () => get<{ stages: OnboardingStageDefinition[]; recommended: { init: { model: string; effort: Effort } } }>("/onboarding/stages");
+export const startOnboardingRun = (repoId: string, body: { automation?: AutomationPolicy | { preset: AutomationPreset }; modelChoices?: ModelPolicy; consent?: boolean }) =>
   post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, body);
 export const getLatestOnboardingRun = (repoId: string) =>
-  get<{ runId: string; status: OnboardingStatus; currentStageKey: string | null; onboardingVersion: string; mode: string; completedAt: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
-export const listOnboardingRuns = (repoId: string) =>
-  get<{ runs: { id: string; status: OnboardingStatus; mode: string; onboardingVersion: string; startedAt: string; completedAt: string | null; baselineSha: string | null }[] }>(`/repos/${repoId}/onboarding/runs`);
-export const getOnboardingRun = (repoId: string, runId: string) => get<OnboardingRunView>(`/repos/${repoId}/onboarding/runs/${runId}`);
-export const advanceOnboardingRun = (repoId: string, runId: string) =>
-  post<{ runStatus: string; stageKey: string | null }>(`/repos/${repoId}/onboarding/runs/${runId}/advance`, {});
-export const cancelOnboardingRun = (repoId: string, runId: string) =>
-  post<{ cancelled: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/cancel`, {});
-export const submitOnboardingStageInput = (repoId: string, runId: string, stageKey: string, input: unknown) =>
-  post<{ runStatus: string; stageKey: string | null }>(`/repos/${repoId}/onboarding/runs/${runId}/stages/${stageKey}/input`, { input });
+  get<{ runId: string; status: OnboardingStatus; currentStageKey: OnboardingStageKey | null; completedAt: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
+export const listOnboardingRuns = (repoId: string) => get<{ runs: OnboardingRunSummary[] }>(`/repos/${repoId}/onboarding/runs`);
+export const getOnboardingRun = (repoId: string, runId: string) => get<OnboardingRunView>(ob(repoId, runId));
+export const runOnboardingStage = (repoId: string, runId: string, stageKey: OnboardingStageKey) => post<{ started: string }>(`${ob(repoId, runId)}/stages/${stageKey}/run`, {});
+export const completeOnboardingInit = (repoId: string, runId: string) => post<{ completed: string }>(`${ob(repoId, runId)}/init/complete`, {});
+export const resumeOnboardingSession = (repoId: string, runId: string) => post<{ resumed: boolean }>(`${ob(repoId, runId)}/session/resume`, {});
+export const refreshOnboardingReview = (repoId: string, runId: string) => post<{ changedFiles: ChangedFile[] }>(`${ob(repoId, runId)}/review/refresh`, {});
+export const approveOnboardingReview = (repoId: string, runId: string) => post<{ approved: boolean }>(`${ob(repoId, runId)}/review/approve`, {});
+export const cancelOnboardingRun = (repoId: string, runId: string) => post<{ cancelled: boolean }>(`${ob(repoId, runId)}/cancel`, {});
 export const updateOnboardingAutomation = (repoId: string, runId: string, automation: AutomationPolicy | { preset: AutomationPreset }, consent?: boolean) =>
-  patch<AutomationPolicy>(`/repos/${repoId}/onboarding/runs/${runId}/automation`, { automation, consent });
-export const updateOnboardingModelChoices = (repoId: string, runId: string, choices: ModelPolicy) =>
-  patch<ModelPolicy>(`/repos/${repoId}/onboarding/runs/${runId}/model-choices`, { choices });
-export const resetOnboardingRunTo = (repoId: string, runId: string, stageKey: string, note?: string) =>
-  post<{ reset: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/reset-to/${stageKey}`, { note });
-export const stopOnboardingExecution = (repoId: string, runId: string) =>
-  post<{ stopped: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/stop-execution`, {});
+  patch<AutomationPolicy>(`${ob(repoId, runId)}/automation`, { automation, consent });
+export const updateOnboardingModelChoices = (repoId: string, runId: string, choices: ModelPolicy) => patch<ModelPolicy>(`${ob(repoId, runId)}/model-choices`, { choices });
 export const getOnboardingDiff = (repoId: string, runId: string, path: string) =>
-  get<{ path: string; diff: string; binary: boolean }>(`/repos/${repoId}/onboarding/runs/${runId}/diff?${new URLSearchParams({ path })}`);
-export type OnboardingCostByStage = { stageKey: string; model: string | null; effort: string | null; costUsd: number; inputTokens: number; outputTokens: number; durationMs: number };
-export type OnboardingRunCostSummary = { totalCostUsd: number; totalInputTokens: number; totalOutputTokens: number; totalDurationMs: number; executionCount: number; byStage: OnboardingCostByStage[] };
-export const getOnboardingRunCostSummary = (repoId: string, runId: string) =>
-  get<OnboardingRunCostSummary>(`/repos/${repoId}/onboarding/runs/${runId}/cost-summary`);
-export type OnboardingExecution = {
-  id: string; stageKey: string; model: string | null; effort: string | null; permissionProfile: string; status: string;
-  resultText: string | null; resultJson: unknown; costUsd: string | null; inputTokens: number | null; outputTokens: number | null;
-  durationMs: number | null; numTurns: number | null; errorMessage: string | null; denyRulesSnapshot: string[];
-  promptKey: string; promptVersion: number; promptTitle: string; promptBody: string;
-};
-export const getOnboardingExecution = (repoId: string, executionId: string) =>
-  get<OnboardingExecution>(`/repos/${repoId}/onboarding/executions/${executionId}`);
-export const updateOnboardingPrompt = (promptKey: string, body: string) =>
-  patch<{ id: string; version: number }>(`/onboarding/prompts/${promptKey}`, { body });
-export type OnboardingPromptLibraryItem = { id: string; promptKey: string; version: number; stage: string; title: string; body: string; defaultModel: string | null; createdAt: string; driftedFromCode: boolean };
-export const getOnboardingPromptLibrary = () => get<{ prompts: OnboardingPromptLibraryItem[] }>("/onboarding/prompts");
-export type RefreshSignal = { kind: string; detail: string; artifacts: string[] };
-export type RefreshResult = {
-  checkedAt: string; lastRunId: string; analyzedCommit: string; currentCommit: string; changedPaths: string[]; signals: RefreshSignal[];
-  updateRequired: boolean; ai?: { impactedArtifacts: string[]; requiredUpdates_he: string[]; evidence: string[]; reason_he: string; executionId: string } | null; reason_he: string;
-};
-export const checkOnboardingRefresh = (repoId: string) => post<RefreshResult>(`/repos/${repoId}/onboarding/refresh-check`, {});
-export const getOnboardingRefreshMetrics = (repoId: string) =>
-  get<{ totalChecks: number; noUpdateCount: number; updateRequiredCount: number; lastCheckedAt: string | null; lastResult: RefreshResult | null; avgDaysBetweenChecks: number | null }>(`/repos/${repoId}/onboarding/refresh-metrics`);
+  get<{ path: string; diff: string; binary: boolean }>(`${ob(repoId, runId)}/diff?${new URLSearchParams({ path })}`);
+export type AssistantMessage = { id: string; role: "user" | "assistant"; text: string; at: string; send?: { text: string; sentAt?: string; forced?: boolean } };
+export const getOnboardingAssistant = (repoId: string, runId: string) =>
+  get<{ messages: AssistantMessage[]; model: string; busy: boolean }>(`${ob(repoId, runId)}/assistant`);
+export const askOnboardingAssistant = (repoId: string, runId: string, question: string, screen: string) =>
+  post<{ message: AssistantMessage; costUsd: number }>(`${ob(repoId, runId)}/assistant`, { question, screen });
+export const resetOnboardingAssistant = (repoId: string, runId: string) => del<{ reset: boolean }>(`${ob(repoId, runId)}/assistant`);
+/** `busy`: the session does not look idle; `force` sends anyway. */
+export const sendToOnboardingSession = (repoId: string, runId: string, body: { text: string; messageId?: string; force?: boolean }) =>
+  post<{ sent: true; confirmed: boolean } | { sent: false; busy: true; reason: string }>(`${ob(repoId, runId)}/assistant/send`, body);
+/** The run's terminal socket, through the same `/api` proxy as every call. */
+export const onboardingTerminalUrl = (repoId: string, runId: string) =>
+  `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api${ob(repoId, runId)}/terminal`;
+/** A WebSocket cannot carry headers — its first message carries the same credentials. */
+export const terminalAuthMessage = () => JSON.stringify({ type: "auth", token: HOOK_TOKEN, email: DEV_EMAIL });

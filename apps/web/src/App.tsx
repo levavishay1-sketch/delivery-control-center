@@ -17,7 +17,7 @@ import { Budgets } from "./screens/Budgets.tsx";
 import { Settings } from "./screens/Settings.tsx";
 import { Prompts } from "./screens/Prompts.tsx";
 import { Repositories } from "./screens/Repositories.tsx";
-import { RepoOnboardingPanel } from "./screens/RepoOnboardingPanel.tsx";
+import { OnboardingScreen } from "./screens/onboarding/OnboardingScreen.tsx";
 import { Stub } from "./screens/Stub.tsx";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
@@ -65,8 +65,7 @@ export function App() {
   else if (path === "/requirements" || path === "/projects") screen = <RequirementList nav={nav} />;
   else if (path === "/ado") screen = <AdoTasks nav={nav} />;
   else if (path === "/repositories") screen = <Repositories nav={nav} />;
-  else if (path.startsWith("/repo-onboarding/")) screen = <RepoOnboardingPanel id={path.slice(17)} nav={nav} />;
-  else if (path.startsWith("/repo/")) screen = <RepoOnboardingPanel id={path.slice(6)} nav={nav} />;
+  else if (path.startsWith("/repo/")) screen = <OnboardingScreen id={path.slice(6)} nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
   else if (path === "/budgets") screen = <Budgets />;

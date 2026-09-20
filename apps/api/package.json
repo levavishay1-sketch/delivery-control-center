@@ -11,6 +11,7 @@
   "dependencies": {
     "@dcc/core": "*",
     "@dcc/db": "*",
+    "@fastify/websocket": "^11.3.1",
     "drizzle-orm": "^0.44.2",
     "fastify": "^5.2.0",
     "zod": "^3.24.1"

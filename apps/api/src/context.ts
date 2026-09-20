@@ -16,11 +16,16 @@ export class AuthError extends Error {}
 export class NotFound extends Error {}
 
 export async function actingUser(req: FastifyRequest): Promise<{ id: string; email: string }> {
-  const token = req.headers["x-dcc-hook-token"];
+  return actingUserFrom(req.headers["x-dcc-hook-token"], req.headers["x-dcc-dev-email"]);
+}
+
+/** Same check from explicit values — for a WebSocket, whose browser API
+ *  cannot set headers, the credentials arrive in its first message. */
+export async function actingUserFrom(token: unknown, emailRaw: unknown): Promise<{ id: string; email: string }> {
   if (!process.env.DCC_HOOK_TOKEN || token !== process.env.DCC_HOOK_TOKEN) {
     throw new AuthError("bad or missing x-dcc-hook-token");
   }
-  const email = String(req.headers["x-dcc-dev-email"] ?? "").toLowerCase();
+  const email = String(emailRaw ?? "").toLowerCase();
   if (!email) throw new AuthError("missing x-dcc-dev-email");
 
   const [u] = await db.select({ id: users.id, email: users.email }).from(users).where(sql`lower(${users.email}) = ${email}`).limit(1);

@@ -27,12 +27,8 @@ export type Capability =
   | "decomposition"
   | "review"
   | "execution"
-  | "onboarding_classify"
-  | "onboarding_discover"
-  | "onboarding_plan"
-  | "onboarding_generate"
-  | "onboarding_validate"
-  | "onboarding_refresh";
+  | "onboarding_init"
+  | "onboarding_assistant";
 
 export type Tier = "haiku" | "sonnet" | "opus";
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -45,8 +41,6 @@ export type RoutingSignals = {
   novelty?: "low" | "medium" | "high";
   recentEvents?: number;
   mechanical?: boolean;
-  /** Repository complexity as classified during onboarding. */
-  complexity?: "low" | "medium" | "high";
 };
 
 export type Policy = {
@@ -72,7 +66,7 @@ const ORDER: Record<"low" | "medium" | "high", number> = { low: 0, medium: 1, hi
 function meets(signals: RoutingSignals, cond: Record<string, unknown>): boolean {
   for (const [k, v] of Object.entries(cond)) {
     const s = (signals as Record<string, unknown>)[k];
-    if (k === "ambiguity" || k === "novelty" || k === "complexity") {
+    if (k === "ambiguity" || k === "novelty") {
       if (s === undefined) return false;
       if (ORDER[s as "low"] < ORDER[v as "low"]) return false;
     } else if (typeof v === "number") {
@@ -133,9 +127,9 @@ export function route(
   }
 
   const t = policy.tiers[tier];
-  // A capability may carry its own per-call cap (onboarding's discovery
-  // call reads a whole repository and needs more room than the tier's
-  // default); the cap is the larger of the two, never below the tier's.
+  // A capability may carry its own per-call cap when its calls need more
+  // room than the tier's default; the cap is the larger of the two, never
+  // below the tier's.
   const budgetUsd = Math.max(t.maxUsdPerCall, cap.maxUsdPerCall ?? 0);
   let model = t.model;
   let effort: Effort = cap.effort ?? DEFAULT_EFFORT;

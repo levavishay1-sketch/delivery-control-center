@@ -19,6 +19,14 @@ packages/*/*.d.ts
 packages/*/*.d.ts.map
 packages/*/*.js.map
 !packages/*/drizzle.config.ts
+# ...and inside src/ — a package's sources are .ts; a compiled .js/.d.ts
+# next to one is stale build output (28 of them were once committed by
+# mistake). apps/*/src/vite-env.d.ts is a real source file, so apps are
+# not covered by this rule.
+packages/*/src/**/*.js
+packages/*/src/**/*.js.map
+packages/*/src/**/*.d.ts
+packages/*/src/**/*.d.ts.map
 
 # embedded dev database (PGlite)
 packages/*/.pgdata*

@@ -16,6 +16,7 @@
     "db:migrate": "npm -w @dcc/db run migrate",
     "db:guards": "npm -w @dcc/db run guards",
     "typecheck": "tsc -b",
+  "audit:stale": "node scripts/audit-stale.mjs",
     "spec": "openspec"
   },
   "devDependencies": {
