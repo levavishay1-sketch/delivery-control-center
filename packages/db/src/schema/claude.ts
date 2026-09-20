@@ -165,3 +165,44 @@ export const conversationMessage = pgTable(
     tenantPolicy("conversation_message_tenant_isolation"),
   ],
 ).enableRLS();
+
+/**
+ * A question that repeats on a screen (claude-in-dcc §9.3–§9.4): the
+ * cluster (screen × normalised question) the control center's SQL found,
+ * the finding and recommendation a `usage_insights` call worded for it, and
+ * what was done about it. A repeated question is a gap in the product, not
+ * in Claude — so the way out is an improvement task, not a better answer.
+ * Editable: a conclusion is not money.
+ */
+export const claudeInsight = pgTable(
+  "claude_insight",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "restrict" }),
+    screen: text("screen").notNull(),
+    /** The question with case, punctuation and spacing normalised — the cluster's key. */
+    questionKey: text("question_key").notNull(),
+    /** One of the original questions, as a person wrote it. */
+    sampleQuestion: text("sample_question").notNull(),
+    /** How many times it had been asked when last analysed. */
+    count: integer("count").notNull().default(0),
+    firstAskedAt: timestamp("first_asked_at", { withTimezone: true }),
+    lastAskedAt: timestamp("last_asked_at", { withTimezone: true }),
+    finding: text("finding"),
+    recommendation: text("recommendation"),
+    /** The `usage_insights` call that worded the finding — its cost is on the ledger. */
+    analysedCallId: uuid("analysed_call_id").references(() => claudeCall.id, { onDelete: "set null" }),
+    /** open | task_opened | dismissed */
+    status: text("status").notNull().default("open"),
+    /** The improvement task opened from it, on the internal client. */
+    workitemId: uuid("workitem_id").references(() => workitem.id, { onDelete: "set null" }),
+    createdBy: uuid("created_by").notNull().references(() => users.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("claude_insight_cluster_uq").on(t.clientId, t.screen, t.questionKey),
+    index("claude_insight_status_idx").on(t.clientId, t.status),
+    tenantPolicy("claude_insight_tenant_isolation"),
+  ],
+).enableRLS();

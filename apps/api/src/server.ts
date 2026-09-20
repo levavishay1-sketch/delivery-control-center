@@ -148,6 +148,14 @@ import {
   resizeTerminal,
   killAllSessions,
   stopAllFlowRuns,
+  insightsView,
+  analyseInsights,
+  openImprovementTask,
+  dismissInsight,
+  policyView,
+  updatePolicy,
+  setClientRetention,
+  PolicyError,
 } from "@dcc/core";
 import websocket from "@fastify/websocket";
 import { blocker, gap, task } from "@dcc/db/schema";
@@ -171,7 +179,7 @@ app.setErrorHandler((err, _req, reply) => {
   if (err instanceof OnboardingError) return reply.code(409).send({ error: err.message });
   if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
   // The registry refuses with a sentence for the person ("the task is not approved yet") — show it, not a 500.
-  if (err instanceof ActionRefused || err instanceof ChatError) return reply.code(409).send({ error: err.message });
+  if (err instanceof ActionRefused || err instanceof ChatError || err instanceof PolicyError) return reply.code(409).send({ error: err.message });
   if (err instanceof ReviewRefused) return reply.code(409).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
@@ -428,6 +436,41 @@ app.post("/claude/proposals/:id/cancel", async (req) => {
 app.get("/claude/proposals/:id/preview", async (req) => {
   const dev = await actingUser(req);
   return proposalPreview((req.params as { id: string }).id, dev.id);
+});
+
+/* conclusions and the policy editor (claude-in-dcc §9.3–§9.4, §9.9–§9.10) */
+app.get("/claude/insights", async (req) => {
+  await actingUser(req);
+  const q = req.query as { month?: string; clientId?: string };
+  return insightsView({ month: q.month || undefined, clientId: q.clientId || undefined });
+});
+// The analysis is a named action: one recorded `usage_insights` call, on a click, never in the background.
+app.post("/claude/insights/analyse", async (req) => {
+  const dev = await actingUser(req);
+  const b = z.object({ month: z.string().optional(), clientId: z.string().uuid().optional() }).parse(req.body ?? {});
+  return analyseInsights({ month: b.month, clientId: b.clientId, by: { userId: dev.id } });
+});
+app.post("/claude/insights/:id/task", async (req, reply) => {
+  const dev = await actingUser(req);
+  const r = await openImprovementTask((req.params as { id: string }).id, { userId: dev.id });
+  return reply.code(r.created ? 201 : 200).send(r);
+});
+app.post("/claude/insights/:id/dismiss", async (req) => {
+  await actingUser(req);
+  return dismissInsight((req.params as { id: string }).id);
+});
+app.get("/claude/policy", async (req) => {
+  await actingUser(req);
+  return policyView();
+});
+app.put("/claude/policy", async (req) => {
+  const dev = await actingUser(req);
+  return updatePolicy(req.body ?? {}, { userId: dev.id });
+});
+app.put("/clients/:id/claude-retention", async (req) => {
+  const dev = await actingUser(req);
+  const b = z.object({ days: z.number().int().nullable() }).parse(req.body ?? {});
+  return setClientRetention((req.params as { id: string }).id, b.days, { userId: dev.id });
 });
 app.post("/claude/messages/:id/run-code", async (req) => {
   const dev = await actingUser(req);

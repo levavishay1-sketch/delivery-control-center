@@ -1,4 +1,5 @@
-import { estimateUsd, route } from "./routing.ts";
+import { readFileSync } from "node:fs";
+import { POLICY_PATH, estimateUsd, formatPolicy, route } from "./routing.ts";
 
 /**
  * Proves the routing rules against the global policy.
@@ -22,9 +23,14 @@ eq("execution default", route("execution", { ambiguity: "medium" }).tier, "sonne
 eq("execution, mechanical downgrades", route("execution", { mechanical: true }).tier, "haiku");
 eq("execution, hairy escalates", route("execution", { novelty: "high", breadth: 6 }).tier, "opus");
 eq("a person's model wins", route("decomposition", {}, undefined, { model: "claude-opus-5" }).model, "claude-opus-5");
+eq("a tier alias equal to the default is not an override", String(route("gap_detection", {}, undefined, { model: "sonnet" }).rationale.includes("overridden")), "false");
+eq("a tier alias resolves to its model", route("gap_detection", {}, undefined, { model: "opus" }).model, "claude-opus-5");
 eq("the decision names the policy version", String(route("chat", {}).policyVersion > 0), "true");
 eq("an estimate uses the list price", (estimateUsd("claude-haiku-4-5-20251001", { input: 1_000_000, output: 0 }) ?? 0).toFixed(2), "1.00");
 eq("a tier alias prices like its model", (estimateUsd("sonnet", { output: 1_000_000 }) ?? 0).toFixed(2), "10.00");
+// The editor writes the file back in its own layout, so a save reads as the changed lines (JSON cannot keep a trailing ".0", so those are normalised before comparing).
+const fileText = readFileSync(POLICY_PATH, "utf8");
+eq("a save keeps the file's layout", String(formatPolicy(JSON.parse(fileText)) + "\n" === fileText.replace(/(\d)\.0(?=[,\s}])/g, "$1")), "true");
 
 const d = route("decomposition", { breadth: 5, openGaps: 4 });
 console.log(`\n  sample rationale: "${d.rationale}"  → ${d.model}  (budget $${d.budgetUsd}, policy v${d.policyVersion})`);

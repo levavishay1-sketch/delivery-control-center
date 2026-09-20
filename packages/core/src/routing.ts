@@ -80,11 +80,38 @@ export function reloadPolicy(): Policy {
   cached = null;
   return loadPolicy();
 }
-/** Write the policy back — the editor's path. Bumps `version`; keeps the file's `$comment` keys. */
+const isPlain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+const isFlat = (x: unknown) => isPlain(x) && Object.values(x).every((y) => y === null || typeof y !== "object");
+/** A value the file writes on one line: a primitive, a flat object, or a list of those. */
+const inlineable = (x: unknown): boolean =>
+  x === null || typeof x !== "object" || (Array.isArray(x) ? x.every((y) => y === null || typeof y !== "object" || isFlat(y)) : isFlat(x));
+const inline = (v: unknown): string =>
+  Array.isArray(v) ? `[${v.map(inline).join(", ")}]`
+    : isPlain(v) ? `{ ${Object.entries(v).filter(([, x]) => x !== undefined).map(([k, x]) => `${JSON.stringify(k)}: ${inline(x)}`).join(", ")} }`
+    : JSON.stringify(v);
+/** The file's own layout — the root and its sections indented, every entry
+ *  inside a section on one line when it can be — so a save from the control
+ *  center reads as the changed lines, not as a rewritten file. */
+export function formatPolicy(v: unknown, depth = 0): string {
+  const indent = "  ".repeat(depth);
+  if (Array.isArray(v)) {
+    if (inlineable(v)) return inline(v);
+    return `[\n${v.map((x) => `${indent}  ${formatPolicy(x, depth + 1)}`).join(",\n")}\n${indent}]`;
+  }
+  if (isPlain(v)) {
+    const entries = Object.entries(v).filter(([, x]) => x !== undefined);
+    if (!entries.length) return "{}";
+    if (depth >= 2 && entries.every(([, x]) => inlineable(x))) return inline(v);
+    return `{\n${entries.map(([k, x]) => `${indent}  ${JSON.stringify(k)}: ${formatPolicy(x, depth + 1)}`).join(",\n")}\n${indent}}`;
+  }
+  return JSON.stringify(v);
+}
+
+/** Write the policy back — the editor's path. Bumps `version`; keeps the file's `$comment` keys and its layout. */
 export function savePolicy(next: Policy): Policy {
   const raw = JSON.parse(readFileSync(POLICY_PATH, "utf8")) as Record<string, unknown>;
   const merged = { ...raw, ...next, version: (loadPolicy().version ?? 0) + 1 };
-  writeFileSync(POLICY_PATH, JSON.stringify(merged, null, 2) + "\n", "utf8");
+  writeFileSync(POLICY_PATH, formatPolicy(merged) + "\n", "utf8");
   return reloadPolicy();
 }
 
@@ -168,7 +195,9 @@ export function route(
   const budgetUsd = Math.max(t.maxUsdPerCall, cap.maxUsdPerCall ?? 0);
   let model = t.model;
   let effort: Effort = cap.effort ?? DEFAULT_EFFORT;
-  if (choice?.model && choice.model !== model) { model = choice.model; why.push(`model overridden by user (${choice.model})`); }
+  // A choice may name a tier ("sonnet"); the same tier as the policy's is not an override.
+  const chosenModel = choice?.model ? policy.tiers[choice.model as Tier]?.model ?? choice.model : undefined;
+  if (chosenModel && chosenModel !== model) { model = chosenModel; why.push(`model overridden by user (${choice!.model})`); }
   if (choice?.effort && choice.effort !== effort) { effort = choice.effort as Effort; why.push(`effort overridden by user (${choice.effort})`); }
   return { capability, tier, model, effort, budgetUsd, maxInputTokens: cap.maxInputTokens ?? null, rationale: why.join("; "), policyVersion: policy.version };
 }
