@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
@@ -701,12 +701,30 @@ export function existingCheckout(r: { id: string; localPath: string | null }): s
   return existsSync(path.join(dir, ".git")) ? dir : null;
 }
 
-export async function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+/** One fetch per repository at a time: two callers (a second press, a retry
+ *  after a restart) must wait for the copy being made, not start a second
+ *  clone into the same directory. */
+const checkouts = new Map<string, Promise<string | null>>();
+export function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+  const running = checkouts.get(r.id);
+  if (running) return running;
+  const p = doCheckout(r).finally(() => checkouts.delete(r.id));
+  checkouts.set(r.id, p);
+  return p;
+}
+
+async function doCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
   if (r.localPath && existsSync(r.localPath)) return r.localPath;
   const gitUrl = r.adoRepoRef && /^(https?:\/\/|git@)/.test(r.adoRepoRef) ? r.adoRepoRef : null;
   if (!gitUrl) return r.localPath ?? null;
   mkdirSync(REPO_CACHE, { recursive: true });
   const dir = path.join(REPO_CACHE, r.id);
+  // A clone that was interrupted (the API restarted while it ran) leaves a
+  // directory full of files with no HEAD. Reusing it fails in confusing ways
+  // later, so it is thrown away and fetched again.
+  if (existsSync(path.join(dir, ".git")) && (await git(["rev-parse", "--verify", "--quiet", "HEAD"], dir)).code !== 0) {
+    rmSync(dir, { recursive: true, force: true });
+  }
   if (existsSync(path.join(dir, ".git"))) {
     await git(["reset", "--hard"], dir);
     await git(["clean", "-fd"], dir);
@@ -720,8 +738,16 @@ export async function ensureCheckout(r: { id: string; name: string; localPath: s
         p.on("close", (code) => res(code ?? 1));
         p.on("error", () => res(1));
       });
-    const code = await run(["clone", "--depth", "80", gitUrl, dir]);
-    if (code !== 0) return null;
+    // Clone beside the target and move it into place only once it succeeded,
+    // so a killed clone can never be mistaken for a usable copy.
+    const tmp = `${dir}.partial-${randomUUID().slice(0, 8)}`;
+    const code = await run(["clone", "--depth", "80", gitUrl, tmp]);
+    if (code !== 0 || (await git(["rev-parse", "--verify", "--quiet", "HEAD"], tmp)).code !== 0) {
+      rmSync(tmp, { recursive: true, force: true });
+      return null;
+    }
+    rmSync(dir, { recursive: true, force: true });
+    renameSync(tmp, dir);
   }
   return dir;
 }

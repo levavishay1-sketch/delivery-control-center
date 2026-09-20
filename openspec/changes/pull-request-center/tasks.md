@@ -73,4 +73,11 @@ change of design be one change, not one per screen.
 - [x] 9.3 `apps/web/src/components/CodeMap.tsx` — the only place that draws it. Geometry and colour live in one `D` object at the top; screens pass a map and nothing else
 - [x] 9.4 Added to every screen that touches git, as an addition — nothing existing was moved or removed: onboarding prepare, review and deliver, and the task screen beside push and rollback (refreshed after both)
 - [x] 9.5 Verified: built from this repository's own git (3 commits, 12 uncommitted, pushed, base `master`, fetch time — matches `git` by hand) and rendered in the running app through Vite for the fresh, behind-by-12 and pushed cases. Three overlap bugs found and fixed there (labels on the line, the base badge under the arrow's landing, the arrow label over the branch name)
-- [ ] 9.6 Not yet seen inside a real onboarding run or task screen — the trade repository has no run since the cleanup, and the map only renders when there is a workspace. To be checked on the next run
+- [x] 9.6 Seen inside a real onboarding run on the trade repository (prepare stage): the map draws main's real last commits and the empty branch, and pressing the branch-point dot opens the real merge commit (PR #6) with its author, time and a link to it on GitHub
+- [x] 9.7 Every dot is a real commit with subject, author, time, file count and host link; pressing one opens a floating panel beside it (keyboard and Escape work, the hit area is larger than the dot). Lives in the one shared component, so it applies everywhere the map appears
+
+## 10. Found while building
+
+- A clone interrupted by an API restart left 2.9GB of files with no HEAD; the next prepare reused it and failed with "ambiguous argument HEAD". Cloning is now atomic (into a temporary folder, moved into place only when it has a HEAD), a directory without a HEAD is discarded, and two callers for one repository share one clone instead of racing — a second press had started a second clone into the same folder. The prepare stage also refuses with a clear message instead of passing git's error text on as a revision.
+- The local database corrupted twice in one session because probe scripts opened it while the API was running. The rule is now in CLAUDE.md next to the existing warning.
+- The GitHub CLI was not on PATH for an API started before it was installed; it is now looked for in its install locations.

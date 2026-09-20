@@ -36,7 +36,9 @@ export async function ensureOnboardingWorkspace(
   const sharedDir = await ensureCheckout(repo);
   if (!sharedDir) throw new Error(`אין אפשרות לשכפל או לגשת לריפו ${repo.name} — בדוק את כתובת ה-Git שלו`);
 
-  const baselineSha = (await git(["rev-parse", "HEAD"], sharedDir)).out.trim();
+  const headSha = await git(["rev-parse", "HEAD"], sharedDir);
+  if (headSha.code !== 0) throw new Error(`העותק המקומי של ${repo.name} לא שלם — מחקו את ${sharedDir} והריצו את השלב שוב`);
+  const baselineSha = headSha.out.trim();
   const head = await git(["symbolic-ref", "--short", "HEAD"], sharedDir);
   const defaultBranch = head.code === 0 ? head.out.trim() || null : null;
   const branch = `ai/onboarding/${runId.slice(0, 8)}`;
