@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getBudgets } from "../api.ts";
 import { CardTitle, PageHead } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 
 export function Budgets() {
@@ -22,8 +23,8 @@ export function Budgets() {
       {err && <div className="empty">{err}</div>}
       {rows && (
         <div className="stat-row" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-          <div className="stat-tile"><div className="stat-top"><div><div className="lbl">סה"כ עלות AI החודש</div><div className="num">${total.toFixed(2)}</div></div></div></div>
-          <div className="stat-tile"><div className="stat-top"><div><div className="lbl">סה"כ תקציב</div><div className="num">${cap.toLocaleString("en-US")}</div></div></div></div>
+          <div className="stat-tile"><div className="stat-top"><div><div className="lbl">סה"כ עלות AI החודש<Info k="ai_cost_month" /></div><div className="num">${total.toFixed(2)}</div></div></div></div>
+          <div className="stat-tile"><div className="stat-top"><div><div className="lbl">סה"כ תקציב<Info k="budget" /></div><div className="num">${cap.toLocaleString("en-US")}</div></div></div></div>
         </div>
       )}
       <div className="section">

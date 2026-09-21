@@ -87,7 +87,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       <p className="section-lbl">דרישות<Info k="client_requirements" /></p>
       <div className="panel" style={{ padding: 0, overflow: "hidden", marginBottom: 26 }}>
         <table className="wtable">
-          <thead><tr><th>דרישה</th><th>סוג</th><th>שלב<Info k="phase" /></th><th>עדיפות<Info k="priority" /></th><th>חסמים<Info k="blocker" /></th></tr></thead>
+          {/* no-info: the first column is the thing the row is about */}<thead><tr><th>דרישה</th><th>סוג</th><th>שלב<Info k="phase" /></th><th>עדיפות<Info k="priority" /></th><th>חסמים<Info k="blocker" /></th></tr></thead>
           <tbody>
             {rows.map(({ r, depth }) => {
               const ph = PH[r.phase] ?? { label: r.phase, tone: "inactive" };
@@ -123,7 +123,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       </p>
       <div className="panel" style={{ padding: 0, overflow: "hidden", marginBottom: 26 }}>
         <table className="wtable">
-          <thead><tr><th>משימה</th><th>סוג</th><th>TFS</th><th>מצב</th><th>מתוך דרישה</th></tr></thead>
+          {/* no-info: the first column is the thing the row is about */}<thead><tr><th>משימה</th><th>סוג</th><th>TFS</th><th>מצב</th><th>מתוך דרישה</th></tr></thead>
           <tbody>
             {(ado?.rows ?? []).map((t, i) => {
               const prev = ado!.rows[i - 1];
@@ -171,7 +171,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       <div className="settings-grid">
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p className="card-title" style={{ margin: 0 }}>Repositories</p>
+            <p className="card-title" style={{ margin: 0 }}>Repositories<Info k="repository" /></p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("repo")}>+ חיבור repository</button>
           </div>
           {d.repos.map((r) => (
@@ -192,7 +192,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
 
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p className="card-title" style={{ margin: 0 }}>Azure DevOps</p>
+            <p className="card-title" style={{ margin: 0 }}>Azure DevOps<Info k="ado_connection" /></p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("ado")}>+ חיבור</button>
           </div>
           {activeConns.map((c) => (

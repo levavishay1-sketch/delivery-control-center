@@ -20,5 +20,7 @@ export const TASK_CONCEPTS: Concept[] = [
   { key: "where_it_sits", kind: "field", title: "איפה זה יושב", screens: ["task"], explain: "התיקייה והענף שבהם השינוי נמצא כרגע, ומספר השמירה שלו. זה עותק מבודד — העותק שאתם עובדים בו לא נגוע." },
   { key: "local_check", kind: "field", title: "לבדיקה מקומית", screens: ["task"], explain: "הפקודות להעתקה למי שרוצה לפתוח את השינוי במחשב שלו ולהסתכל עליו. אפשר גם פשוט לקרוא את רשימת הקבצים כאן." },
   { key: "subtasks", kind: "field", title: "תת-משימות", screens: ["task"], explain: "משימות שנגזרו מהמשימה הזו. הן נעשות לפני שהיא נחשבת גמורה, וכל אחת מנוהלת במסך משלה." },
+  { key: "task_intent", kind: "field", title: "כותרת / intent", aliases: ["intent"], screens: ["task"], explain: "מה המשימה אמורה להשיג, במשפט אחד. זו גם הכותרת שתופיע ב-TFS, ולכן כדאי שהיא תיקרא למי שלא ישב בדיון." },
+  { key: "remaining_work", kind: "field", title: "המשך שנשאר", screens: ["task"], explain: "מה קלוד סימן שעוד לא הסתיים בהרצה — עבודה שנשארה פתוחה. זה לא קורה לבד: צריך להחליט אם להריץ שוב או לפצל למשימה נוספת." },
   { key: "check_results", kind: "field", title: "תוצאות הבדיקות", screens: ["task"], explain: "מה עברו הבדיקות שרצו על המשימה, וכמה נכשלו. משימה שנפלה בבדיקות מחכה להחלטה של אדם ולא ממשיכה לבד." },
 ];

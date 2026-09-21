@@ -13,7 +13,13 @@ export const CLAUDE_CONCEPTS: Concept[] = [
   { key: "insights", kind: "term", title: "מסקנות", aliases: ["שאלות חוזרות", "שאלות שחוזרות", "insights"], screens: ["claude"], explain: "שאלות שחזרו על אותו מסך, מקובצות. שאלה שחוזרת היא פער במסך ולא בקלוד — המסך לא אמר את זה מספיק טוב. הקיבוץ עצמו לא עולה כסף." },
   { key: "analyse", kind: "button", title: "נתח שאלות", aliases: ["ניתוח שאלות", "ניתוח", "analyse"], screens: ["claude"], explain: "מבקש מקלוד לנסח ממצא והמלצה לכל שאלה שחזרה מעל סף החזרות.", press: "קריאה אחת בשמכם, שנרשמת ביומן עם עלותה. שום מסך לא משתנה — נכתבים ממצא והמלצה, ומהם אפשר לפתוח משימת שיפור." },
   { key: "improvement_task", kind: "button", title: "פתח משימת שיפור", aliases: ["משימת שיפור"], screens: ["claude"], explain: "הופך ממצא לדרישה על הלקוח הפנימי של DCC, בשמכם, עם הממצא וההמלצה כהערה הראשונה שלה.", press: "נוצרת דרישה חדשה במסך הדרישות (לא ב-TFS), והמסקנה מסומנת כמטופלת ומקושרת אליה." },
+  { key: "question_about_a_concept", kind: "term", title: "שואלים על משהו שכבר מוסבר", screens: ["claude"], explain: "השאלה החוזרת נוגעת ברכיב שכבר יש לידו 'i'. כלומר לא חסר מידע במסך — ההסבר עצמו לא ברור מספיק, וכדאי לנסח אותו מחדש." },
   { key: "threshold", kind: "term", title: "סף החזרות", aliases: ["סף", "insightsMinRepeats"], screens: ["claude"], explain: "כמה פעמים שאלה צריכה לחזור כדי שקלוד יתבקש לנסח לה ממצא. ערך במדיניות." },
+
+  { key: "capability", kind: "field", title: "סוג הפעולה", aliases: ["יכולת", "capability"], screens: ["claude"], explain: "איזו פעולה של קלוד זו: בחינת בשלות, פירוק, פיתוח, צ'אט, סיכום שיחה, הטמעה. המדיניות מכוונת מודל ותקרה לכל סוג בנפרד." },
+  { key: "call_outcome", kind: "field", title: "תוצאת הקריאה", aliases: ["תוצאה", "outcome"], screens: ["claude"], explain: "איך הקריאה הסתיימה: הצליחה, נכשלה בשגיאה, נגמר לה הזמן, נעצרה, או נדחתה כי חרגה מהתקרה שהוגדרה לה." },
+  { key: "cost_per_question", kind: "field", title: "עלות לשאלה", screens: ["claude"], explain: "כמה עולה בממוצע שאלה אחת בצ'אט. שאלות שנענו בלי מודל לא עולות כלום ומורידות את הממוצע." },
+  { key: "tokens_per_turn", kind: "field", title: "טוקנים לתור", screens: ["claude"], explain: "כמה טקסט נשלח בממוצע לקלוד בכל פנייה בצ'אט, כולל מה שנקרא מהמטמון. מספר שגדל אומר ששיחות מתארכות." },
 
   /* the cards and sections of the control center */
   { key: "cost_this_month", kind: "field", title: "עלות החודש", aliases: ["כמה הוצאנו"], screens: ["claude"], explain: "כמה כסף ה-AI הוציא מתחילת החודש, בכל המסלולים יחד. המספר הוא סכום של קריאות אמיתיות ביומן, לא הערכה." },

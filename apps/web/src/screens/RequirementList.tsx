@@ -29,7 +29,7 @@ export function RequirementList({ nav }: { nav: (h: string) => void }) {
       {err && <div className="empty">{err}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>דרישה</th><th>לקוח</th><th>סוג<Info k="requirement_type" /></th><th>שלב<Info k="phase" /></th><th>תקציב<Info k="ai_budget" /></th><th>תת-דרישות<Info k="subrequirements" /></th><th></th></tr></thead>
+          {/* no-info: the first column is the thing the row is about */}<thead><tr><th>דרישה</th><th>לקוח</th><th>סוג<Info k="requirement_type" /></th><th>שלב<Info k="phase" /></th><th>תקציב<Info k="ai_budget" /></th><th>תת-דרישות<Info k="subrequirements" /></th><th></th></tr></thead>
           <tbody>
             {(rows ?? []).map((p) => {
               const ph = PH[p.phase] ?? { label: p.phase, tone: "inactive" };

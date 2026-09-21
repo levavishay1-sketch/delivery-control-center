@@ -248,7 +248,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       )}
 
       <div className="filter-bar" style={{ margin: "10px 0 14px" }}>
-        <div className="field" style={{ flex: 1 }}><label>הוסף פער שזיהית בעצמך</label>
+        <div className="field" style={{ flex: 1 }}>{/* no-info: the label is the instruction */}<label>הוסף פער שזיהית בעצמך</label>
           <input value={newGap.description} onChange={(e) => setNewGap({ ...newGap, description: e.target.value })} placeholder="למשל: לא מוגדר מה קורה כשלקוח עובר דרגה באמצע חודש" style={{ minWidth: 260 }} />
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }} title="כל פער עוצר את הפירוק בין כה וכה — זה רק מסמן שכדאי לטפל בו קודם">
@@ -329,7 +329,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
       {d.gaps.filter((g) => !isOpenGap(g)).length > 0 && (
         <div style={{ marginBottom: 22 }}>
-          <p className="section-lbl" style={{ marginBottom: 8 }}>טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})</p>
+          <p className="section-lbl" style={{ marginBottom: 8 }}><Info k="gaps_handled" />טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})</p>
           <div className="rowlist">
             {d.gaps.filter((g) => !isOpenGap(g)).map((g) => {
               const open = expandedClosed.has(g.id);
@@ -367,12 +367,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       <p className="section-lbl">חוסמים (Blockers)<Info k="blockers_section" /></p>
       <p style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: -6, marginBottom: 10 }}>שאלה פתוחה שעוצרת את העבודה עד שמישהו עונה — למשל החלטה שצריך מגורם אחר.</p>
       <div className="filter-bar" style={{ marginBottom: 14 }}>
-        <div className="field"><label>סוג</label>
+        <div className="field">{/* no-info: the options below name themselves */}<label>סוג</label>
           <select value={newBlk.questionType} onChange={(e) => setNewBlk({ ...newBlk, questionType: e.target.value })}>
             <option value="unclear_requirement">דרישה לא ברורה</option><option value="missing_access">חסרה גישה</option><option value="budget_exceeded">חריגת תקציב</option>
           </select>
         </div>
-        <div className="field" style={{ flex: 1 }}><label>השאלה</label>
+        <div className="field" style={{ flex: 1 }}>{/* no-info: the field is the question being added */}<label>השאלה</label>
           <input value={newBlk.question} onChange={(e) => setNewBlk({ ...newBlk, question: e.target.value })} placeholder="מה חוסם ומה צריך כדי להמשיך" style={{ minWidth: 260 }} />
         </div>
         <button className="btn btn-primary btn-sm" onClick={async () => { if (!newBlk.question.trim()) return; await post(`/workitems/${wi.id}/blockers`, { questionType: newBlk.questionType, question: newBlk.question.trim() }); setNewBlk({ questionType: "unclear_requirement", question: "" }); reload(); }}>הוסף חוסם</button>

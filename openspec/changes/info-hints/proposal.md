@@ -34,8 +34,18 @@ budgets screen, because it is one entry that all three point to.
 - **The rule is enforced by `npm run audit:stale`**: the registry is
   well-formed (unique keys, non-empty text, an explanation short enough to
   read at a glance, a `press` for every button), every key a screen uses
-  exists, every screen registered with the chat has a glossary, and a screen
-  contains no raw `h1`–`h4` heading that bypasses the shared components.
+  exists, every screen registered with the chat has a glossary, a screen
+  contains no raw `h1`–`h4` heading that bypasses the shared components, and
+  no label, table column or figure names something while opening no
+  explanation. A hook says the same thing at the moment a screen is saved.
+- **An explanation that stopped being true is surfaced, not left to be
+  believed.** `npm run info:drift` prints the explanations sitting on the
+  lines a change touched, with their current wording, and asks whether the
+  meaning changed — run before a pull request that touches a screen, and part
+  of the `reviewer` subagent's pass. The slower signal: a repeated question
+  in the control center now names the concept it is about, so a question that
+  keeps coming back about an element that already has an "i" says the hint is
+  the suspect rather than the screen.
 - **Every existing screen is brought in**: the wording is written for all
   screens in the same pass, so the rule starts from a system that already
   follows it.

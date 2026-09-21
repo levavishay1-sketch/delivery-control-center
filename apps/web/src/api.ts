@@ -247,6 +247,8 @@ export type InsightCluster = {
   count: number; firstAskedAt: string; lastAskedAt: string; aboveThreshold: boolean;
   finding: string | null; recommendation: string | null; status: "new" | "open" | "task_opened" | "dismissed";
   workitemId: string | null; analysedCount: number | null; analysedAt: string | null;
+  /** The element whose "i" the question is about, when it names one. */
+  concept: { key: string; title: string; explain: string } | null;
 };
 export type InsightCallRow = {
   id: string; startedAt: string; clientName: string; userName: string; screen: string | null; capability: string; label: string;

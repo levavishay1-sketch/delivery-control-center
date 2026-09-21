@@ -7,7 +7,7 @@ import { claudeCall, claudeInsight, client, conversation, conversationMessage, u
 import { runClaudeRaw } from "./ai-assist.ts";
 import { ChatError, ensureSystemFile, internalClientId } from "./chat/index.ts";
 import { ESCALATED, TOPIC_SCREEN, period } from "./claude-center.ts";
-import { glossaryFor } from "./glossary/index.ts";
+import { glossaryFor, matchGlossary } from "./glossary/index.ts";
 import { chatPolicy, estimateUsd, recommend } from "./routing.ts";
 
 /**
@@ -33,6 +33,11 @@ export type InsightCluster = {
   status: "new" | "open" | "task_opened" | "dismissed";
   workitemId: string | null;
   analysedCount: number | null; analysedAt: string | null;
+  /** The concept the question names, when it names one — the element whose "i" is
+   *  the suspect (openspec/changes/info-hints). A question that keeps coming back
+   *  about a term that already has an explanation says the explanation is wrong or
+   *  unclear, which is a different fix from adding a fact to the screen. */
+  concept: { key: string; title: string; explain: string } | null;
 };
 export type InsightCallRow = {
   id: string; startedAt: string; clientName: string; userName: string; screen: string | null; capability: string; label: string;
@@ -58,6 +63,13 @@ const KEY = sql<string>`trim(regexp_replace(regexp_replace(lower(${conversationM
 const SCREEN_HE: Record<string, string> = { requirement: "דרישה", task: "משימה", pull_request: "בקשת מיזוג", onboarding: "הטמעת מאגר", dashboard: "לוח בקרה", claude: "מרכז הבקרה של קלוד", budgets: "תקציבים" };
 
 type Filter = { clientId?: string | undefined; month?: string | undefined };
+
+/** The concept a repeated question names, if it names one. Derived on every read and
+ *  never stored: the registry is the truth, and it changes with the code. */
+const conceptOf = (screen: string, question: string): InsightCluster["concept"] => {
+  const m = matchGlossary(screen, question);
+  return m ? { key: m.entry.key, title: m.entry.title, explain: m.entry.explain } : null;
+};
 
 export async function clusterQuestions(f: Filter): Promise<InsightCluster[]> {
   const p = period(f.month);
@@ -95,6 +107,7 @@ export async function clusterQuestions(f: Filter): Promise<InsightCluster[]> {
       count: r.count, firstAskedAt: new Date(r.first).toISOString(), lastAskedAt: new Date(r.last).toISOString(), aboveThreshold: r.count >= threshold,
       finding: k?.i.finding ?? null, recommendation: k?.i.recommendation ?? null, status: (k?.i.status as InsightCluster["status"] | undefined) ?? "new",
       workitemId: k?.i.workitemId ?? null, analysedCount: k ? k.i.count : null, analysedAt: k ? new Date(k.i.updatedAt).toISOString() : null,
+      concept: conceptOf(r.screen, r.sample),
     };
   });
   // A conclusion from an earlier month stays visible until it is dealt with.
@@ -105,6 +118,7 @@ export async function clusterQuestions(f: Filter): Promise<InsightCluster[]> {
       count: k.i.count, firstAskedAt: new Date(k.i.firstAskedAt ?? k.i.createdAt).toISOString(), lastAskedAt: new Date(k.i.lastAskedAt ?? k.i.updatedAt).toISOString(), aboveThreshold: k.i.count >= threshold,
       finding: k.i.finding, recommendation: k.i.recommendation, status: k.i.status as InsightCluster["status"],
       workitemId: k.i.workitemId, analysedCount: k.i.count, analysedAt: new Date(k.i.updatedAt).toISOString(),
+      concept: conceptOf(k.i.screen, k.i.sampleQuestion),
     });
   }
   return out;

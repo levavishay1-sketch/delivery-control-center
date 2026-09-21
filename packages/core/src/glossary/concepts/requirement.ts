@@ -20,6 +20,10 @@ export const REQUIREMENT_CONCEPTS: Concept[] = [
   { key: "research_work", kind: "section", title: "עבודת תחקור או בדיקות", aliases: ["תחקור", "עבודת בדיקות"], screens: ["requirement"], explain: "דרישה שהתוצאה שלה היא ממצאים או תוצאת אימות, ולא קוד. לכן אין פירוק למשימות פיתוח, אלא משימת מעקב אחת ב-TFS." },
   { key: "prompt_preview", kind: "section", title: "מה יישלח ל-Claude", aliases: ["תצוגה מקדימה", "הפרומפט", "פרומפט"], screens: ["requirement", "task"], explain: "ההוראות המדויקות שיישלחו לקלוד, לפני שנשלחות. שום דבר לא רץ ולא עולה כסף עד שתאשרו כאן. ההרצה עצמה תמיד באנגלית; העברית היא לקריאה." },
 
+  { key: "assessment_depth", kind: "field", title: "עומק הבדיקה", aliases: ["מה אתה מצפה מהבדיקה"], screens: ["requirement"], explain: "כמה יסודית תהיה בחינת הבשלות, ולכן גם כמה היא תעלה ותימשך: טריאז' זריז במודל קל, או בדיקה מלאה במודל החזק." },
+  { key: "gaps_handled", kind: "field", title: "פערים שטופלו", aliases: ["טופלו"], screens: ["requirement"], explain: "פערים שכבר נענו, נסגרו או נדחו. הם נשארים כאן עם התשובה שניתנה, כדי שאפשר יהיה לראות על מה הוחלט ומתי." },
+  { key: "start_command", kind: "field", title: "הפקודה", screens: ["requirement"], explain: "השורה להעתקה לטרמינל כדי להתחיל לעבוד על הדרישה במחשב שלכם, על הענף הנכון." },
+
   /* the figures on the requirement's card */
   { key: "priority", kind: "field", title: "Priority", aliases: ["עדיפות"], screens: ["requirement"], explain: "כמה הדרישה דחופה ביחס לאחרות. זה מה שקובע במה מטפלים קודם כשיש כמה דרישות פתוחות." },
   { key: "risk", kind: "field", title: "Risk", aliases: ["סיכון"], screens: ["requirement"], explain: "כמה הדרישה מסוכנת: עד כמה היא נוגעת בחלקים רגישים, וכמה לא ברור מה צריך. סיכון גבוה מצדיק בדיקה יסודית יותר לפני שמתחילים." },

@@ -45,7 +45,7 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
 
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p className="card-title" style={{ margin: 0 }}>Repositories</p>
+            <p className="card-title" style={{ margin: 0 }}>Repositories<Info k="repository" /></p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("repo")}>+ חיבור</button>
           </div>
           {(repos ?? []).map((r) => (

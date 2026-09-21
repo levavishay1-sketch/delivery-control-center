@@ -67,6 +67,60 @@ heading already asks for it. The audit is the backstop for the rest: raw
 `h1`–`h4` in a screen, an unknown key, a registered chat screen with no
 glossary, a duplicate key or title.
 
+Two questions decide whether the rule survives the people who wrote it:
+**will a new element get an "i"**, and **will an old one stay true**. They
+have different answers.
+
+### A new element — four layers, strongest first
+
+1. **The type system.** `info` is required on `PageHead`, `CardTitle` and
+   `StatTile`, so a new card or page title does not compile without one.
+2. **`npm run audit:stale`.** Fails a heading written by hand, and a label, a
+   table column or a figure that names something and opens no explanation.
+   The rule of what "names something" means lives in `scripts/info-lint.mjs`
+   and nowhere else, so the audit and the hook cannot drift apart.
+3. **A hook** (`hooks/info-hint-check.mjs`, PostToolUse on Edit / Write) that
+   says the same thing the moment a screen file is saved — the fix then costs
+   one line instead of a second pass over ten screens. It never blocks.
+4. **The skill and `CLAUDE.md`** — last, because they need someone to read them.
+
+The heuristic is deliberately narrow. The classes `l` and `tt` carry free text
+as often as they carry a name, so linting them would cry wolf and the check
+would stop being read. An element that genuinely needs no explanation opts out
+with `{/* no-info: why */}` above it: visible in review, and counted by the
+audit so an opt-out cannot quietly become the norm.
+
+## 9. An explanation that stopped being true
+
+The harder half. The wording lives in `packages/core/src/glossary/`, the thing
+it describes lives in a screen, and nothing connects them — so a button that
+starts writing to TFS keeps an "i" that says it does not. A stale explanation
+is worse than a missing one, because it is believed.
+
+**What was rejected.** Fingerprinting the code a concept describes — a hash of
+the JSX block and its handler, with the audit failing when the hash moves. It
+is precise and it is brittle: a reformat trips it, it needs a "re-bless" step,
+and a check people re-bless without reading is worse than no check.
+
+**What was built** (`npm run info:drift`). The diff, at `-U0`, gives the exact
+lines a change touched. An "i" within three lines of one of them is a suspect.
+The command prints those explanations with their current wording and asks the
+one question a machine cannot answer: *did the meaning change?* It is a prompt
+and not a gate — most edits do not change meaning, and a gate that fires on
+every screen edit would be clicked past. It is wired where it will actually be
+read: `CLAUDE.md` says to run it before a pull request that touches a screen,
+the `info-hints` skill says the same, and the `reviewer` subagent treats a
+stale explanation as a blocking finding.
+
+**The slow signal.** A hint can be accurate and still unclear, and no check
+catches that — only a person asking again. The control center already clusters
+repeated questions per screen; a cluster now also names the **concept** the
+question is about, derived at read time with the same matcher the chat uses
+(`matchGlossary`, so it is never stored and never goes stale). A question that
+keeps coming back about an element that already has an "i" is a different
+finding from a missing fact: it says the explanation is the suspect. The
+screen says so in those words.
+
 ## 7. The web reads the registry once
 
 `GET /claude/glossary` returns every concept; `Info` fetches it once per page

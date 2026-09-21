@@ -70,8 +70,9 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
             {["note.added", "gap.proposed", "gap.verified", "tasks.proposed", "task.progressed", "blocker.raised", "blocker.answered", "claude.call", "claude.session", "policy.changed", "review.completed", "git.activity"].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
+        {/* no-info: a date range, read by every reader the same way */}
         <div className="field"><label>From</label><input type="date" value={q.from} onChange={(e) => set("from", e.target.value)} /></div>
-        <div className="field"><label>To</label><input type="date" value={q.to} onChange={(e) => set("to", e.target.value)} /></div>
+        {/* no-info: see From */}<div className="field"><label>To</label><input type="date" value={q.to} onChange={(e) => set("to", e.target.value)} /></div>
         <button className="btn btn-secondary btn-sm" onClick={() => setQ({ actorKind: "", type: "", from: "", to: "", page: "1" })}>Clear</button>
       </div>
 

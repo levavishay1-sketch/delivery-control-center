@@ -1,6 +1,6 @@
 ---
 name: info-hints
-description: How to add the "i" hint to a screen, card, title, figure or field in the DCC web app — find or write the concept, word it in plain Hebrew, attach it, and pass the audit. Use whenever you build or change a screen or a shared component, add a card or a section title, add a non-obvious field or a costly button, or the user asks for an explanation next to something. A screen, card or non-obvious field is not finished without it.
+description: How to add the "i" hint to a screen, card, title, figure or field in the DCC web app, and how to keep an existing hint true when the thing it describes changes — find or write the concept, word it in plain Hebrew, attach it, and pass the audit. Use whenever you build or change a screen or a shared component, add a card or a section title, add a non-obvious field or a costly button, change what an existing control does, or the user asks for an explanation next to something. A screen, card or non-obvious field is not finished without it.
 ---
 
 # info-hints
@@ -20,7 +20,10 @@ itself without sending them elsewhere. The design and its reasons are in
 | Reading the registry | `getConcept` / `allConcepts` / `glossaryFor` in `glossary/index.ts` — never the arrays |
 | The component | `apps/web/src/claude/Info.tsx` (`<Info k="key" />`) |
 | Shared components that carry it | `PageHead`, `CardTitle`, `StatTile` in `apps/web/src/ui.tsx` — prop `info` |
-| The check | `npm run audit:stale` (section 7 of `scripts/audit-stale.mjs`) |
+| The rule itself, in code | `scripts/info-lint.mjs` — what counts as "names something", used by the audit and the hook |
+| The gate | `npm run audit:stale` (section 7 of `scripts/audit-stale.mjs`) |
+| The nudge while editing | `hooks/info-hint-check.mjs`, on every Edit / Write of a screen |
+| Keeping a hint true | `npm run info:drift` |
 
 ## Adding one — in this order
 
@@ -73,6 +76,43 @@ Hebrew, plain, **short but clear** — one or two sentences (the audit fails an
 
 Good: "כמה כסף ה-AI הוציא על הדרישה עד עכשיו — סכום כל הקריאות לקלוד עליה, מיומן הקריאות."
 Not: "סה״כ עלות אגרגטיבית של invocations." (jargon, no meaning)
+
+## When you change what something does
+
+An "i" that was right when it was written becomes a lie the moment the control
+under it changes. Nothing can detect that on its own, so:
+
+1. **Before opening a pull request that touches a screen, run:**
+
+   ```bash
+   npm run info:drift
+   ```
+
+   It prints every explanation that sits on a line the change touched, with its
+   current wording, and asks whether that wording is still true. Most of the
+   time it is, and you move on; when it is not, **fix the wording in the same
+   change** — a stale hint is worse than no hint, because it is believed.
+2. If you edited wording, check the screens that show it still match: the same
+   command lists the glossary files the change touched.
+3. The slow signal, for a hint that is technically true but unclear: the
+   "מסקנות" tab of the קלוד screen marks a repeated question that names an
+   element which already has an "i". That mark means the explanation is the
+   suspect, not the screen — re-word it rather than adding a fact.
+
+## What holds the rule up
+
+In order of strength, so you know what you can rely on:
+
+1. **The type system.** `info` is required on `PageHead`, `CardTitle` and
+   `StatTile`. A new card or page title does not compile without one.
+2. **`npm run audit:stale`.** Fails a heading written by hand, an "i" pointing
+   at a concept that does not exist, a malformed entry, and a label, column or
+   figure that names something and opens no explanation.
+3. **The hook** (`hooks/info-hint-check.mjs`), which says the same thing the
+   moment a screen file is saved, so the fix is one line rather than a second
+   pass. It never blocks. Hook configuration is read at session start, so a
+   change to `.claude/settings.json` needs a fresh session.
+4. **This skill and `CLAUDE.md`** — last, because they need someone to read them.
 
 ## Later
 

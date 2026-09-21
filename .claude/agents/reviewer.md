@@ -24,6 +24,11 @@ changes can coexist, whether one assumes state the other removes.
   contract one side changed that the other still relies on
 - Acceptance criteria: does the diff plausibly satisfy the task's
   Given/When/Then?
+- **Explanations that the change made untrue.** If the diff touches a web
+  screen, run `npm run info:drift`: it prints every "i" explanation sitting
+  on a line the change touched. Read each one against the new code and flag
+  any that now says something the screen no longer does. A stale explanation
+  is a `block` finding, not a nit — a person reads it and believes it.
 - Nothing about style or taste unless it's a real trap
 
 ## Output

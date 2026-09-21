@@ -116,7 +116,7 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
               </div>
               <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
                 <table className="wtable">
-                  <thead><tr><th>דרישה</th><th>תחת</th><th>אחראי<Info k="owner" /></th><th>עדיפות<Info k="priority" /></th><th>תקציב AI<Info k="ai_budget" /></th><th>עודכן לאחרונה<Info k="updated_at" /></th><th></th></tr></thead>
+                  {/* no-info: the first column is the thing the row is about */}<thead><tr><th>דרישה</th><th>תחת</th><th>אחראי<Info k="owner" /></th><th>עדיפות<Info k="priority" /></th><th>תקציב AI<Info k="ai_budget" /></th><th>עודכן לאחרונה<Info k="updated_at" /></th><th></th></tr></thead>
                   <tbody>
                     {d.recentWorkItems.map((w) => (
                       <tr key={w.id}>

@@ -198,7 +198,7 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
             <div className="section-head" style={{ marginBottom: 8 }}><CardTitle info="cost_by_person" style={{ margin: 0 }}>לפי אדם</CardTitle><a onClick={() => nav("#/claude/calls")}>לכל הקריאות ←</a></div>
             {o.byUser.length === 0 ? <p className="ob-sub">אין קריאות בחודש הזה.</p> : (
               <table className="wtable">
-                <thead><tr><th>מי</th><th className="num">קריאות</th><th className="num">עלות</th></tr></thead>
+                <thead><tr><th>מי<Info k="cost_by_person" /></th><th className="num">קריאות</th><th className="num">עלות</th></tr></thead>
                 <tbody>{o.byUser.map((u) => <tr key={u.key}><td>{u.label}</td><td className="num">{fmtInt(u.calls)}</td><td className="num">{fmtUsd(u.usd)}</td></tr>)}</tbody>
               </table>
             )}
@@ -206,14 +206,14 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
           <div className="panel">
             <div className="section-head" style={{ marginBottom: 8 }}><CardTitle info="chat_targets" style={{ margin: 0 }}>מה מכוונים לפיו</CardTitle><span className="ob-sub">המספרים שלפיהם נקבעים הספים במדיניות — לא הערכה</span></div>
             <div className="stat-row" style={{ marginBottom: 12 }}>
-              <div className="stat-tile"><div className="lbl">עלות לשאלה</div><div className="num">{o.chat.costPerQuestionUsd != null ? fmtUsd(o.chat.costPerQuestionUsd) : "—"}</div><div className="stat-sub muted">{fmtInt(o.chat.calls)} קריאות צ'אט ל-{fmtInt(t.questions)} שאלות</div></div>
-              <div className="stat-tile"><div className="lbl">טוקנים לתור</div><div className="num">{o.chat.tokensPerTurn != null ? fmtInt(o.chat.tokensPerTurn) : "—"}</div><div className="stat-sub muted">קלט ומטמון, ממוצע לקריאת צ'אט</div></div>
+              <div className="stat-tile"><div className="lbl">עלות לשאלה<Info k="cost_per_question" /></div><div className="num">{o.chat.costPerQuestionUsd != null ? fmtUsd(o.chat.costPerQuestionUsd) : "—"}</div><div className="stat-sub muted">{fmtInt(o.chat.calls)} קריאות צ'אט ל-{fmtInt(t.questions)} שאלות</div></div>
+              <div className="stat-tile"><div className="lbl">טוקנים לתור<Info k="tokens_per_turn" /></div><div className="num">{o.chat.tokensPerTurn != null ? fmtInt(o.chat.tokensPerTurn) : "—"}</div><div className="stat-sub muted">קלט ומטמון, ממוצע לקריאת צ'אט</div></div>
               <div className="stat-tile"><div className="lbl">גלגולים<Info k="rollover" /></div><div className="num">{fmtInt(o.chat.rollovers)}</div><div className="stat-sub muted">הסיכומים עלו {fmtUsd(o.chat.rolloverCostUsd)}</div></div>
               <div className="stat-tile"><div className="lbl">נמחקו לפי השמירה<Info k="retention" /></div><div className="num">{fmtInt(o.chat.archived)}</div><div className="stat-sub muted">התוכן נמחק; העלות נשארה</div></div>
             </div>
             {o.chatByScreen.length > 0 && (
               <table className="wtable">
-                <thead><tr><th>מסך</th><th className="num">שאלות</th><th className="num">נענו בלי מודל</th><th className="num">"לא עזר"</th></tr></thead>
+                {/* no-info: the screen the question was asked on, named as it is in the sidebar */}<thead><tr><th>מסך</th><th className="num">שאלות</th><th className="num">נענו בלי מודל</th><th className="num">"לא עזר"</th></tr></thead>
                 <tbody>{o.chatByScreen.map((r) => <tr key={r.screen}><td>{screenLabel(r.screen)}</td><td className="num">{fmtInt(r.questions)}</td><td className="num">{r.withoutModelPct}%</td><td className="num">{r.unhelpfulPct}%</td></tr>)}</tbody>
               </table>
             )}
@@ -278,10 +278,10 @@ function CallsTab({ month, clientId, nav }: { month: string; clientId: string; n
   return (
     <>
       <div className="filter-bar">
-        <div className="field"><label>יכולת</label><select value={capability} onChange={(e) => setCapability(e.target.value)}><option value="">הכול</option>{Object.entries(CAPABILITY_HE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
-        <div className="field"><label>מודל</label><select value={model} onChange={(e) => setModel(e.target.value)}><option value="">הכול</option>{MODEL_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}</select></div>
-        <div className="field"><label>תוצאה</label><select value={outcome} onChange={(e) => setOutcome(e.target.value)}><option value="">הכול</option>{Object.entries(OUTCOME_HE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-        <div className="field"><label>הסלמה</label><select value={escalated ? "1" : ""} onChange={(e) => setEscalated(!!e.target.value)}><option value="">הכול</option><option value="1">רק כאלה שנדרש מודל חזק יותר</option></select></div>
+        <div className="field"><label>יכולת<Info k="capability" /></label><select value={capability} onChange={(e) => setCapability(e.target.value)}><option value="">הכול</option>{Object.entries(CAPABILITY_HE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+        <div className="field"><label>מודל<Info k="model_effort" /></label><select value={model} onChange={(e) => setModel(e.target.value)}><option value="">הכול</option>{MODEL_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}</select></div>
+        <div className="field"><label>תוצאה<Info k="call_outcome" /></label><select value={outcome} onChange={(e) => setOutcome(e.target.value)}><option value="">הכול</option>{Object.entries(OUTCOME_HE).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+        <div className="field"><label>הסלמה<Info k="escalated" /></label><select value={escalated ? "1" : ""} onChange={(e) => setEscalated(!!e.target.value)}><option value="">הכול</option><option value="1">רק כאלה שנדרש מודל חזק יותר</option></select></div>
         {data && <span className="ob-sub" style={{ alignSelf: "center" }}>{fmtInt(data.total)} קריאות · <CostLine costUsd={data.rows.reduce((a, r) => a + r.costUsd, 0)} note="בעמוד הזה" /></span>}
       </div>
       {err && <div className="empty">{err}</div>}
@@ -336,20 +336,31 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
               onClick={() => void act("analyse", () => analyseInsights({ month, ...(clientId ? { clientId } : {}) }).then((r) => r.analysed
                 ? `נוסחו ${r.analysed} ממצאים בקריאה אחת${r.costUsd != null ? ` · ${fmtUsd(r.costUsd)}` : ""} · הקריאה רשומה ביומן בשמכם`
                 : "אין שאלות חדשות לנתח"))}>
-              {busy === "analyse" ? "מנתח…" : `נתח שאלות${due.length ? ` (${due.length})` : ""}`}<Info k="analyse" />
+              {busy === "analyse" ? "מנתח…" : `נתח שאלות${due.length ? ` (${due.length})` : ""}`}
             </button>
+            {/* the "i" sits beside the button, never inside it: Info renders a button of its own */}
+            <Info k="analyse" />
           </div>
           <p className="ob-sub">שאלה שחוזרת על אותו מסך היא פער במסך, לא בקלוד. הקיבוץ כאן לא עולה כסף. "נתח שאלות" היא קריאה אחת בשמכם ({estimate}) שמנסחת ממצא והמלצה לכל שאלה שחזרה {v.threshold} פעמים ומעלה — ונרשמת ביומן כמו כל קריאה.</p>
           {note && <div className="ob-note" style={{ marginBottom: 10 }}>{note}</div>}
           {err && <div className="ob-note crit" style={{ marginBottom: 10 }}>{err}</div>}
           {v.clusters.length === 0 ? <p className="ob-sub">בחודש הזה אף שאלה עוד לא חזרה על עצמה.</p> : (
             <table className="wtable">
+              {/* no-info: the screen the question was asked on, named as it is in the sidebar */}
               <thead><tr><th>מסך</th><th>השאלה</th><th className="num">פעמים</th><th>ממצא והמלצה</th><th>מה עושים</th></tr></thead>
               <tbody>
                 {v.clusters.map((c) => (
                   <tr key={`${c.clientId}|${c.screen}|${c.questionKey}`}>
                     <td>{screenLabel(c.screen)}<div className="muted small">{c.clientName}</div></td>
-                    <td>"{c.sampleQuestion}"<div className="muted small">לאחרונה {fmtWhen(c.lastAskedAt)}</div></td>
+                    <td>
+                      "{c.sampleQuestion}"
+                      <div className="muted small">לאחרונה {fmtWhen(c.lastAskedAt)}</div>
+                      {c.concept && (
+                        <div className="ins-concept" title={c.concept.explain}>
+                          שואלים על "{c.concept.title}", שכבר יש עליו הסבר<Info k="question_about_a_concept" /> — ייתכן שההסבר לא ברור מספיק
+                        </div>
+                      )}
+                    </td>
                     <td className="num">{fmtInt(c.count)}{!c.aboveThreshold && <div className="muted small">מתחת לסף ({v.threshold})</div>}</td>
                     <td>{c.finding ? <><div>{c.finding}</div>{c.recommendation && <div className="muted small">המלצה: {c.recommendation}</div>}</> : <span className="muted small">{c.aboveThreshold ? "עדיין לא נותח" : "—"}</span>}</td>
                     <td>
@@ -357,7 +368,7 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
                         : c.status === "dismissed" ? <Pill tone="inactive">לא רלוונטי</Pill>
                         : c.id && c.finding ? (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            <button className="btn btn-primary btn-sm" type="button" disabled={busy === c.id} onClick={() => void act(c.id!, () => openImprovementTask(c.id!).then(() => "נפתחה משימת שיפור על הלקוח הפנימי, בשמכם — הממצא וההמלצה הם ההערה הראשונה שלה"))}>פתח משימת שיפור<Info k="improvement_task" /></button>
+                            <button className="btn btn-primary btn-sm" type="button" disabled={busy === c.id} onClick={() => void act(c.id!, () => openImprovementTask(c.id!).then(() => "נפתחה משימת שיפור על הלקוח הפנימי, בשמכם — הממצא וההמלצה הם ההערה הראשונה שלה"))}>פתח משימת שיפור</button><Info k="improvement_task" />
                             <button className="btn btn-secondary btn-sm" type="button" disabled={busy === c.id} onClick={() => void act(c.id!, () => dismissInsight(c.id!).then(() => null))}>לא רלוונטי</button>
                           </div>
                         ) : <span className="muted small">{c.aboveThreshold ? "ממתין לניתוח" : `ינותח מ-${v.threshold} פעמים`}</span>}
@@ -507,7 +518,7 @@ function PolicyTab() {
           {saved && <div className="ob-note" style={{ marginBottom: 10 }}>{saved}</div>}
           {err && <div className="ob-note crit" style={{ marginBottom: 10 }}>{err}</div>}
           <table className="wtable">
-            <thead><tr><th>פעולה</th><th>מודל</th><th>מאמץ</th><th>תקרה לקריאה ($)</th><th>תקרת קלט (טוקנים)</th></tr></thead>
+            <thead><tr><th>פעולה<Info k="capability" /></th><th>מודל<Info k="model_effort" /></th><th>מאמץ</th><th>תקרה לקריאה ($)</th><th>תקרת קלט (טוקנים)</th></tr></thead>
             <tbody>
               {caps.map(([k, c]) => (
                 <tr key={k}>
@@ -526,7 +537,7 @@ function PolicyTab() {
         <div className="panel">
           <CardTitle info="policy_tiers">הדרגות</CardTitle>
           <table className="wtable">
-            <thead><tr><th>דרגה</th><th>המודל</th><th>תקרה לקריאה ($)</th></tr></thead>
+            <thead><tr><th>דרגה<Info k="policy_tiers" /></th><th>המודל</th><th>תקרה לקריאה ($)</th></tr></thead>
             <tbody>
               {tiers.map(([t, tv]) => (
                 <tr key={t}>

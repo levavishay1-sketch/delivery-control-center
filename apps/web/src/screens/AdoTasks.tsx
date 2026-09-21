@@ -112,6 +112,7 @@ export function AdoTasks({ nav }: { nav: (h: string) => void }) {
           </div>
           <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <table className="wtable">
+              {/* no-info: the first column is the thing the row is about */}
               <thead><tr><th>משימה</th><th>סוג<Info k="requirement_type" /></th><th>TFS<Info k="tfs" /></th><th>מצב<Info k="task_state" /></th><th>גודל<Info k="task_size" /></th><th>מתוך דרישה</th></tr></thead>
               <tbody><TaskRows rows={c.rows} clientId={c.clientId} nav={nav} onChanged={load} /></tbody>
             </table>

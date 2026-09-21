@@ -348,7 +348,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   // re-run (e.g. after editing the requirement) doesn't need its own UI.
   const tierPicker = (
     <div style={{ background: "var(--surface-muted)", borderRadius: 10, padding: 12, marginBottom: 14 }}>
-      <label style={{ fontSize: 12, fontWeight: 650, color: "var(--ov-label)", display: "block", marginBottom: 6 }}>מה אתה מצפה מהבדיקה?</label>
+      <label style={{ fontSize: 12, fontWeight: 650, color: "var(--ov-label)", display: "block", marginBottom: 6 }}>מה אתה מצפה מהבדיקה?<Info k="assessment_depth" /></label>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {assessPrompts.map((p) => (
           <div key={p.key}>
@@ -561,14 +561,14 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                   {assignOpen && (
                     <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #EAE8F5" }}>
                       <div className="field" style={{ marginBottom: 10 }}>
-                        <label>משתמש קיים</label>
+                        {/* no-info: pick a person already in the system */}<label>משתמש קיים</label>
                         <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)}>
                           <option value="">— בחר —</option>
                           {users.map((u) => <option key={u.id} value={u.id}>{u.displayName} ({u.email})</option>)}
                         </select>
                       </div>
                       <div className="field" style={{ marginBottom: 10 }}>
-                        <label>או אימייל חדש</label>
+                        {/* no-info: the alternative to the field above it */}<label>או אימייל חדש</label>
                         <input value={assignEmail} onChange={(e) => setAssignEmail(e.target.value)} placeholder="name@altshuler.co.il" dir="ltr" style={{ width: "100%" }} />
                       </div>
                       <button className="btn btn-primary btn-sm" disabled={!assignTo && !assignEmail.trim()} onClick={doAssign}>העבר</button>
@@ -628,7 +628,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                     {wi.phase !== "done" ? (
                       <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid #EAE8F5" }}>
                         <label style={{ fontSize: 12.5, fontWeight: 600, display: "block", marginBottom: 6 }}>
-                          {wi.requirementType === "testing" ? "תוצאת בדיקה" : "מסקנות תחקור"} — נדרש לפני סיום
+                          {wi.requirementType === "testing" ? "תוצאת בדיקה" : "מסקנות תחקור"} — נדרש לפני סיום<Info k="research_work" />
                         </label>
                         <textarea value={researchConclusion} onChange={(e) => setResearchConclusion(e.target.value)} rows={3}
                                   placeholder={wi.requirementType === "testing" ? "מה נבדק, ומה התוצאה" : "מה נמצא, ומה המשמעות"}
@@ -824,13 +824,13 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                       </div>
                     ))}
                     <div style={{ marginBottom: 10 }}>
-                      <label style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginBottom: 4 }}>repository</label>
+                      <label style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginBottom: 4 }}>repository<Info k="repository" /></label>
                       {build.repos.length === 0
                         ? <p style={{ fontSize: 12, color: "var(--status-critical)" }}>אין repository מקושר.</p>
                         : build.repos.map((r) => <div key={r.name} style={{ fontSize: 12.5, direction: "ltr", textAlign: "left" }}>{r.name}{r.adoRepoRef ? ` — ${r.adoRepoRef}` : ""}</div>)}
                     </div>
                     <div>
-                      <label style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginBottom: 4 }}>הפקודה</label>
+                      <label style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginBottom: 4 }}>הפקודה<Info k="start_command" /></label>
                       <div className="ov-code">{`git checkout -b ${build.branch}\nclaude`}</div>
                       <span style={{ display: "block", fontSize: 11, color: "var(--ov-label)", marginTop: 6 }}>ה-SessionStart hook יטען את ה-Context Brief אוטומטית.</span>
                     </div>

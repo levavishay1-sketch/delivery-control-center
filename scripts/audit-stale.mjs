@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { conceptsUsed, infoInsideButton, isScreenFile, optedOut, rawHeadings, unexplained } from "./info-lint.mjs";
 
 const root = process.cwd();
 const SKIP = new Set(["node_modules", "dist", ".git", ".pgdata", "scratchpad"]);
@@ -154,15 +155,7 @@ bad.length ? fail(`the info registry is malformed (${bad.length})`, bad.slice(0,
 
 const webSrc = [...text].filter(([f]) => /^apps\/web\/src\/.*\.tsx?$/.test(f));
 const used = [];
-for (const [f, t] of webSrc) {
-  t.split("\n").forEach((line, i) => {
-    for (const m of line.matchAll(/<Info k="([^"]+)"/g)) used.push({ key: m[1], at: `${f}:${i + 1}` });
-    for (const m of line.matchAll(/\binfo=(?:"([^"]+)"|\{([^}]*)\})/g)) {
-      if (m[1]) used.push({ key: m[1], at: `${f}:${i + 1}` });
-      else for (const q of (m[2] ?? "").matchAll(/"([a-z][a-z0-9_]*)"/g)) used.push({ key: q[1], at: `${f}:${i + 1}` });
-    }
-  });
-}
+for (const [f, t] of webSrc) for (const u of conceptsUsed(t)) used.push({ key: u.key, at: `${f}:${u.line}` });
 const unknown = used.filter((u) => !seen.has(u.key));
 unknown.length ? fail(`an "i" points at a concept that does not exist (${unknown.length})`, unknown.slice(0, 15).map((u) => `${u.at}  ${u.key}`)) : ok(`every "i" on a screen has an entry (${used.length} uses)`);
 
@@ -171,15 +164,29 @@ for (const [f, t] of webSrc) if (/useClaudeContext\(/.test(t) && !f.endsWith("cl
 const noGlossary = [...registered].filter((s) => !glossaryScreens().includes(s));
 noGlossary.length ? fail("screens registered with the chat that have no glossary line in glossary/screens.ts", noGlossary) : ok(`every chat screen has a glossary (${registered.size})`);
 
-const rawHeadings = [];
-for (const [f, t] of webSrc) {
-  if (!/^apps\/web\/src\/(screens|components)\//.test(f)) continue;
-  t.split("\n").forEach((line, i) => { if (/<h[1-4][\s>]/.test(line)) rawHeadings.push(`${f}:${i + 1}  ${line.trim().slice(0, 90)}`); });
-}
-rawHeadings.length ? fail(`headings written by hand inside a screen (${rawHeadings.length}) — use PageHead or CardTitle, which carry the "i"`, rawHeadings.slice(0, 20)) : ok("every screen heading goes through PageHead / CardTitle");
+const screenFiles = webSrc.filter(([f]) => isScreenFile(f));
+const rawHead = [];
+for (const [f, t] of screenFiles) for (const h of rawHeadings(t)) rawHead.push(`${f}:${h.line}  ${h.text}`);
+rawHead.length ? fail(`headings written by hand inside a screen (${rawHead.length}) — use PageHead or CardTitle, which carry the "i"`, rawHead.slice(0, 20)) : ok("every screen heading goes through PageHead / CardTitle");
 
-const optedOut = webSrc.reduce((n, [, t]) => n + (t.match(/\binfo=\{null\}/g) ?? []).length, 0);
-if (optedOut) note(`headings that opted out of an "i" with info={null} (${optedOut}) — each should have a reason in review`, []);
+// Completeness: a label, a table column or a figure that names something and opens no explanation.
+// This is what stops a NEW element from arriving without an "i" — the required `info` prop covers
+// headings and tiles, and this covers everything else a person reads as a name.
+const missing = [];
+let optOuts = 0;
+for (const [f, t] of screenFiles) {
+  optOuts += optedOut(t);
+  for (const u of unexplained(t)) missing.push(`${f}:${u.line}  [${u.what}] ${u.text}`);
+}
+missing.length
+  ? fail(`named elements with no "i" (${missing.length}) — add <Info k="…" />, or a {/* no-info: why */} comment above it`, missing.slice(0, 25))
+  : ok(`every named element on a screen opens an explanation (${optOuts} deliberate opt-outs)`);
+
+const nested = [];
+for (const [f, t] of webSrc) for (const n of infoInsideButton(t)) nested.push(`${f}:${n.line}  ${n.text}`);
+nested.length
+  ? fail(`an "i" rendered inside a <button> (${nested.length}) — Info is a button itself, so this is invalid HTML; put it beside the control`, nested)
+  : ok("no \"i\" is nested inside a button");
 
 const unusedConcepts = concepts.filter((c) => !used.some((u) => u.key === c.key) && !(c.screens?.length));
 unusedConcepts.length ? note(`concepts no screen uses and no chat lists (${unusedConcepts.length})`, unusedConcepts.map((c) => c.key).slice(0, 25)) : ok("every concept is used by a screen or listed by a chat screen");

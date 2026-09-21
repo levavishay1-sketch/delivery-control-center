@@ -470,6 +470,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasChildren && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>
                 {delReport.subtree.length - 1} תת-פריטים יימחקו יחד עם המשימה
               </label>
@@ -495,6 +496,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasAdoLinks && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>חלק כבר קיים ב-TFS</label>
               <p style={{ fontSize: 12, color: "var(--ink-600)", marginTop: 2 }}>
                 פריטי TFS <b>לא</b> יימחקו — רק יתועד עליהם ב-Discussion שהוסרו מ-DCC:{" "}
@@ -511,6 +513,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasImplementedCode && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>יש קוד מומש שטרם בוטל</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, marginTop: 4 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -527,6 +530,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasCoTouch && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>
                 {delReport.coTouchedBy.length} משימות אחרות כבר נגעו באותם קבצים
               </label>
@@ -564,15 +568,15 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
           {/* a form that shows its own fields; nothing to explain beyond them */}
           <CardTitle as="h3" info={null} style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 10 }}>עריכת משימה</CardTitle>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>כותרת / intent</label>
+            <label>כותרת / intent<Info k="task_intent" /></label>
             <textarea value={editIntent} onChange={(e) => setEditIntent(e.target.value)} rows={2} />
           </div>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>הפרומט המדוייק שיורץ ל-Claude</label>
+            <label>הפרומט המדוייק שיורץ ל-Claude<Info k="prompt_preview" /></label>
             <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} rows={5} placeholder="ריק = ישתמש ב-intent" />
           </div>
           <div className="field" style={{ marginBottom: 12 }}>
-            <label>גודל</label>
+            <label>גודל<Info k="task_size" /></label>
             <select value={editAppetite} onChange={(e) => setEditAppetite(e.target.value as "small" | "standard" | "large")}>
               <option value="small">small</option>
               <option value="standard">standard</option>
@@ -580,7 +584,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
             </select>
           </div>
           <div className="field" style={{ marginBottom: 14 }}>
-            <label>מה מאפיין את השינוי?</label>
+            {/* no-info: a question whose options explain themselves */}<label>מה מאפיין את השינוי?</label>
             <div style={{ display: "flex", gap: 14, fontSize: 12.5, marginTop: 4 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <input type="radio" style={{ minWidth: 0 }} checked={editScope === "text"} onChange={() => setEditScope("text")} />
@@ -708,6 +712,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                   )}
                   {impl.affectedConsumers?.length > 0 && (
                     <div className="field" style={{ marginBottom: 10 }}>
+                      {/* no-info: the sentence under it is the explanation */}
                       <label>מי עוד נוגע בקבצים האלה ({impl.affectedConsumers.length})</label>
                       <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: -2, marginBottom: 6 }}>
                         קוד אחר שמפנה/משתמש בקבצים ששונו — יש לשקול לאסוף ולעדכן אותם יחד לפריסת טסט.
@@ -729,7 +734,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                   )}
                   {impl.testsRun && (
                     <div className="field" style={{ marginBottom: 10 }}>
-                      <label>בדיקות</label>
+                      <label>בדיקות<Info k="check" /></label>
                       <p style={{ fontSize: 12.5 }}>{impl.testsRun}</p>
                     </div>
                   )}
@@ -749,7 +754,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
                   {impl.followUps.length > 0 && (
                     <div style={{ marginBottom: 14 }}>
-                      <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר</p>
+                      <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר<Info k="remaining_work" /></p>
                       <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5, lineHeight: 1.7 }}>
                         {impl.followUps.map((f, i) => <li key={i}>{f}</li>)}
                       </ul>
@@ -810,6 +815,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                         <p style={{ fontSize: 12.5, color: "var(--ink-500)", whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 8 }}>{old.summary}</p>
                         {old.filesChanged.length > 0 && (
                           <div className="field">
+                            {/* no-info: a list of file names from the run that was cancelled */}
                             <label>קבצים שהשתנו אז (כבר לא קיימים ב-branch)</label>
                             <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
                               {old.filesChanged.join(", ")}
@@ -843,6 +849,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                     <a onClick={() => setReopenOpen(true)} style={{ fontSize: 12, color: "var(--ink-500)", cursor: "pointer" }}>↩ פתח מחדש</a>
                   ) : (
                     <div className="field">
+                      {/* no-info: the label says what is being asked and where the answer is kept */}
                       <label>למה לפתוח מחדש? (יישמר בהיסטוריית הדרישה)</label>
                       <textarea
                         value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2}
@@ -901,6 +908,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                   </div>
                   {overrideReasonOpen && (
                     <div className="field" style={{ marginTop: 10 }}>
+                      {/* no-info: the label says what is being asked and where the answer is kept */}
                       <label>למה לאשר בכל זאת? (יישמר בהיסטוריית הדרישה)</label>
                       <textarea
                         value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2}
