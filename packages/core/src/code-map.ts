@@ -278,9 +278,24 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
     return [...reach(others)].filter((s) => !onBaseLine.has(s)).map((s) => inList.get(s)!)
       .sort((a, b) => a.at.localeCompare(b.at)).map((x) => ({ sha: x.sha, subject: x.subject }));
   };
-  f.baseAfter.forEach((c, i) => {
+  // The order the base line changed in: what entered it, one step after another. A merge is one step, and the commits it
+  // brought in come right before it, in the order they were made; a commit made straight on the base line is a step of
+  // its own. The newest step is last — the dot the arrow lands on. Anything not tied to that chain (a list cut short)
+  // goes first, by time, so the newest step stays last.
+  const isParent = new Set(f.baseAfter.flatMap((c) => (c.parents ?? []).map((p) => p.slice(0, 7))));
+  const tip = f.baseAfter.filter((c) => !isParent.has(c.sha.slice(0, 7))).sort((a, b) => b.at.localeCompare(a.at))[0];
+  const chain: CodeMapCommit[] = [];
+  for (let c: CodeMapCommit | undefined = tip; c && chain.length < f.baseAfter.length; c = c.parents?.[0] ? inList.get(c.parents[0].slice(0, 7)) : undefined) chain.push(c);
+  chain.reverse();
+  const entered: CodeMapCommit[] = [];
+  const placed = new Set<string>();
+  const put = (c: CodeMapCommit | undefined) => { if (c && !placed.has(c.sha.slice(0, 7))) { placed.add(c.sha.slice(0, 7)); entered.push(c); } };
+  for (const c of chain) { if (c.merge) for (const b of broughtBy(c)) put(inList.get(b.sha.slice(0, 7))); put(c); }
+  const loose = [...f.baseAfter].filter((c) => !placed.has(c.sha.slice(0, 7))).sort((a, b) => a.at.localeCompare(b.at));
+  const inOrder = [...loose, ...entered];
+  inOrder.forEach((c, i) => {
     const touching = c.files.some((x) => ourFiles.has(x));
-    const newest = i === f.baseAfter.length - 1;
+    const newest = i === inOrder.length - 1;
     const detail = c.merge
       ? `מיזוג: הוא הכניס ל-${f.baseBranch} אחרי שהתחלנו עבודה שנעשתה בענף אחר.`
       : touching
