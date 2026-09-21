@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
+import { CallsTable } from "../claude/CallsTable.tsx";
+import { CostLine } from "../claude/CostLine.tsx";
+import { capabilityLabel, fmtUsd } from "../claude/labels.ts";
+import { useClaudeContext } from "../claude/context.ts";
 import {
-  answerBlocker, composeGapLetter, correctNote, deleteBlocker, deleteGap, deleteRequirement,
-  getBrief, getCostDetail, getDetail, getFlowRun, getCostSummary, getGapLetters, getRetro, startRetro, unlinkRepoFromReq, uploadAttachment, verifyGap,
-  type Blocker, type ClientLetter, type ClientLetterHistoryItem, type CostDetailRow, type EventRow, type Gap, type RequirementCostSummary, type RetroRun, type WorkItemDetail,
+  answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement,
+  getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
@@ -21,7 +25,7 @@ const post = async (path: string, body: unknown) => {
 const TABS = ["Overview", "Timeline", "Dependencies"] as const;
 type Tab = (typeof TABS)[number];
 
-const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "model.routed", "review.completed"]);
+const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "claude.call", "review.completed"]);
 const isAi = (e: EventRow) => e.actor.kind !== "user" || AI_TYPES.has(e.type);
 const fmt = (t: string) => new Date(t).toISOString().slice(0, 16).replace("T", " ");
 /** decision.made trigger → Hebrew label, for the Timeline's highlighted
@@ -42,7 +46,6 @@ const linkify = (text: string) => {
 const gist = (e: EventRow) => {
   const p = e.payload;
   if (e.type === "decision.made") return String(p.reason ?? "");
-  if (e.type === "client_letter.composed") return `✉ ${p.subject ?? ""} (${p.gapCount ?? 0} שאלות)`;
   return (p.summary || p.body || p.answer || p.description || p.question ||
     (p.model ? `${p.capability} → ${p.model} · ${p.rationale ?? ""}` : "") ||
     (p.verdict ? `${p.verdict}${p.blockingCount ? ` — ${p.blockingCount} blocking` : ""} (${p.findingCount ?? 0} findings)` : "") ||
@@ -64,37 +67,20 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [expandedClosed, setExpandedClosed] = useState<Set<string>>(new Set());
   const [answering, setAnswering] = useState<{ id: string; text: string } | null>(null);
   const [gapHelp, setGapHelp] = useState(false);
-  const [letterDetail, setLetterDetail] = useState<ClientLetterHistoryItem | null>(null);
-  const [letterBusy, setLetterBusy] = useState(false);
-  const [letterCopied, setLetterCopied] = useState(false);
-  const [letterPicker, setLetterPicker] = useState<Set<string> | null>(null);
-  // Every letter ever composed for this requirement (read back, not
-  // re-run) — so navigating away from the detail view before copying
-  // one never costs another AI call to get the same text back, and past
-  // letters are never simply lost.
-  const [letterHistory, setLetterHistory] = useState<ClientLetterHistoryItem[]>([]);
-  const [lettersListOpen, setLettersListOpen] = useState(false);
-  const refreshLetters = useCallback(() => { getGapLetters(id).then((r) => setLetterHistory(r.letters)).catch(() => {}); }, [id]);
-  useEffect(() => { refreshLetters(); }, [refreshLetters]);
 
-  // Per-run cost detail — what the requirement's total AI cost is
-  // actually made of (model, duration, tokens, cost per run). Re-fetched
-  // fresh every time the breakdown is opened — a stale-once-fetched
-  // cache here would silently hide any run that happened after the
-  // first open (a real bug a user hit live: a second composed letter
-  // never appeared because the list had already been cached from
-  // before it existed).
+  // The calls behind the total — the same ledger rows the control center
+  // shows, through the same table; always re-fetched on open (a stale
+  // cached list once hid a run that had just finished).
   const [costDetailOpen, setCostDetailOpen] = useState(false);
-  const [costDetail, setCostDetail] = useState<CostDetailRow[] | null>(null);
+  const [costDetail, setCostDetail] = useState<ClaudeCallView[] | null>(null);
   const [costDetailLoading, setCostDetailLoading] = useState(false);
   const openCostDetail = () => {
     setCostDetailOpen(true);
     setCostDetailLoading(true);
-    getCostDetail(id).then((r) => setCostDetail(r.rows)).catch(() => {}).finally(() => setCostDetailLoading(false));
+    getWorkitemCalls(id).then((r) => setCostDetail(r.calls)).catch(() => {}).finally(() => setCostDetailLoading(false));
   };
   const [newBlk, setNewBlk] = useState({ questionType: "unclear_requirement", question: "" });
   const [uploading, setUploading] = useState(false);
-  const [retroOpen, setRetroOpen] = useState(false);
 
   // go back to wherever the user came from; fall back to the requirements list
   const back = useCallback(() => {
@@ -142,6 +128,42 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     const iv = setInterval(check, 2000);
     return () => { alive = false; clearInterval(iv); };
   }, [id]);
+
+  // What the one chat knows about this screen (a hook — above the early returns).
+  useClaudeContext(d ? (() => {
+    const w = d.workitem;
+    const gaps = d.gaps.filter((g) => g.state === "proposed" || g.state === "verified");
+    const blocker = d.blockers.find((b) => b.state === "open");
+    const live = d.tasks.filter((t) => t.state !== "dropped");
+    const done = live.filter((t) => t.state === "done").length;
+    const inTfs = live.filter((t) => t.linkedAdoId).length;
+    const nextStep = blocker ? `לענות על החוסם: ${blocker.question}`
+      : gaps.length ? `לסגור את ${gaps.length} הפערים הפתוחים, ואז להריץ "פירוק למשימות"`
+      : live.length === 0 ? (w.phase === "intake" ? 'להריץ "בחינת בשלות", ואז "פירוק למשימות"' : 'להריץ "פירוק למשימות"')
+      : inTfs < live.length ? "לאשר את המשימות ליצירה ב-TFS"
+      : done < live.length ? `העבודה בבנייה — ${done} מתוך ${live.length} משימות הושלמו` : "כל המשימות הושלמו — הדרישה מוכנה לסגירה";
+    return {
+      screen: "requirement",
+      topic: { kind: "wi" as const, id: w.id, title: w.title },
+      facts: {
+        "שם הדרישה": w.title, "מפתח": w.key ?? "(עדיין אין)", "שלב (phase)": w.phase, "סוג": w.type, "עדיפות": w.priority, "סיכון": w.risk, "מבצע": w.executor,
+        "תאריך יעד": w.dueDate ?? "(לא נקבע)", "פערים פתוחים": gaps.map((g) => g.description), "חוסם פתוח": blocker?.question ?? null,
+        "משימות": live.length ? `${done} מתוך ${live.length} הושלמו, ${inTfs} נוצרו ב-TFS` : "עדיין אין משימות",
+        // whether there is code to read — the chat offers a (costlier) reading of it only when there is
+        "מאגרים מקושרים": d.repos.length ? d.repos.map((r) => r.name).join(", ") : "(אין — אין קוד לקרוא)",
+        "עלות AI בפועל": cost ? `$${cost.totalUsd.toFixed(2)} ב-${cost.runCount} קריאות` : "עדיין לא נרשמה",
+        "הצעד הבא": nextStep, nextStep, status: w.phase, aiCostUsd: cost?.totalUsd ?? 0, openGaps: gaps.map((g) => g.description), blocker: blocker?.question ?? null,
+      },
+      // The letter to the requester and the recommendations live in the chat now: an answer to copy from, no button, no separate run.
+      suggestions: [
+        "מה השלב הבא?", "מה זה פער?", "כמה עלה עד עכשיו?",
+        ...(gaps.length ? ["נסח מכתב ללקוח עם השאלות הפתוחות"] : []),
+        ...(live.length === 0 && !gaps.length ? ["תפרק את הדרישה למשימות"] : []),
+        ...(w.phase === "done" || live.length ? ["המלצות לייעול: מה היה כדאי לעשות אחרת?"] : []),
+      ],
+      actions: ["assess", "breakdown"],
+    };
+  })() : null);
 
   if (err) return (
     <div className="empty" style={{ textAlign: "center" }}>
@@ -200,133 +222,11 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות</p>
         <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
-          {openGaps.length > 0 && (
-            <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)", fontWeight: 600 }}
-               onClick={() => setLetterPicker(new Set(openGaps.filter((g) => g.whoAnswers === "client").map((g) => g.id)))}>
-              ✉ נסח פערים ללקוח
-            </a>
-          )}
-          {letterHistory.length > 0 && (
-            <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--ink-500)" }} onClick={() => setLettersListOpen(true)}>
-              📄 מכתבים אחרונים ({letterHistory.length})
-            </a>
-          )}
           <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
             {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
           </a>
         </div>
       </div>
-
-      {letterPicker && (
-        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLetterPicker(null)}>
-          <div onClick={(e) => e.stopPropagation()} style={{
-            width: "min(560px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
-            border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl",
-            boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700 }}>אילו פערים בהודעה?</h3>
-              <a onClick={() => setLetterPicker(null)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
-            </div>
-            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
-              מסומנות מראש השאלות שרק מבקש הדרישה יכול להכריע בהן. אפשר לשנות בחירה — לא כל פער צריך להגיע אליו.
-            </p>
-            <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-              {openGaps.map((g) => {
-                const checked = letterPicker.has(g.id);
-                const toggle = () => setLetterPicker((s) => { const n = new Set(s); n.has(g.id) ? n.delete(g.id) : n.add(g.id); return n; });
-                return (
-                  <label key={g.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 12.5, cursor: "pointer", border: "1px solid var(--border-hairline)", borderRadius: 10, padding: "9px 11px" }}>
-                    <input type="checkbox" style={{ marginTop: 2, minWidth: 0 }} checked={checked} onChange={toggle} />
-                    <span style={{ flex: 1 }}>
-                      {g.description}
-                      <span style={{ display: "block", marginTop: 2 }}>
-                        {g.whoAnswers === "client" ? <Pill tone="warning">👤 מבקש הדרישה</Pill> : <Pill tone="neutral">🛠 החלטה שלנו</Pill>}
-                      </span>
-                    </span>
-                  </label>
-                );
-              })}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-primary" disabled={letterPicker.size === 0 || letterBusy} onClick={async () => {
-                setLetterBusy(true); setLetterCopied(false);
-                try {
-                  const l = await composeGapLetter(wi.id, Array.from(letterPicker));
-                  setLetterDetail({ id: "just-now", subject: l.subject, body: l.body, gapCount: l.gapCount, composedAt: new Date().toISOString(), costUsd: l.costUsd, inputTokens: l.inputTokens, outputTokens: l.outputTokens, model: null });
-                  setLetterPicker(null);
-                  refreshLetters();
-                  getCostSummary(id).then(setCost).catch(() => {}); // this was a real AI call — reflect it in the total right away
-                } catch (e) { alert(String(e)); }
-                finally { setLetterBusy(false); }
-              }}>{letterBusy ? "מנסח…" : `נסח מכתב (${letterPicker.size})`}</button>
-              <button className="btn btn-secondary" onClick={() => setLetterPicker(null)}>ביטול</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {lettersListOpen && (
-        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLettersListOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} style={{
-            width: "min(560px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
-            border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl",
-            boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700 }}>מכתבים אחרונים</h3>
-              <a onClick={() => setLettersListOpen(false)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
-            </div>
-            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>לפי סדר ההפקה. לחיצה על מכתב פותחת אותו מלא, כולל העלות המפורטת.</p>
-            <div style={{ display: "grid", gap: 8 }}>
-              {letterHistory.map((l) => (
-                <a key={l.id} onClick={() => { setLetterDetail(l); setLettersListOpen(false); }}
-                   style={{ display: "block", border: "1px solid var(--border-hairline)", borderRadius: 10, padding: "10px 12px", cursor: "pointer" }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 3 }}>{l.subject}</div>
-                  <div style={{ fontSize: 11, color: "var(--ink-400)" }}>{fmt(l.composedAt)} · {l.gapCount} שאלות{l.costUsd != null ? ` · $${l.costUsd.toFixed(4)}` : ""}</div>
-                </a>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {letterDetail && (
-        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setLetterDetail(null)}>
-          <div onClick={(e) => e.stopPropagation()} style={{
-            width: "min(680px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
-            border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl",
-            boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700 }}>הודעה למבקש הדרישה</h3>
-              <a onClick={() => setLetterDetail(null)} style={{ fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)" }}>✕</a>
-            </div>
-            <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 4 }}>
-              {letterDetail.gapCount} שאלות פתוחות, מנוסחות בשפה עסקית · {fmt(letterDetail.composedAt)}. DCC לא שולח — העתק ושלח בעצמך.
-            </p>
-            <p style={{ fontSize: 11, color: "var(--ink-400)", marginBottom: 14 }}>
-              {letterDetail.costUsd != null
-                ? `עלות ההרצה: $${letterDetail.costUsd.toFixed(4)}${letterDetail.model ? ` · מודל ${letterDetail.model}` : ""}${letterDetail.inputTokens != null ? ` · ${letterDetail.inputTokens} טוקני קלט / ${letterDetail.outputTokens ?? 0} פלט` : ""} — נכלל בעלות ה-AI הכוללת של הדרישה.`
-                : "לא ידוע פירוט עלות עבור מכתב זה."}
-            </p>
-            <div className="field" style={{ marginBottom: 10 }}>
-              <label>נושא</label>
-              <div style={{ fontSize: 13.5, fontWeight: 600, background: "var(--surface-muted)", borderRadius: 8, padding: "8px 10px" }}>{letterDetail.subject}</div>
-            </div>
-            <div className="field" style={{ marginBottom: 14 }}>
-              <label>גוף ההודעה</label>
-              <pre style={{ whiteSpace: "pre-wrap", fontSize: 13, lineHeight: 1.8, background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: 0, fontFamily: "inherit" }}>{letterDetail.body}</pre>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-primary" onClick={() => { navigator.clipboard?.writeText(`${letterDetail.subject}\n\n${letterDetail.body}`); setLetterCopied(true); setTimeout(() => setLetterCopied(false), 1800); }}>
-                {letterCopied ? "✓ הועתק" : "העתק הכל"}
-              </button>
-              <button className="btn btn-secondary" onClick={() => setLetterDetail(null)}>סגור</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {gapHelp && (
         <div className="callout" style={{ marginTop: 10, marginBottom: 14, fontSize: 12.5, lineHeight: 1.7 }}>
@@ -489,8 +389,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       {editOpen && <EditRequirement wi={wi} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); reload(); }} />}
       {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
       {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
-      {retroOpen && <RetroModal workitemId={wi.id} onClose={() => setRetroOpen(false)} />}
-      {costDetailOpen && <CostDetailModal rows={costDetail} loading={costDetailLoading} summary={cost} onClose={() => setCostDetailOpen(false)} />}
+      {costDetailOpen && <CallsModal rows={costDetail} loading={costDetailLoading} summary={cost} nav={nav} onClose={() => setCostDetailOpen(false)} />}
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
@@ -500,9 +399,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {wi.phase === "done" && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setRetroOpen(true)}>✦ המלצות לשיפור</button>
-          )}
           <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ אירוע</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setEditOpen(true)}>עריכה</button>
           <button className="btn btn-secondary btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחיקה</button>
@@ -675,152 +571,32 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   );
 }
 
-const RETRO_CATEGORIES: { key: "tokenSavings" | "timeSavings" | "unnecessaryActions" | "reworkCausingDecisions" | "breakdownFeedback" | "emphasize"; label: string; tone: "warning" | "healthy" }[] = [
-  { key: "reworkCausingDecisions", label: "החלטות שגרמו לעבודה חוזרת", tone: "warning" },
-  { key: "unnecessaryActions", label: "פעולות שלא היה צריך", tone: "warning" },
-  { key: "tokenSavings", label: "חיסכון בטוקנים", tone: "warning" },
-  { key: "timeSavings", label: "חיסכון בזמן", tone: "warning" },
-  { key: "breakdownFeedback", label: "משוב על אופן הפירוק", tone: "warning" },
-  { key: "emphasize", label: "מה כדאי להמשיך לעשות", tone: "healthy" },
-];
-
-/** End-of-requirement retro — its own kick-off + poll, deliberately
- *  against the dedicated `/retro` routes rather than the generic
- *  flow-run ones (design notes, `requirement-retro-recommendations`). */
-function RetroModal({ workitemId, onClose }: { workitemId: string; onClose: () => void }) {
-  const [run, setRun] = useState<RetroRun | null>(null);
-  const [starting, setStarting] = useState(false);
-  useEffect(() => {
-    let alive = true;
-    const check = () => getRetro(workitemId).then((r) => { if (alive) setRun(r); }).catch(() => {});
-    check();
-    const iv = setInterval(() => { if (run?.state === "running" || run === null) check(); }, 2000);
-    return () => { alive = false; clearInterval(iv); };
-  }, [workitemId, run?.state]);
-  const start = async () => {
-    setStarting(true);
-    try { await startRetro(workitemId); const r = await getRetro(workitemId); setRun(r); }
-    catch (e) { alert(String(e)); }
-    setStarting(false);
-  };
-  const result = run?.result;
-  return (
-    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px", zIndex: 100 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(640px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <h2 style={{ fontSize: 17, fontWeight: 650 }}>✦ המלצות לשיפור</h2>
-          <a onClick={onClose} style={{ cursor: "pointer", fontSize: 15, color: "var(--ink-500)" }}>✕</a>
-        </div>
-        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>ניתוח מבוסס על ה-timeline, ההיסטוריה והעלות בפועל של הדרישה הזו — לא עצות כלליות.</p>
-
-        {(!run || run.state === "idle") && (
-          <button className="btn btn-primary" disabled={starting} onClick={start}>{starting ? "מתחיל…" : "הרץ ניתוח"}</button>
-        )}
-
-        {run?.state === "running" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 0" }}>
-            <span className="spinner" style={{ width: 16, height: 16 }} />
-            <span style={{ fontSize: 13, color: "var(--ink-500)" }}>Claude מנתח את הדרישה…</span>
-          </div>
-        )}
-
-        {run?.state === "error" && (
-          <div className="callout crit" style={{ marginTop: 6 }}>
-            <div className="body"><p className="r">{run.error}</p></div>
-          </div>
-        )}
-        {run?.state === "error" && <button className="btn btn-secondary btn-sm" style={{ marginTop: 10 }} onClick={start}>נסה שוב</button>}
-
-        {result && (run?.state === "done" || run?.state === "stopped") && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16, marginTop: 6 }}>
-            {result.summary && <p style={{ fontSize: 13, lineHeight: 1.5, color: "var(--ink-700)" }}>{result.summary}</p>}
-            {RETRO_CATEGORIES.map(({ key, label, tone }) => {
-              const items = result[key];
-              if (!items || items.length === 0) return null;
-              return (
-                <div key={key}>
-                  <div style={{ marginBottom: 6 }}><Pill tone={tone}>{label}</Pill></div>
-                  <ul style={{ margin: 0, paddingInlineStart: 18, display: "flex", flexDirection: "column", gap: 4 }}>
-                    {items.map((it, i) => <li key={i} style={{ fontSize: 12.5, color: "var(--ink-700)" }}>{it}</li>)}
-                  </ul>
-                </div>
-              );
-            })}
-            <button className="btn btn-secondary btn-sm" style={{ alignSelf: "flex-start" }} onClick={start} disabled={starting}>{starting ? "מריץ מחדש…" : "↻ הרץ ניתוח מחדש"}</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-const COST_KIND_LABELS: Record<string, string> = {
-  assess: "בחינת בשלות", breakdown: "פירוק למשימות", implement: "פיתוח משימה",
-  check: "בדיקה", gap_letter: "ניסוח מכתב ללקוח", retro: "המלצות לשיפור", other: "אחר",
-};
-const fmtDuration = (ms: number | null) => {
-  if (ms == null) return "—";
-  const s = ms / 1000;
-  return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
-};
-
-/** What a requirement's "עלות AI בפועל" total is actually made of — one
- *  row per AI run, newest first (design notes, cost-visibility: a user
- *  could see the total but nothing behind it). */
-function CostDetailModal({ rows, loading, summary, onClose }: {
-  rows: CostDetailRow[] | null; loading: boolean; summary: RequirementCostSummary | null; onClose: () => void;
+/** What a requirement's "עלות AI בפועל" total is actually made of — the
+ *  ledger rows behind it, through the same table the control center uses
+ *  (claude-in-dcc §8.2: one record, one way to show it). */
+function CallsModal({ rows, loading, summary, nav, onClose }: {
+  rows: ClaudeCallView[] | null; loading: boolean; summary: RequirementCostSummary | null; nav: (h: string) => void; onClose: () => void;
 }) {
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px", zIndex: 100 }}>
-      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(760px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(980px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
           <h2 style={{ fontSize: 17, fontWeight: 650 }}>פירוט עלות AI</h2>
           <a onClick={onClose} style={{ cursor: "pointer", fontSize: 15, color: "var(--ink-500)" }}>✕</a>
         </div>
-        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>כל הרצת AI שהשתתפה בעלות הכוללת של הדרישה הזו, לפי הפרמטרים בפועל שקבעו את החישוב.</p>
+        <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>כל קריאה לקלוד על הדרישה הזו — מיומן הקריאות, כמו במרכז הבקרה. לחיצה על שורה פותחת את הפרטים.</p>
 
         {summary && (
-          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", marginBottom: 16, padding: "10px 14px", background: "var(--surface-muted)", borderRadius: 10 }}>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>סה"כ</div><div style={{ fontSize: 15, fontWeight: 700 }}>${summary.totalUsd.toFixed(4)}</div></div>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>הרצות</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.runCount}</div></div>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>טוקני קלט</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.totalInputTokens.toLocaleString()}</div></div>
-            <div><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>טוקני פלט</div><div style={{ fontSize: 15, fontWeight: 700 }}>{summary.totalOutputTokens.toLocaleString()}</div></div>
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", alignItems: "center", marginBottom: 16, padding: "10px 14px", background: "var(--surface-muted)", borderRadius: 10 }}>
+            <CostLine size="md" inputTokens={summary.totalInputTokens} outputTokens={summary.totalOutputTokens} costUsd={summary.totalUsd} note={`${summary.runCount} קריאות`} />
             {Object.entries(summary.byKind).map(([kind, b]) => (
-              <div key={kind}><div style={{ fontSize: 10.5, color: "var(--ink-400)" }}>{COST_KIND_LABELS[kind] ?? kind}</div><div style={{ fontSize: 13, fontWeight: 600 }}>${b.usd.toFixed(4)} <span style={{ fontWeight: 400, color: "var(--ink-400)" }}>({b.count})</span></div></div>
+              <span key={kind} className="cost-line"><b>{capabilityLabel(kind)}</b><span className="sep">·</span>{b.count}<span className="sep">·</span><span className="usd">{fmtUsd(b.usd)}</span></span>
             ))}
           </div>
         )}
 
         {loading && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 0" }}><span className="spinner" style={{ width: 16, height: 16 }} /><span style={{ fontSize: 13, color: "var(--ink-500)" }}>טוען…</span></div>}
-
-        {rows && rows.length > 0 && (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-              <thead>
-                <tr style={{ borderBottom: "1px solid var(--border-hairline)", textAlign: "right" }}>
-                  {["מתי", "מה", "מודל", "משך", "צעדים", "טוקני קלט", "טוקני פלט", "עלות"].map((h) => (
-                    <th key={h} style={{ padding: "6px 8px", fontWeight: 600, color: "var(--ink-500)", whiteSpace: "nowrap" }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid var(--border-hairline)" }}>
-                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap", color: "var(--ink-400)", fontFamily: "ui-monospace, monospace", fontSize: 11 }}>{fmt(r.occurredAt)}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.label || (COST_KIND_LABELS[r.kind] ?? r.kind)}</td>
-                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{r.model ?? "—"}</td>
-                    <td style={{ padding: "6px 8px", whiteSpace: "nowrap" }}>{fmtDuration(r.durationMs)}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.numTurns ?? "—"}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.inputTokens.toLocaleString()}</td>
-                    <td style={{ padding: "6px 8px" }}>{r.outputTokens.toLocaleString()}</td>
-                    <td style={{ padding: "6px 8px", fontWeight: 600, whiteSpace: "nowrap" }}>${r.costUsd.toFixed(4)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {rows && rows.length === 0 && !loading && <div className="empty">עדיין לא נרשמה אף הרצת AI על הדרישה הזו.</div>}
+        {rows && <CallsTable rows={rows} showClient={false} showOn={false} nav={nav} emptyText="עדיין לא נרשמה אף קריאה לקלוד על הדרישה הזו." />}
       </div>
     </div>
   );

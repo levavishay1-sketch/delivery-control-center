@@ -5,3 +5,4 @@ export * from "./workitem.ts";
 export * from "./events.ts";
 export * from "./prompts.ts";
 export * from "./repo-onboarding.ts";
+export * from "./claude.ts";

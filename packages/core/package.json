@@ -7,7 +7,8 @@
   "exports": { ".": "./src/index.ts" },
   "scripts": {
     "demo": "tsx src/demo.ts",
-    "prove:routing": "tsx src/routing.prove.ts"
+    "prove:routing": "tsx src/routing.prove.ts",
+    "prove:retention": "tsx src/chat/retention.prove.ts"
   },
   "dependencies": {
     "@dcc/db": "*",

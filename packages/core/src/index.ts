@@ -14,7 +14,15 @@ export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksN
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
-export { route, recommend, recordRouting, loadPolicy, type Capability, type Effort, type RoutingDecision, type RoutingSignals } from "./routing.ts";
+export { route, recommend, loadPolicy, reloadPolicy, savePolicy, chatPolicy, priceFor, estimateUsd, type Capability, type Effort, type Policy, type RoutingDecision, type RoutingSignals } from "./routing.ts";
+export { claudeOverview, claudeCalls, claudeCallById, callsForEntity, type CenterFilter, type ClaudeOverview, type ClaudeCallView, type CenterBar } from "./claude-center.ts";
+export { openChat, askChat, markHelpful, listConversations, getConversation, resolveTopic, internalClientId, deleteChatSession, ChatError, type TopicRef, type TopicKind, type ScreenContext, type ChatMessage, type ConversationView } from "./chat/index.ts";
+export { runProposal, cancelProposal, proposalPreview, runCodeQuestion, cancelCodeQuestion } from "./chat/proposals.ts";
+export { archiveExpiredConversations, scheduleRetention, ARCHIVED_TEXT } from "./chat/retention.ts";
+export { ACTIONS, actionsFor, actionEntityFor, runAction, ActionRefused, type ActionKey, type ActionDef, type ActionEntity } from "./actions/index.ts";
+export { GLOSSARY, glossaryFor, matchGlossary, type GlossaryEntry, type ScreenGlossary } from "./glossary/index.ts";
+export { insightsView, analyseInsights, openImprovementTask, dismissInsight, type InsightsView, type InsightCluster, type InsightCallRow, type UnhelpfulRow } from "./insights.ts";
+export { policyView, updatePolicy, setClientRetention, PolicyError, type PolicyView, type PolicyChange, type PolicyPatch } from "./policy-admin.ts";
 export { linkWorkItems, flowFor, taskFlowFor, clientTaskTree, allAdoTasks, type FlowNode, type FlowEdge, type TaskFlowNode, type TaskFlowEdge, type AdoTaskRow } from "./flow.ts";
 export { materializeTasksToAdo, pendingMaterializeCount, editTask, type MaterializeResult, type EditTaskResult } from "./task-ado-sync.ts";
 export { recordTouches, releaseTouches, contentionFor, recordReview } from "./contention.ts";
@@ -27,11 +35,10 @@ export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
-  precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, composeClientLetter,
+  precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt,
   stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, requirementCostSummary, requirementCostDetail,
-  getRetroRunView, getRecentClientLetters,
-  type AssessResult, type AssessGap, type ClientLetter, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
-  type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow, type RetroResult, type ClientLetterHistoryItem,
+  type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
+  type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {

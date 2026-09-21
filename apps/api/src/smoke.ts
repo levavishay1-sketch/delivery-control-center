@@ -70,8 +70,12 @@ const r404 = await app.inject({ method: "GET", url: `/resolve?clientId=${c!.id}&
 check("resolve 404 on no match", r404.statusCode === 404, r404.statusCode);
 
 // routing
-const rt = await app.inject({ method: "POST", url: `/workitems/${wi!.id}/route`, headers: H, payload: { capability: "gap_detection", signals: { ambiguity: "high" } } });
-check("route escalates high-ambiguity gap detection to opus", rt.statusCode === 200 && rt.json().tier === "opus", rt.json());
+// Routing happens inside every call now (claude-in-dcc §8.3); what the smoke
+// test can check without a model is that the ledger's control center answers.
+const ov = await app.inject({ method: "GET", url: "/claude/overview", headers: H });
+check("Claude's control center answers from the ledger", ov.statusCode === 200 && typeof ov.json().tiles?.costUsd === "number", ov.json());
+const cl = await app.inject({ method: "GET", url: `/workitems/${wi!.id}/calls`, headers: H });
+check("a requirement's calls read from the ledger", cl.statusCode === 200 && Array.isArray(cl.json().calls), cl.json());
 
 // flow — rooted at the epic, its subtree is the epic + WI-9001
 const flow = await app.inject({ method: "GET", url: `/requirements/${epic!.id}/flow` });

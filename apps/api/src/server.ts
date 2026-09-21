@@ -32,9 +32,10 @@ import {
   proposeGap,
   proposeTasks,
   raiseBlocker,
-  recordRouting,
-  route,
-  type Capability,
+  claudeOverview,
+  claudeCalls,
+  claudeCallById,
+  callsForEntity,
   recordGitActivity,
   recordNote,
   recordSession,
@@ -73,7 +74,6 @@ import {
   clientTaskTree,
   allAdoTasks,
   materializeTasksToAdo,
-  approveTask,
   rejectTask,
   rollbackTask,
   pushTask,
@@ -90,14 +90,11 @@ import {
   listPrompts,
   updatePrompt,
   previewAssessPrompt,
-  composeClientLetter,
   stopFlowRun,
   sendRunMessage,
   previewBreakdownPrompt,
   requirementCostSummary,
   requirementCostDetail,
-  getRetroRunView,
-  getRecentClientLetters,
   recordDecision,
   linkBugToTask,
   unlinkBugFromTask,
@@ -129,15 +126,35 @@ import {
   onboardingStageCatalogue,
   authorizeOnboardingTerminal,
   recoverOnboardingRuns,
-  getOnboardingAssistant,
-  askOnboardingAssistant,
-  resetOnboardingAssistant,
-  sendToOnboardingSession,
+  openChat,
+  askChat,
+  markHelpful,
+  listConversations,
+  getConversation,
+  ChatError,
+  glossaryFor,
+  runProposal,
+  cancelProposal,
+  proposalPreview,
+  runCodeQuestion,
+  cancelCodeQuestion,
+  runAction,
+  ActionRefused,
   subscribeTerminal,
   writeTerminalInput,
   resizeTerminal,
   killAllSessions,
   stopAllFlowRuns,
+  insightsView,
+  analyseInsights,
+  openImprovementTask,
+  dismissInsight,
+  policyView,
+  updatePolicy,
+  setClientRetention,
+  PolicyError,
+  scheduleRetention,
+  archiveExpiredConversations,
 } from "@dcc/core";
 import websocket from "@fastify/websocket";
 import { blocker, gap, task } from "@dcc/db/schema";
@@ -160,6 +177,8 @@ app.setErrorHandler((err, _req, reply) => {
   // stage has not finished", "a run is already live") — show it, not a 500.
   if (err instanceof OnboardingError) return reply.code(409).send({ error: err.message });
   if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
+  // The registry refuses with a sentence for the person ("the task is not approved yet") — show it, not a 500.
+  if (err instanceof ActionRefused || err instanceof ChatError || err instanceof PolicyError) return reply.code(409).send({ error: err.message });
   if (err instanceof ReviewRefused) return reply.code(409).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
@@ -361,32 +380,117 @@ app.get("/repos/:id/onboarding/runs/:runId/file", async (req) => {
   return getOnboardingFileVersions(id, runId, q.path);
 });
 
-/* The Hebrew assistant next to the terminal: questions about the session, and
- * instructions the person chooses to send to it (openspec/changes/onboarding-assistant). */
-app.get("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
-  await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  return getOnboardingAssistant(id, runId);
+/* ── the one chat (claude-in-dcc §4–§7): one dock over every screen, a conversation per topic ── */
+
+const topicSchema = z.object({ kind: z.enum(["wi", "task", "pr", "run", "app"]), id: z.string().max(200).nullish() });
+const contextSchema = z.object({
+  screen: z.string().max(60).nullish(),
+  facts: z.record(z.unknown()).optional(),
+  suggestions: z.array(z.string().max(200)).max(12).optional(),
+  actions: z.array(z.string().max(60)).max(30).optional(),
 });
 
-app.post("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
-  await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  const b = z.object({ question: z.string().min(1).max(4000), screen: z.string().max(20_000).optional() }).parse(req.body);
-  return askOnboardingAssistant(id, runId, b.question, b.screen);
-});
-
-app.delete("/repos/:id/onboarding/runs/:runId/assistant", async (req) => {
-  await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  return resetOnboardingAssistant(id, runId);
-});
-
-app.post("/repos/:id/onboarding/runs/:runId/assistant/send", async (req) => {
+app.post("/claude/chat/open", async (req, reply) => {
   const dev = await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  const b = z.object({ text: z.string().min(1).max(8000), messageId: z.string().optional(), force: z.boolean().optional() }).parse(req.body);
-  return sendToOnboardingSession(id, runId, { userId: dev.id }, b);
+  const b = z.object({ topic: topicSchema, context: contextSchema.optional() }).parse(req.body ?? {});
+  try { return await openChat(b.topic, dev.id, b.context ?? {}); } catch (e) { if (e instanceof ChatError) return reply.code(409).send({ error: e.message }); throw e; }
+});
+
+app.post("/claude/chat/ask", async (req, reply) => {
+  const dev = await actingUser(req);
+  const b = z.object({ topic: topicSchema, context: contextSchema.optional(), question: z.string().min(1).max(4000) }).parse(req.body ?? {});
+  try { return await askChat({ topic: b.topic, userId: dev.id, question: b.question, ctx: b.context ?? {} }); } catch (e) { if (e instanceof ChatError) return reply.code(409).send({ error: e.message }); throw e; }
+});
+
+app.post("/claude/messages/:id/helpful", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ helpful: z.boolean(), note: z.string().max(1000).optional() }).parse(req.body ?? {});
+  try { return await markHelpful(id, dev.id, b.helpful, b.note); } catch (e) { if (e instanceof ChatError) return reply.code(409).send({ error: e.message }); throw e; }
+});
+
+app.get("/claude/conversations", async (req) => {
+  await actingUser(req);
+  const q = z.object({ clientId: z.string().uuid().optional(), userId: z.string().uuid().optional(), limit: z.coerce.number().int().optional() }).parse(req.query ?? {});
+  return { conversations: await listConversations(q) };
+});
+
+app.get("/claude/conversations/:id", async (req, reply) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const c = await getConversation(id);
+  if (!c) return reply.code(404).send({ error: "conversation" });
+  return c;
+});
+
+/* a proposal runs only from here — the person's click (§5.2); a declared-cost question the same */
+app.post("/claude/proposals/:id/run", async (req) => {
+  const dev = await actingUser(req);
+  return runProposal((req.params as { id: string }).id, dev.id);
+});
+app.post("/claude/proposals/:id/cancel", async (req) => {
+  const dev = await actingUser(req);
+  return cancelProposal((req.params as { id: string }).id, dev.id);
+});
+app.get("/claude/proposals/:id/preview", async (req) => {
+  const dev = await actingUser(req);
+  return proposalPreview((req.params as { id: string }).id, dev.id);
+});
+
+/* conclusions and the policy editor (claude-in-dcc §9.3–§9.4, §9.9–§9.10) */
+app.get("/claude/insights", async (req) => {
+  await actingUser(req);
+  const q = req.query as { month?: string; clientId?: string };
+  return insightsView({ month: q.month || undefined, clientId: q.clientId || undefined });
+});
+// The analysis is a named action: one recorded `usage_insights` call, on a click, never in the background.
+app.post("/claude/insights/analyse", async (req) => {
+  const dev = await actingUser(req);
+  const b = z.object({ month: z.string().optional(), clientId: z.string().uuid().optional() }).parse(req.body ?? {});
+  return analyseInsights({ month: b.month, clientId: b.clientId, by: { userId: dev.id } });
+});
+app.post("/claude/insights/:id/task", async (req, reply) => {
+  const dev = await actingUser(req);
+  const r = await openImprovementTask((req.params as { id: string }).id, { userId: dev.id });
+  return reply.code(r.created ? 201 : 200).send(r);
+});
+app.post("/claude/insights/:id/dismiss", async (req) => {
+  await actingUser(req);
+  return dismissInsight((req.params as { id: string }).id);
+});
+app.get("/claude/policy", async (req) => {
+  await actingUser(req);
+  return policyView();
+});
+app.put("/claude/policy", async (req) => {
+  const dev = await actingUser(req);
+  return updatePolicy(req.body ?? {}, { userId: dev.id });
+});
+app.put("/clients/:id/claude-retention", async (req) => {
+  const dev = await actingUser(req);
+  const b = z.object({ days: z.number().int().nullable() }).parse(req.body ?? {});
+  return setClientRetention((req.params as { id: string }).id, b.days, { userId: dev.id });
+});
+// The daily retention pass, on demand — the same function the schedule runs; nothing expires early.
+app.post("/claude/retention/run", async (req) => {
+  await actingUser(req);
+  return archiveExpiredConversations();
+});
+app.post("/claude/messages/:id/run-code", async (req) => {
+  const dev = await actingUser(req);
+  return runCodeQuestion((req.params as { id: string }).id, dev.id);
+});
+app.post("/claude/messages/:id/run-code/cancel", async (req) => {
+  const dev = await actingUser(req);
+  return cancelCodeQuestion((req.params as { id: string }).id, dev.id);
+});
+
+app.get("/claude/glossary/:screen", async (req, reply) => {
+  await actingUser(req);
+  const { screen } = req.params as { screen: string };
+  const g = glossaryFor(screen);
+  if (!g) return reply.code(404).send({ error: "glossary" });
+  return g;
 });
 
 /** The run's terminal: the live Claude Code session plus DCC's own lines.
@@ -751,7 +855,8 @@ app.post("/workitems/:id/assess", async (req) => {
     model: z.string().optional(),
   }).parse(req.body ?? {});
   const wi = await locateWorkItem({ id });
-  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "assess", by: { userId: dev.id }, assessOpts: b });
+  // The button and the chat's proposal are two doors to the same registry entry (claude-in-dcc §5.1).
+  return runAction("assess", b, { kind: "wi", id, clientId: wi.clientId, workitemId: id }, { userId: dev.id }, "button");
 });
 
 // render (never run) one readiness-check tier's actual prompt — powers
@@ -774,7 +879,7 @@ app.post("/workitems/:id/breakdown", async (req) => {
   if (b.reason?.trim()) {
     await recordDecision({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, trigger: "rebreakdown", reason: b.reason });
   }
-  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "breakdown", by: { userId: dev.id } });
+  return runAction("breakdown", {}, { kind: "wi", id, clientId: wi.clientId, workitemId: id }, { userId: dev.id }, "button");
 });
 
 // render (never run) the breakdown prompt — same "what will be sent"
@@ -784,23 +889,6 @@ app.get("/workitems/:id/breakdown-preview", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
   return previewBreakdownPrompt({ clientId: wi.clientId, workitemId: id });
-});
-
-// end-of-requirement improvement recommendations ("המלצות לשיפור") — its
-// own kick-off + polling routes, deliberately separate from the generic
-// flow-run ones below so a retro run is never mistaken for the latest
-// assess/breakdown/implement run by a screen still polling that one
-// (design notes, `requirement-retro-recommendations`).
-app.post("/workitems/:id/retro", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const wi = await locateWorkItem({ id });
-  return startFlowRun({ clientId: wi.clientId, workitemId: id, kind: "retro", by: { userId: dev.id } });
-});
-app.get("/workitems/:id/retro", async (req) => {
-  const { id } = req.params as { id: string };
-  await locateWorkItem({ id }); // tenant check
-  return (await getRetroRunView(id)) ?? { id: null, kind: null, state: "idle", lines: [], result: null, error: null };
 });
 
 /* ── Bug ↔ Task links (bug-change-request-lifecycle) ─────────────── */
@@ -951,10 +1039,8 @@ app.post("/tasks/:id/implement", async (req) => {
   const { id } = req.params as { id: string };
   const clientId = await taskClient(id);
   const d = await taskDetail(clientId, id);
-  if (!d.task.approvedAt) throw new Error("המשימה טרם אושרה — יש לאשר אותה בשלב הפירוק לפני שאפשר לתת ל-Claude לפתח.");
-  return startFlowRun({
-    clientId, workitemId: d.requirement.id, taskId: id, kind: "implement", by: { userId: dev.id },
-  });
+  // The registry's `allowed` is the approval gate; the button and the chat's proposal pass through the same one.
+  return runAction("implement", {}, { kind: "task", id, clientId, workitemId: d.requirement.id }, { userId: dev.id }, "button");
 });
 
 app.get("/tasks/:id/flow-run", async (req) => {
@@ -996,8 +1082,8 @@ app.post("/tasks/:id/push", async (req) => {
 app.post("/tasks/:id/approve", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional(), prompt: z.string().optional() }).parse(req.body);
-  return approveTask(b.clientId, id, { userId: dev.id }, { intent: b.intent, appetite: b.appetite, prompt: b.prompt });
+  const { clientId, ...patch } = z.object({ clientId: z.string().uuid(), intent: z.string().optional(), appetite: z.enum(["small", "standard", "large"]).optional(), prompt: z.string().optional() }).parse(req.body);
+  return runAction("approve_task", patch, { kind: "task", id, clientId, workitemId: null }, { userId: dev.id }, "button");
 });
 
 app.post("/tasks/:id/reject", async (req) => {
@@ -1049,32 +1135,21 @@ app.post("/workitems/:id/gaps", async (req, reply) => {
   return reply.code(201).send(row);
 });
 
-// compose (never send) a business-language message to the requirement's
-// requester, listing the open questions. Cheap model — this is rephrasing.
-app.post("/workitems/:id/gap-letter", async (req) => {
-  const dev = await actingUser(req);
-  const { id } = req.params as { id: string };
-  const { gapIds } = (req.body ?? {}) as { gapIds?: string[] };
-  const wi = await locateWorkItem({ id });
-  return composeClientLetter({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id }, ...(gapIds ? { gapIds } : {}) });
-});
-
-// every letter ever composed for this requirement, newest first — read
-// back, never re-runs the AI (a real gap a user hit live: losing an
-// unsaved letter by navigating away meant paying for a re-run just to
-// get the same text back).
-app.get("/workitems/:id/gap-letters", async (req) => {
-  const { id } = req.params as { id: string };
-  const wi = await locateWorkItem({ id });
-  return { letters: await getRecentClientLetters(wi.clientId, id) };
-});
-
 // per-run cost detail behind the requirement's total — what each AI
 // call was, which model, how long, how many tokens, how much.
 app.get("/workitems/:id/cost-detail", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
   return { rows: await requirementCostDetail(wi.clientId, id) };
+});
+
+// the same rows as the ledger shows them — what the web's cost detail and
+// the control center both render through one component (claude-in-dcc §8.2)
+app.get("/workitems/:id/calls", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return { calls: await callsForEntity(wi.clientId, { workitemId: id }) };
 });
 
 app.post("/gaps/:id/verify", async (req) => {
@@ -1241,34 +1316,38 @@ app.post("/workitems/:id/depends-on", async (req, reply) => {
   return reply.code(201).send({ linked: true });
 });
 
-/* ── model routing ───────────────────────────────────────────────── */
+/* ── Claude's control center (claude-in-dcc §9) — every number is a slice of the ledger ── */
 
-app.post("/workitems/:id/route", async (req, reply) => {
-  const dev = await actingUser(req);
+const centerQuery = z.object({
+  month: z.string().regex(/^\d{4}-\d{2}$/).optional(),
+  clientId: z.string().uuid().optional(),
+  userId: z.string().uuid().optional(),
+  capability: z.string().optional(),
+  model: z.string().optional(),
+  outcome: z.string().optional(),
+  escalated: z.enum(["1", "true"]).optional(),
+  workitemId: z.string().uuid().optional(),
+  limit: z.coerce.number().int().optional(),
+  offset: z.coerce.number().int().optional(),
+});
+const centerFilter = (q: z.infer<typeof centerQuery>) => ({ ...q, escalated: !!q.escalated });
+
+app.get("/claude/overview", async (req) => {
+  await actingUser(req);
+  return claudeOverview(centerFilter(centerQuery.parse(req.query ?? {})));
+});
+
+app.get("/claude/calls", async (req) => {
+  await actingUser(req);
+  return claudeCalls(centerFilter(centerQuery.parse(req.query ?? {})));
+});
+
+app.get("/claude/calls/:id", async (req, reply) => {
+  await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z
-    .object({
-      capability: z.enum(["brief", "matching", "narrative", "gap_detection", "decomposition", "review", "execution"]),
-      signals: z
-        .object({
-          ambiguity: z.enum(["low", "medium", "high"]).optional(),
-          breadth: z.number().int().optional(),
-          reversible: z.boolean().optional(),
-          openGaps: z.number().int().optional(),
-          novelty: z.enum(["low", "medium", "high"]).optional(),
-          recentEvents: z.number().int().optional(),
-          mechanical: z.boolean().optional(),
-        })
-        .default({}),
-      record: z.boolean().default(true),
-    })
-    .parse(req.body);
-  const wi = await locateWorkItem({ id });
-  const decision = route(b.capability as Capability, b.signals);
-  if (b.record) {
-    await recordRouting({ clientId: wi.clientId, workitemId: wi.id, by: { userId: dev.id }, decision });
-  }
-  return reply.code(200).send(decision);
+  const row = await claudeCallById(id);
+  if (!row) return reply.code(404).send({ error: "call" });
+  return row;
 });
 
 /* ── tasks ────────────────────────────────────────────────────────── */
@@ -1484,6 +1563,9 @@ if (import.meta.main) {
   // marked failed (its button reruns it); a live Claude session is marked
   // disconnected and can be reopened from the same conversation.
   recoverOnboardingRuns().then((n) => { if (n) app.log.warn(`onboarding: ${n} interrupted stage(s)/session(s) recovered after restart`); }).catch((e) => app.log.error(e));
+  // Retention (claude-in-dcc §9.10): expired conversations lose their text
+  // once a day, inside this process — never a second process on the database.
+  scheduleRetention(app.log);
 
   // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
   // un-openable if the process is killed mid-write, so always close it.

@@ -14,6 +14,8 @@ const post = <T,>(p: string, body: unknown) =>
   fetch(`/api${p}`, { method: "POST", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const patch = <T,>(p: string, body: unknown) =>
   fetch(`/api${p}`, { method: "PATCH", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
+const put = <T,>(p: string, body: unknown) =>
+  fetch(`/api${p}`, { method: "PUT", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const del = <T,>(p: string, body?: unknown) =>
   fetch(`/api${p}`, body
     ? { method: "DELETE", headers: H, body: JSON.stringify(body) }
@@ -161,6 +163,124 @@ export type RequirementCostSummary = {
   byKind: Record<string, { count: number; usd: number }>;
 };
 export const getCostSummary = (id: string) => get<RequirementCostSummary>(`/workitems/${id}/cost`);
+
+/* ── Claude: the ledger and its control center (claude-in-dcc §8, §9) ── */
+export type ClaudeCallView = {
+  id: string; startedAt: string; finishedAt: string; durationMs: number | null;
+  clientId: string; clientName: string; userId: string; userName: string;
+  entityKind: string; entityId: string | null; workitemId: string | null; workitemTitle: string | null; screen: string | null;
+  capability: string; trigger: string; label: string;
+  conversationId: string | null; messageId: string | null; parentCallId: string | null;
+  modelRequested: string | null; modelUsed: string | null; effort: string | null; policyVersion: number | null; policyRule: string | null; numTurns: number | null;
+  inputTokens: number; cacheReadTokens: number; cacheWriteTokens: number; outputTokens: number; costUsd: number; priceListVersion: number | null;
+  outcome: string; errorText: string | null; unanswered: boolean; sourceRef: string | null;
+  meta: Record<string, unknown>;
+};
+export type CenterBar = { key: string; label: string; usd: number; calls: number };
+export type ClaudeOverview = {
+  month: string;
+  tiles: {
+    costUsd: number; calls: number; budgetPct: number | null;
+    questions: number; answeredWithoutModel: number; answeredWithoutModelPct: number;
+    unhelpful: number; unhelpfulPct: number; reasked: number;
+    errors: number; timeouts: number; escalated: number; unanswered: number;
+  };
+  byClient: CenterBar[]; byCapability: CenterBar[]; byModel: CenterBar[]; byScreen: CenterBar[];
+  byUser: (CenterBar & { questions: number; withoutModelPct: number; unhelpfulPct: number })[];
+  policy: { version: number; defaults: number; escalated: number; manual: number; capped: number };
+  tokens: { input: number; cacheRead: number; cacheWrite: number; output: number; cacheSharePct: number };
+  chat: { calls: number; costPerQuestionUsd: number | null; tokensPerTurn: number | null; rollovers: number; rolloverCostUsd: number; archived: number };
+  chatByScreen: { screen: string; questions: number; withoutModel: number; withoutModelPct: number; unhelpful: number; unhelpfulPct: number }[];
+  escalationByCapability: { capability: string; escalated: number; total: number; pct: number }[];
+};
+export type CenterQuery = Partial<{ month: string; clientId: string; userId: string; capability: string; model: string; outcome: string; escalated: "1"; workitemId: string; limit: number; offset: number }>;
+const qs = (q: CenterQuery) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v)); const s = p.toString(); return s ? `?${s}` : ""; };
+export const getClaudeOverview = (q: CenterQuery) => get<ClaudeOverview>(`/claude/overview${qs(q)}`);
+export const getClaudeCalls = (q: CenterQuery) => get<{ rows: ClaudeCallView[]; total: number; month: string }>(`/claude/calls${qs(q)}`);
+export const getClaudeCall = (id: string) => get<ClaudeCallView>(`/claude/calls/${id}`);
+/** Every call behind a requirement's total, all time — one ledger row each. */
+export const getWorkitemCalls = (id: string) => get<{ calls: ClaudeCallView[] }>(`/workitems/${id}/calls`);
+
+/* the one chat (claude-in-dcc §4) */
+export type TopicRef = { kind: "wi" | "task" | "pr" | "run" | "app"; id?: string | null };
+export type ChatContext = { screen?: string | null; facts?: Record<string, unknown>; suggestions?: string[]; actions?: string[] };
+export type ChatMessage = {
+  id: string; conversationId: string; role: string; kind: string; text: string; source: string;
+  callId: string | null; payload: Record<string, unknown>; helpful: boolean | null; helpfulSource: string | null; createdAt: string;
+  cost: { model: string | null; effort: string | null; inputTokens: number; outputTokens: number; cacheReadTokens: number; costUsd: number } | null;
+};
+export type ConversationView = {
+  id: string; clientId: string; clientName: string | null; topicKey: string; topicKind: string; topicId: string | null; topicTitle: string;
+  status: string; continuedFrom: string | null; continuesAs: string | null; createdBy: string; createdByName: string | null;
+  lastMessageAt: string; createdAt: string; retainUntil: string | null; messageCount: number; costUsd: number; calls: number; lastText: string | null;
+};
+export type GlossaryEntry = { key: string; title: string; aliases?: string[]; explain: string; press?: string; kind: "button" | "term" | "field" };
+export type ScreenGlossary = { screen: string; about: string; entries: GlossaryEntry[] };
+export type ChatOpen = { topic: { key: string; kind: string; id: string | null; title: string; screen: string }; conversation: ConversationView | null; messages: ChatMessage[]; glossary: ScreenGlossary | null; suggestions: string[] };
+export type ChatAnswer = { conversation: ConversationView; messages: ChatMessage[]; rolledOver: boolean; suggestions: string[] };
+export const openChat = (body: { topic: TopicRef; context?: ChatContext }) => post<ChatOpen>("/claude/chat/open", body);
+export const askChat = (body: { topic: TopicRef; context?: ChatContext; question: string }) => post<ChatAnswer>("/claude/chat/ask", body);
+export const markHelpful = (messageId: string, helpful: boolean, note?: string) => post<{ helpful: boolean }>(`/claude/messages/${messageId}/helpful`, { helpful, note });
+export const getConversations = (q: { clientId?: string; userId?: string; limit?: number } = {}) => get<{ conversations: ConversationView[] }>(`/claude/conversations${qs(q as CenterQuery)}`);
+export const getConversation = (id: string) => get<{ conversation: ConversationView; messages: ChatMessage[]; topic: TopicRef; suggestions: string[]; glossary: ScreenGlossary | null }>(`/claude/conversations/${id}`);
+export const getGlossary = (screen: string) => get<ScreenGlossary>(`/claude/glossary/${screen}`);
+/* actions through the chat (claude-in-dcc §5): a proposal is a message; running it is the person's click */
+export type ProposalPayload = {
+  key: string; title: string; describe: string; params: Record<string, unknown>; consequential: boolean;
+  estimate: { capability: string; model: string; effort: string; usd: number | null } | null;
+  status: "proposed" | "running" | "done" | "cancelled" | "failed"; result?: unknown; error?: string; ranAt?: string; recorded?: string;
+};
+export type DeclaredCostPayload = {
+  reason: string; question: string; estimate: { model: string; effort: string; usdMin: number; usdMax: number };
+  status: "proposed" | "running" | "done" | "cancelled" | "failed"; error?: string;
+};
+export const runProposal = (messageId: string) => post<{ message: ChatMessage }>(`/claude/proposals/${messageId}/run`, {});
+export const cancelProposal = (messageId: string) => post<{ message: ChatMessage }>(`/claude/proposals/${messageId}/cancel`, {});
+export const getProposalPreview = (messageId: string) => get<{ prompt: string; promptHe: string }>(`/claude/proposals/${messageId}/preview`);
+export const runCodeQuestion = (messageId: string) => post<{ message: ChatMessage; answer: ChatMessage }>(`/claude/messages/${messageId}/run-code`, {});
+export const cancelCodeQuestion = (messageId: string) => post<{ message: ChatMessage }>(`/claude/messages/${messageId}/run-code/cancel`, {});
+
+/* conclusions and the policy editor (claude-in-dcc §9.3–§9.4, §9.9–§9.10) */
+export type InsightCluster = {
+  id: string | null; clientId: string; clientName: string; screen: string; questionKey: string; sampleQuestion: string;
+  count: number; firstAskedAt: string; lastAskedAt: string; aboveThreshold: boolean;
+  finding: string | null; recommendation: string | null; status: "new" | "open" | "task_opened" | "dismissed";
+  workitemId: string | null; analysedCount: number | null; analysedAt: string | null;
+};
+export type InsightCallRow = {
+  id: string; startedAt: string; clientName: string; userName: string; screen: string | null; capability: string; label: string;
+  modelUsed: string | null; policyRule: string | null; costUsd: number; outcome: string; errorText: string | null; conversationId: string | null; workitemId: string | null;
+};
+export type UnhelpfulRow = { id: string; createdAt: string; clientName: string; screen: string; question: string | null; answer: string; note: string | null; source: string | null; conversationId: string };
+export type InsightsView = {
+  month: string; threshold: number; estimate: { model: string; effort: string; usd: number | null };
+  clusters: InsightCluster[]; unanswered: InsightCallRow[]; unhelpful: UnhelpfulRow[]; failed: InsightCallRow[]; escalated: InsightCallRow[];
+};
+export const getInsights = (q: CenterQuery) => get<InsightsView>(`/claude/insights${qs(q)}`);
+export const analyseInsights = (body: { month?: string; clientId?: string }) => post<{ analysed: number; callId: string | null; costUsd: number | null; clusters: InsightCluster[] }>("/claude/insights/analyse", body);
+export const openImprovementTask = (id: string) => post<{ workitemId: string; created: boolean }>(`/claude/insights/${id}/task`, {});
+export const dismissInsight = (id: string) => post<{ status: string }>(`/claude/insights/${id}/dismiss`, {});
+
+export type PolicyCapability = { default: string; effort?: string; maxUsdPerCall?: number; maxInputTokens?: number; escalateOn?: Record<string, unknown>[]; downgradeOn?: Record<string, unknown>[] };
+export type PolicyPrice = { input: number; cacheWrite: number; cacheRead: number; output: number };
+export type PolicyDoc = {
+  version: number;
+  tiers: Record<string, { model: string; maxUsdPerCall: number }>;
+  /** `$comment` keys ride along from the file — a value that is a string is one of those. */
+  prices: Record<string, PolicyPrice | string>;
+  capabilities: Record<string, PolicyCapability | string>;
+  chat: { rolloverInputTokens: number; rolloverColdDays: number; retentionDays: number; declareCostAboveUsd: number; insightsMinRepeats: number };
+  guardrails: { killAfterStuckIterations: number; budgetWarnAtFraction: number };
+};
+export type PolicyChange = { path: string; from?: unknown; to?: unknown };
+export type PolicyView = {
+  policy: PolicyDoc;
+  lastChange: { at: string; byName: string | null; fromVersion: number; toVersion: number; changes: PolicyChange[] } | null;
+  retention: { defaultDays: number; clients: { clientId: string; clientName: string; days: number | null }[] };
+};
+export const getPolicy = () => get<PolicyView>("/claude/policy");
+export const putPolicy = (patch: Record<string, unknown>) => put<{ policy: PolicyDoc; changes: PolicyChange[] }>("/claude/policy", patch);
+export const setClientRetention = (clientId: string, days: number | null) => put<{ clientId: string; days: number | null }>(`/clients/${clientId}/claude-retention`, { days });
 export const getFlow = (requirementId: string) => get<FlowData>(`/requirements/${requirementId}/flow`);
 export const getInbox = (clientId: string) => get<{ events: EventRow[] }>(`/clients/${clientId}/inbox`);
 
@@ -185,23 +305,6 @@ export type AssessResult = {
   title: string; summary: string; whatChanges: string[]; baked: boolean; rationale: string[];
   gaps: AssessGap[]; repoUsed: string | null;
 };
-export type ClientLetter = {
-  subject: string; body: string; gapCount: number;
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null;
-};
-export const composeGapLetter = (id: string, gapIds: string[]) =>
-  post<ClientLetter>(`/workitems/${id}/gap-letter`, { gapIds });
-export type ClientLetterHistoryItem = {
-  id: string; subject: string; body: string; gapCount: number; composedAt: string;
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null; model: string | null;
-};
-/** Every letter ever composed for this requirement, newest first — read back, never re-runs the AI. */
-export const getGapLetters = (id: string) => get<{ letters: ClientLetterHistoryItem[] }>(`/workitems/${id}/gap-letters`);
-export type CostDetailRow = {
-  id: string; occurredAt: string; kind: string; label: string; model: string | null;
-  costUsd: number; inputTokens: number; outputTokens: number; durationMs: number | null; numTurns: number | null;
-};
-export const getCostDetail = (id: string) => get<{ rows: CostDetailRow[] }>(`/workitems/${id}/cost-detail`);
 export type BreakdownResult = {
   depth: number;
   tasks: {
@@ -239,18 +342,6 @@ export const materializeTasks = (id: string) => post<MaterializeResult>(`/workit
 export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
 export const startAssess = (id: string, opts?: { promptKey?: string; customEmphasis?: string; model?: string }) =>
   post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, opts ?? {});
-export type RetroResult = {
-  summary: string; tokenSavings: string[]; timeSavings: string[]; unnecessaryActions: string[];
-  reworkCausingDecisions: string[]; breakdownFeedback: string[]; emphasize: string[];
-};
-export type RetroRun = {
-  id: string | null; kind: string | null;
-  state: "running" | "done" | "error" | "idle" | "rolled_back" | "stopped";
-  lines: string[]; result: RetroResult | null; error: string | null;
-  startedAt?: string | null; finishedAt?: string | null;
-};
-export const startRetro = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/retro`, {});
-export const getRetro = (id: string) => get<RetroRun>(`/workitems/${id}/retro`);
 export const previewAssess = (id: string, promptKey: string, customEmphasis?: string) =>
   get<{ prompt: string; promptHe: string | null; model: string | null; templateTitle: string }>(
     `/workitems/${id}/assess-preview?${new URLSearchParams({ promptKey, ...(customEmphasis ? { customEmphasis } : {}) })}`,
@@ -456,10 +547,12 @@ export type OnboardingStage = {
 };
 export type OnboardingEvent = { id: string; type: string; payload: Record<string, unknown>; actorUserId: string | null; occurredAt: string };
 export type OnboardingCost = {
-  totalCostUsd: number; apiCalls: number; inputTokens: number; outputTokens: number; apiDurationMs: number;
-  /** What the Hebrew assistant has cost — its own line, not part of the session. */
-  assistant: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
-  byStage: { stageKey: OnboardingStageKey; model: string | null; effort: string | null; costUsd: number }[];
+  /** Ledger rows for this run plus what the live process spent since the last slice (`liveUsd`, not yet recorded). */
+  totalCostUsd: number; liveUsd: number; apiCalls: number; inputTokens: number; outputTokens: number; apiDurationMs: number;
+  /** What the chat has cost on this run — its own ledger rows, not part of the session. */
+  chat: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
+  byStage: { stageKey: string; model: string | null; effort: string | null; costUsd: number }[];
+  calls: ClaudeCallView[];
 };
 export type CodeMapPlace = "cloud" | "local" | "both";
 export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
@@ -572,15 +665,6 @@ export const updateOnboardingAutomation = (repoId: string, runId: string, automa
 export const updateOnboardingModelChoices = (repoId: string, runId: string, choices: ModelPolicy) => patch<ModelPolicy>(`${ob(repoId, runId)}/model-choices`, { choices });
 export const getOnboardingFile = (repoId: string, runId: string, path: string) =>
   get<FileVersionsData>(`${ob(repoId, runId)}/file?${new URLSearchParams({ path })}`);
-export type AssistantMessage = { id: string; role: "user" | "assistant"; text: string; at: string; send?: { text: string; sentAt?: string; forced?: boolean } };
-export const getOnboardingAssistant = (repoId: string, runId: string) =>
-  get<{ messages: AssistantMessage[]; model: string; busy: boolean }>(`${ob(repoId, runId)}/assistant`);
-export const askOnboardingAssistant = (repoId: string, runId: string, question: string, screen: string) =>
-  post<{ message: AssistantMessage; costUsd: number }>(`${ob(repoId, runId)}/assistant`, { question, screen });
-export const resetOnboardingAssistant = (repoId: string, runId: string) => del<{ reset: boolean }>(`${ob(repoId, runId)}/assistant`);
-/** `busy`: the session does not look idle; `force` sends anyway. */
-export const sendToOnboardingSession = (repoId: string, runId: string, body: { text: string; messageId?: string; force?: boolean }) =>
-  post<{ sent: true; confirmed: boolean } | { sent: false; busy: true; reason: string }>(`${ob(repoId, runId)}/assistant/send`, body);
 /** The run's terminal socket, through the same `/api` proxy as every call. */
 export const onboardingTerminalUrl = (repoId: string, runId: string) =>
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api${ob(repoId, runId)}/terminal`;

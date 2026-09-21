@@ -41,10 +41,10 @@ Appetite: **standard**.
       renders `decision.made` rows with a warm background, an accent-left
       border, a "למה: <trigger label>" pill instead of the raw event type,
       and the reason itself as bold body text. Verified live (see 3.1).
-- [ ] 2.2 Reasons appear in the requirement's final summary (feeds
-      `requirement-retro-recommendations`) — not started; natural next
-      step once `requirement-retro-recommendations` itself is built, since
-      that's the only consumer of a "final summary" view today.
+- [ ] 2.2 Reasons appear in the requirement's final summary — not started.
+      The consumer today is the one chat's end-of-work recommendations on
+      the requirement (`claude-in-dcc`), which answer from the facts the
+      screen hands over; the decisions would join those facts.
 
 ## 3. Verify end to end
 

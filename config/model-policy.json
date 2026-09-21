@@ -1,23 +1,39 @@
 {
-  "$comment": "Model routing policy (architecture §6). Config-as-code: this is the GLOBAL layer. client/ and workitem-level overrides deep-merge on top, most specific wins. Every AI call declares its capability; route() picks a tier + budget from here and records a model.routed event when a model is actually invoked. The router itself is rules, not a model — no regress. escalateOn/downgradeOn are lists: ANY entry matching triggers (keys within one entry are AND).",
-  "version": 1,
+  "$comment": "Model routing policy (architecture §6, claude-in-dcc §6.3/§8.3/§9.9). Config-as-code: this is the GLOBAL layer; client-level overrides deep-merge on top. Every call to Claude declares its capability; route() picks a tier, effort and cap from here, and the decision is written on the call's ledger row together with `version`, so a cost change can be tied to a policy edit. The router is rules, not a model. escalateOn/downgradeOn are lists: ANY entry matching triggers (keys within one entry are AND). Edited from the control center (מדיניות ושמירה), which bumps `version` and records who changed it.",
+  "version": 6,
   "tiers": {
     "haiku": { "model": "claude-haiku-4-5-20251001", "maxUsdPerCall": 0.05 },
     "sonnet": { "model": "claude-sonnet-5", "maxUsdPerCall": 0.75 },
-    "opus": { "model": "claude-opus-5", "maxUsdPerCall": 4.0 }
+    "opus": { "model": "claude-opus-5", "maxUsdPerCall": 4 }
+  },
+  "prices": {
+    "$comment": "USD per million tokens, Anthropic's list prices as of 2026-09. The CLI reports each call's cost itself; the ledger keeps the price-list version so a cost can be recomputed from its tokens.",
+    "claude-haiku-4-5-20251001": { "input": 1, "cacheWrite": 1.25, "cacheRead": 0.1, "output": 5 },
+    "claude-sonnet-5": { "input": 2, "cacheWrite": 2.5, "cacheRead": 0.2, "output": 10 },
+    "claude-opus-5": { "input": 5, "cacheWrite": 6.25, "cacheRead": 0.5, "output": 25 }
   },
   "capabilities": {
-    "brief":        { "default": "haiku",  "escalateOn": [{ "recentEvents": 40 }] },
-    "matching":     { "default": "haiku" },
-    "narrative":    { "default": "haiku" },
-    "gap_detection":{ "default": "sonnet", "escalateOn": [{ "ambiguity": "high" }] },
-    "decomposition":{ "default": "sonnet", "escalateOn": [{ "breadth": 4 }, { "openGaps": 3 }, { "novelty": "high" }] },
-    "review":       { "default": "sonnet" },
-    "execution":    { "default": "sonnet", "escalateOn": [{ "breadth": 5 }, { "ambiguity": "high" }, { "novelty": "high" }], "downgradeOn": [{ "mechanical": true }] },
-    "$onboarding_comment": "The onboarding session is Claude Code's own /init, run once per repository; what it writes steers every later session there for months, so it gets a strong default. A person can change model and effort per run, or type /model and /effort in the session itself.",
+    "$comment": "A capability nothing calls is a statement, not a policy — every key here has a caller, and the control center shows how many calls each one had this month.",
+    "gap_detection": { "default": "sonnet", "effort": "medium", "escalateOn": [{ "ambiguity": "high" }] },
+    "decomposition": { "default": "sonnet", "effort": "medium", "escalateOn": [{ "breadth": 4 }, { "openGaps": 3 }, { "novelty": "high" }] },
+    "execution": { "default": "sonnet", "effort": "high", "escalateOn": [{ "breadth": 5 }, { "ambiguity": "high" }, { "novelty": "high" }], "downgradeOn": [{ "mechanical": true }] },
+    "$onboarding_comment": "The onboarding session is Claude Code's own /init, run once per repository; what it writes steers every later session there for months, so it gets a strong default. A person can change model and effort per run, or type /model and /effort in the session itself. Its cost is recorded as ledger slices, one per stage of the run.",
     "onboarding_init": { "default": "sonnet", "effort": "high" },
-    "$assistant_comment": "The Hebrew assistant next to the onboarding terminal: answers questions about what the session is doing, from a digest of it. Sonnet: Haiku dropped content when it was tested on the same kind of screen. Read-only; its cost is its own line in the run.",
-    "onboarding_assistant": { "default": "sonnet" }
+    "$chat_comment": "The one chat. It answers from the facts the screen hands it; step zero answers glossary and fact questions with no call at all. Haiku, no thinking, short answers. A call whose input passes maxInputTokens is refused and recorded — the sign that the delta discipline broke.",
+    "chat": { "default": "haiku", "effort": "low", "maxInputTokens": 60000 },
+    "chat_code_read": { "default": "sonnet", "effort": "medium" },
+    "conversation_summary": { "default": "haiku", "effort": "low", "maxUsdPerCall": 0.1 },
+    "usage_insights": { "default": "sonnet", "effort": "medium", "maxUsdPerCall": 0.5 },
+    "$interactive_comment": "A person's own Claude Code session, reported by the SessionEnd hook — recorded so the ledger is every call, never routed.",
+    "interactive_session": { "default": "sonnet" }
+  },
+  "chat": {
+    "$comment": "Opening values (claude-in-dcc §6.5, §6.6, §9.10); tuned by measurement in the control center, not by estimate (§6.8).",
+    "rolloverInputTokens": 40000,
+    "rolloverColdDays": 14,
+    "retentionDays": 90,
+    "declareCostAboveUsd": 0.1,
+    "insightsMinRepeats": 5
   },
   "guardrails": {
     "killAfterStuckIterations": 3,

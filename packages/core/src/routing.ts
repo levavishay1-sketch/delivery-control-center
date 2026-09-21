@@ -1,34 +1,28 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { sql } from "drizzle-orm";
-import { appendEvent, withTenant } from "@dcc/db";
-import { clientBudget } from "@dcc/db/schema";
 
 /**
- * Model routing (architecture §6). EVERY AI call in the system goes
- * through here first — brief upkeep, matching, gap detection,
- * decomposition, execution, review. The router is deterministic rules,
- * not a model (no infinite regress). `route()` returns the decision;
- * `recordRouting()` writes the `model.routed` audit event — called only
- * when a model is actually invoked, so an assembled/no-LLM brief creates
- * no event.
+ * Model routing (architecture §6, claude-in-dcc §6.3 / §8.3 / §9.9).
+ * EVERY call to Claude goes through `route()` inside `runClaudeRaw`, and
+ * the decision — tier, model, effort, cap, the rule that fired, the policy
+ * version — is written on the call's ledger row. The router is
+ * deterministic rules, not a model (no infinite regress).
  *
- * Resolution order (global → client → workitem, most specific wins) is
- * a deep-merge of policy layers. Phase 1 ships the global layer only;
- * `route()` already accepts an `overrides` layer so client/workitem
- * slots in without a signature change.
+ * Resolution order (global → client → workitem, most specific wins) is a
+ * deep-merge of policy layers; `route()` takes an `overrides` layer so a
+ * client layer slots in without a signature change.
  */
 
 export type Capability =
-  | "brief"
-  | "matching"
-  | "narrative"
   | "gap_detection"
   | "decomposition"
-  | "review"
   | "execution"
   | "onboarding_init"
-  | "onboarding_assistant";
+  | "chat"
+  | "chat_code_read"
+  | "conversation_summary"
+  | "usage_insights"
+  | "interactive_session";
 
 export type Tier = "haiku" | "sonnet" | "opus";
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
@@ -43,23 +37,87 @@ export type RoutingSignals = {
   mechanical?: boolean;
 };
 
+export type ModelPrice = { input: number; cacheWrite: number; cacheRead: number; output: number };
+
+export type CapabilityPolicy = {
+  default: Tier;
+  effort?: Effort;
+  escalateOn?: Record<string, unknown>[];
+  downgradeOn?: Record<string, unknown>[];
+  maxUsdPerCall?: number;
+  /** A chat call whose input passes this is refused and recorded (claude-in-dcc §2.12). */
+  maxInputTokens?: number;
+};
+
+export type ChatPolicy = {
+  rolloverInputTokens: number;
+  rolloverColdDays: number;
+  retentionDays: number;
+  declareCostAboveUsd: number;
+  insightsMinRepeats: number;
+};
+
 export type Policy = {
   version: number;
   tiers: Record<Tier, { model: string; maxUsdPerCall: number }>;
-  capabilities: Record<
-    string,
-    { default: Tier; effort?: Effort; escalateOn?: Record<string, unknown>[]; downgradeOn?: Record<string, unknown>[]; maxUsdPerCall?: number }
-  >;
+  prices: Record<string, ModelPrice>;
+  capabilities: Record<string, CapabilityPolicy>;
+  chat: ChatPolicy;
   guardrails: { killAfterStuckIterations: number; budgetWarnAtFraction: number };
 };
 
-const GLOBAL_POLICY_PATH = fileURLToPath(new URL("../../../config/model-policy.json", import.meta.url));
+export const POLICY_PATH = fileURLToPath(new URL("../../../config/model-policy.json", import.meta.url));
 
 let cached: Policy | null = null;
 export function loadPolicy(): Policy {
-  if (!cached) cached = JSON.parse(readFileSync(GLOBAL_POLICY_PATH, "utf8")) as Policy;
+  if (!cached) cached = JSON.parse(readFileSync(POLICY_PATH, "utf8")) as Policy;
   return cached;
 }
+/** After the file changed on disk (the control center's editor writes it). */
+export function reloadPolicy(): Policy {
+  cached = null;
+  return loadPolicy();
+}
+const isPlain = (x: unknown): x is Record<string, unknown> => !!x && typeof x === "object" && !Array.isArray(x);
+const isFlat = (x: unknown) => isPlain(x) && Object.values(x).every((y) => y === null || typeof y !== "object");
+/** A value the file writes on one line: a primitive, a flat object, or a list of those. */
+const inlineable = (x: unknown): boolean =>
+  x === null || typeof x !== "object" || (Array.isArray(x) ? x.every((y) => y === null || typeof y !== "object" || isFlat(y)) : isFlat(x));
+const inline = (v: unknown): string =>
+  Array.isArray(v) ? `[${v.map(inline).join(", ")}]`
+    : isPlain(v) ? `{ ${Object.entries(v).filter(([, x]) => x !== undefined).map(([k, x]) => `${JSON.stringify(k)}: ${inline(x)}`).join(", ")} }`
+    : JSON.stringify(v);
+/** The file's own layout — the root and its sections indented, every entry
+ *  inside a section on one line when it can be — so a save from the control
+ *  center reads as the changed lines, not as a rewritten file. */
+export function formatPolicy(v: unknown, depth = 0): string {
+  const indent = "  ".repeat(depth);
+  if (Array.isArray(v)) {
+    if (inlineable(v)) return inline(v);
+    return `[\n${v.map((x) => `${indent}  ${formatPolicy(x, depth + 1)}`).join(",\n")}\n${indent}]`;
+  }
+  if (isPlain(v)) {
+    const entries = Object.entries(v).filter(([, x]) => x !== undefined);
+    if (!entries.length) return "{}";
+    if (depth >= 2 && entries.every(([, x]) => inlineable(x))) return inline(v);
+    return `{\n${entries.map(([k, x]) => `${indent}  ${JSON.stringify(k)}: ${formatPolicy(x, depth + 1)}`).join(",\n")}\n${indent}}`;
+  }
+  return JSON.stringify(v);
+}
+
+/** Write the policy back — the editor's path. Bumps `version`; keeps the file's `$comment` keys and its layout. */
+export function savePolicy(next: Policy): Policy {
+  const raw = JSON.parse(readFileSync(POLICY_PATH, "utf8")) as Record<string, unknown>;
+  const merged = { ...raw, ...next, version: (loadPolicy().version ?? 0) + 1 };
+  writeFileSync(POLICY_PATH, formatPolicy(merged) + "\n", "utf8");
+  return reloadPolicy();
+}
+
+/** The policy's chat values with the file's defaults as the floor. */
+export const chatPolicy = (): ChatPolicy => {
+  const defaults: ChatPolicy = { rolloverInputTokens: 40_000, rolloverColdDays: 14, retentionDays: 90, declareCostAboveUsd: 0.1, insightsMinRepeats: 5 };
+  return { ...defaults, ...(loadPolicy().chat ?? {}) };
+};
 
 const ORDER: Record<"low" | "medium" | "high", number> = { low: 0, medium: 1, high: 2 };
 
@@ -87,7 +145,9 @@ export type RoutingDecision = {
   model: string;
   effort: Effort;
   budgetUsd: number;
+  maxInputTokens: number | null;
   rationale: string;
+  policyVersion: number;
 };
 
 const DEFAULT_EFFORT: Effort = "medium";
@@ -109,7 +169,7 @@ export function route(
   overrides?: Partial<Policy>,
   /** A person's explicit choice for this one call — wins over both the
    *  policy default and any signal-driven escalation, per field. */
-  choice?: { model?: string; effort?: Effort },
+  choice?: { model?: string | undefined; effort?: Effort | string | undefined },
 ): RoutingDecision {
   const policy = { ...loadPolicy(), ...overrides };
   const cap = policy.capabilities[capability] ?? { default: "sonnet" as Tier };
@@ -133,39 +193,26 @@ export function route(
   const budgetUsd = Math.max(t.maxUsdPerCall, cap.maxUsdPerCall ?? 0);
   let model = t.model;
   let effort: Effort = cap.effort ?? DEFAULT_EFFORT;
-  if (choice?.model && choice.model !== model) { model = choice.model; why.push(`model overridden by user (${choice.model})`); }
-  if (choice?.effort && choice.effort !== effort) { effort = choice.effort; why.push(`effort overridden by user (${choice.effort})`); }
-  return { capability, tier, model, effort, budgetUsd, rationale: why.join("; ") };
+  // A choice may name a tier ("sonnet"); the same tier as the policy's is not an override.
+  const chosenModel = choice?.model ? policy.tiers[choice.model as Tier]?.model ?? choice.model : undefined;
+  if (chosenModel && chosenModel !== model) { model = chosenModel; why.push(`model overridden by user (${choice!.model})`); }
+  if (choice?.effort && choice.effort !== effort) { effort = choice.effort as Effort; why.push(`effort overridden by user (${choice.effort})`); }
+  return { capability, tier, model, effort, budgetUsd, maxInputTokens: cap.maxInputTokens ?? null, rationale: why.join("; "), policyVersion: policy.version };
 }
 
-/** Write the audit event. Call when a model is actually invoked. */
-export async function recordRouting(input: {
-  clientId: string;
-  workitemId: string | null;
-  by: { userId: string };
-  decision: RoutingDecision;
-  /** actual spend for this call, if known. Falls back to a fraction of the budget as an estimate. */
-  actualUsd?: number;
-}) {
-  const spent = input.actualUsd ?? input.decision.budgetUsd * 0.25;
-  await withTenant(input.clientId, (tx) =>
-    tx
-      .update(clientBudget)
-      .set({ spentUsd: sql`${clientBudget.spentUsd} + ${spent}` })
-      .where(sql`${clientBudget.clientId} = ${input.clientId}`),
-  );
+/** List price for a model id, or for a tier alias the CLI accepts ("haiku", "sonnet", "opus"). */
+export function priceFor(model: string | null | undefined): ModelPrice | null {
+  if (!model) return null;
+  const policy = loadPolicy();
+  const id = policy.tiers[model as Tier]?.model ?? model;
+  return policy.prices[id] ?? Object.entries(policy.prices).find(([k]) => id.startsWith(k.replace(/-\d{8}$/, "")))?.[1] ?? null;
+}
 
-  return appendEvent({
-    clientId: input.clientId,
-    workitemId: input.workitemId,
-    source: "system",
-    type: "model.routed",
-    actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "router" },
-    payload: {
-      capability: input.decision.capability,
-      model: input.decision.model,
-      budgetUsd: input.decision.budgetUsd,
-      rationale: input.decision.rationale,
-    },
-  });
+/** What a call would cost from its tokens, at list price — the estimate a
+ *  declared-cost card shows and the recomputation the ledger allows. */
+export function estimateUsd(model: string | null | undefined, tokens: { input?: number; cacheRead?: number; cacheWrite?: number; output?: number }): number | null {
+  const p = priceFor(model);
+  if (!p) return null;
+  const m = 1_000_000;
+  return ((tokens.input ?? 0) * p.input + (tokens.cacheRead ?? 0) * p.cacheRead + (tokens.cacheWrite ?? 0) * p.cacheWrite + (tokens.output ?? 0) * p.output) / m;
 }

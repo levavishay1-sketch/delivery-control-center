@@ -731,3 +731,104 @@ a { color: var(--color-accent); }
 .rv-o.on { border: 2px solid var(--color-accent); background: var(--color-accent-muted); padding: 7px 9px; }
 .rv-ta { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 8px 10px; border: 1px solid var(--border-hairline); border-radius: var(--radius-md); background: var(--surface); color: var(--ink-900); resize: vertical; }
 .ob-note.ok { background: var(--status-healthy-bg); color: var(--status-healthy); }
+
+/* ── Claude in DCC (claude/CostLine.tsx, claude/CallsTable.tsx, screens/ClaudeCenter.tsx) ── */
+/* the one cost line: model · effort · tokens · cost, the same everywhere */
+.cost-line { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink-500); white-space: nowrap; flex-wrap: wrap; }
+.cost-line.md { font-size: 12.5px; }
+.cost-line b { color: var(--ink-700); font-weight: 600; }
+.cost-line .sep { color: var(--ink-400); }
+.cost-line .usd { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; font-weight: 650; color: var(--ink-900); }
+.cost-line .tok { direction: ltr; unicode-bidi: isolate; }
+.cost-line.free .usd { color: var(--status-healthy); }
+/* bars in the control center */
+.bars { display: grid; gap: 8px; }
+.bar { display: grid; grid-template-columns: 150px 1fr 74px; gap: 10px; align-items: center; font-size: 12.5px; }
+.bar .n { color: var(--ink-700); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar .v { text-align: end; direction: ltr; font-variant-numeric: tabular-nums; font-weight: 600; }
+.meter-fill.ai { background: linear-gradient(90deg, #9b6bf2, var(--status-ai)); }
+.meter-fill.healthy { background: linear-gradient(90deg, #22b989, var(--status-healthy)); }
+/* the calls table: an open row and its detail */
+.wtable.calls tbody tr.open td { background: var(--color-accent-muted); border-bottom: none; }
+.wtable.calls .mono { font-family: var(--mono); font-size: 11.5px; direction: ltr; unicode-bidi: isolate; }
+.wtable.calls .num { text-align: end; direction: ltr; font-variant-numeric: tabular-nums; }
+.wtable .muted { color: var(--ink-500); }
+.wtable .small { font-size: 11.5px; }
+.badge-soft.critical { background: var(--status-critical-bg); color: var(--status-critical); }
+.badge-soft { font-weight: 700; font-size: 15px; }
+.tab:disabled { cursor: default; opacity: .5; }
+
+/* ── the one chat (claude/ClaudeChat.tsx) ─────────────────────────── */
+/* the launcher: bottom-left of every screen */
+.cc-fab { position: fixed; bottom: 18px; left: 18px; z-index: 40; appearance: none; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 9px; padding: 11px 16px 11px 14px; border-radius: 999px; background: linear-gradient(160deg, #9b6bf2, var(--status-ai)); color: #fff; font: inherit; font-size: 13.5px; font-weight: 600; box-shadow: 0 10px 24px -8px rgb(124 58 237 / 0.6); }
+.cc-fab kbd { font-family: var(--font); font-size: 10px; background: rgb(255 255 255 / 0.2); border-radius: 5px; padding: 1px 6px; }
+.cc-fab .ic { stroke: #fff; }
+/* the dock: floating over the screen, or pinned beside it as a flex sibling of .canvas */
+.cc-dock { display: flex; flex-direction: column; width: 440px; max-width: 100vw; background: var(--surface); z-index: 30; min-height: 0; }
+.cc-dock.float { position: fixed; top: 0; bottom: 0; left: 0; border-inline-start: 1.5px solid var(--border-hairline); box-shadow: 0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.22); }
+.cc-dock.pinned { position: sticky; top: 0; height: 100vh; flex: 0 0 440px; border-inline-start: 1.5px solid var(--border-hairline); }
+.cc-head { padding: 16px 18px 12px; border-bottom: 1px solid var(--border-hairline); display: flex; flex-direction: column; gap: 8px; }
+.cc-head .top { display: flex; align-items: center; gap: 10px; }
+.cc-head h3 { font-size: 14px; font-weight: 700; }
+.cc-head .x { width: 28px; height: 28px; border-radius: 999px; background: var(--surface-muted); color: var(--ink-500); display: flex; align-items: center; justify-content: center; border: none; cursor: pointer; font-size: 14px; }
+.cc-pin { appearance: none; border: 1px solid var(--border-hairline); background: var(--surface); color: var(--ink-700); border-radius: 8px; padding: 4px 9px; font: inherit; font-size: 11.5px; cursor: pointer; margin-inline-start: auto; }
+.cc-pin[aria-pressed="true"] { background: var(--color-accent-muted); border-color: var(--color-accent); color: var(--color-accent-dark); }
+.cc-topic { display: flex; align-items: center; gap: 8px; background: var(--surface-tint-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 8px 10px; font-size: 12px; color: var(--ink-700); }
+.cc-topic .k { font-size: 10.5px; color: var(--ink-500); white-space: nowrap; }
+.cc-topic .t { font-weight: 600; color: var(--ink-900); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-topic a { margin-inline-start: auto; font-size: 11.5px; white-space: nowrap; cursor: pointer; }
+.cc-topic.flash { animation: cc-flash 1.4s ease-out; }
+@keyframes cc-flash { from { background: var(--color-accent-muted); border-color: var(--color-accent); } to { background: var(--surface-tint-2); } }
+.cc-msgs { flex: 1; overflow: auto; padding: 14px 18px; display: flex; flex-direction: column; gap: 12px; }
+.cc-msg { max-width: 94%; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; line-height: 1.7; animation: cc-pop .18s ease-out; }
+@keyframes cc-pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.cc-msg.user { align-self: flex-start; background: var(--color-accent-muted); color: var(--ink-900); }
+.cc-msg.assistant { align-self: flex-end; background: var(--surface-tint-2); border: 1px solid var(--border-soft); color: var(--ink-900); width: 94%; }
+.cc-msg .src { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cc-msg .foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--divider); flex-wrap: wrap; }
+.cc-help { margin-inline-start: auto; display: inline-flex; gap: 4px; }
+.cc-help button { appearance: none; border: 1px solid var(--border-hairline); background: var(--surface); border-radius: 999px; font: inherit; font-size: 11px; padding: 2px 9px; cursor: pointer; color: var(--ink-700); }
+.cc-help button[aria-pressed="true"] { background: var(--status-warning-bg); border-color: var(--status-warning); color: #7a4a10; }
+.cc-divider { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--ink-500); }
+.cc-divider span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 80%; }
+.cc-divider::before, .cc-divider::after { content: ""; flex: 1; height: 1px; background: var(--border-hairline); }
+.cc-chips { display: flex; gap: 6px; flex-wrap: wrap; padding: 0 18px 8px; }
+.cc-chip { appearance: none; border: 1px solid var(--border-hairline); background: var(--surface); border-radius: 999px; font: inherit; font-size: 12px; padding: 4px 11px; cursor: pointer; color: var(--ink-700); }
+.cc-chip:hover:not(:disabled) { border-color: var(--color-accent); color: var(--color-accent-dark); }
+.cc-chip:disabled { opacity: .5; cursor: default; }
+.cc-input { display: flex; gap: 8px; align-items: flex-end; padding: 0 18px 12px; }
+.cc-input textarea { flex: 1; resize: none; min-height: 44px; max-height: 160px; font: inherit; font-size: 13.5px; border: 1.5px solid var(--border-hairline); border-radius: 10px; padding: 8px 10px; background: var(--surface); color: var(--ink-900); }
+.cc-input textarea:focus { outline: none; border-color: var(--color-accent); }
+.cc-foot { padding: 0 18px 14px; font-size: 11px; color: var(--ink-500); line-height: 1.5; }
+/* a card inside an answer: a proposal, a declared cost, a refusal, a done action */
+.cc-card { margin-top: 8px; border: 1.5px solid var(--status-ai); background: var(--status-ai-bg); border-radius: 10px; padding: 10px 12px; }
+.cc-card.cost { border-color: var(--status-warning); background: var(--status-warning-bg); }
+.cc-card.no { border-color: var(--border-hairline); background: var(--surface-muted); }
+.cc-card.done { border-color: var(--status-healthy); background: var(--status-healthy-bg); }
+.cc-card .cap { font-size: 10.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--status-ai); margin-bottom: 4px; }
+.cc-card.cost .cap { color: #7a4a10; }
+.cc-card.done .cap { color: var(--status-healthy); }
+.cc-card.no .cap { color: var(--ink-500); }
+.cc-card .h { font-size: 13.5px; font-weight: 700; color: var(--ink-900); }
+.cc-card .d { font-size: 12.5px; color: var(--ink-700); line-height: 1.6; margin-top: 3px; }
+.cc-card .kv { display: grid; grid-template-columns: 74px 1fr; gap: 3px 10px; font-size: 12px; margin-top: 8px; }
+.cc-card .kv b { color: var(--ink-500); font-weight: 600; }
+.cc-card .acts { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
+/* the "?" next to a control, from the same glossary the chat answers from */
+.gl-wrap { position: relative; display: inline-block; }
+.gl-q { appearance: none; display: inline-flex; width: 18px; height: 18px; border-radius: 999px; border: 1px solid var(--border-hairline); background: var(--surface); color: var(--ink-500); font: inherit; font-size: 11px; font-weight: 700; align-items: center; justify-content: center; margin-inline-start: 6px; vertical-align: middle; cursor: pointer; padding: 0; }
+.gl-q:hover, .gl-q[aria-expanded="true"] { border-color: var(--color-accent); color: var(--color-accent-dark); }
+.gl-hint { position: absolute; top: 24px; inset-inline-start: 0; z-index: 50; width: 300px; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-panel); padding: 10px 12px; font-size: 12.5px; line-height: 1.6; color: var(--ink-700); text-align: start; font-weight: 400; white-space: normal; display: block; }
+.gl-hint b { display: block; color: var(--ink-900); font-size: 13px; margin-bottom: 2px; }
+.gl-hint .gl-press { display: block; margin-top: 4px; }
+.gl-hint .gl-press span { color: var(--ink-900); font-weight: 600; }
+.gl-hint .gl-foot { display: block; margin-top: 8px; font-size: 11px; color: var(--ink-500); }
+@media (max-width: 700px) { .cc-dock.float { width: 100vw; } .cc-fab { bottom: 12px; left: 12px; } }
+/* the conversations list (screens/ClaudeCenter.tsx) */
+.cv-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 12px; align-items: center; padding: 11px 14px; border-top: 1px solid var(--border-hairline); background: var(--surface); cursor: pointer; }
+.cv-row:first-child { border-top: none; }
+.cv-row:hover { background: var(--surface-muted); }
+.cv-row .ic { width: 26px; height: 26px; border-radius: 999px; background: var(--surface-muted); color: var(--ink-700); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+.cv-row .t { font-size: 13px; font-weight: 600; }
+.cv-row .s { font-size: 11.5px; color: var(--ink-500); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cv-row .r { text-align: end; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }

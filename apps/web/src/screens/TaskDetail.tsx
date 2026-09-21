@@ -6,6 +6,7 @@ import {
 } from "../api.ts";
 import { PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
+import { useClaudeContext } from "../claude/context.ts";
 import { StepRail } from "./WorkflowTab.tsx";
 
 /**
@@ -141,6 +142,21 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       doAdoRecheck();
     }
   }, [dKind, dLinkedAdoId, dActive, doAdoRecheck]);
+
+  // What the one chat knows about this screen (a hook — above the early returns).
+  useClaudeContext(d ? {
+    screen: "task",
+    topic: { kind: "task", id: d.task.id, title: `משימה #${d.task.seq}: ${d.task.intent.slice(0, 60)}` },
+    facts: {
+      "המשימה": d.task.intent, "מספר": d.task.seq, "סוג": d.task.kind === "check" ? "בדיקה" : "משימה", "מצב": d.task.state, "גודל": d.task.appetite,
+      "אושרה": d.task.approvedAt ? "כן" : "עדיין לא", "הדרישה": d.requirement.title, "משימת אב": d.parent ? `#${d.parent.seq}: ${d.parent.intent}` : "(אין)",
+      "חסומה על ידי": d.blockedBy.map((t) => `#${t.seq}: ${t.intent}`), "מאגרים": d.repos.map((r) => r.name),
+      "הרצה אחרונה": run ? `${run.kind} — ${run.state}` : "(אין)",
+      status: d.task.state, nextStep: !d.task.approvedAt ? "לאשר את המשימה, ואז להריץ את הפיתוח" : d.task.state === "done" ? "המשימה הושלמה" : d.task.state === "failed_checks" ? "בדיקות נכשלו — להחליט אם לתקן או לאשר בכל זאת" : "להריץ את הפיתוח, ואז לדחוף את הענף",
+    },
+    suggestions: ["מה זה בדיקה?", "מה יקרה אם אלחץ על פיתוח?", "מה השלב הבא?"],
+    actions: ["implement", "approve_task"],
+  } : null);
 
   if (err) return <div className="empty">{err}</div>;
   if (!d) return <div className="spin">טוען…</div>;

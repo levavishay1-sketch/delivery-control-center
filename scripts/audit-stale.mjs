@@ -49,11 +49,24 @@ const RETIRED = [
   // a review approved inside DCC instead of on the host, retired 2026-09-20: the decision is the host's own
   "dcc_approve", "dccApprovedBy", "DCC_APPROVAL", "dccApprovalMark", "dcc-review:approved", "reviewOf(", "אישור פנימי של DCC",
   "repo_ai_profile", "repoAiProfile", "ai_component", "aiComponent", "repo_knowledge_snapshot", "repo_ai_recommendation",
+  // three separate cost paths, a routing audit event nothing read, and a summariser that never summarised —
+  // retired 2026-09-20 by the one ledger (openspec/changes/claude-in-dcc)
+  "recordRunCost", "recordRouting", "model.routed", "modelRouted", "summariseTimeline", "summarise.ts",
+  "costAtStart", "costAtEnd", "getCostDetail", "CostDetailModal", "COST_KIND_LABELS", "run-cost-tracking",
+  // the reading aid next to the onboarding terminal, retired 2026-09-20: the one chat is that assistant now
+  "onboarding_assistant", "onboarding-assistant", "askAssistant", "assistantMessages", "resetAssistant", "markAssistantSent", "assistantBusy",
+  "assistantModel", "assistant.json", "askOnboardingAssistant", "getOnboardingAssistant", "resetOnboardingAssistant", "AssistantTotals",
+  "Assistant.tsx", "onboarding.assistant.sent", "AssistantMessage",
+  // the end-of-requirement recommendations run and the composed letter to the requester, retired 2026-09-21:
+  // both are answers of the one chat now (openspec/changes/claude-in-dcc, stage 5)
+  "runRetro", "getRetroRunView", "RetroModal", "RetroResult", "RetroRun", "startRetro", "getRetro(", "/retro", "\"retro\"", "retro:",
+  "requirement-retro-recommendations", "composeClientLetter", "getRecentClientLetters", "client_letter", "clientLetter", "ClientLetter",
+  "gap-letter", "gapLetter", "gap_letter", "composeGapLetter", "getGapLetters", "letterHistory", "letterPicker", "letterDetail",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
 // docs/history/ holds the design records the user asked to keep. Everything else — the replacing
 // change included — may not name a retired design.
-const HISTORY = /^(CLAUDE\.md$|scripts\/audit-stale\.mjs$|packages\/db\/migrations\/|docs\/history\/)/;
+const HISTORY = /^(CLAUDE\.md$|scripts\/audit-stale\.mjs$|packages\/db\/migrations\/|docs\/history\/|docs\/architecture-review\.md$)/;
 const re = new RegExp(RETIRED.map((r) => r.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")).join("|"));
 const stale = [];
 for (const [f, t] of text) {

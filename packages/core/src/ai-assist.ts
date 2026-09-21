@@ -4,8 +4,9 @@ import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } 
 import os from "node:os";
 import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { appendEvent, db, withTenant } from "@dcc/db";
-import { eventLog, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
+import { appendEvent, db, recordClaudeCall, usd, withTenant, type CallEntityKind, type CallOutcome, type CallTrigger } from "@dcc/db";
+import { claudeCall, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
+import { route, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
 import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
 import { adoSend } from "./ado-http.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
@@ -53,7 +54,7 @@ const REPO_CACHE = path.join(os.homedir(), ".dcc-repos");
  * the user can leave the screen and come back to everything Claude did.
  */
 
-type FlowKind = "assess" | "breakdown" | "implement" | "retro";
+type FlowKind = "assess" | "breakdown" | "implement";
 
 const buffers = new Map<string, { lines: string[]; kind: FlowKind; workitemId: string; taskId?: string }>();
 
@@ -68,8 +69,8 @@ function pushLine(runId: string | undefined, line: string) {
 /* ── live control over a running claude process: stop it, or hand it
  * more text while it's still working (architecture: user-in-the-loop on a
  * background run, not just a spectator). Only runs started with a runId
- * (assess/breakdown/implement) are steerable — composeClientLetter and
- * other one-shot calls are unaffected. */
+ * (assess/breakdown/implement) are steerable — one-shot calls are
+ * unaffected. */
 type SteerableProc = { child: import("node:child_process").ChildProcessWithoutNullStreams; stdinOpen: boolean; stoppedByUser: boolean };
 const runningProcs = new Map<string, SteerableProc>();
 
@@ -168,6 +169,8 @@ export async function startFlowRun(input: {
   clientId: string; workitemId: string; kind: FlowKind; by: Dev; taskId?: string;
   /** assess-only: how the user wants the readiness check to run. */
   assessOpts?: { promptKey?: string; customEmphasis?: string; model?: string };
+  /** Which door the person came through — the button, or a proposal in the chat. On the ledger row. */
+  trigger?: CallTrigger;
 }): Promise<{ runId: string; alreadyRunning: boolean }> {
   for (const [id, b] of buffers) {
     if (input.taskId ? b.taskId === input.taskId : b.workitemId === input.workitemId && !b.taskId) {
@@ -188,9 +191,7 @@ export async function startFlowRun(input: {
         ? await runAssess({ ...input, runId, ...input.assessOpts })
         : input.kind === "implement"
           ? await runImplement({ ...input, taskId: input.taskId!, runId })
-          : input.kind === "retro"
-            ? await runRetro({ ...input, runId })
-            : await runBreakdown({ ...input, runId });
+          : await runBreakdown({ ...input, runId });
       await db.update(flowRun).set({
         state: "done", result: result as unknown as Record<string, unknown>,
         log: buffers.get(runId)?.lines ?? [], finishedAt: new Date(),
@@ -254,11 +255,41 @@ export type RunMeta = {
   costUsd: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
   durationMs: number | null;
   numTurns: number | null;
 };
 
+/**
+ * Who, for whom and for what — REQUIRED on every call (claude-in-dcc §8):
+ * a call without a declared capability does not compile. `runClaudeRaw`
+ * routes the call by its capability and writes one ledger row for it.
+ */
+export type LedgerContext = {
+  clientId: string;
+  userId: string;
+  capability: Capability;
+  trigger: CallTrigger;
+  entity?: { kind: CallEntityKind; id: string };
+  workitemId?: string | null;
+  screen?: string | null;
+  label: string;
+  conversationId?: string | null;
+  messageId?: string | null;
+  parentCallId?: string | null;
+  signals?: RoutingSignals;
+  /** What the CLI already reported for this resumed session (cumulative) — the row is the difference. */
+  baseline?: { costUsd?: number; inputTokens?: number; outputTokens?: number };
+  /** The input the caller expects (for a resumed session: the last call's), checked against the capability's cap before the call. */
+  expectedInputTokens?: number;
+  /** The model said it did not have what was asked — a candidate fact for the screen (§7.2). */
+  unanswered?: (text: string) => boolean;
+  meta?: Record<string, unknown>;
+};
+
 export type RunClaudeOpts = {
+  ledger: LedgerContext;
   timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string;
   /** `--effort <level>` — reasoning effort, independent of `--model`. */
   effort?: string;
@@ -284,7 +315,36 @@ export type RunClaudeOpts = {
  *  place that actually spawns the CLI; `runClaudeJson` below is a thin
  *  JSON-parsing wrapper on top for every caller that wants structured
  *  output. */
-export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts = {}): Promise<{ text: string; meta: RunMeta }> {
+const emptyMeta = (d: RoutingDecision): RunMeta => ({ model: d.model, effort: d.effort, costUsd: null, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheWriteTokens: null, durationMs: null, numTurns: null });
+
+/** The one writer of the ledger from a CLI call. Best-effort on purpose: a
+ *  row failing to write must never fail the run it describes — it is logged
+ *  loudly instead, because a missing row is a missing cost. */
+async function recordCall(l: LedgerContext, d: RoutingDecision, startedAt: Date, r: { meta: RunMeta; outcome: CallOutcome; errorText?: string; text?: string }): Promise<string | null> {
+  try {
+    const row = await recordClaudeCall({
+      clientId: l.clientId, userId: l.userId,
+      entityKind: l.entity?.kind ?? (l.workitemId ? "workitem" : "none"), entityId: l.entity?.id ?? l.workitemId ?? null,
+      workitemId: l.workitemId ?? null, screen: l.screen ?? null, capability: l.capability, trigger: l.trigger, label: l.label,
+      conversationId: l.conversationId ?? null, messageId: l.messageId ?? null, parentCallId: l.parentCallId ?? null,
+      startedAt, finishedAt: new Date(), durationMs: r.meta.durationMs ?? Math.max(0, Date.now() - startedAt.getTime()),
+      modelRequested: d.model, modelUsed: r.meta.model ?? d.model, effort: d.effort, policyVersion: d.policyVersion, policyRule: d.rationale, numTurns: r.meta.numTurns,
+      inputTokens: Math.max(0, (r.meta.inputTokens ?? 0) - (l.baseline?.inputTokens ?? 0)),
+      cacheReadTokens: r.meta.cacheReadTokens ?? 0, cacheWriteTokens: r.meta.cacheWriteTokens ?? 0,
+      outputTokens: Math.max(0, (r.meta.outputTokens ?? 0) - (l.baseline?.outputTokens ?? 0)),
+      costUsd: Math.max(0, (r.meta.costUsd ?? 0) - (l.baseline?.costUsd ?? 0)), priceListVersion: d.policyVersion,
+      outcome: r.outcome, errorText: r.errorText ?? null,
+      unanswered: r.text != null && l.unanswered ? l.unanswered(r.text) : false,
+      meta: l.meta ?? {},
+    });
+    return row.id;
+  } catch (e) {
+    console.error(`[ledger] a ${l.capability} call was NOT recorded:`, e instanceof Error ? e.message : e);
+    return null;
+  }
+}
+
+export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts): Promise<{ text: string; meta: RunMeta; callId: string | null }> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain.
   // Read-only by default. `write` is only for implementation runs, and those
   // work on an isolated clone — never the user's own checkout.
@@ -323,8 +383,21 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
         "--max-turns", String(opts.maxTurns ?? 40),
       ];
   if (steerable) args.push("--input-format", "stream-json");
-  if (opts.model) args.push("--model", opts.model);
-  if (opts.effort) args.push("--effort", opts.effort);
+  // The policy decides model and effort for EVERY call (claude-in-dcc
+  // §8.3); a person's explicit choice wins per field. What it decided, and
+  // why, goes on the call's ledger row.
+  const decision = route(opts.ledger.capability, opts.ledger.signals ?? {}, undefined, { model: opts.model, effort: opts.effort });
+  args.push("--model", decision.model, "--effort", decision.effort);
+  const startedAt = new Date();
+  // A call whose input would pass the capability's cap is refused before it
+  // costs anything — and recorded, because that is the sign the delta
+  // discipline broke (claude-in-dcc §2.12).
+  const expectedInput = opts.ledger.expectedInputTokens ?? Math.round(prompt.length / 3);
+  if (decision.maxInputTokens && expectedInput > decision.maxInputTokens) {
+    const why = `הקלט (~${expectedInput.toLocaleString("en-US")} טוקנים) עובר את התקרה של ${opts.ledger.capability} (${decision.maxInputTokens.toLocaleString("en-US")}) — השיחה צריכה להתגלגל להמשך`;
+    await recordCall(opts.ledger, decision, startedAt, { meta: emptyMeta(decision), outcome: "refused", errorText: why });
+    throw new Error(why);
+  }
   // A lean call: the CLI's own system prompt, the user's skills/MCP servers and
   // memory are replaced by one small prompt file (measured: ~1.9k tokens in
   // instead of ~31k for a one-line request, so ~5x cheaper and faster). A file,
@@ -353,7 +426,9 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     writeFileSync(settingsFile, JSON.stringify({ permissions: { deny: opts.denyRules } }));
     args.push("--settings", settingsFile);
   }
-  const raw = await new Promise<string>((resolve, reject) => {
+  let raw: string;
+  try {
+    raw = await new Promise<string>((resolve, reject) => {
     const child = spawn(CLAUDE_BIN, args, { cwd, env: opts.env ? { ...process.env, ...opts.env } : process.env, windowsHide: true, shell: CLAUDE_VIA_SHELL });
     const proc: SteerableProc | null = steerable ? { child, stdinOpen: true, stoppedByUser: false } : null;
     if (proc) runningProcs.set(opts.runId!, proc);
@@ -389,17 +464,25 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     });
     if (steerable) child.stdin.write(JSON.stringify({ type: "user", message: { role: "user", content: [{ type: "text", text: prompt }] } }) + "\n");
     else { child.stdin.write(prompt); child.stdin.end(); }
-  });
+    });
+  } catch (e) {
+    // A call that never answered still cost something to try, and is a
+    // failure the control center must show (§9.6) — recorded, then rethrown.
+    const msg = e instanceof Error ? e.message : String(e);
+    const outcome: CallOutcome = msg === "STOPPED_BY_USER" ? "stopped" : /timed out/.test(msg) ? "timeout" : "error";
+    await recordCall(opts.ledger, decision, startedAt, { meta: emptyMeta(decision), outcome, errorText: msg.slice(0, 500) });
+    throw e;
+  }
 
   // stream-json → many NDJSON lines; the assistant's answer is the last
   // {"type":"result","result":"…"} line — which also carries cost/usage.
   let text = raw.trim();
   const resultLine = raw.split("\n").reverse().find((l) => l.includes('"type":"result"'));
-  let meta: RunMeta = { model: opts.model ?? null, effort: opts.effort ?? null, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null, numTurns: null };
+  let meta: RunMeta = emptyMeta(decision);
   try {
     const env = JSON.parse((resultLine ?? text).trim()) as {
       result?: string; total_cost_usd?: number; duration_ms?: number; num_turns?: number; is_error?: boolean; subtype?: string;
-      usage?: { input_tokens?: number; output_tokens?: number };
+      usage?: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number };
       modelUsage?: Record<string, unknown>;
     };
     if (typeof env.result === "string") text = env.result;
@@ -407,26 +490,36 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
     // exhausted) as a result line with is_error — the process still exits
     // 0, so surface it here rather than returning the error text as "the answer".
     if (env.is_error) throw new Error(`claude run failed (${env.subtype ?? "error"}): ${text.slice(0, 300)}`);
-    const modelFromUsage = env.modelUsage ? Object.keys(env.modelUsage)[0] ?? null : null;
+    // The CLI lists every model the run touched, its own small helper calls
+    // included — the model that carried the run is the one that cost the most.
+    const modelFromUsage = env.modelUsage
+      ? Object.entries(env.modelUsage).map(([m, u]) => [m, Number((u as { costUSD?: number } | null)?.costUSD ?? 0)] as const).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+      : null;
     meta = {
-      model: opts.model ?? modelFromUsage,
-      effort: opts.effort ?? null,
+      model: modelFromUsage ?? decision.model,
+      effort: decision.effort,
       costUsd: typeof env.total_cost_usd === "number" ? env.total_cost_usd : null,
       inputTokens: env.usage?.input_tokens ?? null,
       outputTokens: env.usage?.output_tokens ?? null,
+      cacheReadTokens: env.usage?.cache_read_input_tokens ?? null,
+      cacheWriteTokens: env.usage?.cache_creation_input_tokens ?? null,
       durationMs: typeof env.duration_ms === "number" ? env.duration_ms : null,
       numTurns: typeof env.num_turns === "number" ? env.num_turns : null,
     };
   } catch (e) {
-    if (e instanceof Error && e.message.startsWith("claude run failed")) throw e;
+    if (e instanceof Error && e.message.startsWith("claude run failed")) {
+      await recordCall(opts.ledger, decision, startedAt, { meta, outcome: "error", errorText: e.message.slice(0, 500) });
+      throw e;
+    }
     /* fall back to raw text, meta stays all-null */
   }
   opts.onMeta?.(meta);
-  return { text, meta };
+  const callId = await recordCall(opts.ledger, decision, startedAt, { meta, outcome: "ok", text });
+  return { text, meta, callId };
 }
 
 /** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back. */
-async function runClaudeJson<T>(cwd: string, prompt: string, opts: RunClaudeOpts = {}): Promise<T> {
+async function runClaudeJson<T>(cwd: string, prompt: string, opts: RunClaudeOpts): Promise<T> {
   const { text } = await runClaudeRaw(cwd, prompt, opts);
   // pull the JSON object/array out of whatever the model wrapped it in
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/) ?? [null, text];
@@ -440,242 +533,60 @@ async function runClaudeJson<T>(cwd: string, prompt: string, opts: RunClaudeOpts
   }
 }
 
-/** Writes one `claude -p` call's cost/usage as its own `claude.session`
- *  event — the payload type already existed (built for the interactive
- *  SessionEnd hook, `capture.ts`) but was never populated with real
- *  numbers; this is the first writer that actually has them, from
- *  DCC's own headless runs (assess/breakdown/implement/check). Every
- *  call is its own record, on purpose — two runs on the same task are
- *  two separate cost events, never merged (design notes,
- *  `run-cost-tracking`). Best-effort: a cost record failing to write
- *  must never fail the run it's describing. */
-async function recordRunCost(input: { clientId: string; workitemId: string; by: Dev; kind: string; label: string; meta: RunMeta }) {
-  try {
-    await appendEvent({
-      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "claude.session",
-      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: `dcc:${input.kind}` },
-      payload: {
-        sessionId: `dcc-${input.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        summary: input.label,
-        model: input.meta.model ?? undefined,
-        tokensIn: input.meta.inputTokens ?? undefined,
-        tokensOut: input.meta.outputTokens ?? undefined,
-        costUsd: input.meta.costUsd ?? undefined,
-        durationMs: input.meta.durationMs ?? undefined,
-        numTurns: input.meta.numTurns ?? undefined,
-      },
-    });
-  } catch { /* best-effort — never block the run it describes */ }
-}
-
 export type RequirementCostSummary = {
   totalUsd: number;
   totalInputTokens: number;
   totalOutputTokens: number;
   runCount: number;
-  /** by the `dcc:<kind>` triggeredBy tag (assess/breakdown/implement/check) */
+  /** by capability (gap_detection / decomposition / execution / …) */
   byKind: Record<string, { count: number; usd: number }>;
 };
 
 /**
- * A requirement's cumulative Claude cost — every `claude.session` event
- * ever recorded against it, summed. Deliberately never filtered by
- * whether the task/check that triggered a run still exists, is still
- * approved, or is still active: a task opened, worked on, and later
- * dropped/deactivated already cost what it cost, and that cost stays in
- * the requirement's total (design notes, `run-cost-tracking`) — a
- * re-breakdown adds new records on top, it never resets this.
+ * A requirement's cumulative Claude cost — every ledger row against it,
+ * summed (claude-in-dcc §8.2: one place, one count). Deliberately never
+ * filtered by whether the task/check that triggered a run still exists or
+ * is still active: work that was later dropped already cost what it cost;
+ * a re-breakdown adds rows on top, it never resets this.
  */
 export async function requirementCostSummary(clientId: string, workitemId: string): Promise<RequirementCostSummary> {
   const rows = await withTenant(clientId, (tx) =>
-    tx.select({ payload: eventLog.payload, actor: eventLog.actor })
-      .from(eventLog)
-      .where(and(eq(eventLog.workitemId, workitemId), eq(eventLog.type, "claude.session"), isNull(eventLog.supersedes))),
+    tx.select({ capability: claudeCall.capability, costUsd: claudeCall.costUsd, inputTokens: claudeCall.inputTokens, outputTokens: claudeCall.outputTokens })
+      .from(claudeCall).where(eq(claudeCall.workitemId, workitemId)),
   );
   const byKind: Record<string, { count: number; usd: number }> = {};
   let totalUsd = 0, totalInputTokens = 0, totalOutputTokens = 0;
   for (const r of rows) {
-    const p = r.payload as { costUsd?: number; tokensIn?: number; tokensOut?: number };
-    const usd = typeof p.costUsd === "number" ? p.costUsd : 0;
-    totalUsd += usd;
-    totalInputTokens += p.tokensIn ?? 0;
-    totalOutputTokens += p.tokensOut ?? 0;
-    const triggeredBy = (r.actor as { triggeredBy?: string }).triggeredBy ?? "";
-    const kind = triggeredBy.replace(/^dcc:/, "") || "other";
-    const bucket = (byKind[kind] ??= { count: 0, usd: 0 });
+    const cost = usd(r.costUsd);
+    totalUsd += cost;
+    totalInputTokens += r.inputTokens;
+    totalOutputTokens += r.outputTokens;
+    const bucket = (byKind[r.capability] ??= { count: 0, usd: 0 });
     bucket.count++;
-    bucket.usd += usd;
+    bucket.usd += cost;
   }
   return { totalUsd, totalInputTokens, totalOutputTokens, runCount: rows.length, byKind };
 }
 
 export type CostDetailRow = {
-  id: string; occurredAt: string; kind: string; label: string; model: string | null;
-  costUsd: number; inputTokens: number; outputTokens: number; durationMs: number | null; numTurns: number | null;
+  id: string; occurredAt: string; kind: string; trigger: string; label: string; model: string | null; effort: string | null;
+  costUsd: number; inputTokens: number; cacheReadTokens: number; outputTokens: number; durationMs: number | null; numTurns: number | null; outcome: string;
 };
 
-/**
- * Every individual AI run behind a requirement's total cost — one row per
- * `claude.session` event, newest first. `requirementCostSummary` answers
- * "how much in total"; this answers "on what, exactly" (a real gap a user
- * hit live: the total tile had nothing behind it to explain what it was
- * made of — design notes, cost-visibility).
- */
+/** Every call behind a requirement's total — one ledger row each, newest
+ *  first. `requirementCostSummary` answers "how much"; this answers "on
+ *  what, exactly". Kept for the MCP server; the web reads the same rows
+ *  through `callsForEntity`. */
 export async function requirementCostDetail(clientId: string, workitemId: string): Promise<CostDetailRow[]> {
   const rows = await withTenant(clientId, (tx) =>
-    tx.select({ id: eventLog.id, occurredAt: eventLog.occurredAt, payload: eventLog.payload, actor: eventLog.actor })
-      .from(eventLog)
-      .where(and(eq(eventLog.workitemId, workitemId), eq(eventLog.type, "claude.session"), isNull(eventLog.supersedes)))
-      .orderBy(desc(eventLog.occurredAt)),
+    tx.select().from(claudeCall).where(eq(claudeCall.workitemId, workitemId)).orderBy(desc(claudeCall.startedAt)),
   );
-  return rows.map((r) => {
-    const p = r.payload as { summary?: string; model?: string; costUsd?: number; tokensIn?: number; tokensOut?: number; durationMs?: number; numTurns?: number };
-    const triggeredBy = (r.actor as { triggeredBy?: string }).triggeredBy ?? "";
-    return {
-      id: r.id, occurredAt: new Date(r.occurredAt).toISOString(), kind: triggeredBy.replace(/^dcc:/, "") || "other",
-      label: p.summary ?? "", model: p.model ?? null,
-      costUsd: p.costUsd ?? 0, inputTokens: p.tokensIn ?? 0, outputTokens: p.tokensOut ?? 0,
-      durationMs: p.durationMs ?? null, numTurns: p.numTurns ?? null,
-    };
-  });
-}
-
-/* ── retro: end-of-requirement improvement recommendations ──────────
- *
- * Runs once a requirement is done — analyzes its full event timeline,
- * cumulative cost (`requirementCostSummary`), and decision history
- * (`decision.made` events, `decision-history`) to produce concrete,
- * requirement-specific recommendations, never generic advice (design
- * notes, `requirement-retro-recommendations`). Deliberately read-only —
- * no repo checkout, no code changes — this is a report action.
- */
-
-export type RetroResult = {
-  summary: string;
-  tokenSavings: string[];
-  timeSavings: string[];
-  unnecessaryActions: string[];
-  reworkCausingDecisions: string[];
-  breakdownFeedback: string[];
-  emphasize: string[];
-};
-
-async function loadRequirementEvents(clientId: string, workitemId: string) {
-  return withTenant(clientId, (tx) =>
-    tx.select({ type: eventLog.type, occurredAt: eventLog.occurredAt, payload: eventLog.payload, actor: eventLog.actor })
-      .from(eventLog)
-      .where(and(eq(eventLog.workitemId, workitemId), isNull(eventLog.supersedes)))
-      .orderBy(eventLog.occurredAt),
-  );
-}
-
-/** One compact line per event — enough for the model to reconstruct what
- *  happened and when, without dumping full JSON payloads at it. */
-function describeTimelineEvent(e: { type: string; occurredAt: Date; payload: unknown; actor: unknown }): string {
-  const p = (e.payload ?? {}) as Record<string, unknown>;
-  const when = new Date(e.occurredAt).toISOString().slice(0, 16).replace("T", " ");
-  const bits =
-    e.type === "decision.made" ? `trigger=${p.trigger} — ${p.reason}` :
-    e.type === "claude.session" ? `${p.summary ?? ""} · model=${p.model ?? "?"} · $${typeof p.costUsd === "number" ? p.costUsd.toFixed(3) : "?"} · in=${p.tokensIn ?? "?"} out=${p.tokensOut ?? "?"}` :
-    e.type === "note.added" ? String(p.body ?? "").slice(0, 200) :
-    e.type === "gap.proposed" ? `gap: ${p.description ?? p.question ?? ""}` :
-    e.type === "task.progressed" ? `${p.from ?? "?"} → ${p.to ?? "?"}` :
-    JSON.stringify(p).slice(0, 200);
-  return `[${when}] ${e.type}: ${bits}`;
-}
-
-async function buildRetroPrompt(input: { clientId: string; workitemId: string }) {
-  const { wi } = await loadRequirementText(input.clientId, input.workitemId);
-  const events = await loadRequirementEvents(input.clientId, input.workitemId);
-  const cost = await requirementCostSummary(input.clientId, input.workitemId);
-  const decisions = events.filter((e) => e.type === "decision.made");
-
-  const costText = [
-    `Total AI cost: $${cost.totalUsd.toFixed(2)} across ${cost.runCount} run(s), ${cost.totalInputTokens} input / ${cost.totalOutputTokens} output tokens.`,
-    ...Object.entries(cost.byKind).map(([kind, b]) => `  - ${kind}: ${b.count} run(s), $${b.usd.toFixed(2)}`),
-  ].join("\n");
-
-  const decisionsText = decisions.length
-    ? decisions.map((d) => describeTimelineEvent(d)).join("\n")
-    : "(none recorded — no re-breakdowns, overrides, or reopenings on this requirement)";
-
-  const timelineText = events.map(describeTimelineEvent).join("\n");
-
-  const prompt = [
-    "You are reviewing a completed software requirement for a delivery team, to produce a retrospective.",
-    "The goal is to LEARN from what actually happened on THIS requirement — every recommendation must be",
-    "grounded in a specific event, decision, or cost figure below. Never give generic process advice that",
-    "could apply to any requirement.",
-    "",
-    `REQUIREMENT: ${wi.title}`,
-    "",
-    "COST SUMMARY:",
-    costText,
-    "",
-    "DECISION HISTORY (re-breakdowns, overrides, reopenings, and why):",
-    decisionsText,
-    "",
-    "FULL EVENT TIMELINE:",
-    timelineText,
-    "",
-    "Produce recommendations in these categories — each entry is one short, SPECIFIC, actionable sentence",
-    "tied to something that actually happened above (cite the event/decision/cost it's based on). Leave a",
-    "category as an empty array if the timeline genuinely gives no grounds for it — never pad with filler.",
-    "  tokenSavings — where AI tokens were spent that didn't need to be",
-    "  timeSavings — where elapsed time could have been shorter",
-    "  unnecessaryActions — actions/runs that turned out not to matter",
-    "  reworkCausingDecisions — decisions (from DECISION HISTORY) that caused rework, and what to do differently",
-    "  breakdownFeedback — how the task breakdown itself could have been better shaped",
-    "  emphasize — things that went well and are worth repeating next time",
-    "Also write a 2-4 sentence `summary` of the requirement's overall efficiency.",
-    "IMPORTANT: write every string value IN HEBREW.",
-    "",
-    'Respond with ONLY this JSON object, no prose:',
-    '{"summary": string, "tokenSavings": string[], "timeSavings": string[], "unnecessaryActions": string[], "reworkCausingDecisions": string[], "breakdownFeedback": string[], "emphasize": string[]}',
-  ].join("\n");
-
-  return { prompt, wi };
-}
-
-async function runRetro(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<RetroResult> {
-  pushLine(input.runId, "אוסף timeline, עלויות והיסטוריית החלטות…");
-  const { prompt } = await buildRetroPrompt(input);
-  pushLine(input.runId, "מנתח ומכין המלצות…");
-
-  let retroMeta: RunMeta | undefined;
-  const raw = await runClaudeJson<Partial<RetroResult>>(
-    process.cwd(), prompt, { timeoutMs: 300000, maxTurns: 4, runId: input.runId, onMeta: (m) => { retroMeta = m; } },
-  );
-  if (retroMeta) await recordRunCost({ clientId: input.clientId, workitemId: input.workitemId, by: input.by, kind: "retro", label: "המלצות לשיפור", meta: retroMeta });
-
-  const lines = (v: unknown): string[] => Array.isArray(v) ? v.filter(Boolean).map(String) : [];
-  return {
-    summary: raw.summary ?? "",
-    tokenSavings: lines(raw.tokenSavings),
-    timeSavings: lines(raw.timeSavings),
-    unnecessaryActions: lines(raw.unnecessaryActions),
-    reworkCausingDecisions: lines(raw.reworkCausingDecisions),
-    breakdownFeedback: lines(raw.breakdownFeedback),
-    emphasize: lines(raw.emphasize),
-  };
-}
-
-/** The latest retro run for a requirement — deliberately its OWN lookup,
- *  filtered to `kind = "retro"`, rather than reusing `getFlowRunView`'s
- *  "latest run of any kind": retro can be kicked off long after
- *  assess/breakdown/implement are done, and must never be mistaken for
- *  one of those in a screen that's still polling the generic flow-run
- *  endpoint (design notes, `requirement-retro-recommendations`). */
-export async function getRetroRunView(workitemId: string): Promise<FlowRunView | null> {
-  for (const [id, b] of buffers) {
-    if (b.workitemId === workitemId && !b.taskId && b.kind === "retro") {
-      return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
-    }
-  }
-  const [row] = await db.select().from(flowRun)
-    .where(and(eq(flowRun.workitemId, workitemId), isNull(flowRun.taskId), eq(flowRun.kind, "retro")))
-    .orderBy(desc(flowRun.startedAt)).limit(1);
-  return row ? viewOf(row) : null;
+  return rows.map((r) => ({
+    id: r.id, occurredAt: new Date(r.startedAt).toISOString(), kind: r.capability, trigger: r.trigger, label: r.label,
+    model: r.modelUsed ?? r.modelRequested, effort: r.effort,
+    costUsd: usd(r.costUsd), inputTokens: r.inputTokens, cacheReadTokens: r.cacheReadTokens, outputTokens: r.outputTokens,
+    durationMs: r.durationMs, numTurns: r.numTurns, outcome: r.outcome,
+  }));
 }
 
 /** Local working copy for the repo — clone or pull. Returns null if we can't get one.
@@ -889,7 +800,7 @@ export async function previewAssessPrompt(input: { clientId: string; workitemId:
   return { prompt: built.prompt, promptHe: built.promptHe, model: built.model ?? null, templateTitle: built.templateTitle };
 }
 
-async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; promptKey?: string; customEmphasis?: string; model?: string }): Promise<AssessResult> {
+async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; promptKey?: string; customEmphasis?: string; model?: string; trigger?: CallTrigger }): Promise<AssessResult> {
   pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
   const built = await buildAssessPrompt({
     clientId: input.clientId, workitemId: input.workitemId,
@@ -897,11 +808,12 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   });
   pushLine(input.runId, built.cwd ? `קורא את ה-repo ${built.repoName} · ${built.templateTitle}` : `אין עותק repo — מעריך מהטקסט בלבד · ${built.templateTitle}`);
 
-  let assessMeta: RunMeta | undefined;
   const raw = await runClaudeJson<Partial<AssessResult> & { rationale?: string | string[]; whatChanges?: string | string[] }>(
-    built.cwd ?? process.cwd(), built.prompt, { timeoutMs: 600000, runId: input.runId, model: built.model, onMeta: (m) => { assessMeta = m; } },
+    built.cwd ?? process.cwd(), built.prompt, {
+      timeoutMs: 600000, runId: input.runId, model: built.model,
+      ledger: { clientId: input.clientId, userId: input.by.userId, capability: "gap_detection", trigger: input.trigger ?? "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: `בחינת בשלות הדרישה · ${built.templateTitle}` },
+    },
   );
-  if (assessMeta) await recordRunCost({ clientId: input.clientId, workitemId: input.workitemId, by: input.by, kind: "assess", label: "בחינת בשלות הדרישה", meta: assessMeta });
   pushLine(input.runId, "כותב סיכום ופערים…");
 
   // The contract asks for bullet arrays; a model can still hand back one
@@ -962,107 +874,6 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
   await regenerateBrief(input.clientId, input.workitemId);
 
   return { ...res, repoUsed: built.repoName };
-}
-
-/* ── 1b. the letter to the requester ───────────────────────────────── */
-
-export type ClientLetter = {
-  subject: string; body: string; gapCount: number;
-  /** This specific composition's own cost — surfaced right away so it
-   *  reads as "an AI call, not a free rephrase" (a real gap a user hit
-   *  live: this call was invisible in both the per-run and cumulative
-   *  cost). Null only if the CLI's result line didn't carry usage. */
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null;
-};
-
-/**
- * Turns the open gaps into a message the REQUESTER can actually read — no
- * code, no jargon, questions numbered, options offered. We compose it and
- * the user sends it themselves (there is no channel to the client from
- * here, and pretending otherwise would be worse than useless).
- * Runs on the cheap model: this is rephrasing, not analysis.
- *
- * Saved as its own `client_letter.composed` event (not just returned) so
- * a person who navigates away before copying it doesn't have to pay for
- * another run to get the same text back — see `getLastClientLetter`.
- * Also recorded as a `claude.session` cost event like every other run,
- * so it shows up in `requirementCostSummary` instead of silently not
- * counting toward the requirement's AI spend.
- */
-export async function composeClientLetter(input: { clientId: string; workitemId: string; by: Dev; gapIds?: string[] }): Promise<ClientLetter> {
-  const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
-  const allOpen = await withTenant(input.clientId, (tx) =>
-    tx.select().from(gap)
-      .where(and(eq(gap.workitemId, input.workitemId), sql`${gap.state} in ('proposed','verified')`))
-      .orderBy(desc(gap.blocking), gap.createdAt),
-  );
-  // The caller picks which open gaps go out — not every gap belongs in
-  // front of the client (some are ours to decide). No selection given
-  // falls back to "all open", so an old caller keeps working.
-  const open = input.gapIds ? allOpen.filter((g) => input.gapIds!.includes(g.id)) : allOpen;
-  if (open.length === 0) throw new Error(input.gapIds ? "לא נבחר אף פער" : "אין פערים פתוחים — אין מה לשלוח");
-
-  const gapsText = open.map((g, i) => [
-    `${i + 1}. ${g.description}`,
-    g.why ? `   רקע: ${g.why}` : "",
-    (g.options as string[])?.length ? `   אפשרויות: ${(g.options as string[]).join(" / ")}` : "",
-    `   ${g.whoAnswers === "client" ? "החלטה של מבקש הדרישה" : "החלטה שלנו — הוזכר רק אם רלוונטי לו"}`,
-  ].filter(Boolean).join("\n")).join("\n\n");
-
-  const tmpl = await getPromptByKey("gaps.client_letter");
-  const vars = {
-    REQUIREMENT_TITLE: wi.title,
-    REQUIREMENT_TEXT: notes.map((n) => n.body).join("\n\n").slice(0, 4000),
-    GAPS: gapsText,
-  };
-  const prompt = tmpl
-    ? renderPrompt(tmpl.body, vars)
-    : `Write a short Hebrew business message asking these questions, no code or jargon:\n${gapsText}\n\nRespond with ONLY {"subject": string, "body": string}`;
-
-  let letterMeta: RunMeta | undefined;
-  const res = await runClaudeJson<{ subject?: string; body?: string }>(process.cwd(), prompt, {
-    timeoutMs: 180_000, maxTurns: 3, model: tmpl?.defaultModel || "haiku", onMeta: (m) => { letterMeta = m; },
-  });
-  if (letterMeta) await recordRunCost({ clientId: input.clientId, workitemId: input.workitemId, by: input.by, kind: "gap_letter", label: "ניסוח מכתב ללקוח", meta: letterMeta });
-
-  const subject = res.subject ?? `שאלות פתוחות — ${wi.title}`;
-  const body = res.body ?? "";
-  const costUsd = letterMeta?.costUsd ?? null, inputTokens = letterMeta?.inputTokens ?? null, outputTokens = letterMeta?.outputTokens ?? null;
-  await appendEvent({
-    clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "client_letter.composed",
-    actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:gap_letter" },
-    payload: {
-      subject, body, gapCount: open.length, gapIds: open.map((g) => g.id),
-      costUsd: costUsd ?? undefined, inputTokens: inputTokens ?? undefined, outputTokens: outputTokens ?? undefined, model: letterMeta?.model ?? undefined,
-    },
-  });
-
-  return { subject, body, gapCount: open.length, costUsd, inputTokens, outputTokens };
-}
-
-export type ClientLetterHistoryItem = {
-  id: string; subject: string; body: string; gapCount: number; composedAt: string;
-  costUsd: number | null; inputTokens: number | null; outputTokens: number | null; model: string | null;
-};
-
-/** Every letter ever composed for this requirement, newest first — read
- *  back from `client_letter.composed` events rather than kept in memory,
- *  so none of them are lost by navigating away before copying one (a
- *  real gap a user hit live). Never regenerates anything. */
-export async function getRecentClientLetters(clientId: string, workitemId: string, limit = 20): Promise<ClientLetterHistoryItem[]> {
-  const rows = await withTenant(clientId, (tx) =>
-    tx.select({ id: eventLog.id, payload: eventLog.payload, occurredAt: eventLog.occurredAt })
-      .from(eventLog)
-      .where(and(eq(eventLog.workitemId, workitemId), eq(eventLog.type, "client_letter.composed"), isNull(eventLog.supersedes)))
-      .orderBy(desc(eventLog.occurredAt)).limit(limit),
-  );
-  return rows.map((row) => {
-    const p = row.payload as { subject: string; body: string; gapCount: number; costUsd?: number; inputTokens?: number; outputTokens?: number; model?: string };
-    return {
-      id: row.id, subject: p.subject, body: p.body, gapCount: p.gapCount, composedAt: new Date(row.occurredAt).toISOString(),
-      costUsd: p.costUsd ?? null, inputTokens: p.inputTokens ?? null, outputTokens: p.outputTokens ?? null, model: p.model ?? null,
-    };
-  });
 }
 
 /* ── 2. breakdown: propose tasks + dependencies ────────────────────── */
@@ -1181,13 +992,14 @@ export async function previewBreakdownPrompt(input: { clientId: string; workitem
   return { prompt, promptHe, repoName };
 }
 
-async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev; runId?: string }): Promise<BreakdownResult> {
+async function runBreakdown(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<BreakdownResult> {
   const { prompt, cwd } = await buildBreakdownPrompt(input);
-  let breakdownMeta: RunMeta | undefined;
   const proposed = await runClaudeJson<
     { seq: number; parentSeq?: number | null; kind?: string; intent: string; prompt?: string; appetite: string; affectedPaths?: string[]; compiledComponents?: string[]; dependsOnSeq?: number[] }[]
-  >(cwd ?? process.cwd(), prompt, { timeoutMs: 600000, runId: input.runId, onMeta: (m) => { breakdownMeta = m; } });
-  if (breakdownMeta) await recordRunCost({ clientId: input.clientId, workitemId: input.workitemId, by: input.by, kind: "breakdown", label: "פירוק למשימות", meta: breakdownMeta });
+  >(cwd ?? process.cwd(), prompt, {
+    timeoutMs: 600000, runId: input.runId,
+    ledger: { clientId: input.clientId, userId: input.by.userId, capability: "decomposition", trigger: input.trigger ?? "button", entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement", label: "פירוק למשימות" },
+  });
   pushLine(input.runId, "בונה את היררכיית המשימות…");
 
   // resolve the tree: level per node, then the depth that picks TFS types.
@@ -1491,7 +1303,7 @@ export async function previewImplementPrompt(input: { clientId: string; workitem
   return { prompt, promptHe, approved: t.approvedAt != null };
 }
 
-async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string }): Promise<ImplementResult> {
+async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<ImplementResult> {
   const { prompt, instruction, t, wi, hasChecks } = await buildImplementPrompt(input);
   // Defense in depth — the API route already refuses this before a run is
   // even queued, but a run only ever does what this function lets it do.
@@ -1534,7 +1346,6 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
 
   pushLine(input.runId, `הפרומט של המשימה:\n${instruction}`);
 
-  let implementMeta: RunMeta | undefined;
   const res = await runClaudeJson<{
     summary: string; filesChanged?: string[]; testsRun?: string | null; followUps?: string[];
     affectedConsumers?: { path: string; usedBy?: string[]; reason: string }[];
@@ -1542,16 +1353,16 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   }>(
     // Checks never get write tools — the moment one can edit code, "task"
     // vs "check" stops being an enforceable boundary (design notes).
-    dir, prompt, { timeoutMs: 900_000, runId: input.runId, write: !isCheck, onMeta: (m) => { implementMeta = m; } },
+    dir, prompt, {
+      timeoutMs: 900_000, runId: input.runId, write: !isCheck,
+      ledger: {
+        clientId: input.clientId, userId: input.by.userId, capability: "execution", trigger: input.trigger ?? "button",
+        entity: { kind: "task", id: input.taskId }, workitemId: input.workitemId, screen: "task",
+        label: `${isCheck ? "בדיקה" : "פיתוח משימה"} #${t.seq}: ${t.intent.slice(0, 60)}`,
+        signals: { mechanical: isCheck }, meta: { taskSeq: t.seq, check: isCheck },
+      },
+    },
   );
-  if (implementMeta) {
-    await recordRunCost({
-      clientId: input.clientId, workitemId: input.workitemId, by: input.by,
-      kind: isCheck ? "check" : "implement",
-      label: `${isCheck ? "בדיקה" : "פיתוח משימה"} #${t.seq}: ${t.intent.slice(0, 60)}`,
-      meta: implementMeta,
-    });
-  }
 
   let changed: string[] = [];
   let commit: string | null = null;

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   foreignKey,
   index,
+  integer,
   numeric,
   pgPolicy,
   pgTable,
@@ -53,6 +54,8 @@ export const client = pgTable("client", {
   connectorType: connectorType("connector_type").notNull().default("manual"),
   /** ADO project reference for sync, e.g. "Altshuler Trade". */
   adoProjectRef: text("ado_project_ref"),
+  /** How many days this client's chat conversations are kept; NULL ⇒ the policy's default (claude-in-dcc §9.10). */
+  chatRetentionDays: integer("chat_retention_days"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
 });

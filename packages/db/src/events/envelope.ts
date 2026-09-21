@@ -38,6 +38,8 @@ export const eventLink = z.object({
     "commit",
     "session",
     "thread",
+    /** a row of the claude_call ledger — the event carries no cost, the row does */
+    "claude_call",
   ]),
   ref: z.string().min(1),
 });

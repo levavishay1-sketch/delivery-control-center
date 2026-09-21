@@ -545,9 +545,9 @@ export const notification = pgTable(
 ).enableRLS();
 
 /**
- * A per-client AI-spend budget, and the running total. The dashboard's
- * "AI cost" meter reads this; `spentUsd` is bumped whenever a
- * model.routed / claude.session event carries a cost.
+ * A per-client AI-spend budget. The spend itself is never stored here: the
+ * dashboard's "AI cost" meter and the budgets screen sum `claude_call`
+ * (claude-in-dcc §8.2), from `periodStart` on.
  */
 export const clientBudget = pgTable(
   "client_budget",
@@ -556,7 +556,7 @@ export const clientBudget = pgTable(
       .primaryKey()
       .references(() => client.id, { onDelete: "cascade" }),
     monthlyUsd: numeric("monthly_usd", { precision: 10, scale: 2 }).notNull().default("300"),
-    spentUsd: numeric("spent_usd", { precision: 10, scale: 2 }).notNull().default("0"),
+    /** The spend itself is a sum over `claude_call` since here — never cached (claude-in-dcc §8.2). */
     periodStart: timestamp("period_start", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [tenantPolicy("client_budget_tenant_isolation")],

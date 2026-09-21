@@ -97,11 +97,15 @@ const statusChanged = z.object({
   viaAdo: z.boolean().default(false),
 });
 
-const modelRouted = z.object({
-  capability: z.string(), // "brief" | "matching" | "gap_detection" | "execution" | "review" | ...
-  model: z.string(),
-  budgetUsd: z.number().nonnegative().optional(),
-  rationale: z.string(),
+/** A call to Claude on this work item happened. The ledger row it links to
+ *  (`links: [{rel: "claude_call"}]`) holds who, which model, tokens and
+ *  cost — deliberately none of that here, so money is counted once
+ *  (claude-in-dcc §8.2). */
+const claudeCall = z.object({
+  callId: z.string().uuid(),
+  capability: z.string(),
+  label: z.string().default(""),
+  outcome: z.string().default("ok"),
 });
 
 const reviewCompleted = z.object({
@@ -150,25 +154,14 @@ const decisionMade = z.object({
   reason: z.string(),
 });
 
-/** A composed (never sent) message to the requirement's requester,
- *  listing open gaps in business language — `composeClientLetter`. Saved
- *  so it survives navigating away before copying it (a real gap a user
- *  hit live: losing an unsaved letter meant re-running the AI call just
- *  to get the same text back). `gapIds` are the gaps it was composed
- *  from, for context — not itself a source of truth for gap state. */
-const clientLetterComposed = z.object({
-  subject: z.string(),
-  body: z.string(),
-  gapCount: z.number().int().nonnegative(),
-  gapIds: z.array(z.string()).optional(),
-  /** This letter's own cost, duplicated here (alongside the separate
-   *  `claude.session` event every run also gets) so the letter-history
-   *  view can show each past letter's cost without correlating two
-   *  event streams (design notes, cost-visibility). */
-  costUsd: z.number().nonnegative().optional(),
-  inputTokens: z.number().int().nonnegative().optional(),
-  outputTokens: z.number().int().nonnegative().optional(),
-  model: z.string().optional(),
+/** The routing policy — or a client's own retention period — was edited from
+ *  the control center (claude-in-dcc §9.9, §9.10): which version became
+ *  which, and exactly what changed. Every ledger row carries the version it
+ *  was routed under, so a cost change can be tied to this event. */
+const policyChanged = z.object({
+  fromVersion: z.number().int().nonnegative(),
+  toVersion: z.number().int().nonnegative(),
+  changes: z.array(z.object({ path: z.string().min(1), from: z.unknown().optional(), to: z.unknown().optional() })),
 });
 
 const matchConfirmed = z.object({
@@ -192,14 +185,14 @@ export const payloadSchemas: Registry = {
   "blocker.raised": { 1: blockerRaised },
   "blocker.answered": { 1: blockerAnswered },
   "status.changed": { 1: statusChanged },
-  "model.routed": { 1: modelRouted },
+  "claude.call": { 1: claudeCall },
   "ado.synced": { 1: adoSynced },
   "note.added": { 1: noteAdded },
   "requirement.updated": { 1: requirementUpdated },
   "repo.linked": { 1: repoLinked },
   "repo.unlinked": { 1: repoUnlinked },
   "decision.made": { 1: decisionMade },
-  "client_letter.composed": { 1: clientLetterComposed },
+  "policy.changed": { 1: policyChanged },
 };
 
 export const CURRENT_VERSION = 1;

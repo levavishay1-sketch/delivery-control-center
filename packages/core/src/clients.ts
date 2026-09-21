@@ -39,7 +39,8 @@ export async function listClients() {
       name: client.name,
       initiatives: sql<number>`count(distinct ${workitem.id}) filter (where ${workitem.parentId} is null)::int`,
       workitems: sql<number>`count(distinct ${workitem.id})::int`,
-      spent: sql<number>`coalesce(max(${clientBudget.spentUsd}),0)::float`,
+      // month-to-date, from the ledger — the one place cost is counted (claude-in-dcc §8.2)
+      spent: sql<number>`coalesce((select sum(cc.cost_usd) from claude_call cc where cc.client_id = ${client.id} and cc.started_at >= date_trunc('month', now())),0)::float`,
       budget: sql<number>`coalesce(max(${clientBudget.monthlyUsd}),0)::float`,
     })
     .from(client)

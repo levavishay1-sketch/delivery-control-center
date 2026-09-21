@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getDashboard, REQ_TYPE_HE, type Dashboard as D } from "../api.ts";
 import { ICONS, Icon, initials } from "../ui.tsx";
 import { NewRequirement } from "../forms.tsx";
+import { useClaudeContext } from "../claude/context.ts";
 
 const PHASE: Record<string, { label: string; tone: string }> = {
   intake: { label: "קליטה", tone: "inactive" }, shaping: { label: "עיצוב", tone: "healthy" },
@@ -26,6 +27,15 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
   const [modal, setModal] = useState<"req" | null>(null);
   const reload = () => getDashboard().then(setD).catch((e) => setErr(String(e)));
   useEffect(() => { reload(); }, []);
+  useClaudeContext({
+    screen: "dashboard", topic: { kind: "app" },
+    facts: d ? {
+      "דרישות-על פעילות": d.stats.initiatives, "דרישות פתוחות": d.stats.openItems, "דרישות חסומות": d.stats.blockedItems,
+      "עלות AI החודש": `$${(d.stats.aiCostUsd ?? 0).toFixed(2)} (${d.stats.aiBudgetPct}% מהתקציב)`, aiCostUsd: d.stats.aiCostUsd ?? 0,
+      "התראות": d.alerts.slice(0, 5).map((a) => a.title),
+    } : {},
+    suggestions: ["מה זה דרישת-על?", "כמה עלה ה-AI החודש?", "מה חסום עכשיו?"],
+  });
 
   return (
     <>

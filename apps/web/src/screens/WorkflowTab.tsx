@@ -6,6 +6,7 @@ import {
   ADO_LADDER, type FlowRun, type MaterializeResult, type PromptTemplate, type StartBuildResult, type TaskFlow, type WorkItemDetail,
 } from "../api.ts";
 import { Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { GlossaryHint } from "../claude/GlossaryHint.tsx";
 import { TaskGraph } from "./TaskGraph.tsx";
 import { AddNote } from "../forms.tsx";
 
@@ -250,9 +251,10 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const kick = async (what: "assess" | "breakdown") => {
     setErr(null); setSendErr(null); setSendData(null); setPendingKick(what); setSendLoading(true);
     try {
-      setSendData(what === "assess"
+      const r = what === "assess"
         ? await previewAssess(wi.id, assessPromptKey, isCustom ? assessCustomEmphasis : undefined)
-        : await previewBreakdown(wi.id));
+        : await previewBreakdown(wi.id);
+      setSendData({ prompt: r.prompt, promptHe: r.promptHe ?? "" });
     } catch (e) { setSendErr(String(e)); }
     finally { setSendLoading(false); }
   };
@@ -497,6 +499,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                       </p>
                       {tierPicker}
                       <button className="btn btn-primary btn-sm" disabled={isCustom && !assessCustomModel} onClick={() => { setShowRerunOptions(false); kick("assess"); }}>הרץ הערכה</button>
+                      <GlossaryHint screen="requirement" entry="assess" />
                     </div>
                   )}
                   {/* rendered line-by-line, not as one pre-wrap blob: bullets
@@ -654,6 +657,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 </p>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                   <button className="btn btn-primary btn-sm" onClick={() => kick("breakdown")}>{nodes.length > 0 ? "פרק מחדש" : "פרק למשימות"}</button>
+                  <GlossaryHint screen="requirement" entry="breakdown" />
                   {nodes.length > 0 && <button className="btn btn-secondary btn-sm" onClick={() => setView(3)}>לאישור המשימות ←</button>}
                 </div>
                 <Err />

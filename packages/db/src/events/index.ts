@@ -31,7 +31,7 @@ export type AppendInput = Omit<EventEnvelope, "occurredAt" | "supersedes" | "lin
 const REASONING_TYPES = new Set([
   "gap.proposed",
   "tasks.proposed",
-  "model.routed",
+  "claude.call",
   "blocker.raised",
 ]);
 

@@ -95,8 +95,9 @@ Appetite: **large** (needs a design pass before sizing further).
       ADO task (`#69`) → "+ הוסף ממצא" → wrote a conclusion → "✓ סיום
       תחקור" → confirmed requirement phase became `done`, the task's
       own `state` became `done` (checked directly via the task-flow
-      API, not just the UI), and the "✦ המלצות לשיפור" retro button
-      appeared automatically. Cleaned up after: deleted the DCC
+      API, not just the UI), and the requirement's end-of-work
+      recommendations became available (an answer of the one chat since
+      `claude-in-dcc`). Cleaned up after: deleted the DCC
       requirement AND soft-deleted the real ADO test task it created
       (`wit/workitems/69` DELETE) so no test debris was left in the
       pilot's live TFS project.

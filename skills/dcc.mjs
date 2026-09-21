@@ -6,7 +6,6 @@
 //   node dcc.mjs gap     --workitem <id> --description "..." --blocking --confidence 0.8
 //   node dcc.mjs blocker --workitem <id> --type missing_access --question "..."
 //   node dcc.mjs tasks   --workitem <id> --file tasks.json [--change <openspec-change-id>]
-//   node dcc.mjs route   --workitem <id> --capability gap_detection [--ambiguity high --breadth 5 ...]
 //   node dcc.mjs contention     --repo <name>
 //   node dcc.mjs touches        --workitem <id> --repo <name> --paths a.ts,b.ts [--branch b --kind branch]
 //   node dcc.mjs touches-release --workitem <id>
@@ -81,12 +80,6 @@ try {
         question: a.question,
       }),
     );
-  } else if (cmd === "route") {
-    const signals = {};
-    for (const k of ["ambiguity", "novelty"]) if (a[k]) signals[k] = a[k];
-    for (const k of ["breadth", "openGaps", "recentEvents"]) if (a[k]) signals[k] = Number(a[k]);
-    for (const k of ["reversible", "mechanical"]) if (a[k]) signals[k] = true;
-    console.log(await call("POST", `/workitems/${a.workitem}/route`, { capability: a.capability, signals }));
   } else if (cmd === "contention") {
     console.log(await call("GET", `/repos/${encodeURIComponent(a.repo)}/contention?clientId=${c.clientId}`));
   } else if (cmd === "touches") {
@@ -120,7 +113,7 @@ try {
       }),
     );
   } else {
-    console.error("usage: dcc <resolve|brief|gap|blocker|tasks|route|contention|touches|touches-release|review> [--flags]");
+    console.error("usage: dcc <resolve|brief|gap|blocker|tasks|contention|touches|touches-release|review> [--flags]");
     process.exit(2);
   }
 } catch (e) {

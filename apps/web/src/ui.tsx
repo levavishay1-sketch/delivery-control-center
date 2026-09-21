@@ -122,6 +122,8 @@ export const ICONS = {
   message: <><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></>,
   layers: <><path d="m12 2 9 5-9 5-9-5z" /><path d="m3 12 9 5 9-5" /><path d="m3 17 9 5 9-5" /></>,
   repo: <><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></>,
+  /** Claude — the chat launcher and the control center */
+  spark: <><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z" /></>,
 };
 
 export function Pill({ tone, children }: { tone: "warning" | "critical" | "active" | "healthy" | "ai" | "inactive" | "neutral"; children: ReactNode }) {
@@ -184,7 +186,10 @@ export function PromptPreviewModal({
    *  it's filled. */
   reasonField?: { label: string; value: string; onChange: (v: string) => void };
 }) {
-  const [lang, setLang] = useState<"he" | "en">("he");
+  const [pick, setLang] = useState<"he" | "en">("he");
+  // Not every prompt has a Hebrew rendering; an empty tab would read as "nothing will be sent".
+  const hasHe = !!data?.promptHe?.trim();
+  const lang = pick === "he" && !hasHe ? "en" : pick;
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} style={{
@@ -207,9 +212,11 @@ export function PromptPreviewModal({
         ) : data ? (
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-              <button className={`btn btn-sm ${lang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("he")}>עברית</button>
-              <CopyBtn text={data.promptHe} />
-              <span style={{ width: 1, height: 16, background: "var(--border-hairline)", margin: "0 4px" }} />
+              {hasHe ? <>
+                <button className={`btn btn-sm ${lang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("he")}>עברית</button>
+                <CopyBtn text={data.promptHe} />
+                <span style={{ width: 1, height: 16, background: "var(--border-hairline)", margin: "0 4px" }} />
+              </> : <span className="ob-sub">לפעולה הזו אין תצוגה בעברית — זה הפרומפט עצמו, כפי שיישלח</span>}
               <button className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("en")}>English</button>
               <CopyBtn text={data.prompt} />
             </div>

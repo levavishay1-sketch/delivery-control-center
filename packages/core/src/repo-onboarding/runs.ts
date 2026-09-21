@@ -1,20 +1,20 @@
 import { randomUUID } from "node:crypto";
 import { rmSync } from "node:fs";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
-import { db, withTenant } from "@dcc/db";
+import { db, recordClaudeCall, withTenant } from "@dcc/db";
 import { repo, repoAiEvent, repositoryOnboardingRun, repositoryOnboardingStage } from "@dcc/db/schema";
+import { callsForEntity } from "../claude-center.ts";
 import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { recommend } from "../routing.ts";
-import { changedFiles, fileVersions } from "./changes.ts";
+import { changeSummary, changedFiles, fileVersions } from "./changes.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { appendRepoAiEvent } from "./events.ts";
-import { assistantBusy, assistantMessages, assistantModel, askAssistant, markAssistantSent, resetAssistant } from "./assistant.ts";
 import { lastInputUser, markDisconnected, startClaudeSession, statusFile, stopClaudeSession, terminalLine, terminalState, writeTerminalInput } from "./session.ts";
-import { promptSeenAfter, readStatusSnapshot, scanTranscript, sessionIdle, transcriptLineCount, type TranscriptFact } from "./transcript.ts";
+import { digestTranscript, promptSeenAfter, readStatusSnapshot, scanTranscript, sessionIdle, transcriptLineCount, type TranscriptFact } from "./transcript.ts";
 import {
   LIVE_RUN_STATUSES, STAGES, isStageKey, normalizeModelPolicy, normalizePolicy, policyNeedsConsent, presetPolicy, stageDefinition,
   type AutomationPolicy, type ChangedFile, type DeliverResult, type ModelPolicy, type PrepareResult, type ReviewResult, type RunSession,
-  type RunStatus, type StageKey, type StageStatus, type StageUsage, type AssistantTotals, sessionTotals,
+  type RunStatus, type StageKey, type StageStatus, type StageUsage, type SessionTotals, sessionTotals,
 } from "./types.ts";
 import { ensureOnboardingWorkspace, existingSetup, trackedFileCount } from "./workspace.ts";
 
@@ -53,8 +53,38 @@ async function loadRun(repoId: string, runId: string) {
 }
 
 const sessionOf = (run: Pick<RunRow, "session">): RunSession => ({ state: "none", ...((run.session ?? {}) as Partial<RunSession>) });
-const usageOf = (s: Pick<StageRow, "usage">): StageUsage => (s.usage ?? {}) as StageUsage;
-const costNow = (run: Pick<RunRow, "session">) => sessionTotals(sessionOf(run)).costUsd;
+const ZERO: SessionTotals = { costUsd: 0, inputTokens: 0, outputTokens: 0, apiDurationMs: 0 };
+const sessionModelId = (s: RunSession) => s.status?.modelId ?? s.status?.model ?? s.model ?? null;
+const sessionEffort = (s: RunSession) => s.status?.effort ?? s.effort ?? null;
+
+/** The session's spend since the ledger cursor, written as ONE ledger row
+ *  (claude-in-dcc design §1: a live session is recorded in slices — one per
+ *  stage, one per process), and the cursor moved. The cursor is bookkeeping
+ *  in the run's session JSON; the money is only in the ledger. */
+async function recordSessionSlice(ctx: Ctx, stageKey: StageKey | null, by?: string | null): Promise<void> {
+  const { run } = await loadRun(ctx.repoId, ctx.runId);
+  const s = sessionOf(run);
+  const now = sessionTotals(s);
+  const cur = s.ledgerCursor ?? ZERO;
+  const stage = stageKey ?? (s.ledgerCursor?.stageKey as StageKey | undefined) ?? (run.currentStageKey as StageKey | null) ?? null;
+  const delta = {
+    costUsd: Math.max(0, now.costUsd - cur.costUsd),
+    inputTokens: Math.max(0, Math.round(now.inputTokens - cur.inputTokens)),
+    outputTokens: Math.max(0, Math.round(now.outputTokens - cur.outputTokens)),
+    apiDurationMs: Math.max(0, Math.round(now.apiDurationMs - cur.apiDurationMs)),
+  };
+  if (delta.costUsd > 0 || delta.inputTokens > 0 || delta.outputTokens > 0) {
+    await recordClaudeCall({
+      clientId: ctx.clientId, userId: by ?? run.triggeredBy, entityKind: "onboarding_run", entityId: ctx.runId,
+      capability: "onboarding_init", trigger: "session", screen: "onboarding",
+      label: stage ? `סשן ההטמעה · ${stageDefinition(stage)?.title_he ?? stage}` : "סשן ההטמעה",
+      startedAt: s.ledgerCursor?.at ? new Date(s.ledgerCursor.at) : s.startedAt ? new Date(s.startedAt) : new Date(),
+      durationMs: delta.apiDurationMs, modelUsed: sessionModelId(s), effort: sessionEffort(s),
+      inputTokens: delta.inputTokens, outputTokens: delta.outputTokens, costUsd: delta.costUsd, meta: { stageKey: stage },
+    }).catch((e) => console.error("[ledger] an onboarding slice was NOT recorded:", e instanceof Error ? e.message : e));
+  }
+  await patchSession(ctx, { ledgerCursor: { ...now, stageKey: stage, at: new Date().toISOString() } });
+}
 
 async function event(ctx: Ctx, type: string, payload: Record<string, unknown>, actor: string | null) {
   await appendRepoAiEvent({ clientId: ctx.clientId, repoId: ctx.repoId, type, payload: { runId: ctx.runId, ...payload }, actorUserId: actor });
@@ -202,12 +232,15 @@ function sessionModel(run: RunRow): { model: string; effort: string } {
 
 async function startInit(ctx: Ctx, run: RunRow, by: Actor, automated: boolean) {
   if (!run.workspacePath) throw new OnboardingError("אין עותק מבודד — הריצו קודם את הכנת הריפו");
-  await startStage(ctx, "init", by.userId, automated, { costAtStart: costNow(run) });
+  await startStage(ctx, "init", by.userId, automated);
   await launchSession(ctx, run, by, false);
 }
 
 async function launchSession(ctx: Ctx, run: RunRow, by: Actor, resume: boolean) {
-  const prior = sessionOf(run);
+  // Anything the previous process spent that never reached the ledger (an
+  // API restart mid-session) is recorded before the new process starts.
+  if (resume) await recordSessionSlice(ctx, null, by.userId);
+  const prior = sessionOf(resume ? (await loadRun(ctx.repoId, ctx.runId)).run : run);
   const sessionId = resume && prior.id ? prior.id : randomUUID();
   const { model, effort } = sessionModel(run);
   // A new process counts from zero, and until it reports, the file still
@@ -222,9 +255,12 @@ async function launchSession(ctx: Ctx, run: RunRow, by: Actor, resume: boolean) 
     if (!resume) await failStage(ctx, "init", e, by.userId);
     throw e instanceof OnboardingError ? e : new OnboardingError(`לא ניתן להפעיל את Claude Code: ${(e as Error).message}`);
   }
+  const base = resume ? sessionTotals(prior) : undefined;
   await patchSession(ctx, {
     id: sessionId, state: "live", startedAt: new Date().toISOString(), endedAt: undefined, exitCode: undefined, model, effort,
-    status: undefined, base: resume ? sessionTotals(prior) : undefined,
+    status: undefined, base,
+    // A new process counts from zero; the cursor says everything before it is already in the ledger.
+    ledgerCursor: { ...(base ?? ZERO), stageKey: run.currentStageKey ?? "init", at: new Date().toISOString() },
   });
   await event(ctx, resume ? "onboarding.session.resumed" : "onboarding.session.started", { sessionId, model, effort }, by.userId);
   startMonitor(ctx, run.triggeredBy);
@@ -233,6 +269,7 @@ async function launchSession(ctx: Ctx, run: RunRow, by: Actor, resume: boolean) 
 async function onSessionExit(ctx: Ctx, exitCode: number | null) {
   await pollSession(ctx, null);
   stopMonitor(ctx.runId);
+  await recordSessionSlice(ctx, null, lastInputUser(ctx.runId));
   await patchSession(ctx, { state: "ended", endedAt: new Date().toISOString(), exitCode });
   await event(ctx, "onboarding.session.ended", { exitCode }, lastInputUser(ctx.runId));
 }
@@ -244,11 +281,13 @@ export async function completeInitStage(repoId: string, runId: string, by: Actor
   const s = stages.find((x) => x.stageKey === "init");
   if (s?.status !== "Running") throw new OnboardingError("שלב ההטמעה לא פעיל");
   await pollSession(ctx, run.triggeredBy);
+  await recordSessionSlice(ctx, "init", by.userId);
   const { run: fresh } = await loadRun(repoId, runId);
-  const status = sessionOf(fresh).status;
+  const fs = sessionOf(fresh);
   const files = await changedFiles(fresh.workspacePath!, fresh.baselineSha!);
-  await completeStage(ctx, "init", { sessionId: sessionOf(fresh).id ?? "", changedFiles: files.length, completedBy: by.userId }, by.userId,
-    { ...usageOf(s), costAtEnd: costNow(fresh), model: status?.model ?? sessionOf(fresh).model ?? null, effort: status?.effort ?? sessionOf(fresh).effort ?? null });
+  await completeStage(ctx, "init", { sessionId: fs.id ?? "", changedFiles: files.length, completedBy: by.userId }, by.userId,
+    { model: sessionModelId(fs), effort: sessionEffort(fs) } satisfies StageUsage);
+  void s;
   await drive(repoId, runId);
   return { completed: "init" };
 }
@@ -265,7 +304,7 @@ export async function resumeOnboardingSession(repoId: string, runId: string, by:
 
 async function runReview(ctx: Ctx, run: RunRow, by: Actor, automated: boolean) {
   if (!run.workspacePath || !run.baselineSha) throw new OnboardingError("אין עותק מבודד להשוואה");
-  await startStage(ctx, "review", by.userId, automated, { costAtStart: costNow(run) });
+  await startStage(ctx, "review", by.userId, automated);
   const files = await changedFiles(run.workspacePath, run.baselineSha);
   const result: ReviewResult = { changedFiles: files, checkedAt: new Date().toISOString() };
   await patchStage(ctx, "review", { status: "WaitingForUser", result });
@@ -300,13 +339,13 @@ async function approve(ctx: Ctx, by: Actor, auto: boolean) {
   const s = stages.find((x) => x.stageKey === "review");
   if (s?.status !== "WaitingForUser") throw new OnboardingError("שלב הסקירה לא ממתין לאישור");
   await pollSession(ctx, run.triggeredBy);
+  await recordSessionSlice(ctx, "review", by.userId);
   const files = await changedFiles(run.workspacePath!, run.baselineSha!);
-  const fresh = (await loadRun(ctx.repoId, ctx.runId)).run;
-  const status = sessionOf(fresh).status;
+  const fs = sessionOf((await loadRun(ctx.repoId, ctx.runId)).run);
   const result: ReviewResult = { changedFiles: files, checkedAt: new Date().toISOString(), approvedBy: by.userId, approvedAt: new Date().toISOString(), auto };
   if (auto) await event(ctx, "onboarding.gate.auto_resolved", { stageKey: "review", preset: normalizePolicy(run.automation).preset }, by.userId);
   await event(ctx, "onboarding.review.approved", { files: files.length, auto }, by.userId);
-  await completeStage(ctx, "review", result, by.userId, { ...usageOf(s), costAtEnd: costNow(fresh), model: status?.model ?? null, effort: status?.effort ?? null });
+  await completeStage(ctx, "review", result, by.userId, { model: sessionModelId(fs), effort: sessionEffort(fs) } satisfies StageUsage);
 }
 
 async function runDeliver(ctx: Ctx, by: Actor) {
@@ -358,6 +397,7 @@ export async function cancelOnboardingRun(repoId: string, runId: string, by: Act
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה כבר הסתיימה");
   await stopClaudeSession(runId, true);
   stopMonitor(runId);
+  await recordSessionSlice(ctx, null, by.userId);
   for (const s of stages) if (s.status === "Running" || s.status === "WaitingForUser" || s.status === "Pending") await patchStage(ctx, s.stageKey as StageKey, { status: "Cancelled" });
   await patchRun(ctx, { status: "Cancelled", cancelledAt: new Date(), cancelledBy: by.userId });
   await event(ctx, "onboarding.run.cancelled", {}, by.userId);
@@ -476,7 +516,6 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
   const live = terminalState(runId);
   session.state = live === "live" ? "live" : session.state === "live" ? "disconnected" : session.state;
   const totals = sessionTotals(session);
-  const total = totals.costUsd;
   const rec = recommend("onboarding_init");
   // The same picture the task screens draw, built from this run's worktree.
   const deliver = (stages.find((s) => s.stageKey === "deliver")?.result ?? {}) as Partial<DeliverResult>;
@@ -486,18 +525,43 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
       branch: run.branchName, baselineSha: run.baselineSha, prUrl: deliver.prUrl ?? null, prNumber: deliver.prNumber ?? null,
     }).catch(() => null);
   }
+  // The run's cost is its ledger rows (claude-in-dcc §8.2) plus what the
+  // live process has spent since the last slice — shown, and labelled as
+  // not yet recorded, rather than hidden until the stage ends.
+  const calls = await callsForEntity(ctx.clientId, { entityKind: "onboarding_run", entityId: runId });
+  const sessionCalls = calls.filter((c) => c.capability === "onboarding_init");
+  const chatCalls = calls.filter((c) => c.trigger === "chat" || c.trigger === "rollover");
+  const cur = session.ledgerCursor ?? ZERO;
+  const unrecorded = {
+    costUsd: Math.max(0, totals.costUsd - cur.costUsd), inputTokens: Math.max(0, totals.inputTokens - cur.inputTokens),
+    outputTokens: Math.max(0, totals.outputTokens - cur.outputTokens), apiDurationMs: Math.max(0, totals.apiDurationMs - cur.apiDurationMs),
+  };
+  const sum = <T,>(xs: T[], f: (x: T) => number) => xs.reduce((a, x) => a + f(x), 0);
+  const byStage = new Map<string, { stageKey: string; model: string | null; effort: string | null; costUsd: number }>();
+  for (const c of sessionCalls) {
+    const k = String(c.meta.stageKey ?? "init");
+    const e = byStage.get(k) ?? { stageKey: k, model: c.modelUsed, effort: c.effort, costUsd: 0 };
+    e.costUsd += c.costUsd;
+    byStage.set(k, e);
+  }
+  if (unrecorded.costUsd > 0) {
+    const k = String(session.ledgerCursor?.stageKey ?? run.currentStageKey ?? "init");
+    const e = byStage.get(k) ?? { stageKey: k, model: sessionModelId(session), effort: sessionEffort(session), costUsd: 0 };
+    e.costUsd += unrecorded.costUsd;
+    byStage.set(k, e);
+  }
   const cost = {
-    totalCostUsd: total,
+    totalCostUsd: sum(sessionCalls, (c) => c.costUsd) + unrecorded.costUsd,
+    liveUsd: unrecorded.costUsd,
     apiCalls: session.apiCalls ?? 0,
-    inputTokens: totals.inputTokens,
-    outputTokens: totals.outputTokens,
-    apiDurationMs: totals.apiDurationMs,
-    assistant: session.assistant ?? null,
-    byStage: stages.filter((s) => usageOf(s).costAtStart !== undefined).map((s) => {
-      const u = usageOf(s);
-      const end = s.status === "Completed" ? (u.costAtEnd ?? total) : total;
-      return { stageKey: s.stageKey, model: u.model ?? session.status?.model ?? session.model ?? null, effort: u.effort ?? session.status?.effort ?? session.effort ?? null, costUsd: Math.max(0, end - (u.costAtStart ?? 0)) };
-    }),
+    inputTokens: sum(sessionCalls, (c) => c.inputTokens) + unrecorded.inputTokens,
+    outputTokens: sum(sessionCalls, (c) => c.outputTokens) + unrecorded.outputTokens,
+    apiDurationMs: sum(sessionCalls, (c) => c.durationMs ?? 0) + unrecorded.apiDurationMs,
+    chat: chatCalls.length
+      ? { costUsd: sum(chatCalls, (c) => c.costUsd), calls: chatCalls.length, inputTokens: sum(chatCalls, (c) => c.inputTokens), outputTokens: sum(chatCalls, (c) => c.outputTokens) }
+      : null,
+    byStage: [...byStage.values()],
+    calls,
   };
   return {
     repo: { id: r.id, name: r.name },
@@ -539,36 +603,29 @@ export function onboardingStageCatalogue() {
   return { stages: STAGES, recommended: { init: { model: rec.model, effort: rec.effort } } };
 }
 
-/* ── the Hebrew assistant ─────────────────────────────────────────── */
+/* ── what the one chat knows about a run (claude-in-dcc design §3) ─── */
 
-export async function getOnboardingAssistant(repoId: string, runId: string) {
-  await loadRun(repoId, runId);
-  return { messages: assistantMessages(runId), model: assistantModel(), busy: assistantBusy(runId) };
-}
-
-/** Answer a question about the session. Its cost is added to the run's own assistant line. */
-export async function askOnboardingAssistant(repoId: string, runId: string, question: string, screen?: string) {
-  const { run, ctx } = await loadRun(repoId, runId);
-  if (!question.trim()) throw new OnboardingError("כתבו שאלה");
-  if (assistantBusy(runId)) throw new OnboardingError("העוזר עדיין עונה על השאלה הקודמת");
-  const s = sessionOf(run);
-  let a;
-  try {
-    a = await askAssistant({ runId, question, screen, transcriptPath: s.transcriptPath, workspacePath: run.workspacePath, baselineSha: run.baselineSha });
-  } catch (e) {
-    throw new OnboardingError(`העוזר לא הצליח לענות: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`);
-  }
-  const prev: AssistantTotals = s.assistant ?? { costUsd: 0, calls: 0, inputTokens: 0, outputTokens: 0 };
-  await patchSession(ctx, {
-    assistant: { costUsd: prev.costUsd + a.costUsd, calls: prev.calls + 1, inputTokens: prev.inputTokens + a.inputTokens, outputTokens: prev.outputTokens + a.outputTokens },
-  });
-  return { message: a.message, costUsd: a.costUsd };
-}
-
-export async function resetOnboardingAssistant(repoId: string, runId: string) {
-  await loadRun(repoId, runId);
-  resetAssistant(runId);
-  return { reset: true };
+/** The facts the chat gets for a `run:<id>` topic: the session's state, what
+ *  it did since the previous question (a digest of the transcript from the
+ *  cursor), and the files changed in the isolated copy. The chat keeps the
+ *  cursor; only what is new is handed over each time. */
+export async function onboardingChatFacts(runId: string, cursor: number): Promise<{ facts: Record<string, unknown>; cursor: number }> {
+  const [row] = await db.select().from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, runId)).limit(1);
+  if (!row) return { facts: {}, cursor };
+  const s = sessionOf(row);
+  const digest = s.transcriptPath ? digestTranscript(s.transcriptPath, cursor, cursor ? 10_000 : 14_000) : { text: "", cursor, entries: 0 };
+  const files = row.workspacePath && row.baselineSha ? await changeSummary(row.workspacePath, row.baselineSha).catch(() => "") : "";
+  const stage = row.currentStageKey ? stageDefinition(row.currentStageKey as StageKey)?.title_he ?? row.currentStageKey : "—";
+  return {
+    facts: {
+      "שלב נוכחי": stage,
+      "מצב ההרצה": row.status,
+      "סשן Claude": s.state === "live" ? "פעיל" : s.state === "ended" ? "נסגר" : s.state === "disconnected" ? "נותק" : "לא התחיל",
+      "מה הסשן עשה מאז השאלה הקודמת": digest.text || "(אין חדש)",
+      "קבצים ששונו בעותק המבודד": files || "(אין)",
+    },
+    cursor: digest.cursor,
+  };
 }
 
 /** Type an instruction into the live session, as the person who pressed send.
@@ -590,8 +647,7 @@ export async function sendToOnboardingSession(repoId: string, runId: string, by:
   if (!writeTerminalInput(runId, `\x1b[200~${text}\x1b[201~`, by.userId)) throw new OnboardingError("סשן Claude לא פעיל");
   await new Promise((r) => setTimeout(r, 500));
   writeTerminalInput(runId, "\r", by.userId);
-  if (input.messageId) markAssistantSent(runId, input.messageId, !!input.force);
-  await event(ctx, "onboarding.assistant.sent", { text: text.length > 500 ? `${text.slice(0, 499)}…` : text, forced: !!input.force }, by.userId);
+  await event(ctx, "onboarding.session.instructed", { text: text.length > 500 ? `${text.slice(0, 499)}…` : text, forced: !!input.force, messageId: input.messageId ?? null }, by.userId);
   // Typed into a terminal is not the same as received: look for the message in the transcript.
   let confirmed = false;
   for (let i = 0; i < 12 && file && !confirmed; i++) {

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { AutomationPolicy, AutomationPreset, Effort, ModelPolicy, OnboardingCost, OnboardingEvent, OnboardingRunSummary, OnboardingStageDefinition, OnboardingStageKey } from "../../api.ts";
 import { Pill } from "../../ui.tsx";
+import { CostLine } from "../../claude/CostLine.tsx";
 import {
   EFFORTS, EFFORT_HE, MODEL_OPTIONS, PRESET_HE, RUN_STATUS_HE, describePolicy, effortLabel, eventLabel, fmtDate, fmtDuration, fmtInt, fmtTime, fmtUsd,
   modelLabel, policyNeedsConsent, presetPolicy,
@@ -149,9 +150,9 @@ export function ModelPanel({ choices, defs, recommended, busy, disabled, onSave 
   );
 }
 
-/* ── cost ─────────────────────────────────────────────────────────── */
+/* ── cost — every number here is a ledger row, or the live delta the ledger does not have yet ── */
 
-export function CostPanel({ cost, title }: { cost: OnboardingCost; title: (key: string) => string }) {
+export function CostPanel({ cost, title, nav }: { cost: OnboardingCost; title: (key: string) => string; nav: (h: string) => void }) {
   return (
     <div className="panel">
       <h4>עלות ההרצה</h4>
@@ -161,22 +162,30 @@ export function CostPanel({ cost, title }: { cost: OnboardingCost; title: (key: 
         <div><div className="l">טוקנים (קלט / פלט)</div><div className="v" style={{ fontSize: 12 }}>{fmtInt(cost.inputTokens)} / {fmtInt(cost.outputTokens)}</div></div>
         <div><div className="l">זמן AI מצטבר</div><div className="v">{fmtDuration(cost.apiDurationMs)}</div></div>
       </div>
-      {!!cost.byStage.length && (
-        <table className="ob-cost-table">
-          <thead><tr><th style={{ textAlign: "right" }}>שלב</th><th style={{ textAlign: "right" }}>מודל</th><th style={{ textAlign: "right" }}>מאמץ</th><th style={{ textAlign: "left" }}>עלות</th></tr></thead>
-          <tbody>
-            {cost.byStage.map((s) => (
-              <tr key={s.stageKey}><td>{title(s.stageKey)}</td><td>{s.model ?? "—"}</td><td>{effortLabel(s.effort)}</td><td style={{ textAlign: "left" }}>{fmtUsd(s.costUsd)}</td></tr>
-            ))}
-          </tbody>
-        </table>
+      {cost.byStage.length > 0 && (
+        <div className="rowlist" style={{ marginTop: 10 }}>
+          {cost.byStage.map((s) => (
+            <div className="row" key={s.stageKey} style={{ padding: "7px 10px", fontSize: 12 }}>
+              <span className="title">{title(s.stageKey)}</span>
+              <span className="spacer" />
+              <CostLine model={s.model} effort={s.effort} costUsd={s.costUsd} />
+            </div>
+          ))}
+          {cost.chat && cost.chat.calls > 0 && (
+            <div className="row" style={{ padding: "7px 10px", fontSize: 12 }}>
+              <span className="title">הצ'אט · {fmtInt(cost.chat.calls)} שאלות</span>
+              <span className="spacer" />
+              <CostLine inputTokens={cost.chat.inputTokens} outputTokens={cost.chat.outputTokens} costUsd={cost.chat.costUsd} />
+            </div>
+          )}
+        </div>
       )}
-      {cost.assistant && cost.assistant.calls > 0 && (
-        <table className="ob-cost-table">
-          <tbody><tr><td>העוזר העברי · {fmtInt(cost.assistant.calls)} שאלות</td><td style={{ textAlign: "left" }}>{fmtUsd(cost.assistant.costUsd)}</td></tr></tbody>
-        </table>
-      )}
-      <p className="ob-sub" style={{ marginTop: 8 }}>מתוך שורת הסטטוס של Claude Code — הערכה של העלות, כמו ש-/cost מציג.</p>
+      <p className="ob-sub" style={{ marginTop: 8 }}>
+        {cost.liveUsd > 0
+          ? <>מתוך זה {fmtUsd(cost.liveUsd)} הוצא בסשן הפעיל ועדיין לא נרשם — הוא נרשם כשהשלב מסתיים או כשהסשן נסגר.</>
+          : <>מתוך יומן הקריאות של קלוד, כמו כל עלות במערכת.</>}
+        {" "}<a onClick={() => nav("#/claude/calls")}>כל הקריאות ←</a>
+      </p>
     </div>
   );
 }
