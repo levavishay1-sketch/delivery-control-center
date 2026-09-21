@@ -177,8 +177,13 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
             onSelect={setSelected}
           />
 
-          <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} />
-          <p className="ob-sub" style={{ marginTop: 10 }}>שאלות על מה שהסשן עושה — בצ'אט של קלוד (הכפתור למטה משמאל, או Ctrl K). הוא מקבל את מה שהתחדש בסשן ואת המסך שבטרמינל.</p>
+          {/* Delivery has no conversation left to have: the session closes with it, and its steps are one button. */}
+          {sel !== "deliver" && (
+            <>
+              <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} />
+              <p className="ob-sub" style={{ marginTop: 10 }}>שאלות על מה שהסשן עושה — בצ'אט של קלוד (הכפתור למטה משמאל, או Ctrl K). הוא מקבל את מה שהתחדש בסשן ואת המסך שבטרמינל.</p>
+            </>
+          )}
           {sel === "review" && byKey.get("review")?.status === "WaitingForUser" && (
             <ReviewPanel
               view={view} stage={byKey.get("review")!} busy={busy}
@@ -258,7 +263,9 @@ function StageCard(p: StageCardProps) {
         <span className="grow" />
         {p.runnable && (
           <button className="btn btn-primary" disabled={!!p.busy} onClick={p.onRun}>
-            {p.busy === `run:${def.key}` ? "מתחיל…" : stage.status === "Failed" ? "▶ הרץ שלב שוב" : "▶ הרץ שלב"}
+            {def.key === "deliver"
+              ? (p.busy === "run:deliver" ? "מבצע…" : stage.status === "Failed" ? "COMMIT + PUSH + PR שוב" : "COMMIT + PUSH + PR")
+              : (p.busy === `run:${def.key}` ? "מתחיל…" : stage.status === "Failed" ? "▶ הרץ שלב שוב" : "▶ הרץ שלב")}
           </button>
         )}
       </div>
