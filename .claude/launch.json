@@ -11,6 +11,7 @@
       "name": "api",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "start", "-w", "@dcc/api"],
+      "env": { "DCC_HOOK_TOKEN": "dev-secret" },
       "port": 3001
     }
   ]
