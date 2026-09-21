@@ -90,7 +90,7 @@ would stop being read. An element that genuinely needs no explanation opts out
 with `{/* no-info: why */}` above it: visible in review, and counted by the
 audit so an opt-out cannot quietly become the norm.
 
-## 9. An explanation that stopped being true
+## 7. An explanation that stopped being true
 
 The harder half. The wording lives in `packages/core/src/glossary/`, the thing
 it describes lives in a screen, and nothing connects them — so a button that
@@ -121,13 +121,21 @@ keeps coming back about an element that already has an "i" is a different
 finding from a missing fact: it says the explanation is the suspect. The
 screen says so in those words.
 
-## 7. The web reads the registry once
+## 8. The web reads the registry once
 
 `GET /claude/glossary` returns every concept; `Info` fetches it once per page
 load and looks the key up locally, so a screen with thirty hints makes one
 request, and a hint never waits on its own round trip.
 
-## 8. Restarts
+## 9. Reading and placement
+
+Two things that only show on a real screen, both found by the user looking at it.
+
+**Hebrew with English inside.** A sentence like "…לקוח שצורך יותר AI; המספר…" is laid out by the bidi algorithm, which places a neutral character (`;` `=` `·`) by the letters on either side of it — so the same sentence came out scrambled, and differently depending on whether it began in Hebrew or English. The rule is that an explanation is **always** right-to-left, right-aligned, whatever its first letter. `BidiText` (`claude/BidiText.tsx`) wraps every run of Latin letters or digits in `<bdi dir="ltr">`, so the run keeps its own order and everything around it is plain right-to-left text; the bubble itself carries `dir="rtl"`. The chat answers with the same words and uses the same component. Wording never has to be written around the problem.
+
+**A bubble that hides behind the next card.** Drawn inside the card that holds the "i", the bubble lives in that card's stacking context: the next card paints over it and any `overflow` clips it. It is now drawn in a portal on `<body>` with fixed coordinates and a z-index above every card, the sidebar and the chat dock. It opens under the "i" (above it when there is no room), stays inside the window, and follows the "i" while any container scrolls. Because a portal still bubbles events through the React tree, a click inside the bubble stops there and does not reach the card.
+
+## 10. Restarts
 
 The API is started without a file watcher, so saving a file never restarts it.
 It is restarted deliberately, once at the end of each stage, and checked

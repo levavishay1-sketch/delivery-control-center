@@ -3,7 +3,7 @@
 // Run: `npm run info:drift [<git range>]` (default: everything this branch
 // adds to master, plus what is not committed yet).
 //
-// The problem it solves (openspec/changes/info-hints, design §9): the wording
+// The problem it solves (openspec/changes/info-hints, design §7): the wording
 // lives in `packages/core/src/glossary/`, the thing it describes lives in a
 // screen. Nothing connects them, so a button that starts writing to TFS keeps
 // an "i" that says it does not. This does not try to understand the change —

@@ -72,6 +72,7 @@ Hebrew, plain, **short but clear** — one or two sentences (the audit fails an
 - Name the consequence of an action, especially when it costs money or writes outside DCC.
 - Describe numbers and states; never quote an example value.
 - One idea per entry. If the sentence needs "and also", it is two concepts.
+- English inside a Hebrew sentence is fine and needs no special care in the wording: the bubble and the chat render every Latin run isolated (`BidiText`), so it reads the same wherever the sentence starts. Write the sentence naturally; do not reorder it to dodge the bidi algorithm.
 - Write it so the chat can say the same words aloud: the chat answers from this entry with no model call.
 
 Good: "כמה כסף ה-AI הוציא על הדרישה עד עכשיו — סכום כל הקריאות לקלוד עליה, מיומן הקריאות."
