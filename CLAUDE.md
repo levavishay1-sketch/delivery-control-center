@@ -135,6 +135,15 @@ and how to group a large change into phases instead of switching per
 task. Its facts live in `references/models.md` with the date they were
 checked — update that file when a model is released, not the method.
 
+## Wishlist
+
+The user's ideas for the project that are not yet committed to live in
+`docs/wishlist.md`; its header has the format and the statuses. When asked
+to "add to the wishlist", add one entry there and leave it **uncommitted**
+until the user says to commit — then all waiting entries go in one PR, since
+`master` changes only through one. Say at the end of a session that entries
+are waiting. When an idea becomes an OpenSpec change, delete its entry.
+
 ## Methodology
 
 OpenSpec (`/opsx:propose → /opsx:apply → /opsx:archive`) with a Shape-Up
