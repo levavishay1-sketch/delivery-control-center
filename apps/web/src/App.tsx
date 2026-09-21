@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import "./theme.css";
 import { Icon, ICONS, initials } from "./ui.tsx";
-import { getDashboard } from "./api.ts";
 import { Dashboard } from "./screens/Dashboard.tsx";
 import { AuditTrail } from "./screens/AuditTrail.tsx";
 import { Record } from "./screens/Record.tsx";
@@ -36,29 +35,24 @@ function useHash() {
   return hash;
 }
 
-const NAV: { to: string; label: string; icon: React.ReactNode; badge?: boolean }[] = [
+// "כל הדרישות", "התראות" and "תקציבים" are not here: their screens stay reachable from the dashboard.
+const NAV: { to: string; label: string; icon: React.ReactNode }[] = [
   { to: "#/", label: "לוח בקרה", icon: ICONS.dashboard },
-  { to: "#/clients", label: "לקוחות", icon: ICONS.branch },
+  { to: "#/clients", label: "לקוחות", icon: ICONS.briefcase },
   { to: "#/requirements", label: "דרישות", icon: ICONS.folder },
-  { to: "#/ado", label: "Azure DevOps", icon: ICONS.branch },
+  { to: "#/ado", label: "Azure DevOps", icon: ICONS.layers },
   { to: "#/repositories", label: "Repositories", icon: ICONS.repo },
   { to: "#/pull-requests", label: "בקשות מיזוג", icon: ICONS.branch },
-  { to: "#/work", label: "כל הדרישות", icon: ICONS.list },
-  { to: "#/alerts", label: "התראות", icon: ICONS.bell, badge: true },
-  { to: "#/budgets", label: "תקציבים", icon: ICONS.slash },
   { to: "#/claude", label: "קלוד", icon: ICONS.spark },
   { to: "#/prompts", label: "פרומפטים", icon: ICONS.message },
   { to: "#/settings", label: "הגדרות", icon: ICONS.gear },
-  { to: "#/users", label: "משתמשים", icon: ICONS.inbox },
+  { to: "#/users", label: "משתמשים", icon: ICONS.user },
   { to: "#/audit", label: "יומן פעילויות", icon: ICONS.list },
 ];
 
 export function App() {
   const hash = useHash();
   const nav = (h: string) => { location.hash = h; };
-  const [alertCount, setAlertCount] = useState(0);
-
-  useEffect(() => { getDashboard().then((d) => setAlertCount(d.alerts.length)).catch(() => {}); }, [hash]);
 
   const path = hash.replace(/^#/, "").split("?")[0]!;
   let screen: React.ReactNode;
@@ -93,7 +87,7 @@ export function App() {
   const active = (to: string) => {
     if (to === "#/") return path === "/";
     if (to === "#/clients") return path === "/clients" || path.startsWith("/client/");
-    if (to === "#/requirements") return path === "/requirements" || path === "/projects" || path.startsWith("/project/") || path.startsWith("/wi/") || path.startsWith("/task/");
+    if (to === "#/requirements") return path === "/requirements" || path === "/projects" || path === "/work" || path.startsWith("/project/") || path.startsWith("/wi/") || path.startsWith("/task/");
     if (to === "#/repositories") return path === "/repositories" || path.startsWith("/repo/");
     if (to === "#/claude") return path === "/claude" || path.startsWith("/claude/");
     return hash.split("?")[0] === to;
@@ -111,7 +105,6 @@ export function App() {
             <button key={n.to} className="nav-item" aria-current={active(n.to) ? "page" : undefined} onClick={() => nav(n.to)}>
               <Icon d={n.icon} />
               {n.label}
-              {n.badge && alertCount > 0 && <span className="nav-count">{alertCount}</span>}
             </button>
           ))}
         </div>
