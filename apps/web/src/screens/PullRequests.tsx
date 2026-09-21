@@ -88,13 +88,16 @@ export function PullRequests({ nav }: { nav: (h: string) => void }) {
   const ready = openRows.filter((r) => !r.draft && !r.conflicts && r.review === "approved").length;
 
   // Grouped by client, then repository; a request whose base is another request hangs under it.
+  // Within a group the requests follow their numbers — the order they were opened in — so a request keeps its place
+  // from one visit to the next; what needs attention is said by its flags and the tile above, not by moving it up.
   const groups = new Map<string, { client: string; repo: string; repoId: string; rows: PullRequestRow[] }>();
   for (const r of rows) {
     const key = `${r.client.id ?? "-"}|${r.repo.id}`;
     if (!groups.has(key)) groups.set(key, { client: r.client.name ?? "ללא לקוח", repo: r.repo.name, repoId: r.repo.id, rows: [] });
     groups.get(key)!.rows.push(r);
   }
-  const ordered = (list: PullRequestRow[]) => {
+  const ordered = (unsorted: PullRequestRow[]) => {
+    const list = [...unsorted].sort((a, b) => a.number - b.number);
     const out: { pr: PullRequestRow; depth: number }[] = [];
     const children = (id: string | null, depth: number) => {
       for (const r of list.filter((x) => x.parentId === id)) { out.push({ pr: r, depth }); children(r.id, depth + 1); }
