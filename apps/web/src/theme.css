@@ -575,6 +575,11 @@ a { color: var(--color-accent); }
 .cm-pop .sha { font-family: var(--mono); direction: ltr; unicode-bidi: isolate; background: var(--surface-muted); border: 1px solid var(--border-soft); border-radius: 4px; padding: 0 5px; }
 .cm-pop .x { position: absolute; inset-inline-end: 6px; top: 4px; border: none; background: none; cursor: pointer; color: var(--ink-500); font-size: 15px; line-height: 1; padding: 2px 5px; }
 .cm-pop a { font-size: 11.5px; }
+/* a merge's popover: the titles of the commits it brought in */
+.cm-pop .bg { margin-top: 8px; }
+.cm-pop .bg ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 4px; max-height: 130px; overflow: auto; }
+.cm-pop .bg li { display: flex; gap: 6px; align-items: baseline; font-size: 11.5px; line-height: 1.5; color: var(--ink-700); }
+.cm-pop .bg .t { direction: ltr; text-align: left; unicode-bidi: isolate; overflow-wrap: anywhere; }
 .cm .fd { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--divider); }
 .cm .fd .k { color: var(--ink-500); }
 .cm .fd .p { font-family: var(--mono); font-size: 11px; direction: ltr; text-align: left; unicode-bidi: isolate; overflow-wrap: anywhere; background: var(--surface-muted); border: 1px solid var(--border-soft); border-radius: 6px; padding: 4px 7px; margin: 4px 0 6px; }

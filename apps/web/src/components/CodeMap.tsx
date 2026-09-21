@@ -21,7 +21,9 @@ const D = {
   minSpacing: 24,
   curveDx: 60,
   lead: 36,
-  radius: { other: 4, ours: 5, attention: 5, current: 7, branchPoint: 6, pr: 12, uncommitted: 6, empty: 6 },
+  radius: { other: 4, ours: 5, attention: 5, current: 7, merge: 7, branchPoint: 6, pr: 12, uncommitted: 6, empty: 6 },
+  /** The dots drawn with a 2px ring, so their outer edge is one more than their radius. */
+  ringed: new Set(["branchPoint", "uncommitted", "empty", "pr"]),
   color: {
     line: "var(--border-hairline)",
     lineStroke: "#D3D1C7",
@@ -69,6 +71,7 @@ function Node({ node, x, y, onPick, picked }: { node: CodeMapNode; x: number; y:
       case "ours": return <circle cx={x} cy={y} r={r} fill={D.color.ours} />;
       case "attention": return <circle cx={x} cy={y} r={r} fill={D.color.attention} />;
       case "current": return <circle cx={x} cy={y} r={r} fill={D.color.current} />;
+      case "merge": return <circle cx={x} cy={y} r={r} fill={D.color.current} />;
       case "branchPoint": return <circle cx={x} cy={y} r={r} fill={D.color.surface} stroke={D.color.ours} strokeWidth={2} />;
       case "uncommitted": return <circle cx={x} cy={y} r={r} fill={D.color.surface} stroke={D.color.attention} strokeWidth={2} strokeDasharray="3 2" />;
       case "empty": return <circle cx={x} cy={y} r={r} fill={D.color.surface} stroke={D.color.ours} strokeWidth={2} />;
@@ -100,6 +103,7 @@ const KIND_HE: Record<CodeMapNodeKind, string> = {
   ours: "שינוי שלנו",
   attention: "שינוי שנוגע בקבצים שלנו",
   current: "המצב העדכני",
+  merge: "מיזוג",
   branchPoint: "נקודת ההתחלה של הענף",
   pr: "בקשת מיזוג",
   uncommitted: "שינויים שעוד לא נשמרו",
@@ -170,13 +174,24 @@ function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: n
       {node.subject && <div className={node.heading ? "s br" : "s"}>{node.subject}</div>}
       {node.message && <div className="msg">{node.message}</div>}
       {node.detail && <div className="d">{node.detail}</div>}
+      {!!node.brought?.length && (
+        <div className="bg">
+          <div className="k">{node.brought.length === 1 ? "הקומיט שהוא הכניס" : `${node.brought.length} הקומיטים שהוא הכניס`}</div>
+          <ul>{node.brought.map((b) => <li key={b.sha}><span className="sha">{b.sha}</span> <span className="t">{b.subject}</span></li>)}</ul>
+        </div>
+      )}
       <div className="m">
         {node.sha && <span className="sha">{node.sha}</span>}
         {node.author && <span>{node.author}</span>}
         {when && <span>{when}</span>}
         {typeof node.files === "number" && <span>{node.files} קבצים</span>}
       </div>
-      {node.url && <div style={{ marginTop: 6 }}><a href={node.url} target="_blank" rel="noreferrer">פתח בגיט־האוסט ↗</a></div>}
+      {(node.url || node.dccPath) && (
+        <div style={{ marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {node.url && <a href={node.url} target="_blank" rel="noreferrer">פתח בגיט־האוסט ↗</a>}
+          {node.dccPath && <a href={node.dccPath}>פתח ב-DCC ›</a>}
+        </div>
+      )}
       {node.folder && <FolderBlock folder={node.folder} />}
     </div>
   );
@@ -243,9 +258,15 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
         const parent = p.lane.from ? byId.get(p.lane.from.lane) : undefined;
         const px = parent ? parent.xs[p.lane.from!.at] ?? first : first;
         const py = parent ? parent.y : p.y;
-        // Labels hang above the line, starting at the point the line starts, so they
-        // never sit on the dots and never collide with an arrow label.
+        // Labels start at the point the line starts, so they never sit on the dots. The base line keeps its name above;
+        // a branch that springs from another keeps its name below, so the arrow that climbs from its request up to the
+        // base has the gap between the two lines to itself. The badge follows the name and the note.
         const labelX = Math.min(D.width - 8, first + 6);
+        const below = !!parent;
+        const rows = (p.lane.label ? 1 : 0) + (p.lane.note ? 1 : 0);
+        const labelY = below ? p.y + 30 : p.y - 32;
+        const noteY = below ? p.y + (p.lane.label ? 45 : 30) : p.y - (p.lane.label ? 17 : 32);
+        const badgeY = below ? p.y + 24 + rows * 20 : p.y - 24;
         // The line that has no parent starts a little before its first dot, so a lane with one or two dots still reads as a line.
         const lineStart = parent ? first : Math.min(D.width - 24, first + D.lead);
         return (
@@ -253,14 +274,14 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
             {parent
               ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} fill="none" stroke={D.color.ours} strokeWidth={2} pointerEvents="none" />
               : <line x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} pointerEvents="none" />}
-            {p.lane.label && <text x={labelX} y={p.y - 32} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
-            {p.lane.note && <text x={labelX} y={p.y - (p.lane.label ? 17 : 32)} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
+            {p.lane.label && <text x={labelX} y={labelY} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
+            {p.lane.note && <text x={labelX} y={noteY} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
             {p.lane.nodes.map((n: CodeMapNode, i) => (
               <Node key={i} node={n} x={p.xs[i]!} y={p.y} picked={picked === `${p.lane.id}:${i}`}
                 onPick={() => onPick?.(`${p.lane.id}:${i}`, n, p.xs[i]!, p.y)} />
             ))}
             {/* The base line keeps its badge above, so the arrow that arrives from below has a clear landing. */}
-            {p.lane.place && <Badge place={p.lane.place} x={last - 16} y={p.y + (parent ? 24 : -24)} ours={!!parent} />}
+            {p.lane.place && <Badge place={p.lane.place} x={last - 16} y={badgeY} ours={!!parent} />}
           </g>
         );
       })}
@@ -269,17 +290,30 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
         const from = byId.get(a.from);
         const to = byId.get(a.to);
         if (!from || !to) return null;
-        const fx = (from.xs[from.xs.length - 1] ?? 0) - 12;
-        const fy = from.y - 10;
-        const tx = (to.xs[to.xs.length - 1] ?? 0) + 24;
-        const ty = to.y + 13;
+        // From the top of the last dot of the branch (the request's circle) to the edge of the newest dot of the base:
+        // the arrow says "this goes in there", so it must start and end ON those two dots, touching them, and not
+        // somewhere between. The end is where the line toward the dot's centre meets the dot's outer edge.
+        const lastKind = (pl: Placed) => pl.lane.nodes[pl.lane.nodes.length - 1]?.kind ?? "other";
+        const outer = (pl: Placed) => { const k = lastKind(pl); return D.radius[k] + (D.ringed.has(k) ? 1 : 0); };
+        const fx = from.xs[from.xs.length - 1] ?? 0;
+        const fy = from.y - outer(from);
+        const cxTo = to.xs[to.xs.length - 1] ?? 0;
+        const dx = cxTo - fx;
+        const dy = to.y - fy;
+        const len = Math.hypot(dx, dy) || 1;
+        const tx = cxTo - (dx / len) * outer(to);
+        const ty = to.y - (dy / len) * outer(to);
         const done = a.state === "done";
+        // The label sits beside the arrow, on the side that has room, and carries its own background.
+        const lw = a.label.length * 6.2 + 12;
+        const midX = (fx + tx) / 2;
+        const cx = midX - 12 - lw / 2 >= 8 ? midX - 12 - lw / 2 : midX + 12 + lw / 2;
+        const cy = (fy + ty) / 2;
         return (
           <g key={i}>
             <path d={`M${fx},${fy} L${tx},${ty}`} fill="none" stroke={done ? D.color.ours : D.color.other} strokeWidth={1.5} strokeDasharray="5 4" markerEnd={`url(#${done ? "cm-ar-ours" : "cm-ar-mute"})`} />
-            {/* The label sits on the arrow, so it carries its own background. */}
-            <rect x={(fx + tx) / 2 - 6 - (a.label.length * 6.2 + 12) / 2} y={(fy + ty) / 2 - 27} width={a.label.length * 6.2 + 12} height={17} rx={6} fill={D.color.surface} />
-            <text x={(fx + tx) / 2 - 6} y={(fy + ty) / 2 - 15} textAnchor="middle" fontSize={D.size.arrow} fill={done ? D.color.oursText : D.color.muted} fontFamily={D.font}>{a.label}</text>
+            <rect x={cx - lw / 2} y={cy - 9} width={lw} height={17} rx={6} fill={D.color.surface} />
+            <text x={cx} y={cy + 4} textAnchor="middle" fontSize={D.size.arrow} fill={done ? D.color.oursText : D.color.muted} fontFamily={D.font}>{a.label}</text>
           </g>
         );
       })}
@@ -291,7 +325,7 @@ const LEGEND: { color: string; ring?: boolean; text: string }[] = [
   { color: D.color.other, text: "שינוי של אחרים" },
   { color: D.color.ours, text: "שינוי שלנו" },
   { color: D.color.attention, text: "דורש תשומת לב" },
-  { color: D.color.current, text: "המצב העדכני" },
+  { color: D.color.current, text: "מיזוג, או המצב העדכני" },
   { color: D.color.ours, ring: true, text: "נקודת התחלה או בקשת מיזוג" },
 ];
 

@@ -340,7 +340,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       "סקירה": h.pr.review === "approved" ? "מאושרת" : h.pr.review === "changes_requested" ? "התבקשו תיקונים" : "אין עדיין",
       "בדיקות": h.pr.checks === "passing" ? "עברו" : h.pr.checks === "failing" ? "נכשלו" : h.pr.checks === "running" ? "רצות" : "אין",
       "התנגשות": h.pr.conflicts ? "יש" : "אין", "ממתינה": `${Math.round(h.pr.waitingHours)} שעות`,
-      ...(d?.freshness ? { "מאחורי הבסיס": `${d.freshness.behind} קומיטים, ${d.freshness.behindTouching} מהם נוגעים בקבצים של הבקשה` } : {}),
+      ...(d?.freshness ? { "מאחורי הבסיס": `${d.freshness.behind} קומיטים, ${d.freshness.sharedFiles} קבצים שגם הבקשה הזו משנה` } : {}),
       "מה חוסם": h.blockers.filter((b) => b.ok === false).map((b) => `${b.title}: ${b.detail}`),
       "הצעד הבא": `${h.nextStep.title} — ${h.nextStep.detail}`, nextStep: `${h.nextStep.title} — ${h.nextStep.detail}`,
       status: h.pr.state, blocker: h.blockers.find((b) => b.ok === false)?.title ?? null,
@@ -440,7 +440,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
                   <div><div className="l">commits</div><div className="v">{d?.freshness?.ahead ?? "—"}</div></div>
                   <div><div className="l">קבצים</div><div className="v">{d?.fileCount ?? pr.changedFiles}</div></div>
                   <div><div className="l">היעד התקדם</div><div className="v">{d?.freshness ? `${d.freshness.behind}` : "—"}</div></div>
-                  <div><div className="l">מתוכם באותם קבצים</div><div className="v" style={{ color: d?.freshness?.behindTouching ? "var(--status-warning)" : undefined }}>{d?.freshness?.behindTouching ?? "—"}</div></div>
+                  <div><div className="l">קבצים משותפים</div><div className="v" style={{ color: d?.freshness?.sharedFiles ? "var(--status-warning)" : undefined }}>{d?.freshness?.sharedFiles ?? "—"}</div></div>
                 </div>
               </div>
               <div className="panel">
