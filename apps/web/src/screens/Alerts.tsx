@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAlerts } from "../api.ts";
 import { PageHead } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 const KIND: Record<string, string> = { blocker: "חסימה", budget: "תקציב", decision: "החלטה", deadline: "דדליין", review: "בדיקה", gap: "פער" };
 const ago = (iso: string) => {
@@ -15,7 +16,7 @@ export function Alerts({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead title="התראות" sub={rows ? `${rows.length} התראות` : undefined} />
+      <PageHead info="page_alerts" title="התראות" sub={rows ? `${rows.length} התראות` : undefined} />
       {err && <div className="empty">{err}</div>}
       <div className="rowlist">
         {(rows ?? []).map((a) => (
@@ -24,7 +25,7 @@ export function Alerts({ nav }: { nav: (h: string) => void }) {
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 600 }}>{a.title}</div>
               {a.body && <div style={{ fontSize: 12, color: "var(--ink-500)", marginTop: 2 }}>{a.body}</div>}
-              <div style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 3 }}>{KIND[a.kind] ?? a.kind} · {ago(a.createdAt)}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 3 }}>{KIND[a.kind] ?? a.kind}<Info k="alert_kind" /> · {ago(a.createdAt)}</div>
             </div>
             {a.workitemId && <a className="link" onClick={() => nav(`#/wi/${a.workitemId}`)}>פתיחה</a>}
           </div>

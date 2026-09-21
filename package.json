@@ -16,9 +16,10 @@
     "db:migrate": "npm -w @dcc/db run migrate",
     "db:guards": "npm -w @dcc/db run guards",
     "typecheck": "tsc -b",
-  "audit:stale": "node scripts/audit-stale.mjs",
+    "audit:stale": "node scripts/audit-stale.mjs",
     "sync": "node scripts/sync.mjs",
-    "spec": "openspec"
+    "spec": "openspec",
+    "info:drift": "node scripts/info-drift.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.2",

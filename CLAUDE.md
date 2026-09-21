@@ -4,7 +4,7 @@
 
 ## Working in this repo
 
-- npm workspaces: packages under `packages/*`, apps under `apps/*`, `@dcc/*` names.
+- npm workspaces: packages under `packages/*`, apps under `apps/*` (`api`, `web`, `mcp`), `@dcc/*` names.
 - Node ≥ 22, ESM, `.ts` extensions in imports (NodeNext).
 - **Run TypeScript directly with `tsx`, never raw `node`.** Any script that
   imports across workspace packages (`@dcc/core` → `@dcc/db`, etc.) resolves
@@ -47,17 +47,25 @@
 ## Commands
 
 ```bash
-npm run typecheck              # tsc -b, whole repo
+npm run typecheck              # tsc -b: db, core, api, mcp — NOT apps/web
+npx tsc -p apps/web --noEmit   # web app has its own tsconfig; vite does not type-check
 npm run db:migrate             # drizzle-kit, real Postgres
 npm run db:guards              # append-only triggers + dcc_app role
 npm run -w @dcc/db dev:reset   # wipe local PGlite
 npm run -w @dcc/db dev:setup   # apply migrations to local PGlite
 npm run -w @dcc/db dev:prove   # 9 checks: RLS wall + append-only + validation
+npm run -w @dcc/api smoke      # 8 end-to-end checks against the API (needs the DB free, see PGlite note)
+npm run -w @dcc/core prove:routing    # routing proofs
+npm run -w @dcc/core prove:retention  # chat-retention proofs
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run audit:stale            # leftovers of replaced designs, stale OpenSpec statuses
 npm run sync                   # after merges: master current, merged local branches gone, what is left
 ```
+
+There is no test runner, linter, formatter or CI. A change is verified by
+`typecheck`, `audit:stale`, and the `dev:prove` / `smoke` / `prove:*` scripts.
+`smoke` and `dev:prove` hold the PGlite directory, so stop the API first.
 
 Repository onboarding (`openspec/changes/repository-onboarding-native-init`)
 runs the real, interactive Claude Code (`/init` with `CLAUDE_CODE_NEW_INIT=1`)
@@ -188,6 +196,44 @@ after looking at what it holds — never left to accumulate. The "ענפים" ta
 a pull request shows every branch of the repository and says which of these
 applies.
 
+## Every screen explains itself — the "i"
+
+The end user is a Hebrew speaker who is not fluent in developer concepts.
+So **every screen title, card, section title, figure and non-obvious field
+carries an "i"** that opens one or two plain Hebrew sentences saying what it
+is — and, for a costly or irreversible button, what happens if you press it.
+This is the default for anything built from now on, not something to remember
+per screen: the shared components (`PageHead`, `CardTitle`, `StatTile` in
+`apps/web/src/ui.tsx`) take a **required** `info` prop, and
+`npm run audit:stale` fails a raw `h1`–`h4` inside a screen, an unknown
+concept key, or a malformed entry.
+
+The wording lives in **one** place, keyed by **concept** and never by screen
+(`packages/core/src/glossary/concepts/`), and is read only through
+`getConcept` / `allConcepts` / `glossaryFor` — the same entries the chat
+answers from, so a person gets identical words from the "i" and from Claude.
+A new screen or component is not finished without it.
+
+How to add one, how to word it, and which elements get an "i" (a button
+usually does not): the `info-hints` skill in `.claude/skills/`, and
+`openspec/changes/info-hints/design.md` for why it is built this way.
+
+Two things hold this over time, and neither depends on remembering:
+
+- **Completeness.** The `info` prop is required, so a card or a page title
+  does not compile without one; `npm run audit:stale` fails a heading written
+  by hand and a label, column or figure that names something and opens no
+  explanation; and a hook says it the moment the file is saved. An element
+  that genuinely needs none opts out with `{/* no-info: why */}` above it —
+  the audit counts those, so an opt-out cannot quietly become the norm.
+- **Staying true.** `npm run info:drift` lists the explanations that sit on
+  the lines a change touched, and asks the one question a check cannot answer:
+  did the meaning change? **Run it before opening a pull request that touches
+  a screen**, and fix a wording that no longer matches in the same change. The
+  slower signal is in the קלוד screen: a question that keeps coming back about
+  an element that already has an "i" is marked there, because then the hint is
+  the suspect, not the screen.
+
 ## Before a large task — the model and effort box
 
 Before starting a **large** task, do not begin the work: invoke the
@@ -214,6 +260,8 @@ are the same mechanisms DCC gives to pilot clients — wired up here too via
 client. See `hooks/README.md` for what each hook does and its caveats
 (`SessionEnd` can't block termination; hook config is snapshotted at
 session start, so edits to `.claude/settings.json` need a fresh session).
+The hooks do nothing unless `DCC_DEV_EMAIL` and `DCC_HOOK_TOKEN` are set
+(`.claude/settings.local.json` and `.claude/launch.json` carry the dev values).
 
 **Two skill directories, don't mix them.** `skills/` at the root is the
 library DCC hands to a client's repository — those call `skills/dcc.mjs`

@@ -6,7 +6,8 @@ import {
   type AutomationPolicy, type DeliverResult, type Effort, type InitResult, type ModelPolicy, type OnboardingRunSummary, type OnboardingRunView,
   type OnboardingStage, type OnboardingStageDefinition, type OnboardingStageKey, type PrepareResult, type ReviewResult,
 } from "../../api.ts";
-import { PageHead, Pill } from "../../ui.tsx";
+import { CardTitle, PageHead, Pill } from "../../ui.tsx";
+import { Info } from "../../claude/Info.tsx";
 import { CodeMapPanel } from "../../components/CodeMap.tsx";
 import { FileCompare } from "../../components/FileCompare.tsx";
 import { useClaudeContext } from "../../claude/context.ts";
@@ -20,6 +21,9 @@ import { KIND_CHIP, RUN_STATUS_HE, STAGE_STATUS_HE, errText, fmtDate, fmtInt, fm
  * from its own button in its card; the terminal under the card is the real
  * session and stays on screen through every stage.
  */
+/** The concept behind each stage's "i" — the same entry its button opens. */
+const STAGE_INFO: Record<string, string | undefined> = { prepare: "prepare", init: "init", review: "onboarding_review", deliver: "deliver" };
+
 export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [repoName, setRepoName] = useState("");
   const [runs, setRuns] = useState<OnboardingRunSummary[] | null>(null);
@@ -116,7 +120,7 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_onboarding_run"
         crumb={crumb}
         title={`הטמעת AI — ${view.repo.name}`}
         sub={`הרצה ${run.id.slice(0, 8)} · התחילה ${fmtDate(run.startedAt)}${run.baselineSha ? ` · commit ${shortSha(run.baselineSha)}` : ""}${run.branchName ? ` · ענף ${run.branchName}` : ""}`}
@@ -239,7 +243,7 @@ function StageCard(p: StageCardProps) {
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
       <div className="ob-stage-head">
-        <h3>{def.order + 1}. {def.title_he}</h3>
+        <CardTitle as="h3" info={STAGE_INFO[def.key] ?? null}>{def.order + 1}. {def.title_he}</CardTitle>
         <span className={`ob-chip ${kind.cls}`}>{kind.label}</span>
         {def.key === "init" && <span className="ob-chip human">דורש אותך</span>}
         {stage.status === "Completed" && <span className="ob-chip ok">הסתיים</span>}
@@ -301,10 +305,16 @@ function StageBody(p: StageCardProps) {
         {map}
         <p className="ob-sub" style={{ margin: "10px 0" }}>עותק מבודד על ענף חדש. הריפו שלך לא נגע.</p>
         <div className="ob-kv">
-          <div><div className="l">ענף</div><div className="v ob-code">{r.branch}</div></div>
-          <div><div className="l">נקודת התחלה</div><div className="v ob-code">{shortSha(r.baselineSha)}</div></div>
-          <div><div className="l">קבצים</div><div className="v">{fmtInt(r.fileCount)}</div></div>
+          <div><div className="l">נוצר מהענף<Info k="run_base_branch" /></div><div className="v ob-code">{r.defaultBranch ?? "—"}</div></div>
+          <div><div className="l">ענף<Info k="run_branch" /></div><div className="v ob-code">{r.branch}</div></div>
+          <div><div className="l">נקודת התחלה<Info k="run_baseline" /></div><div className="v ob-code">{shortSha(r.baselineSha)}</div></div>
+          <div><div className="l">קבצים<Info k="run_files" /></div><div className="v">{fmtInt(r.fileCount)}</div></div>
         </div>
+        {r.baseFrom === "head" && (
+          <div className="ob-note warn" style={{ marginTop: 10 }}>
+            לא נמצא ענף ראשי במאגר, ולכן ההרצה נגזרה מהענף שהעותק עמד עליו. מה שיש בענף הזה ולא בראשי ייכנס גם לבקשת המיזוג — בדקו לפני שממשיכים.
+          </div>
+        )}
         <p className="ob-sub" style={{ marginTop: 10 }}>{found.length ? `כבר קיים בריפו: ${found.join(", ")}.` : "אין בריפו הגדרות קיימות של Claude Code."}</p>
       </>
     );
@@ -331,8 +341,8 @@ function StageBody(p: StageCardProps) {
     return (
       <>
         <div className="ob-kv">
-          <div><div className="l">קבצים שהשתנו</div><div className="v">{fmtInt(r.changedFiles)}</div></div>
-          <div><div className="l">עלות השלב</div><div className="v">{fmtUsd(stageCost?.costUsd ?? 0)}</div></div>
+          <div><div className="l">קבצים שהשתנו<Info k="run_files" /></div><div className="v">{fmtInt(r.changedFiles)}</div></div>
+          <div><div className="l">עלות השלב<Info k="stage_cost" /></div><div className="v">{fmtUsd(stageCost?.costUsd ?? 0)}</div></div>
           <div><div className="l">סיים/ה</div><div className="v">{p.users[r.completedBy] ?? "—"}</div></div>
         </div>
         <p className="ob-sub" style={{ marginTop: 10 }}>הסשן נשאר פתוח עד המסירה: אפשר לבקש מ-Claude שינויים בטרמינל בכל שלב.</p>
@@ -357,7 +367,7 @@ function StageBody(p: StageCardProps) {
       <div className="ob-kv" style={{ marginTop: 10 }}>
         <div><div className="l">commit</div><div className="v ob-code">{r.commitSha ?? "—"}</div></div>
         <div><div className="l">ענף</div><div className="v ob-code">{r.branch}</div></div>
-        <div><div className="l">Pull Request</div><div className="v">{r.prUrl ? <a href={r.prUrl} target="_blank" rel="noreferrer">#{r.prNumber ?? "PR"}</a> : r.compareUrl ? <a href={r.compareUrl} target="_blank" rel="noreferrer">פתיחה ידנית</a> : "—"}</div></div>
+        <div><div className="l">Pull Request<Info k="run_pr" /></div><div className="v">{r.prUrl ? <a href={r.prUrl} target="_blank" rel="noreferrer">#{r.prNumber ?? "PR"}</a> : r.compareUrl ? <a href={r.compareUrl} target="_blank" rel="noreferrer">פתיחה ידנית</a> : "—"}</div></div>
       </div>
       <p className="ob-sub" style={{ marginTop: 10 }}>
         {r.note ?? (r.localOnly ? `אין remote לריפו: הענף נשאר מקומי. מזגו אותו ל-${r.base} ידנית.` : `ה-PR ממתין למיזוג ידני ל-${r.base}. המיזוג הוא "AI Ready".`)}
@@ -427,16 +437,16 @@ function PreStart({ repoId, repoName, crumb, onStarted, onCancel }: { repoId: st
   };
   return (
     <>
-      <PageHead crumb={crumb} title={`לפני שמתחילים — הטמעת AI${repoName ? ` לריפו ${repoName}` : ""}`} sub="הסבר קצר על התהליך. שום דבר עוד לא רץ." actions={onCancel && <button className="btn btn-secondary btn-sm" onClick={onCancel}>חזרה להרצה</button>} />
+      <PageHead info="page_onboarding_intro" crumb={crumb} title={`לפני שמתחילים — הטמעת AI${repoName ? ` לריפו ${repoName}` : ""}`} sub="הסבר קצר על התהליך. שום דבר עוד לא רץ." actions={onCancel && <button className="btn btn-secondary btn-sm" onClick={onCancel}>חזרה להרצה</button>} />
       {err && <div className="ob-note crit" style={{ marginBottom: 14 }}>{err}</div>}
       <div className="dash">
         <div style={{ minWidth: 0, display: "grid", gap: 16 }}>
           <div className="panel">
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>מכינים את Claude לריפו הזה</h3>
+            <CardTitle as="h3" info="onboarding_intro" style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>מכינים את Claude לריפו הזה</CardTitle>
             <p style={{ fontSize: 13, lineHeight: 1.65 }}>כך שמפתח שמקבל משימה יקבל מההתחלה את מה שהוא צריך לעבודה יעילה, חסכונית ואיכותית: הוראות, ידע שנטען לפי דרישה והגנות. התוכן נוצר על ידי <span className="ob-code">/init</span> של Claude Code עצמו, בשיחה איתך.</p>
           </div>
           <div className="panel">
-            <p className="section-lbl">מה יקרה, ב-{defs.length} שלבים</p>
+            <p className="section-lbl">מה יקרה, ב-{defs.length} שלבים<Info k="stage_overview" /></p>
             <div className="ob-overview" style={{ ["--ob-steps" as string]: defs.length }}>
               {defs.map((d) => (
                 <div key={d.key}>
@@ -448,14 +458,14 @@ function PreStart({ repoId, repoName, crumb, onStarted, onCancel }: { repoId: st
             </div>
           </div>
           <div className="panel">
-            <p className="section-lbl">מה ייכתב לריפו</p>
+            <p className="section-lbl">מה ייכתב לריפו<Info k="what_gets_written" /></p>
             <div className="ob-actions" style={{ gap: 6 }}>
               <span className="ob-chip">CLAUDE.md</span><span className="ob-chip">skills לפי דרישה</span><span className="ob-chip">hooks</span><span className="ob-chip">rules לפי נתיב</span>
             </div>
             <p className="ob-sub" style={{ marginTop: 8 }}>מה בדיוק — Claude מציע ואתם מחליטים בשיחה. הכל נכתב בענף חדש, ושום דבר לא יוצא לפני שתאשרו בסקירת התוצרים.</p>
           </div>
           <div className="panel">
-            <p className="section-lbl">על מה תישאלו</p>
+            <p className="section-lbl">על מה תישאלו<Info k="what_youll_be_asked" /></p>
             <p style={{ fontSize: 13, lineHeight: 1.65 }}>על מה ש-Claude לא יכול לדעת מהקוד: מה לעשות עם הגדרות קיימות, איך אתם בונים ומפרסמים, ומה השתנה בצוות. אפשר לבחור תשובה, לכתוב אחרת, או לשוחח איתו.</p>
           </div>
           <div className="ob-actions">
@@ -465,11 +475,11 @@ function PreStart({ repoId, repoName, crumb, onStarted, onCancel }: { repoId: st
         </div>
         <div className="rail">
           <div className="panel">
-            <h4>אוטומציה</h4>
+            <CardTitle info="automation">אוטומציה</CardTitle>
             <AutomationEditor defs={defs} value={policy} onChange={setPolicy} consent={consent} onConsent={setConsent} />
           </div>
           <div className="panel">
-            <h4>מודל ומאמץ</h4>
+            <CardTitle info="model_effort">מודל ומאמץ</CardTitle>
             <ModelEditor defs={defs} value={models} recommended={recommended} onChange={setModels} />
             <p className="ob-sub" style={{ marginTop: 8 }}>אפשר לשנות גם בזמן השיחה, עם <span className="ob-code">/model</span> ו-<span className="ob-code">/effort</span>.</p>
           </div>

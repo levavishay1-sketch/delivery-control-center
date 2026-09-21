@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getPullRequest, listPullRequests, type PullRequestDetail, type PullRequestList, type PullRequestRow } from "../api.ts";
 import { TopicRows } from "../components/Topics.tsx";
 import { PageHead, Pill, PrNumber } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 /**
  * בקשות מיזוג — every open pull request DCC can see, from every client and
@@ -109,7 +110,7 @@ export function PullRequests({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_pull_requests"
         title="בקשות מיזוג"
         sub="כל מה שממתין לאישור, מכל הלקוחות. המיזוג עצמו נעשה בגיט־האוסט."
         actions={<button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void load(true)}>{busy ? "מסנכרן…" : "↻ סנכרן"}</button>}
@@ -117,10 +118,10 @@ export function PullRequests({ nav }: { nav: (h: string) => void }) {
       {err && <div className="ob-note crit" style={{ marginBottom: 14 }}>{err}</div>}
 
       <div className="pr-tiles">
-        <div><div className="l">פתוחות</div><div className="v">{openRows.length}</div></div>
-        <div><div className="l">דורש תשומת לב</div><div className="v" style={{ color: attention ? "var(--status-warning)" : undefined }}>{attention}</div></div>
-        <div><div className="l">מוכן למיזוג</div><div className="v" style={{ color: ready ? "var(--status-healthy)" : undefined }}>{ready}</div></div>
-        <div><div className="l">סונכרן</div><div className="v" style={{ fontSize: 13 }}>{data ? fmtTime(data.syncedAt) : "—"}</div></div>
+        <div><div className="l">פתוחות<Info k="prs_open" /></div><div className="v">{openRows.length}</div></div>
+        <div><div className="l">דורש תשומת לב<Info k="prs_attention" /></div><div className="v" style={{ color: attention ? "var(--status-warning)" : undefined }}>{attention}</div></div>
+        <div><div className="l">מוכן למיזוג<Info k="prs_ready" /></div><div className="v" style={{ color: ready ? "var(--status-healthy)" : undefined }}>{ready}</div></div>
+        <div><div className="l">סונכרן<Info k="prs_synced" /></div><div className="v" style={{ fontSize: 13 }}>{data ? fmtTime(data.syncedAt) : "—"}</div></div>
       </div>
 
       {data?.problems.map((p) => <div key={p.repo} className="ob-note warn" style={{ marginBottom: 10 }}>{p.repo}: {p.reason}</div>)}

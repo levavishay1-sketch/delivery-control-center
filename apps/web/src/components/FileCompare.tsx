@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Info } from "../claude/Info.tsx";
 
 /**
  * A file before and after, side by side, with the changes marked
@@ -135,7 +136,7 @@ function Compare({ v }: { v: FileVersionsData }) {
   return (
     <div className="fc" ref={first}>
       <div className="fc-head">
-        <span className="old">לפני{v.before === null ? " · הקובץ לא היה קיים" : ""}</span>
+        <span className="old"><Info k="file_compare" />לפני{v.before === null ? " · הקובץ לא היה קיים" : ""}</span>
         <span className="new">אחרי{v.after === null ? " · הקובץ נמחק" : ""}</span>
       </div>
       <div className="fc-body">

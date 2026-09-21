@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from "react";
+import { useState, type CSSProperties, type ReactNode } from "react";
+import { Info } from "./claude/Info.tsx";
 
 export const initials = (s: string) =>
   s.split(/[\s@._-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
@@ -159,12 +160,17 @@ export function StatusPill({ status }: { status: string }) {
   return <Pill tone={p.tone}>{p.label}</Pill>;
 }
 
-export function PageHead({ title, sub, crumb, actions }: { title: ReactNode; sub?: string; crumb?: ReactNode; actions?: ReactNode }) {
+/**
+ * The heading of a screen. `info` is the key of the concept that says what the
+ * screen is for (openspec/changes/info-hints) — required, so a screen without
+ * one is a written decision (`null`), not an oversight.
+ */
+export function PageHead({ title, sub, crumb, actions, info }: { title: ReactNode; sub?: string; crumb?: ReactNode; actions?: ReactNode; info: string | null }) {
   return (
     <div className="page-head">
       <div className="titles">
         {crumb && <p className="crumb">{crumb}</p>}
-        <h1>{title}</h1>
+        <h1>{title}{info && <Info k={info} />}</h1>
         {sub && <p>{sub}</p>}
       </div>
       {actions && <div className="head-actions">{actions}</div>}
@@ -281,7 +287,16 @@ export function CopyBtn({ text, label = "העתק" }: { text: string; label?: st
   );
 }
 
-export function StatTile({ tone, num, label, onClick }: { tone: string; num: ReactNode; label: string; onClick?: () => void }) {
+/**
+ * The one card / section heading of a screen — every title inside a panel goes
+ * through here so it carries its "i" (`info`, required: a concept key, or
+ * `null` when the heading needs no explanation).
+ */
+export function CardTitle({ info, as: Tag = "h4", className, style, children }: { info: string | null; as?: "h1" | "h2" | "h3" | "h4"; className?: string; style?: CSSProperties; children: ReactNode }) {
+  return <Tag className={className} style={style}>{children}{info && <Info k={info} />}</Tag>;
+}
+
+export function StatTile({ tone, num, label, onClick, info }: { tone: string; num: ReactNode; label: string; onClick?: () => void; info?: string }) {
   return (
     <div className="stat-tile" onClick={onClick} role="button" tabIndex={0}>
       <span className={`badge-circle tone-${tone}`}>
@@ -289,7 +304,7 @@ export function StatTile({ tone, num, label, onClick }: { tone: string; num: Rea
           {tone === "critical" ? ICONS.slash : tone === "warning" ? ICONS.alert : ICONS.calendar}
         </svg>
       </span>
-      <span><span className="num">{num}</span><span className="lbl">{label}</span></span>
+      <span><span className="num">{num}</span><span className="lbl">{label}{info && <Info k={info} />}</span></span>
     </div>
   );
 }

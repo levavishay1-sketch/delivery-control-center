@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getWorkList, type WorkListRow } from "../api.ts";
 import { PageHead, TypeChip, initials } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { NewRequirement } from "../forms.tsx";
 
 const PRIO: Record<string, string> = { critical: "קריטית", high: "גבוהה", medium: "בינונית", low: "נמוכה" };
@@ -28,16 +29,16 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
 
   return (
     <>
-      <PageHead title="עבודות" sub={rows ? `${rows.length} דרישות בכל הלקוחות` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ דרישה חדשה</button>} />
+      <PageHead info="page_works" title="עבודות" sub={rows ? `${rows.length} דרישות בכל הלקוחות` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ דרישה חדשה</button>} />
       {modal && <NewRequirement onClose={() => setModal(false)} onDone={(id) => { setModal(false); if (id) nav(`#/wi/${id}`); else reload(); }} />}
       <div className="filter-bar">
-        <div className="field"><label>חיפוש</label><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="כותרת או מפתח…" /></div>
-        <div className="field"><label>עדיפות</label>
+        {/* no-info: a search box */}<div className="field"><label>חיפוש</label><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="כותרת או מפתח…" /></div>
+        <div className="field"><label>עדיפות<Info k="priority" /></label>
           <select value={f.priority} onChange={(e) => setF({ ...f, priority: e.target.value })}>
             <option value="">הכל</option>{Object.entries(PRIO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </div>
-        <div className="field"><label>שלב</label>
+        <div className="field"><label>שלב<Info k="phase" /></label>
           <select value={f.phase} onChange={(e) => setF({ ...f, phase: e.target.value })}>
             <option value="">הכל</option>{Object.entries(PHASE).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -52,7 +53,7 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
       {err && <div className="empty">{err}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>דרישה</th><th>תחת</th><th>לקוח</th><th>אחראי</th><th>עדיפות</th><th>שלב</th><th>עודכן</th></tr></thead>
+          {/* no-info: the first column is the thing the row is about */}<thead><tr><th>דרישה</th><th>תחת</th><th>לקוח</th><th>אחראי<Info k="owner" /></th><th>עדיפות<Info k="priority" /></th><th>שלב<Info k="phase" /></th><th>עודכן<Info k="updated_at" /></th></tr></thead>
           <tbody>
             {filtered.map((w) => (
               <tr key={w.id}>

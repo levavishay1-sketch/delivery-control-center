@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, getClientAdoTasks, unlinkClientRepo, approveTask, REQ_TYPE_HE, type AdoTasks, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
 
 const PH: Record<string, { label: string; tone: string }> = {
@@ -61,7 +62,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_client"
         crumb={<a onClick={() => nav("#/clients")}>← לקוחות</a>}
         title={d.client.name}
         sub={`${d.requirements.length} דרישות · ${d.repos.length} repositories · ${activeConns.length} חיבורים${d.client.adoProjectRef ? ` · ADO: ${d.client.adoProjectRef}` : ""}`}
@@ -83,10 +84,10 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       {editRepo && <EditRepo repo={editRepo} onClose={() => setEditRepo(null)} onDone={() => { setEditRepo(null); reload(); }} />}
 
       {/* ---- requirements ---- */}
-      <p className="section-lbl">דרישות</p>
+      <p className="section-lbl">דרישות<Info k="client_requirements" /></p>
       <div className="panel" style={{ padding: 0, overflow: "hidden", marginBottom: 26 }}>
         <table className="wtable">
-          <thead><tr><th>דרישה</th><th>סוג</th><th>שלב</th><th>עדיפות</th><th>חסמים</th></tr></thead>
+          {/* no-info: the first column is the thing the row is about */}<thead><tr><th>דרישה</th><th>סוג</th><th>שלב<Info k="phase" /></th><th>עדיפות<Info k="priority" /></th><th>חסמים<Info k="blocker" /></th></tr></thead>
           <tbody>
             {rows.map(({ r, depth }) => {
               const ph = PH[r.phase] ?? { label: r.phase, tone: "inactive" };
@@ -110,7 +111,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
 
       {/* ---- Azure DevOps: the client's task hierarchy ---- */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <p className="section-lbl">Azure DevOps</p>
+        <p className="section-lbl">Azure DevOps<Info k="ado_sync_state" /></p>
         {ado && (
           <span style={{ fontSize: 11.5, color: "var(--ink-400)" }}>
             {ado.inTfs} ב-TFS{ado.pending ? ` · ${ado.pending} טרם הוקמו` : ""}
@@ -122,7 +123,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       </p>
       <div className="panel" style={{ padding: 0, overflow: "hidden", marginBottom: 26 }}>
         <table className="wtable">
-          <thead><tr><th>משימה</th><th>סוג</th><th>TFS</th><th>מצב</th><th>מתוך דרישה</th></tr></thead>
+          {/* no-info: the first column is the thing the row is about */}<thead><tr><th>משימה</th><th>סוג</th><th>TFS</th><th>מצב</th><th>מתוך דרישה</th></tr></thead>
           <tbody>
             {(ado?.rows ?? []).map((t, i) => {
               const prev = ado!.rows[i - 1];
@@ -170,7 +171,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
       <div className="settings-grid">
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p className="card-title" style={{ margin: 0 }}>Repositories</p>
+            <p className="card-title" style={{ margin: 0 }}>Repositories<Info k="repository" /></p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("repo")}>+ חיבור repository</button>
           </div>
           {d.repos.map((r) => (
@@ -191,7 +192,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
 
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p className="card-title" style={{ margin: 0 }}>Azure DevOps</p>
+            <p className="card-title" style={{ margin: 0 }}>Azure DevOps<Info k="ado_connection" /></p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("ado")}>+ חיבור</button>
           </div>
           {activeConns.map((c) => (

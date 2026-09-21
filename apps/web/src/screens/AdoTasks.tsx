@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAllAdoTasks, approveTask, ADO_LADDER, type AllAdoTasks, type AdoTaskRow } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 /**
  * The Azure DevOps screen: the org-wide mirror of what DCC has put (or
@@ -77,7 +78,7 @@ export function AdoTasks({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_ado_tasks"
         title="Azure DevOps"
         sub={`${d.inTfs} פריטים ב-TFS${d.pending ? ` · ${d.pending} טרם הוקמו` : ""} · ${d.clients.length} לקוחות`}
         actions={
@@ -111,7 +112,8 @@ export function AdoTasks({ nav }: { nav: (h: string) => void }) {
           </div>
           <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <table className="wtable">
-              <thead><tr><th>משימה</th><th>סוג</th><th>TFS</th><th>מצב</th><th>גודל</th><th>מתוך דרישה</th></tr></thead>
+              {/* no-info: the first column is the thing the row is about */}
+              <thead><tr><th>משימה</th><th>סוג<Info k="requirement_type" /></th><th>TFS<Info k="tfs" /></th><th>מצב<Info k="task_state" /></th><th>גודל<Info k="task_size" /></th><th>מתוך דרישה</th></tr></thead>
               <tbody><TaskRows rows={c.rows} clientId={c.clientId} nav={nav} onChanged={load} /></tbody>
             </table>
           </div>

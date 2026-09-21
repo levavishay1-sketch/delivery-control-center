@@ -4,8 +4,8 @@ import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
 import { useClaudeContext } from "../claude/context.ts";
-import { GlossaryHint } from "../claude/GlossaryHint.tsx";
-import { PrNumber } from "../ui.tsx";
+import { CardTitle, PrNumber } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { errText } from "./onboarding/labels.ts";
 
 /**
@@ -180,11 +180,10 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
       <div className="panel rv" style={{ marginBottom: 12 }}>
         <div className="rv-head">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h4 style={{ margin: 0 }}>סקירה ואישור</h4>
+            <CardTitle info="pr_review" style={{ margin: 0 }}>סקירה ואישור</CardTitle>
             <p className="ob-sub" style={{ marginTop: 3 }}>הבקשה פתוחה ומוכנה לסקירה. התהליך יעבור אתכם על מה שנכנס, ובסוף תחליטו.</p>
           </div>
           <button className="btn btn-primary" onClick={() => setOpen(true)}>התחל בתהליך אישור PR</button>
-          <GlossaryHint screen="pull_request" entry="review" />
         </div>
         {sent && <div className="ob-note ok" style={{ marginTop: 8 }}>{sent}</div>}
       </div>
@@ -194,14 +193,14 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
   return (
     <div className="panel rv" style={{ marginBottom: 12 }}>
       <div className="rv-head">
-        <h4 style={{ margin: 0 }}>סקירה ואישור · בקשה #{number}</h4>
+        <CardTitle info="pr_review" style={{ margin: 0 }}>סקירה ואישור · בקשה #{number}</CardTitle>
         <span className="ob-sub">עברתם על {done} מתוך {steps.length}</span>
         <span style={{ flex: 1 }} />
         <button className="btn btn-secondary btn-sm" onClick={() => setOpen(false)}>צא מהסקירה</button>
       </div>
 
       <div className="panel rv-in" style={{ marginBottom: 10 }}>
-        <h4>מה לבדוק לפני שמחליטים</h4>
+        <CardTitle info="pr_review_checklist">מה לבדוק לפני שמחליטים</CardTitle>
         <div className="pr-chk">
           <span className={`ic ${stuck.length ? "no" : "yes"}`}>{stuck.length ? "✕" : "✓"}</span>
           <div>
@@ -229,7 +228,7 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
       </div>
 
       <div className="panel rv-in">
-        <h4>ההחלטה שלכם</h4>
+        <CardTitle info="pr_decision">ההחלטה שלכם</CardTitle>
         {!ready
           ? <div className="rv-lock">סמנו את השורות למעלה, וההחלטה תיפתח. <button type="button" className="rv-link" onClick={onFiles}>או פתחו קודם את הקבצים</button></div>
           : (
@@ -271,7 +270,7 @@ function Branches({ data, err, busy, reload }: { data: RepoBranches | null; err:
   return (
     <>
       <div className="panel" style={{ marginBottom: 12 }}>
-        <h4>מה זה ענף, ולמה יש כאלה</h4>
+        <CardTitle info="branch">מה זה ענף, ולמה יש כאלה</CardTitle>
         <p className="ob-sub">
           ענף הוא עותק עבודה מקביל של הריפו. כל מי שמתחיל עבודה — אדם, סשן של Claude Code או הרצה של DCC — פותח לעצמו ענף, כדי לא לשבור את
           {data ? ` ${data.defaultBranch}` : " הענף הראשי"}. כשהעבודה מוכנה, בקשת מיזוג מכניסה אותה לענף הראשי, ואז הענף כבר לא נחוץ.
@@ -283,10 +282,10 @@ function Branches({ data, err, busy, reload }: { data: RepoBranches | null; err:
       {data && (
         <>
           <div className="pr-tiles">
-            <div><div className="l">בקשה פתוחה</div><div className="v">{count("open_pr")}</div></div>
+            <div><div className="l">בקשה פתוחה<Info k="prs_open" /></div><div className="v">{count("open_pr")}</div></div>
             <div><div className="l">בעבודה</div><div className="v">{count("work")}</div></div>
             <div><div className="l">נסגרו בלי מיזוג</div><div className="v" style={{ color: count("stale") ? "var(--status-warning)" : undefined }}>{count("stale")}</div></div>
-            <div><div className="l">אפשר למחוק</div><div className="v" style={{ color: count("merged") ? "var(--status-healthy)" : undefined }}>{count("merged")}</div></div>
+            <div><div className="l">אפשר למחוק<Info k="branch_deletable" /></div><div className="v" style={{ color: count("merged") ? "var(--status-healthy)" : undefined }}>{count("merged")}</div></div>
           </div>
           <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <div className="pr-group">
@@ -309,7 +308,7 @@ function Branches({ data, err, busy, reload }: { data: RepoBranches | null; err:
                   </div>
                 )}
                 {b.lastMessage && b.status !== "default" && <div className="l">"{b.lastMessage}"</div>}
-                <div className="l">איך הגיע לכאן: {b.origin}</div>
+                <div className="l">איך הגיע לכאן<Info k="branch_origin" />: {b.origin}</div>
                 <div className={`adv ${b.advice.tone}`}><b>{b.advice.title}.</b> {b.advice.detail}</div>
               </div>
             ))}
@@ -454,7 +453,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
             </div>
           )}
           {pr.state === "open" && (pr.draft
-            ? <div className="panel rv" style={{ marginBottom: 12 }}><h4>סקירה ואישור</h4><p className="ob-sub">כל עוד הבקשה מסומנת כטיוטה אין מה לסקור: סמנו אותה מוכנה לסקירה בגיט־האוסט, והתהליך ייפתח כאן.</p></div>
+            ? <div className="panel rv" style={{ marginBottom: 12 }}><CardTitle info="pr_review">סקירה ואישור</CardTitle><p className="ob-sub">כל עוד הבקשה מסומנת כטיוטה אין מה לסקור: סמנו אותה מוכנה לסקירה בגיט־האוסט, והתהליך ייפתח כאן.</p></div>
             : <ReviewFlow repoId={repoId} number={number} base={pr.baseBranch} blockers={blockers}
                 steps={[
                   { key: "files", title: "עברתי על רשימת הקבצים", detail: `${d?.fileCount ?? pr.changedFiles} קבצים${d?.topics.length ? ` · ${d.topics.length} נושאים` : ""}`, go: () => go("files"), goText: "פתח את הרשימה" },
@@ -464,7 +463,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
           <div className="dash">
             <div style={{ minWidth: 0 }}>
               {blockers.length > 0 && <div className="panel" style={{ marginBottom: 12 }}>
-                <h4>מה חוסם מיזוג</h4>
+                <CardTitle info="pr_blockers">מה חוסם מיזוג</CardTitle>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>
                 {blockers.map((b) => <BlockerRow key={b.key} b={b} />)}
               </div>}
@@ -477,7 +476,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
                     </div>
                     {d.topics.length > 0 && (
                       <div className="panel pr-topics">
-                        <h4>על מה הענף</h4>
+                        <CardTitle info="pr_branch_topics">על מה הענף</CardTitle>
                         <TopicRows topics={d.topics} />
                       </div>
                     )}
@@ -486,18 +485,18 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
             </div>
             <div className="rail">
               <div className="panel">
-                <h4>עובדות</h4>
+                <CardTitle info="pr_facts">עובדות</CardTitle>
                 <div className="ob-kv">
-                  <div><div className="l">commits</div><div className="v">{d?.freshness?.ahead ?? "—"}</div></div>
-                  <div><div className="l">קבצים</div><div className="v">{d?.fileCount ?? pr.changedFiles}</div></div>
-                  <div><div className="l">היעד התקדם</div><div className="v">{d?.freshness ? `${d.freshness.behind}` : "—"}</div></div>
-                  <div><div className="l">קבצים משותפים</div><div className="v" style={{ color: d?.freshness?.sharedFiles ? "var(--status-warning)" : undefined }}>{d?.freshness?.sharedFiles ?? "—"}</div></div>
+                  <div><div className="l">commits<Info k="commits" /></div><div className="v">{d?.freshness?.ahead ?? "—"}</div></div>
+                  <div><div className="l">קבצים<Info k="pr_file_count" /></div><div className="v">{d?.fileCount ?? pr.changedFiles}</div></div>
+                  <div><div className="l">היעד התקדם<Info k="base_advanced" /></div><div className="v">{d?.freshness ? `${d.freshness.behind}` : "—"}</div></div>
+                  <div><div className="l">קבצים משותפים<Info k="shared_files" /></div><div className="v" style={{ color: d?.freshness?.sharedFiles ? "var(--status-warning)" : undefined }}>{d?.freshness?.sharedFiles ?? "—"}</div></div>
                 </div>
               </div>
               <div className="panel">
-                <h4>אנשים</h4>
+                <CardTitle info="pr_people">אנשים</CardTitle>
                 <div className="pr-rl"><span className="l">פתח</span><span>{pr.author}</span></div>
-                <div className="pr-rl"><span className="l">סקירה</span><span>{pr.review === "approved" ? "אושר" : pr.review === "changes_requested" ? "התבקשו שינויים" : "אין אישור"}</span></div>
+                <div className="pr-rl"><span className="l">סקירה<Info k="pr_review" /></span><span>{pr.review === "approved" ? "אושר" : pr.review === "changes_requested" ? "התבקשו שינויים" : "אין אישור"}</span></div>
                 <div className="pr-rl"><span className="l">עודכן</span><span>{fmtDate(pr.updatedAt)}</span></div>
               </div>
             </div>

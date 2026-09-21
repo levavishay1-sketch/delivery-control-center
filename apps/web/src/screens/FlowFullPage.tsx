@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getDetail, getTaskFlow, ADO_LADDER, type WorkItemDetail, type TaskFlow } from "../api.ts";
 import { TaskGraph } from "./TaskGraph.tsx";
+import { CardTitle } from "../ui.tsx";
 
 /**
  * The Flow, full-page — reached via "⤢ פתח במסך מלא" on the embedded
@@ -28,7 +29,7 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
       <a onClick={() => nav(`#/wi/${id}`)} style={{ cursor: "pointer", fontSize: 12.5, color: "var(--color-accent)", fontWeight: 600 }}>
         ← {d.workitem.key ?? "לדרישה"}
       </a>
-      <h1 style={{ fontSize: 22, fontWeight: 700, margin: "6px 0 16px" }}>{d.workitem.title}</h1>
+      <CardTitle as="h1" info="page_flow" style={{ fontSize: 22, fontWeight: 700, margin: "6px 0 16px" }}>{d.workitem.title}</CardTitle>
 
       <TaskGraph
         flow={flow} height={canvasHeight} nav={nav}
