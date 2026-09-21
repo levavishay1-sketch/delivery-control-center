@@ -1,3 +1,5 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
@@ -343,6 +345,90 @@ export type FileVersions = {
 };
 
 const encodePath = (p: string) => p.split("/").map(encodeURIComponent).join("/");
+
+/* ── the change, written out so it can be read ─────────────────────── */
+
+/** What one approved reading of a request may fetch. A person pays for every token, so the ceiling is here and not in a prompt. */
+const CODE_MAX_FILES = 25;
+const CODE_MAX_TOTAL_BYTES = 400_000;
+const CODE_MAX_FILE_BYTES = 60_000;
+const CODE_MAX_DIFF_BYTES = 300_000;
+
+/** A path from the host is never trusted to stay inside the folder it is written into. */
+const safeRelative = (p: string) => !p || p.startsWith("/") || p.includes("..") || /^[a-zA-Z]:/.test(p) ? null : p;
+
+/**
+ * The change itself, written into a folder: what the request is, its unified
+ * diff, and each changed file as it stands after the change. This is what the
+ * chat reads when a person approves a code reading on a pull request — the
+ * same thing a reviewer looks at, and nothing from a local clone, which may
+ * not have the branch at all.
+ *
+ * It is capped, and the note it returns says what was left out, so an answer
+ * drawn from a part of the change can say that it was only a part.
+ */
+export async function writePullRequestCode(repoId: string, number: number, dir: string): Promise<string> {
+  const d = await pullRequestDetail(repoId, number);
+  const [r] = await db.select({ adoRepoRef: repo.adoRepoRef }).from(repo).where(eq(repo.id, repoId)).limit(1);
+  const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
+  const slug = url ? url.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "") : null;
+  if (!slug) throw new Error("אין כתובת GitHub לריפו הזה, ולכן אי אפשר להביא את השינויים.");
+
+  rmSync(dir, { recursive: true, force: true });
+  mkdirSync(path.join(dir, "files"), { recursive: true });
+
+  const all = d.groups.flatMap((g) => g.files.map((f) => ({ ...f, group: g.title })));
+  const left: string[] = [];
+
+  // The whole change in one call to the host.
+  const raw = await ghText(["api", `repos/${slug}/pulls/${number}`, "-H", "Accept: application/vnd.github.v3.diff"]);
+  let diff = raw ?? "";
+  if (!raw) left.push("את ה-diff המלא לא הצלחנו להביא מהגיט־האוסט");
+  else if (Buffer.byteLength(diff) > CODE_MAX_DIFF_BYTES) {
+    diff = `${diff.slice(0, CODE_MAX_DIFF_BYTES)}\n\n… ה-diff נחתך כאן. ההמשך לא נקרא.\n`;
+    left.push("ה-diff ארוך מדי ונחתך");
+  }
+  writeFileSync(path.join(dir, "changes.diff"), diff, "utf8");
+
+  // Each changed file as it is now, for the lines the diff does not show.
+  let budget = CODE_MAX_TOTAL_BYTES;
+  let written = 0;
+  const wanted = all.filter((f) => f.status !== "D" && safeRelative(f.path));
+  for (const f of wanted) {
+    if (written >= CODE_MAX_FILES || budget <= 0) { left.push(`מתוך ${wanted.length} הקבצים, רק ${written} נקראו במלואם — השאר רק ב-diff`); break; }
+    const text = d.refs ? await ghText(["api", `repos/${slug}/contents/${encodePath(f.path)}?ref=${d.refs.head}`, "-H", "Accept: application/vnd.github.raw"]) : null;
+    if (text == null || text.includes(" ")) continue;
+    const bytes = Buffer.byteLength(text);
+    if (bytes > CODE_MAX_FILE_BYTES) { left.push(`\`${f.path}\` ארוך מדי ולא נקרא במלואו`); continue; }
+    const target = path.join(dir, "files", f.path);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, text, "utf8");
+    budget -= bytes;
+    written += 1;
+  }
+
+  const head = [
+    `# בקשת מיזוג #${d.pr.number} · ${d.pr.repo.name}`,
+    "",
+    `כותרת: ${d.pr.title}`,
+    `מענף \`${d.pr.headBranch}\` אל \`${d.pr.baseBranch}\` · פתח ${d.pr.author} · מצב: ${d.pr.state}`,
+    `${d.fileCount} קבצים שונו.`,
+    "",
+    "## מה יש בתיקייה הזו",
+    "- `changes.diff` — כל השינוי, בפורמט diff. זה מה שסוקר קורא.",
+    "- `files/…` — הקבצים ששונו, כפי שהם אחרי השינוי (לא לפניו), עד התקרה שלמעלה.",
+    left.length ? `\n**מה לא נכנס:** ${left.join("; ")}.` : "",
+    "",
+    "## הקבצים ששונו",
+    ...all.map((f) => `- \`${f.path}\` — ${f.status} · +${f.additions} −${f.deletions} · ${f.group}`),
+    d.body ? `\n## תיאור הבקשה\n\n${d.body.slice(0, 4000)}` : "",
+  ].filter(Boolean).join("\n");
+  writeFileSync(path.join(dir, "pull-request.md"), head, "utf8");
+
+  return left.length
+    ? `בתיקייה: ה-diff המלא של הבקשה, ו-${written} מהקבצים כפי שהם אחרי השינוי. מה שלא נכנס: ${left.join("; ")}. אמרו את זה בתשובה אם זה משנה אותה.`
+    : `בתיקייה: ה-diff המלא של הבקשה, וכל ${written} הקבצים ששונו כפי שהם אחרי השינוי.`;
+}
 
 /** Opening a file needs only the two versions' addresses, which the detail already worked out. That is kept
  *  longer than the detail itself, so a file opened a minute later does not repeat the four calls to the host. */

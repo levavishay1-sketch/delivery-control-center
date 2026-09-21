@@ -11,7 +11,8 @@ import { chatPolicy } from "../routing.ts";
 import { asksAboutScreen, glossaryAnswer, glossaryFor, matchGlossary, type ScreenGlossary } from "../glossary/index.ts";
 import { onboardingChatFacts } from "../repo-onboarding/runs.ts";
 import { actionEntityFor, actionsFor, type ActionDef } from "../actions/index.ts";
-import { codeReadEstimate } from "./proposals.ts";
+import { placesFor, renderPlaces } from "../screens/index.ts";
+import { codeReadEstimate, codeReads } from "./proposals.ts";
 
 /**
  * The one chat (claude-in-dcc §4–§7, design §2–§3).
@@ -35,6 +36,8 @@ export type ScreenContext = {
   suggestions?: string[];
   /** Actions the screen allows this person — stage 3 hands them to the model. */
   actions?: string[];
+  /** The place of the screen map the person is standing on, when it is one (`screens/index.ts`). */
+  place?: string | null;
 };
 
 export type ResolvedTopic = { key: string; kind: TopicKind; id: string | null; title: string; clientId: string; workitemId: string | null; screen: string };
@@ -252,8 +255,9 @@ Rules:
 - Short and plain, usually under 120 words. Plain text only: no headings, no bold or other markdown (short lines starting with "-" are fine). Explain consequences in everyday words ("if you press it, the tasks are proposed but not created").
 - Put commands, file paths, code and keyboard keys in backticks, exactly as written, never translated.
 - You never perform anything yourself, and you cannot read files, run code or browse.
+- SCREENS. The context may list "מסכים שאפשר לעבור אליהם מכאן". When the answer is not in the facts but one of those screens holds it, do NOT use the marker and do NOT tell the person to press a tab themselves: add ONE block, exactly in this form and with a listed key only: <goto key="KEY">one short sentence: what you are going to look at there</goto>. DCC takes the person to that screen and asks them your question again with its facts, and you answer it from those facts. Write nothing else in an answer that carries the block. Never the screen you are already on, never a key that is not listed, and never more than one block.
 - ACTIONS. The context may list "פעולות שאפשר להציע". If the person asks you to DO something that one of them does, answer in one or two sentences what will happen and add ONE block, exactly in this form, with only the listed parameters as JSON: <action key="KEY">{"param":"value"}</action>. The block becomes a card under your answer with an approve button; say that you are proposing it and that it runs only after their approval there. Never say or imply that you did it, and do not send them to a button on the screen instead. If no listed action does what is asked, say so and name the screen or button that does. Never invent an action.
-- CODE. If the answer lies in the repository's code (what a piece of code does, why something fails, where a thing is handled), do NOT use the marker: answer what the facts allow and add ONE block: <needs_code>one sentence: what would have to be read and why</needs_code>. Reading code is a separate, costlier call the person approves under your answer. The marker is for what neither the screen nor the code would answer.
+- CODE. If the answer lies in the repository's code (what a piece of code does, why something fails, where a thing is handled), do NOT use the marker: answer what the facts allow and add ONE block: <needs_code>one sentence: what would have to be read and why</needs_code>. Reading code is a separate, costlier call the person approves under your answer. On a pull request this covers the change itself — whether it is sound, what it might break, whether it is worth merging, what a particular file in it does — which is answered by reading the change and never from the screen's facts. The marker is for what none of these would answer — not the screen, not another screen of DCC, and not the code.
 - When a person's question is about a button or a term that the glossary covers, answer with the glossary's meaning and consequence.
 - LETTER. When asked to draft a message or letter to the client / the requester (מכתב ללקוח), write the whole message from the open gaps in the facts: a short greeting, the open questions numbered in plain business Hebrew (no code, no jargon), a closing line. It may be longer than the usual limit. DCC never sends it — the person copies it; say that in one sentence after the message. If the facts list no open gaps, say there is nothing to ask yet.
 - RECOMMENDATIONS. When asked what could be done better or more cheaply on this item (המלצות לייעול), answer from the facts only — the phase, the gaps, the tasks, the cost and the calls — as three to five short, specific points tied to those facts; never generic advice.`;
@@ -264,7 +268,7 @@ function renderActions(defs: ActionDef[]): string {
 }
 
 /** The blocks a model answer may carry, and the text without them. */
-function parseBlocks(raw: string): { text: string; action: { key: string; params: Record<string, unknown> } | null; needsCode: string | null } {
+function parseBlocks(raw: string): { text: string; action: { key: string; params: Record<string, unknown> } | null; needsCode: string | null; goto: { key: string; reason: string } | null } {
   let text = raw;
   let action: { key: string; params: Record<string, unknown> } | null = null;
   const a = raw.match(/<action\s+key="([^"]+)"\s*>([\s\S]*?)<\/action>/i);
@@ -277,7 +281,10 @@ function parseBlocks(raw: string): { text: string; action: { key: string; params
   const n = raw.match(/<needs_code\s*\/?>([\s\S]*?)(?:<\/needs_code>|$)/i);
   const needsCode = n ? n[1]!.trim() || null : null;
   if (n) text = text.replace(n[0], "");
-  return { text: text.trim(), action, needsCode };
+  const g = raw.match(/<goto\s+key="([^"]+)"\s*>([\s\S]*?)(?:<\/goto>|$)/i);
+  const goto = g ? { key: g[1]!.trim(), reason: g[2]!.trim() } : null;
+  if (g) text = text.replace(g[0], "");
+  return { text: text.trim(), action, needsCode, goto };
 }
 
 function renderFacts(facts: Record<string, unknown>): string {
@@ -392,20 +399,29 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
       transcriptCursor = f.cursor;
     }
 
-    // "Did this help" without a click: the same question again within a minute.
     const previous = await messagesOf(conv);
+    // The chat took the person to another screen for this very question and is
+    // now asked it again there. One question, one hop: it is not a re-ask, it
+    // does not become a second question in the transcript, and from there the
+    // answer comes from the facts — the places are withheld below, so a chat
+    // that cannot answer even there says so instead of moving on again.
+    const lastGoto = [...previous].reverse().find((m) => m.kind === "navigate");
+    const justNavigated = !!lastGoto && normQ(String(lastGoto.payload.question ?? "")) === normQ(question) && Date.now() - new Date(lastGoto.createdAt).getTime() < 120_000;
+
+    // "Did this help" without a click: the same question again within a minute.
     const lastUser = [...previous].reverse().find((m) => m.role === "user");
-    const lastAnswer = [...previous].reverse().find((m) => m.role === "assistant");
-    if (lastUser && lastAnswer && normQ(lastUser.text) === normQ(question) && Date.now() - new Date(lastUser.createdAt).getTime() < 60_000 && lastAnswer.helpful == null) {
+    const lastAnswer = [...previous].reverse().find((m) => m.role === "assistant" && m.kind === "answer");
+    if (!justNavigated && lastUser && lastAnswer && normQ(lastUser.text) === normQ(question) && Date.now() - new Date(lastUser.createdAt).getTime() < 60_000 && lastAnswer.helpful == null) {
       await withTenant(conv.clientId, (tx) => tx.update(conversationMessage).set({ helpful: false, helpfulSource: "reasked" }).where(eq(conversationMessage.id, lastAnswer.id)));
     }
 
-    const userMsg = await addMessage(conv, { role: "user", kind: "answer", source: "system", text: question });
+    const userMsg = justNavigated ? null : await addMessage(conv, { role: "user", kind: "answer", source: "system", text: question });
+    const asked = userMsg ? [toMessage(userMsg, null)] : [];
 
     const zero = stepZero(topic.screen, facts, question);
     if (zero) {
       const a = await addMessage(conv, { role: "assistant", kind: "answer", source: "system", text: zero.text, payload: zero.payload });
-      return { conversation: await viewOf(conv), messages: [toMessage(userMsg, null), toMessage(a, null)], rolledOver: false, suggestions: suggestionsFor(topic.screen, input.ctx) };
+      return { conversation: await viewOf(conv), messages: [...asked, toMessage(a, null)], rolledOver: false, suggestions: suggestionsFor(topic.screen, input.ctx) };
     }
 
     let rolledOver = false;
@@ -414,13 +430,14 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
       conv = await rollOver(conv, topic, input.userId, why);
       rolledOver = true;
       // the question moves with the person into the continuation
-      await withTenant(conv.clientId, (tx) => tx.update(conversationMessage).set({ conversationId: conv.id }).where(eq(conversationMessage.id, userMsg.id)));
+      if (userMsg) await withTenant(conv.clientId, (tx) => tx.update(conversationMessage).set({ conversationId: conv.id }).where(eq(conversationMessage.id, userMsg.id)));
     }
 
     const b = baselineOf(conv);
     const g = glossaryFor(topic.screen);
     const defs = actionsFor(topic.kind, input.ctx.actions ?? null);
-    const contextText = [renderGlossary(g), renderActions(defs), Object.keys(facts).length ? `העובדות על המסך עכשיו:\n${renderFacts(facts)}` : ""].filter(Boolean).join("\n\n");
+    const places = justNavigated ? [] : placesFor(topic, input.ctx.place ?? null);
+    const contextText = [renderGlossary(g), renderPlaces(places), renderActions(defs), Object.keys(facts).length ? `העובדות על המסך עכשיו:\n${renderFacts(facts)}` : ""].filter(Boolean).join("\n\n");
     const contextHash = hash(contextText);
     // What a session that already holds the earlier turns needs now (`next`),
     // and everything a session starting from nothing needs (`full`).
@@ -437,13 +454,29 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
     const { res, fresh } = await callModel(conv, topic, input.userId, { next, full }, question, { expectedInput: b.lastInputTokens, baselineUsd: b.costUsd });
     const unanswered = res.text.includes(UNANSWERED_MARK);
     const parsed = parseBlocks(res.text.replace(UNANSWERED_MARK, ""));
-    const text = parsed.text || (parsed.action ? "הנה מה שאפשר לעשות:" : parsed.needsCode ? "על זה אין תשובה במסך — צריך לקרוא בקוד." : "(אין תשובה)");
-    const a = await addMessage(conv, { role: "assistant", kind: "answer", source: "model", text, callId: res.callId, payload: unanswered ? { unanswered: true } : {} });
+    // A move is made only to a place that was offered a moment ago; a key the
+    // model invented moves nobody, and is counted as a question left open.
+    const going = parsed.goto ? places.find((p) => p.def.key === parsed.goto!.key) ?? null : null;
+    const stray = !!parsed.goto && !going;
+    const text = parsed.text || (parsed.action ? "הנה מה שאפשר לעשות:" : parsed.needsCode ? "על זה אין תשובה במסך — צריך לקרוא בקוד."
+      : going ? "" : stray ? "אין לי את זה במסך הזה, ולא הצלחתי לעבור למסך שבו זה נמצא." : "(אין תשובה)");
+    // On a move the card below says everything; an answer bubble would only repeat it.
+    const a = text ? await addMessage(conv, { role: "assistant", kind: "answer", source: "model", text, callId: res.callId, payload: unanswered || stray ? { unanswered: true } : {} }) : null;
 
     // The cards: a proposal the person approves (validated against the
     // registry — exists, on this topic, allowed for this person — or it
     // becomes a sentence, never a button), and a declared cost for code.
     const cards: MsgRow[] = [];
+    // The move itself: the screen the person is about to be taken to, why,
+    // and the question that is asked again once they are there.
+    if (going) {
+      cards.push(await addMessage(conv, {
+        role: "assistant", kind: "navigate", source: "model",
+        text: parsed.goto!.reason || `עובר אל "${going.def.title}" כדי לענות.`,
+        callId: a ? null : res.callId,
+        payload: { key: going.def.key, title: going.def.title, route: going.route, screen: going.def.screen, question },
+      }));
+    }
     if (parsed.action) {
       const def = defs.find((d) => d.key === parsed.action!.key);
       // Only the parameters the action declares reach it — whatever else the model put in the block is dropped.
@@ -465,7 +498,7 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
     if (parsed.needsCode) {
       cards.push(await addMessage(conv, {
         role: "assistant", kind: "declared_cost", source: "model", text: parsed.needsCode,
-        payload: { reason: parsed.needsCode, question, askedCallId: res.callId, estimate: codeReadEstimate(), status: "proposed" },
+        payload: { reason: parsed.needsCode, question, askedCallId: res.callId, estimate: codeReadEstimate(), reads: codeReads(topic.kind), status: "proposed" },
       }));
     }
     // The conversation's size is everything the model read this turn: on a
@@ -477,7 +510,11 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
       cliBaseline: { ...(fresh ? {} : b), costUsd: res.meta.costUsd ?? (fresh ? 0 : b.costUsd), lastInputTokens: contextSize, started: true, systemHash: SYSTEM_HASH, transcriptCursor },
     });
     const call = res.callId ? (await db.select().from(claudeCall).where(eq(claudeCall.id, res.callId)).limit(1))[0] ?? null : null;
-    return { conversation: await viewOf(conv), messages: [toMessage(userMsg, null), toMessage(a, call), ...cards.map((m) => toMessage(m, null))], rolledOver, suggestions: suggestionsFor(topic.screen, input.ctx) };
+    return {
+      conversation: await viewOf(conv),
+      messages: [...asked, ...(a ? [toMessage(a, call)] : []), ...cards.map((m) => toMessage(m, m.callId ? call : null))],
+      rolledOver, suggestions: suggestionsFor(topic.screen, input.ctx),
+    };
   } finally {
     busy.delete(conv.id);
   }

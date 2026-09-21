@@ -9,7 +9,7 @@ export function Budgets() {
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => { getBudgets().then((r) => setRows(r.budgets)).catch((e) => setErr(String(e))); }, []);
   useClaudeContext({
-    screen: "budgets", topic: { kind: "app" },
+    screen: "budgets", place: "budgets", ready: !!rows, topic: { kind: "app" },
     facts: rows ? { "תקציבים לפי לקוח": rows.map((b) => `${b.clientName}: $${b.spentUsd.toFixed(2)} מתוך $${b.monthlyUsd} (${b.pct}%)`), aiCostUsd: rows.reduce((a, b) => a + b.spentUsd, 0) } : {},
     suggestions: ["מאיפה מגיע המספר הזה?", "מה קורה כשעוברים את התקציב?"],
   });

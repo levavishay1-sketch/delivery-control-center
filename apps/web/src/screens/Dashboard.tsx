@@ -29,7 +29,7 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
   const reload = () => getDashboard().then(setD).catch((e) => setErr(String(e)));
   useEffect(() => { reload(); }, []);
   useClaudeContext({
-    screen: "dashboard", topic: { kind: "app" },
+    screen: "dashboard", place: "dashboard", ready: !!d, topic: { kind: "app" },
     facts: d ? {
       "דרישות-על פעילות": d.stats.initiatives, "דרישות פתוחות": d.stats.openItems, "דרישות חסומות": d.stats.blockedItems,
       "עלות AI החודש": `$${(d.stats.aiCostUsd ?? 0).toFixed(2)} (${d.stats.aiBudgetPct}% מהתקציב)`, aiCostUsd: d.stats.aiCostUsd ?? 0,

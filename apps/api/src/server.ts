@@ -397,6 +397,7 @@ const contextSchema = z.object({
   facts: z.record(z.unknown()).optional(),
   suggestions: z.array(z.string().max(200)).max(12).optional(),
   actions: z.array(z.string().max(60)).max(30).optional(),
+  place: z.string().max(60).nullish(),
 });
 
 app.post("/claude/chat/open", async (req, reply) => {

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { askChat, getConversation, markHelpful, openChat, type ChatMessage, type ConversationView, type TopicRef } from "../api.ts";
+import { askChat, getConversation, markHelpful, openChat, type ChatAnswer, type ChatMessage, type ConversationView, type TopicRef } from "../api.ts";
 import { Icon, ICONS } from "../ui.tsx";
 import { CostLine } from "./CostLine.tsx";
 import { ProposalCard } from "./ProposalCard.tsx";
 import { errText } from "../screens/onboarding/labels.ts";
+import { onChatCommand, useCurrentClaudeContext, waitForPlace, type ClaudeScreenContext } from "./context.ts";
 import { onChatCommand, useCurrentClaudeContext, type ClaudeScreenContext } from "./context.ts";
 import { BidiText } from "./BidiText.tsx";
 
@@ -32,7 +33,7 @@ function Text({ text }: { text: string }) {
 
 const topicOf = (ctx: ClaudeScreenContext | null): TopicRef => ctx ? { kind: ctx.topic.kind, id: ctx.topic.id ?? null } : { kind: "app" };
 const contextPayload = (ctx: ClaudeScreenContext | null) => ctx ? {
-  screen: ctx.screen, facts: { ...(ctx.facts ?? {}), ...(ctx.liveFacts?.() ?? {}) }, suggestions: ctx.suggestions, actions: ctx.actions,
+  screen: ctx.screen, place: ctx.place ?? null, facts: { ...(ctx.facts ?? {}), ...(ctx.liveFacts?.() ?? {}) }, suggestions: ctx.suggestions, actions: ctx.actions,
 } : { screen: "dashboard" };
 
 export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
@@ -100,23 +101,33 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
     if (!text || busy) return;
     setBusy(true); setErr(null); setQuestion("");
     setMessages((m) => [...m, { id: `pending-${Date.now()}`, conversationId: conv?.id ?? "", role: "user", kind: "answer", source: "system", text, callId: null, payload: {}, helpful: null, helpfulSource: null, createdAt: new Date().toISOString(), cost: null }]);
+    const show = async (r: ChatAnswer) => {
+      if (r.rolledOver) setMessages((await getConversation(r.conversation.id)).messages);
+      else setMessages((m) => [...m.filter((x) => !x.id.startsWith("pending-")), ...r.messages]);
+      setConv(r.conversation); setSuggestions(r.suggestions);
+    };
     try {
       const topic = override?.topic ?? topicOf(ctx);
       const r = await askChat({ topic, context: override ? { screen: null } : contextPayload(ctx), question: text });
-      if (r.rolledOver) {
-        const full = await getConversation(r.conversation.id);
-        setMessages(full.messages);
-      } else {
-        setMessages((m) => [...m.filter((x) => !x.id.startsWith("pending-")), ...r.messages]);
+      await show(r);
+      // The answer may be on another screen of the same topic. Then the chat
+      // takes the person there and asks their question again once that screen
+      // has loaded — one move per question, into the same conversation.
+      const go = override ? undefined : r.messages.find((m) => m.kind === "navigate");
+      const route = typeof go?.payload.route === "string" ? go.payload.route : null;
+      if (go && route) {
+        nav(route);
+        const landed = await waitForPlace(String(go.payload.key));
+        if (!landed) { setErr(`עברתי אל "${String(go.payload.title ?? "")}", אבל מה שיש שם עוד לא נטען. שאלו שוב בעוד רגע.`); return; }
+        await show(await askChat({ topic: topicOf(landed), context: contextPayload(landed), question: text }));
       }
-      setConv(r.conversation); setSuggestions(r.suggestions);
     } catch (e) {
       setErr(errText(e));
       setMessages((m) => m.filter((x) => !x.id.startsWith("pending-")));
     } finally {
       setBusy(false);
     }
-  }, [busy, ctx, conv, override]);
+  }, [busy, ctx, conv, override, nav]);
 
   const helpful = async (m: ChatMessage, v: boolean) => {
     const next = m.helpful === v ? null : v;
@@ -169,6 +180,21 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
             {messages.map((m) => {
               if (m.role === "system") return <div key={m.id} className="cc-divider" title={m.text}><span>{m.text.split("\n")[0]}</span></div>;
               if (m.role === "user") return <div key={m.id} className="cc-msg user"><Text text={m.text} /></div>;
+              if (m.kind === "navigate") {
+                const route = typeof m.payload.route === "string" ? m.payload.route : null;
+                return (
+                  <div key={m.id} className="cc-msg assistant">
+                    <div className="src"><span className="ob-chip ai">קלוד</span><span className="ob-sub">עבר אל "{String(m.payload.title ?? "")}" כדי לענות</span></div>
+                    <Text text={m.text} />
+                    <div className="foot">
+                      {route && <button type="button" className="btn btn-secondary btn-sm" onClick={() => nav(route)}>פתח שוב את "{String(m.payload.title ?? "")}"</button>}
+                      {m.cost
+                        ? <CostLine model={m.cost.model} effort={m.cost.effort} inputTokens={m.cost.inputTokens} outputTokens={m.cost.outputTokens} cacheReadTokens={m.cost.cacheReadTokens} costUsd={m.cost.costUsd} />
+                        : <span className="ob-sub">המעבר עצמו לא עולה כלום</span>}
+                    </div>
+                  </div>
+                );
+              }
               if (m.kind === "proposal" || m.kind === "declared_cost" || m.kind === "refusal") {
                 return (
                   <div key={m.id} className="cc-msg assistant" style={{ paddingTop: 6 }}>
