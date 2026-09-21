@@ -23,15 +23,21 @@ export type ReviewDecision = "comment" | "approve" | "request_changes";
 /** A refusal with a message written for the person, not a failure to hide. */
 export class ReviewRefused extends Error {}
 
-export async function submitReview(input: { repoId: string; number: number; decision: ReviewDecision; text: string }): Promise<{ posted: true }> {
-  const text = input.text.trim().slice(0, 4000);
+/** The open request and the host address of its repository, or a refusal in words. */
+async function openRequest(repoId: string, number: number, whenGone: string) {
   const list = await listPullRequests({});
-  const pr = list.rows.find((r) => r.repo.id === input.repoId && r.number === input.number);
-  if (!pr) throw new ReviewRefused("הבקשה כבר לא פתוחה, ולכן אי אפשר לסקור אותה.");
+  const pr = list.rows.find((r) => r.repo.id === repoId && r.number === number);
+  if (!pr) throw new ReviewRefused(whenGone);
 
-  const [r] = await db.select({ adoRepoRef: repo.adoRepoRef }).from(repo).where(eq(repo.id, input.repoId)).limit(1);
+  const [r] = await db.select({ adoRepoRef: repo.adoRepoRef }).from(repo).where(eq(repo.id, repoId)).limit(1);
   const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
   if (!url) throw new ReviewRefused("אין כתובת GitHub לריפו הזה.");
+  return { pr, url };
+}
+
+export async function submitReview(input: { repoId: string; number: number; decision: ReviewDecision; text: string }): Promise<{ posted: true }> {
+  const text = input.text.trim().slice(0, 4000);
+  const { pr, url } = await openRequest(input.repoId, input.number, "הבקשה כבר לא פתוחה, ולכן אי אפשר לסקור אותה.");
 
   const login = await ghLogin();
   const isAuthor = !!login && login.toLowerCase() === pr.author.toLowerCase();
@@ -53,4 +59,25 @@ export async function submitReview(input: { repoId: string; number: number; deci
     throw new ReviewRefused(`הגיט־האוסט לא קיבל את הסקירה${why ? `: ${why.slice(0, 160)}` : "."}`);
   }
   return { posted: true };
+}
+
+/**
+ * Merge a request without an approval — the way through while every request is
+ * written by the one account DCC acts as, which the host will not let approve its
+ * own request. It is the host's own merge, run through the operator's login: if
+ * the branch requires an approval there, the host refuses and that is said in
+ * words. It goes away with the "users" work, when an approval can be given.
+ */
+export async function mergeRequest(input: { repoId: string; number: number }): Promise<{ merged: true }> {
+  const { url } = await openRequest(input.repoId, input.number, "הבקשה כבר לא פתוחה, ולכן אין מה למזג.");
+
+  const res = await ghExec(["pr", "merge", String(input.number), "--repo", url, "--merge"]);
+  if (!res.ok) {
+    const why = res.err.split("\n").find((l) => l.trim()) ?? "";
+    if (/policy|required|protect|review/i.test(why)) {
+      throw new ReviewRefused("הגיט־האוסט לא מרשה למזג: בענף היעד מוגדר שצריך אישור סקירה. צריך להוריד את הדרישה בהגדרות הענף בגיט־האוסט (Settings ← Branches), או שמשתמש אחר יאשר.");
+    }
+    throw new ReviewRefused(`הגיט־האוסט לא מיזג את הבקשה${why ? `: ${why.slice(0, 160)}` : "."}`);
+  }
+  return { merged: true };
 }

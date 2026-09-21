@@ -604,7 +604,9 @@ export type PullRequestDetail = {
 export type ReviewDecision = "comment" | "approve" | "request_changes";
 export const submitPullRequestReview = (repoId: string, number: number, decision: ReviewDecision, text: string) =>
   post<{ posted: true }>(`/repos/${repoId}/pull-requests/${number}/review`, { decision, text });
-export const getPullRequestFile = (repoId: string, number: number, path: string) =>
+export const mergePullRequest = (repoId: string, number: number) =>
+  post<{ merged: true }>(`/repos/${repoId}/pull-requests/${number}/merge`, {});
+export const getPullRequestFile =(repoId: string, number: number, path: string) =>
   get<FileVersionsData>(`/repos/${repoId}/pull-requests/${number}/file?${new URLSearchParams({ path })}`);
 
 /** Every branch of a repository and what to do about it. */

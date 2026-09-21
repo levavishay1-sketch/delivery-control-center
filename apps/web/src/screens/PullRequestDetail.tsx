@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, submitPullRequestReview, type ReviewDecision, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
+import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, mergePullRequest, submitPullRequestReview, type ReviewDecision, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
@@ -107,7 +107,7 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
   const saved = reviewProgress.get(key);
   const [open, setOpen] = useState(saved?.open ?? false);
   const [checked, setChecked] = useState<string[]>(saved?.checked ?? []);
-  const [decision, setDecision] = useState<ReviewDecision | null>(null);
+  const [decision, setDecision] = useState<ReviewDecision | "merge" | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -120,10 +120,11 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
   const ready = done === steps.length;
   const toggle = (k: string) => setChecked((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]));
 
-  const options: { key: ReviewDecision; title: string; text: string }[] = [
+  const options: { key: ReviewDecision | "merge"; title: string; text: string }[] = [
     { key: "approve", title: `מאשר מיזוג ל-${base}`, text: "השינוי טוב. אישור רשמי בגיט־האוסט, והמיזוג נפתח אם אין חסמים אחרים." },
     { key: "request_changes", title: "לא מאשר, צריך תיקון", text: "השינוי לא מוכן. הבקשה מסומנת באדום, והכותב צריך לתקן ולשלוח שוב. חובה לכתוב מה לתקן." },
     { key: "comment", title: "רק הערה", text: "כותבים מה חשבתם, בלי להחליט. הבקשה נשארת פתוחה." },
+    { key: "merge", title: `ממזג ל-${base} בלי אישור סקירה`, text: "השינוי נכנס עכשיו, בלי אישור רשמי. זה זמני: הגיט־האוסט לא נותן לחשבון ש-DCC עובד בו לאשר בקשה שהוא פתח. המיזוג הוא מיזוג אמיתי בגיט־האוסט, ואי אפשר לבטל אותו מכאן." },
   ];
   const needsText = decision === "comment" || decision === "request_changes";
 
@@ -131,8 +132,9 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
     if (!decision) return;
     setBusy(true); setErr(null); setSent(null);
     try {
-      await submitPullRequestReview(repoId, number, decision, text);
-      setSent(decision === "approve" ? "האישור נשלח לגיט־האוסט." : decision === "request_changes" ? "הבקשה סומנה כדורשת תיקון, והכותב יקבל את ההערה." : "ההערה נשלחה לגיט־האוסט.");
+      if (decision === "merge") await mergePullRequest(repoId, number);
+      else await submitPullRequestReview(repoId, number, decision, text);
+      setSent(decision === "merge" ? `הבקשה מוזגה ל-${base}.` : decision === "approve" ? "האישור נשלח לגיט־האוסט." : decision === "request_changes" ? "הבקשה סומנה כדורשת תיקון, והכותב יקבל את ההערה." : "ההערה נשלחה לגיט־האוסט.");
       setDecision(null); setText(""); setChecked([]); setOpen(false);
       onDone();
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
@@ -199,17 +201,18 @@ function ReviewFlow({ repoId, number, base, blockers, steps, onFiles, onDone }: 
             <>
               <div className="rv-opts" role="radiogroup" aria-label="החלטה">
                 {options.map((o) => (
-                  <button key={o.key} type="button" role="radio" aria-checked={decision === o.key} className={`rv-o${decision === o.key ? " on" : ""}`} onClick={() => setDecision(o.key)}>
+                  <button key={o.key} type="button" role="radio" aria-checked={decision === o.key} className={`rv-o${decision === o.key ? " on" : ""}`}
+                    disabled={o.key === "merge" && stuck.length > 0} onClick={() => setDecision(o.key)}>
                     <b>{o.title}</b>{o.text}
                   </button>
                 ))}
               </div>
-              <textarea className="rv-ta" value={text} onChange={(e) => setText(e.target.value)} rows={3}
-                placeholder={needsText ? "מה חשבתם? כתבו כאן" : "אפשר להוסיף הערה (לא חובה)"} />
+              {decision !== "merge" && <textarea className="rv-ta" value={text} onChange={(e) => setText(e.target.value)} rows={3}
+                placeholder={needsText ? "מה חשבתם? כתבו כאן" : "אפשר להוסיף הערה (לא חובה)"} />}
               {err && <div className="ob-note crit" style={{ marginTop: 8 }}>{err}</div>}
               <div className="ob-actions" style={{ marginTop: 8 }}>
-                <button className="btn btn-primary btn-sm" disabled={!decision || busy || (needsText && !text.trim())} onClick={() => void finish()}>{busy ? "שולח…" : "סיים סקירה"}</button>
-                <span className="ob-sub" style={{ alignSelf: "center" }}>ההחלטה נשלחת לגיט־האוסט, והמסך מתרענן.</span>
+                <button className="btn btn-primary btn-sm" disabled={!decision || busy || (needsText && !text.trim())} onClick={() => void finish()}>{busy ? "שולח…" : decision === "merge" ? "מזג עכשיו" : "סיים סקירה"}</button>
+                <span className="ob-sub" style={{ alignSelf: "center" }}>{stuck.length ? "מיזוג בלי אישור נפתח רק כשאין חסמים אחרים. " : ""}ההחלטה נשלחת לגיט־האוסט, והמסך מתרענן.</span>
               </div>
             </>
           )}
