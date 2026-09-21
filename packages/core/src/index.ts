@@ -18,6 +18,7 @@ export { route, recommend, loadPolicy, reloadPolicy, savePolicy, chatPolicy, pri
 export { claudeOverview, claudeCalls, claudeCallById, callsForEntity, type CenterFilter, type ClaudeOverview, type ClaudeCallView, type CenterBar } from "./claude-center.ts";
 export { openChat, askChat, markHelpful, listConversations, getConversation, resolveTopic, internalClientId, deleteChatSession, ChatError, type TopicRef, type TopicKind, type ScreenContext, type ChatMessage, type ConversationView } from "./chat/index.ts";
 export { runProposal, cancelProposal, proposalPreview, runCodeQuestion, cancelCodeQuestion } from "./chat/proposals.ts";
+export { archiveExpiredConversations, scheduleRetention, ARCHIVED_TEXT } from "./chat/retention.ts";
 export { ACTIONS, actionsFor, actionEntityFor, runAction, ActionRefused, type ActionKey, type ActionDef, type ActionEntity } from "./actions/index.ts";
 export { GLOSSARY, glossaryFor, matchGlossary, type GlossaryEntry, type ScreenGlossary } from "./glossary/index.ts";
 export { insightsView, analyseInsights, openImprovementTask, dismissInsight, type InsightsView, type InsightCluster, type InsightCallRow, type UnhelpfulRow } from "./insights.ts";

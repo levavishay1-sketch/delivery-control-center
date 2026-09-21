@@ -203,6 +203,29 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
               </table>
             )}
           </div>
+          <div className="panel">
+            <div className="section-head" style={{ marginBottom: 8 }}><h4 style={{ margin: 0 }}>מה מכוונים לפיו</h4><span className="ob-sub">המספרים שלפיהם נקבעים הספים במדיניות — לא הערכה</span></div>
+            <div className="stat-row" style={{ marginBottom: 12 }}>
+              <div className="stat-tile"><div className="lbl">עלות לשאלה</div><div className="num">{o.chat.costPerQuestionUsd != null ? fmtUsd(o.chat.costPerQuestionUsd) : "—"}</div><div className="stat-sub muted">{fmtInt(o.chat.calls)} קריאות צ'אט ל-{fmtInt(t.questions)} שאלות</div></div>
+              <div className="stat-tile"><div className="lbl">טוקנים לתור</div><div className="num">{o.chat.tokensPerTurn != null ? fmtInt(o.chat.tokensPerTurn) : "—"}</div><div className="stat-sub muted">קלט ומטמון, ממוצע לקריאת צ'אט</div></div>
+              <div className="stat-tile"><div className="lbl">גלגולים<GlossaryHint screen="claude" entry="rollover" /></div><div className="num">{fmtInt(o.chat.rollovers)}</div><div className="stat-sub muted">הסיכומים עלו {fmtUsd(o.chat.rolloverCostUsd)}</div></div>
+              <div className="stat-tile"><div className="lbl">נמחקו לפי השמירה<GlossaryHint screen="claude" entry="retention" /></div><div className="num">{fmtInt(o.chat.archived)}</div><div className="stat-sub muted">התוכן נמחק; העלות נשארה</div></div>
+            </div>
+            {o.chatByScreen.length > 0 && (
+              <table className="wtable">
+                <thead><tr><th>מסך</th><th className="num">שאלות</th><th className="num">נענו בלי מודל</th><th className="num">"לא עזר"</th></tr></thead>
+                <tbody>{o.chatByScreen.map((r) => <tr key={r.screen}><td>{screenLabel(r.screen)}</td><td className="num">{fmtInt(r.questions)}</td><td className="num">{r.withoutModelPct}%</td><td className="num">{r.unhelpfulPct}%</td></tr>)}</tbody>
+              </table>
+            )}
+            {o.escalationByCapability.length > 0 && (
+              <div style={{ marginTop: 10 }}>
+                {o.escalationByCapability.map((r) => (
+                  <div key={r.capability} className="stat-line"><span className="l">{capabilityLabel(r.capability)} · הוסלמו {fmtInt(r.escalated)} מתוך {fmtInt(r.total)}</span><span>{r.pct}%{r.pct >= 30 ? " · ברירת מחדל מוסווית" : ""}</span></div>
+                ))}
+                <p className="ob-sub" style={{ marginTop: 6 }}>יכולת שמוסלמת ב-30% מהמקרים ומעלה — ברירת המחדל שלה במדיניות נמוכה מדי. מה "נענו בלי מודל" אמור לעלות עם כל מילון ועובדה שנוספים למסך.</p>
+              </div>
+            )}
+          </div>
         </div>
         <div className="rail">
           <div className="panel">

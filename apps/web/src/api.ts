@@ -189,6 +189,9 @@ export type ClaudeOverview = {
   byUser: (CenterBar & { questions: number; withoutModelPct: number; unhelpfulPct: number })[];
   policy: { version: number; defaults: number; escalated: number; manual: number; capped: number };
   tokens: { input: number; cacheRead: number; cacheWrite: number; output: number; cacheSharePct: number };
+  chat: { calls: number; costPerQuestionUsd: number | null; tokensPerTurn: number | null; rollovers: number; rolloverCostUsd: number; archived: number };
+  chatByScreen: { screen: string; questions: number; withoutModel: number; withoutModelPct: number; unhelpful: number; unhelpfulPct: number }[];
+  escalationByCapability: { capability: string; escalated: number; total: number; pct: number }[];
 };
 export type CenterQuery = Partial<{ month: string; clientId: string; userId: string; capability: string; model: string; outcome: string; escalated: "1"; workitemId: string; limit: number; offset: number }>;
 const qs = (q: CenterQuery) => { const p = new URLSearchParams(); for (const [k, v] of Object.entries(q)) if (v !== undefined && v !== "") p.set(k, String(v)); const s = p.toString(); return s ? `?${s}` : ""; };

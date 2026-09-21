@@ -88,9 +88,15 @@ the declared cost, as data), `helpful`, `helpful_note`, `created_at`.
   well below the CLI's own compaction point so the summary is always
   DCC's — named, recorded, costed (§9.8).
 - **Retention (§9.10):** `retain_until = last_message_at + retention days`
-  (policy default, per-client override). A daily job archives expired
-  conversations: text replaced by a fixed sentence, `status = archived`,
-  the CLI session file deleted. Ledger rows are never touched.
+  (policy default, per-client override). `archiveExpiredConversations`
+  archives what is past its period — every message becomes one fixed
+  sentence with no payload and no note, `status = archived`, the session
+  id, the context hash and the CLI session folder go — active and rolled
+  conversations alike; a second pass finds nothing. It runs inside the API
+  process (`scheduleRetention`: once shortly after start, then daily —
+  never a second process on the database) and on demand through
+  `POST /claude/retention/run`. Ledger rows are never touched.
+  `prove:retention` proves all of it against a scratch database.
 
 ## 3. Screen context: facts, glossary, actions, suggestions (§6.1, §6.2, §7)
 
@@ -231,6 +237,17 @@ effort · tokens · cost, the same everywhere, also the zero-cost variant),
 cost displays that existed are replaced by `CostLine` / `CallsTable`.
 
 ## 9. Token economics, as built (§6)
+
+The control center's overview carries the numbers the thresholds are tuned
+by (§6.8), all from the ledger and the conversations: cost per question
+(chat cost over questions asked, system answers included), tokens per turn
+(input plus cache, per chat call), roll-overs and what their summaries
+cost, conversations removed by retention, per screen the share answered
+without a model and the share marked unhelpful, and per capability the
+share of calls escalated — a capability at 30% or more has a disguised
+default. After a month of numbers the roll-over thresholds, the expensive
+question threshold and the defaults are set again from this table, not
+from estimates.
 
 In order of effect on the chat: (a) step zero answers without a model;
 (b) tokens per turn are bounded by topic separation, delta-only context and
