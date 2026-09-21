@@ -11,6 +11,7 @@ export const CODE_CONCEPTS: Concept[] = [
   { key: "prompt_emphasis", kind: "field", title: "דגש מיוחד לבדיקה הזו", explain: "משפט חופשי שנוסף להוראות שקלוד מקבל, למשל לשים לב לתרחיש מסוים. לא חובה — בלעדיו הוא עובד לפי הדרישה כפי שהיא." },
   { key: "run_branch", kind: "field", title: "ענף ההרצה", aliases: ["ענף"], screens: ["onboarding"], explain: "הענף שנוצר להרצה הזו, שאליו נכתב כל מה שהיא עושה. העותק שאתם עובדים בו לא נגוע בשום שלב." },
   { key: "run_baseline", kind: "field", title: "נקודת התחלה", screens: ["onboarding"], explain: "מצב הקוד שממנו ההרצה יצאה. כך אפשר לדעת בדיוק מה היא הוסיפה, גם אם בינתיים נכנסו שינויים אחרים." },
+  { key: "run_base_branch", kind: "field", title: "נוצר מהענף", aliases: ["מאיזה ענף", "ענף הבסיס"], screens: ["onboarding"], explain: "הענף הראשי של המאגר, שההרצה נגזרה ממנו ושאליו תחזור בקשת המיזוג בסוף. אם נגזרה מענף אחר, היא תישא איתה גם את העבודה שיש בו." },
   { key: "run_files", kind: "field", title: "קבצים בהרצה", aliases: ["קבצים"], screens: ["onboarding"], explain: "כמה קבצים יש במאגר שנסרק, וכמה מהם ההרצה שינתה בפועל. רק מה ששונה ייכנס לבקשת המיזוג." },
   { key: "stage_cost", kind: "field", title: "עלות השלב", screens: ["onboarding"], explain: "כמה הוציא השלב הזה לבדו, מיומן הקריאות. סכום כל השלבים הוא עלות ההרצה." },
   { key: "run_pr", kind: "field", title: "Pull Request", aliases: ["בקשת המיזוג של ההרצה"], screens: ["onboarding"], explain: "בקשת המיזוג שנפתחה בסוף ההרצה. משם הקבצים נכנסים למאגר האמיתי, אחרי סקירה ומיזוג שאדם מאשר." },

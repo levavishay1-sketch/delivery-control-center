@@ -181,7 +181,10 @@ export type ExistingSetup = {
 export type PrepareResult = {
   branch: string;
   baselineSha: string;
+  /** The main line the copy was cut from, and the one the request will target. */
   defaultBranch: string | null;
+  /** Where that came from: the remote's own main line, a local one, or — when neither could be found — the copy's current branch. */
+  baseFrom: "remote" | "local" | "head";
   fileCount: number;
   existing: ExistingSetup;
 };

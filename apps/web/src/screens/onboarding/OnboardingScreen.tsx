@@ -305,10 +305,16 @@ function StageBody(p: StageCardProps) {
         {map}
         <p className="ob-sub" style={{ margin: "10px 0" }}>עותק מבודד על ענף חדש. הריפו שלך לא נגע.</p>
         <div className="ob-kv">
+          <div><div className="l">נוצר מהענף<Info k="run_base_branch" /></div><div className="v ob-code">{r.defaultBranch ?? "—"}</div></div>
           <div><div className="l">ענף<Info k="run_branch" /></div><div className="v ob-code">{r.branch}</div></div>
           <div><div className="l">נקודת התחלה<Info k="run_baseline" /></div><div className="v ob-code">{shortSha(r.baselineSha)}</div></div>
           <div><div className="l">קבצים<Info k="run_files" /></div><div className="v">{fmtInt(r.fileCount)}</div></div>
         </div>
+        {r.baseFrom === "head" && (
+          <div className="ob-note warn" style={{ marginTop: 10 }}>
+            לא נמצא ענף ראשי במאגר, ולכן ההרצה נגזרה מהענף שהעותק עמד עליו. מה שיש בענף הזה ולא בראשי ייכנס גם לבקשת המיזוג — בדקו לפני שממשיכים.
+          </div>
+        )}
         <p className="ob-sub" style={{ marginTop: 10 }}>{found.length ? `כבר קיים בריפו: ${found.join(", ")}.` : "אין בריפו הגדרות קיימות של Claude Code."}</p>
       </>
     );

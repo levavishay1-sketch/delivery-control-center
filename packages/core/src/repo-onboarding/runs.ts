@@ -203,7 +203,7 @@ async function runPrepare(ctx: Ctx, r: Awaited<ReturnType<typeof loadRepo>>, by:
     const ws = await ensureOnboardingWorkspace(r, ctx.runId, log);
     const fileCount = await trackedFileCount(ws.dir);
     const existing = existingSetup(ws.dir);
-    log(`baseline ${ws.baselineSha.slice(0, 7)} · ${fileCount.toLocaleString("en-US")} files · branch ${ws.branch}`);
+    log(`baseline ${ws.baselineSha.slice(0, 7)} on ${ws.defaultBranch ?? "HEAD"} · ${fileCount.toLocaleString("en-US")} files · branch ${ws.branch}`);
     const found = [
       existing.claudeMdLines !== null ? `CLAUDE.md (${existing.claudeMdLines} lines)` : null,
       existing.agentsMd ? "AGENTS.md" : null,
@@ -215,7 +215,7 @@ async function runPrepare(ctx: Ctx, r: Awaited<ReturnType<typeof loadRepo>>, by:
     ].filter(Boolean);
     log(found.length ? `existing Claude Code setup: ${found.join(", ")}` : "no existing Claude Code setup");
     await patchRun(ctx, { workspacePath: ws.dir, baselineSha: ws.baselineSha, branchName: ws.branch, defaultBranch: ws.defaultBranch });
-    const result: PrepareResult = { branch: ws.branch, baselineSha: ws.baselineSha, defaultBranch: ws.defaultBranch, fileCount, existing };
+    const result: PrepareResult = { branch: ws.branch, baselineSha: ws.baselineSha, defaultBranch: ws.defaultBranch, baseFrom: ws.baseFrom, fileCount, existing };
     await completeStage(ctx, "prepare", result, by.userId);
     await drive(ctx.repoId, ctx.runId);
   } catch (e) {

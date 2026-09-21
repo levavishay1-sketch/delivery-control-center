@@ -532,7 +532,14 @@ export type OnboardingSession = {
 };
 export type ChangedFile = { path: string; status: string; additions: number; deletions: number };
 export type ExistingSetup = { claudeMdLines: number | null; agentsMd: boolean; rules: number; skills: number; hooks: number; agents: number; settings: boolean };
-export type PrepareResult = { branch: string; baselineSha: string; defaultBranch: string | null; fileCount: number; existing: ExistingSetup };
+export type PrepareResult = {
+  branch: string; baselineSha: string;
+  /** The main line the copy was cut from, and the one its request will target. */
+  defaultBranch: string | null;
+  /** Where that came from: the remote's main line, a local one, or the copy's current branch when neither was found. */
+  baseFrom: "remote" | "local" | "head";
+  fileCount: number; existing: ExistingSetup;
+};
 export type InitResult = { sessionId: string; changedFiles: number; completedBy: string };
 export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean };
 export type DeliverResult = {
