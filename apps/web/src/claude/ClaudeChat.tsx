@@ -5,7 +5,6 @@ import { CostLine } from "./CostLine.tsx";
 import { ProposalCard } from "./ProposalCard.tsx";
 import { errText } from "../screens/onboarding/labels.ts";
 import { onChatCommand, useCurrentClaudeContext, waitForPlace, type ClaudeScreenContext } from "./context.ts";
-import { onChatCommand, useCurrentClaudeContext, type ClaudeScreenContext } from "./context.ts";
 import { BidiText } from "./BidiText.tsx";
 
 /**
