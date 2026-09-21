@@ -134,6 +134,15 @@ export function Pill({ tone, children }: { tone: "warning" | "critical" | "activ
   return <span className={`pill ${tone}`}><span className="dot" />{children}</span>;
 }
 
+/**
+ * The number of a pull request, shown next to its branch name — in the list
+ * and on the request's own page, so the same request is recognised in both.
+ * One component: a number on its own says nothing to whoever reads it.
+ */
+export function PrNumber({ n }: { n: number }) {
+  return <span className="pr-num" dir="ltr" title={`בקשת מיזוג מספר ${n}`}>#{n}</span>;
+}
+
 export function TypeChip({ type }: { type: "epic" | "feature" | "story" | "bug" | "task" | "spike" }) {
   const label = { epic: "Epic", feature: "Feature", story: "Story", bug: "Bug", task: "Task", spike: "Spike" }[type];
   return <span className={`type-chip ${type}`}>{label}</span>;

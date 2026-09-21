@@ -5,6 +5,7 @@ import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 import { GlossaryHint } from "../claude/GlossaryHint.tsx";
+import { PrNumber } from "../ui.tsx";
 import { errText } from "./onboarding/labels.ts";
 
 /**
@@ -367,7 +368,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       <div className="panel pr-head">
         <div className="top">
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="h1 br">{pr.headBranch}</div>
+            <div className="h1 br">{pr.headBranch}<PrNumber n={pr.number} /></div>
             <div className="l">פתח {pr.author} · {waited(pr.waitingHours)} · אל <span className="ob-code">{pr.baseBranch}</span></div>
           </div>
           <div className="flags">
