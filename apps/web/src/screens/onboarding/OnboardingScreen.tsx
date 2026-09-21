@@ -389,7 +389,7 @@ function ReviewIntro(p: StageCardProps) {
   const st = p.view.run.session.state;
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <div className="ob-note warn">שום דבר לא יוצא מהמחשב עד שתאשרו. אפשר להמשיך לשוחח עם Claude בטרמינל כל עוד הסקירה פתוחה: מה שהוא משנה מופיע בתוצרים שמתחת לטרמינל (לחצו "רענן רשימה").</div>
+      <div className="ob-note warn">שום דבר לא יוצא מהמחשב עד שתאשרו. אפשר להמשיך לשוחח עם Claude בטרמינל כל עוד הסקירה פתוחה: מה שהוא משנה מופיע בתוצרים שמתחת לטרמינל: הרשימה מתעדכנת לבד, ואפשר גם ללחוץ "רענן רשימה".</div>
       {st !== "live" && (
         <div className="ob-note warn" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span>{st === "disconnected" ? "הסשן של Claude נותק (השרת הופעל מחדש)." : "הסשן של Claude נסגר."} כדי להמשיך לשוחח איתו, חדשו אותו מאותה נקודה בשיחה.</span>
@@ -408,6 +408,7 @@ function ReviewPanel(p: { view: OnboardingRunView; stage: OnboardingStage; busy:
     <div className="panel" style={{ display: "grid", gap: 10, marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 650 }}>מה השתנה ({r.changedFiles.length} קבצים)</span>
+        <span className="ob-sub">מתעדכן לבד כש-Claude משנה קבצים</span>
         <span style={{ flex: 1 }} />
         <button className="btn btn-secondary btn-sm" disabled={!!p.busy} onClick={p.onRefreshReview}>{p.busy === "review-refresh" ? "מרענן…" : "↻ רענן רשימה"}</button>
       </div>
@@ -421,7 +422,7 @@ function ReviewPanel(p: { view: OnboardingRunView; stage: OnboardingStage; busy:
                 <span className="add">+{f.additions}</span>
                 <span className="del">−{f.deletions}</span>
               </button>
-              {open === f.path && <FileCompare key={`${f.path}|${r.checkedAt}`} load={() => getOnboardingFile(p.view.run.repoId, p.view.run.id, f.path)} />}
+              {open === f.path && <FileCompare key={`${f.path}|${f.status}|${f.additions}|${f.deletions}`} load={() => getOnboardingFile(p.view.run.repoId, p.view.run.id, f.path)} />}
             </div>
           ))}
         </div>

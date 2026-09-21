@@ -324,14 +324,27 @@ async function runReview(ctx: Ctx, run: RunRow, by: Actor, automated: boolean) {
   }
 }
 
-/** Re-read the worktree — after asking Claude for a change during review. */
+/** The review's file list, re-read from the worktree. It is written only when it
+ *  differs from what is stored, so a refresh that finds nothing new changes nothing
+ *  on screen (an open comparison is not reloaded). `changedFiles` is sorted by path. */
+async function syncReviewFiles(ctx: Ctx, run: RunRow, stage: StageRow): Promise<ChangedFile[]> {
+  const files = await changedFiles(run.workspacePath!, run.baselineSha!);
+  const result = (stage.result ?? {}) as Partial<ReviewResult>;
+  const prev = result.changedFiles ?? [];
+  const same = prev.length === files.length && files.every((f, i) => {
+    const p = prev[i];
+    return !!p && p.path === f.path && p.status === f.status && p.additions === f.additions && p.deletions === f.deletions;
+  });
+  if (!same) await patchStage(ctx, "review", { result: { ...result, changedFiles: files, checkedAt: new Date().toISOString() } });
+  return files;
+}
+
+/** Re-read the worktree — the "רענן רשימה" button; the monitor does the same by itself (`checkReviewFiles`). */
 export async function refreshReview(repoId: string, runId: string) {
   const { run, stages, ctx } = await loadRun(repoId, runId);
   const s = stages.find((x) => x.stageKey === "review");
   if (s?.status !== "WaitingForUser") throw new OnboardingError("שלב הסקירה לא ממתין");
-  const files: ChangedFile[] = await changedFiles(run.workspacePath!, run.baselineSha!);
-  await patchStage(ctx, "review", { result: { ...((s.result ?? {}) as ReviewResult), changedFiles: files, checkedAt: new Date().toISOString() } });
-  return { changedFiles: files };
+  return { changedFiles: await syncReviewFiles(ctx, run, s) };
 }
 
 export async function approveReview(repoId: string, runId: string, by: Actor) {
@@ -457,7 +470,7 @@ const polling = new Set<string>();
 
 function startMonitor(ctx: Ctx, fallbackActor: string) {
   stopMonitor(ctx.runId);
-  monitors.set(ctx.runId, setInterval(() => { void pollSession(ctx, fallbackActor).then(() => checkInitFinished(ctx)); }, 3000));
+  monitors.set(ctx.runId, setInterval(() => { void pollSession(ctx, fallbackActor).then(() => checkInitFinished(ctx)).then(() => checkReviewFiles(ctx)); }, 3000));
 }
 function stopMonitor(runId: string) {
   const t = monitors.get(runId);
@@ -465,7 +478,38 @@ function stopMonitor(runId: string) {
   monitors.delete(runId);
   settled.delete(runId);
   looked.delete(runId);
+  reviewSeen.delete(runId);
   initClosed.delete(runId);
+}
+
+/* ── the review's file list follows the session ───────────────────── */
+
+/** While the review waits and the session is live, Claude may be changing files
+ *  (the person asked it to). The list is re-read when the transcript has grown —
+ *  everything Claude does is in it — and at most every few seconds, so a long
+ *  answer costs a handful of `git diff`s and an idle session costs none. The last
+ *  change of a burst is picked up by the first tick after the interval. */
+const REVIEW_REFRESH_MS = 6000;
+const reviewSeen = new Map<string, { lines: number; at: number }>();
+const refreshing = new Set<string>();
+
+async function checkReviewFiles(ctx: Ctx) {
+  if (refreshing.has(ctx.runId) || !initClosed.has(ctx.runId)) return;
+  refreshing.add(ctx.runId);
+  try {
+    const { run, stages } = await loadRun(ctx.repoId, ctx.runId);
+    const review = stages.find((x) => x.stageKey === "review");
+    const s = sessionOf(run);
+    if (review?.status !== "WaitingForUser" || s.state !== "live" || !s.transcriptPath || !run.workspacePath || !run.baselineSha) return;
+    const lines = transcriptLineCount(s.transcriptPath);
+    const seen = reviewSeen.get(ctx.runId);
+    if (seen && (seen.lines === lines || Date.now() - seen.at < REVIEW_REFRESH_MS)) return;
+    reviewSeen.set(ctx.runId, { lines, at: Date.now() });
+    await syncReviewFiles(ctx, run, review);
+  } catch { /* a transient error: the next tick tries again, and the button is there */ }
+  finally {
+    refreshing.delete(ctx.runId);
+  }
 }
 
 /* ── `/init` finished ─────────────────────────────────────────────── */
