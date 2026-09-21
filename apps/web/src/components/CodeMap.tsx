@@ -22,6 +22,8 @@ const D = {
   curveDx: 60,
   lead: 36,
   radius: { other: 4, ours: 5, attention: 5, current: 7, branchPoint: 6, pr: 12, uncommitted: 6, empty: 6 },
+  /** The dots drawn with a 2px ring, so their outer edge is one more than their radius. */
+  ringed: new Set(["branchPoint", "uncommitted", "empty", "pr"]),
   color: {
     line: "var(--border-hairline)",
     lineStroke: "#D3D1C7",
@@ -275,13 +277,19 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
         const from = byId.get(a.from);
         const to = byId.get(a.to);
         if (!from || !to) return null;
-        // From the top of the last dot of the branch (the request's circle) to the bottom of the newest dot of the base:
-        // the arrow says "this goes in there", so it must start and end on those two dots and not somewhere between them.
+        // From the top of the last dot of the branch (the request's circle) to the edge of the newest dot of the base:
+        // the arrow says "this goes in there", so it must start and end ON those two dots, touching them, and not
+        // somewhere between. The end is where the line toward the dot's centre meets the dot's outer edge.
         const lastKind = (pl: Placed) => pl.lane.nodes[pl.lane.nodes.length - 1]?.kind ?? "other";
+        const outer = (pl: Placed) => { const k = lastKind(pl); return D.radius[k] + (D.ringed.has(k) ? 1 : 0); };
         const fx = from.xs[from.xs.length - 1] ?? 0;
-        const fy = from.y - D.radius[lastKind(from)] - 2;
-        const tx = to.xs[to.xs.length - 1] ?? 0;
-        const ty = to.y + D.radius[lastKind(to)] + 4;
+        const fy = from.y - outer(from);
+        const cxTo = to.xs[to.xs.length - 1] ?? 0;
+        const dx = cxTo - fx;
+        const dy = to.y - fy;
+        const len = Math.hypot(dx, dy) || 1;
+        const tx = cxTo - (dx / len) * outer(to);
+        const ty = to.y - (dy / len) * outer(to);
         const done = a.state === "done";
         // The label sits beside the arrow, on the side that has room, and carries its own background.
         const lw = a.label.length * 6.2 + 12;
