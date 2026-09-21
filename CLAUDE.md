@@ -88,8 +88,19 @@ master
 4. When the project holds together, one PR `project/<name>` → `master`. That
    merge is a human action.
 
-Claude commits and pushes only when asked, never pushes to or merges into
-`master`, and does not create a project branch on its own.
+Claude commits and pushes on its own only in the case below; otherwise only
+when asked. It never pushes to or merges into `master`, and does not create
+a project branch on its own.
+
+**A finished task is committed, pushed, and a PR is requested.** When a
+task is done, checked (`npm run typecheck`, `npm run audit:stale`, the
+affected screens) and Claude stands behind it, Claude does not wait to be
+reminded: it commits the work to the task's own branch, pushes that branch,
+and asks the user for a pull request — into the project branch (`master`
+only for a `fix/` branch, where a human merges) — saying what was checked.
+The standing permission covers the commit and the push, and the request is
+the question about the PR. If something was not checked or does not hold,
+Claude says so and neither commits nor pushes.
 
 ### Branch names and what happens to a branch
 
