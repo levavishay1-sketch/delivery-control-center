@@ -363,6 +363,9 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
     setBranchesBusy(true);
     try { setBranches(await getRepoBranches(repoId, refresh)); setBranchesErr(null); } catch (e) { setBranchesErr(e instanceof Error ? e.message : String(e)); } finally { setBranchesBusy(false); }
   }, [repoId]);
+  // A different repository's request reuses this screen, so what was loaded for
+  // the previous one is dropped first — otherwise its branches would stay.
+  useEffect(() => { setBranches(null); setBranchesErr(null); }, [repoId]);
   useEffect(() => { if (tab === "branches" && !branches) void loadBranches(); }, [tab, branches, loadBranches]);
 
   const go = (t: Tab) => nav(`#/pull-requests/${repoId}/${number}${t === "overview" ? "" : `/${t}`}`);
@@ -389,9 +392,11 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       "הצעד הבא": `${h.nextStep.title} — ${h.nextStep.detail}`, nextStep: `${h.nextStep.title} — ${h.nextStep.detail}`,
       status: h.pr.state, blocker: h.blockers.find((b) => b.ok === false)?.title ?? null,
     },
-    suggestions: tab === "overview"
-      ? ["אילו קבצים השתנו בבקשה?", "אפשר למזג עכשיו?", "למה הבקשה לא עדכנית?"]
-      : ["אפשר למזג עכשיו?", "מה ההבדל בין ענף פרויקט לענף משימה?"],
+    suggestions: tab === "files"
+      ? ["מה דעתך על השינויים האלה?", "יש כאן משהו שהייתי צריך לשים לב אליו?", "מה הבקשה הזו עושה בעצם?"]
+      : tab === "overview"
+        ? ["אילו קבצים השתנו בבקשה?", "מה דעתך על השינויים האלה?", "אפשר למזג עכשיו?"]
+        : ["אפשר למזג עכשיו?", "מה ההבדל בין ענף פרויקט לענף משימה?"],
   } : null);
 
   if (err) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><div className="ob-note crit" style={{ marginTop: 12 }}>{err}</div></>;

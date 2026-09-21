@@ -43,7 +43,7 @@ export function ProposalCard({ message, onUpdate }: { message: ChatMessage; onUp
         <div className="kv">
           <b>מודל</b><span>{modelLabel(p.estimate.model)} · מאמץ {effortLabel(p.estimate.effort)}</span>
           <b>עלות משוערת</b><span>{fmtUsd(p.estimate.usdMin)} – {fmtUsd(p.estimate.usdMax)}, לפי כמות הקבצים</span>
-          <b>גישה</b><span>קריאה בלבד, בעותק המקומי של המאגר</span>
+          <b>גישה</b><span>{p.reads ?? "קריאה בלבד, בעותק המקומי של המאגר"}</span>
         </div>
         {p.error && <div className="ob-note crit" style={{ marginTop: 8 }}>{p.error}</div>}
         {err && <div className="ob-note crit" style={{ marginTop: 8 }}>{err}</div>}

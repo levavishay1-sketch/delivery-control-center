@@ -56,9 +56,40 @@ about half a cent for the move and the same again for the answer, on the model
 the policy routes chat to. The move itself is recorded in the conversation, so
 the second call is visible for what it is rather than looking like a re-ask.
 
+## And when no screen is enough: reading the change itself
+
+Walking the screens answers *what* changed. It does not answer *whether the
+change is sound* — the question a person actually has in front of a pull
+request they are about to merge, and the one they asked next: **"אני צריך
+שיאשר לי את השינויים של ה-PR, בשביל זה הוא צריך לראות את הקבצים שחלקם גם
+קבצי קוד."**
+
+Reading code already exists in the chat, behind a declared cost the person
+approves — but only from a requirement or an onboarding run, both of which
+have a local copy of the repository. A pull request had neither, and said so:
+*"קריאה בקוד אפשרית רק משיחה על דרישה או על הטמעת מאגר."*
+
+So a request now has somewhere to read from. When the person approves the
+cost, DCC fetches the change itself from the host into a folder — the unified
+diff, and each changed file as it stands after the change — and the reading
+happens there. Not from a local clone, which may not have the branch at all,
+and never from the screen's facts.
+
+Three things keep it honest:
+
+- **The card says what will be opened.** A reading on a request declares the
+  change and the host, not "the local copy of the repository", which would
+  have been untrue.
+- **It is capped, and says what it left out.** Twenty-five files, 400KB, a
+  diff cut at 300KB — and the note travels into the answer, so an opinion
+  drawn from part of a change says it was only part.
+- **It is a reader, not an approval.** It says what the change does and what
+  would concern it, each with the file. The decision stays the person's, and
+  the review is still submitted from the request's own screen, to the host,
+  in their name.
+
 ## What this does not do
 
-It does not read code (`<needs_code>` already does that, behind an approval),
-it does not perform anything (actions already do that, behind an approval),
-and it does not leave the subject the person is on. A question no screen of
-DCC answers still ends in the honest marker.
+It does not perform anything (actions already do that, behind an approval),
+and it does not leave the subject the person is on. A question no screen and
+no reading of DCC answers still ends in the honest marker.

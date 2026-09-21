@@ -232,6 +232,8 @@ export type ProposalPayload = {
 };
 export type DeclaredCostPayload = {
   reason: string; question: string; estimate: { model: string; effort: string; usdMin: number; usdMax: number };
+  /** What the reading will open — a request's own change is not a local copy of the repository. */
+  reads?: string;
   status: "proposed" | "running" | "done" | "cancelled" | "failed"; error?: string;
 };
 export const runProposal = (messageId: string) => post<{ message: ChatMessage }>(`/claude/proposals/${messageId}/run`, {});

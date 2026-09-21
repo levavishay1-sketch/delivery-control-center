@@ -1,8 +1,10 @@
 import { mkdirSync } from "node:fs";
+import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db, withTenant } from "@dcc/db";
 import { claudeCall, conversation, conversationMessage, repositoryOnboardingRun } from "@dcc/db/schema";
 import { existingCheckout, firstRepo, runClaudeRaw } from "../ai-assist.ts";
+import { writePullRequestCode } from "../pull-request-detail.ts";
 import { ACTIONS, ActionRefused, actionEntityFor, runAction, type ActionKey } from "../actions/index.ts";
 import { recommend } from "../routing.ts";
 import { ChatError, chatDir, ensureSystemFile, messageView, resolveTopic, type ChatMessage, type TopicKind } from "./index.ts";
@@ -22,6 +24,8 @@ type ProposalPayload = {
 type DeclaredCostPayload = {
   reason: string; question: string; askedCallId: string | null;
   estimate: { model: string; effort: string; usdMin: number; usdMax: number };
+  /** What will actually be read, in the person's words — it differs per topic. */
+  reads?: string;
   status: "proposed" | "running" | "done" | "cancelled" | "failed"; error?: string;
 };
 
@@ -80,14 +84,23 @@ export async function proposalPreview(messageId: string, userId: string): Promis
 
 const CODE_SYSTEM = `You answer one question about a software repository for a person who is not a developer and reads Hebrew. Answer in Hebrew, plainly, under 150 words, no markdown. You have read-only tools (Read, Grep, Glob) on the repository; read as little as possible — the person pays for every token — and say what you read. Put file paths, commands and code in backticks, never translated. If the repository does not contain the answer, say so.`;
 
+/** A pull request is not a repository: the folder holds the change, and the question is almost always whether it is sound. */
+const CHANGE_SYSTEM = `You answer one question about a change proposed to a software repository — a pull request — for a person who is not a developer and reads Hebrew. Answer in Hebrew, plainly, under 200 words, no markdown. You have read-only tools (Read, Grep, Glob) on a folder holding the change: \`changes.diff\` is the whole change in diff form, \`files/\` holds the changed files as they are after it, and \`pull-request.md\` says what the request is and what was left out. Read as little as you need — the person pays for every token — and say what you read. Put file paths, commands and code in backticks, never translated.
+
+When asked whether the change is good, safe, or worth merging: say in one or two sentences what it does, then name what would concern you — each with the file it is in and why it matters to this person — and if nothing concerns you, say that plainly rather than inventing a reservation. Judge only what is in front of you; if the part that would decide it was not read, say so. You are one reader and not an approval: the decision is the person's, and the review itself is submitted from the request's own screen.`;
+
 export async function runCodeQuestion(messageId: string, userId: string): Promise<{ message: ChatMessage; answer: ChatMessage }> {
   const { m, c } = await loadCard(messageId, userId, "declared_cost");
   const p = m.payload as unknown as DeclaredCostPayload;
   if (p.status !== "proposed") throw new ChatError("השאלה כבר לא ממתינה");
   const topic = await resolveTopic({ kind: c.topicKind as TopicKind, id: c.topicId });
 
-  // Where the code is: a requirement's first repository (its local copy), or an onboarding run's isolated copy.
+  // Where the code is: a requirement's first repository (its local copy), an
+  // onboarding run's isolated copy, or — for a request — the change itself,
+  // fetched from the host into a folder of its own.
   let dir: string | null = null;
+  let holds = "";
+  let system = CODE_SYSTEM;
   if (topic.kind === "wi" && topic.workitemId) {
     const r = await firstRepo(topic.clientId, topic.workitemId);
     dir = r ? existingCheckout(r) : null;
@@ -96,16 +109,25 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
     const [run] = await db.select({ workspacePath: repositoryOnboardingRun.workspacePath }).from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, topic.id)).limit(1);
     dir = run?.workspacePath ?? null;
     if (!dir) throw new ChatError("להרצה הזו אין עותק מבודד עדיין");
+  } else if (topic.kind === "pr" && topic.id) {
+    const [prRepoId, num] = topic.id.split("/");
+    if (!prRepoId || !num) throw new ChatError("חסר מזהה בקשת מיזוג");
+    dir = path.join(chatDir(c.id), "change");
+    system = CHANGE_SYSTEM;
+    // Fetched before the card says "running": when the host refuses, the card
+    // stays as it was and the person is told why, instead of a failed reading.
+    try { holds = await writePullRequestCode(prRepoId, Number(num), dir); }
+    catch (e) { throw new ChatError(e instanceof Error ? e.message : String(e)); }
   } else {
-    throw new ChatError("קריאה בקוד אפשרית רק משיחה על דרישה או על הטמעת מאגר");
+    throw new ChatError("קריאה בקוד אפשרית רק משיחה על דרישה, על בקשת מיזוג או על הטמעת מאגר");
   }
 
   await setPayload(m, { ...p, status: "running" });
   const work = chatDir(c.id);
   mkdirSync(work, { recursive: true });
-  const sys = ensureSystemFile(work, "code-system.txt", CODE_SYSTEM);
+  const sys = ensureSystemFile(work, "code-system.txt", system);
   try {
-    const res = await runClaudeRaw(dir, `השאלה: ${p.question}\n\nמה שצריך לבדוק: ${p.reason}`, {
+    const res = await runClaudeRaw(dir, [`השאלה: ${p.question}`, `מה שצריך לבדוק: ${p.reason}`, holds].filter(Boolean).join("\n\n"), {
       ledger: {
         clientId: c.clientId, userId, capability: "chat_code_read", trigger: "chat", entity: { kind: "conversation", id: c.id },
         workitemId: topic.workitemId, screen: topic.screen, label: p.question.slice(0, 80), conversationId: c.id, messageId: m.id, parentCallId: p.askedCallId,
@@ -131,6 +153,13 @@ export async function cancelCodeQuestion(messageId: string, userId: string): Pro
   const p = m.payload as unknown as DeclaredCostPayload;
   if (p.status !== "proposed") throw new ChatError("השאלה כבר לא ממתינה");
   return { message: await setPayload(m, { ...p, status: "cancelled" }) };
+}
+
+/** What a reading on this topic will open, said on the card before the person approves it. */
+export function codeReads(topic: TopicKind): string {
+  if (topic === "pr") return "קריאה בלבד: השינוי עצמו — ה-diff של הבקשה והקבצים ששונו כפי שהם אחריו, מהגיט־האוסט";
+  if (topic === "run") return "קריאה בלבד, בעותק המבודד של ההרצה";
+  return "קריאה בלבד, בעותק המקומי של המאגר";
 }
 
 /** The estimate a declared-cost card shows: the policy's model for reading code, and a range from what such calls typically read. */

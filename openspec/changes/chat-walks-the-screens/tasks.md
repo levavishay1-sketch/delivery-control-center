@@ -35,6 +35,23 @@
       for the screen, and asks the question again there. If the screen never
       loads it says so instead of asking into the void.
 
+## Reading the change itself
+
+- [x] `writePullRequestCode` in `pull-request-detail.ts` — the change written
+      into a folder: the unified diff from the host in one call, each changed
+      file as it is after the change, and `pull-request.md` saying what the
+      request is. Capped at 25 files, 400KB, and a 300KB diff; what was left
+      out is returned as a note and travels into the prompt.
+- [x] A host path is never trusted to stay inside the folder it is written to.
+- [x] `runCodeQuestion` accepts a request's conversation, with a system prompt
+      of its own: say what the change does, name what would concern you with
+      the file it is in, and remember you are a reader and not an approval.
+- [x] The declared-cost card says what will actually be opened (`reads`), so a
+      request's own change is not described as a local copy of the repository.
+- [x] The `<needs_code>` rule names the question a person really asks on a
+      request — is it sound, what might it break, is it worth merging.
+- [x] The files tab suggests it in one click.
+
 ## Checked
 
 - [x] `npm run typecheck` and `npx tsc -p apps/web --noEmit` — both clean.
@@ -46,6 +63,14 @@
 - [x] In the browser, from the overview: "אילו ענפים יש במאגר ומה מצבם?" moved
       the screen to the branches tab and answered with the four real branches
       and what to do with each. No console errors.
+- [x] A reading on a request, end to end, against this change's own pull
+      request: "מה דעתך על השינויים האלה? יש כאן משהו מסוכן?" produced the
+      card, and the approved reading fetched the diff and answered from it —
+      what the change does, what it did not read and why, and one real
+      reservation about the branches loading. $0.1165, inside the range the
+      card declared. That reservation was true and is fixed here: a request
+      of another repository now drops the branches loaded for the previous
+      one instead of showing them.
 
 ## Deliberately not done
 
