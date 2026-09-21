@@ -189,8 +189,8 @@ function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boole
   if (pr.state !== "open") return [];
   const b: Blocker[] = [];
   b.push(pr.conflicts
-    ? { key: "conflict", ok: false, title: "התנגשות מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
-    : { key: "conflict", ok: pr.mergeable === null ? null : true, title: pr.mergeable === null ? "מצב המיזוג עדיין נבדק" : "אין התנגשות", detail: pr.mergeable === null ? "הגיט־האוסט עדיין בודק אם אפשר למזג. כדאי לרענן בעוד רגע." : "הגיט־האוסט מצא שאפשר למזג בלי הכרעה ידנית." });
+    ? { key: "conflict", ok: false, title: "קונפליקט מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
+    : { key: "conflict", ok: pr.mergeable === null ? null : true, title: pr.mergeable === null ? "מצב המיזוג עדיין נבדק" : "אין קונפליקט", detail: pr.mergeable === null ? "הגיט־האוסט עדיין בודק אם אפשר למזג. כדאי לרענן בעוד רגע." : "הגיט־האוסט מצא שאפשר למזג בלי הכרעה ידנית." });
   b.push(pr.review === "approved"
     ? { key: "review", ok: true, title: "אושר בסקירה", detail: "לפחות אדם אחד עבר על השינוי ואישר." }
     : pr.review === "changes_requested"

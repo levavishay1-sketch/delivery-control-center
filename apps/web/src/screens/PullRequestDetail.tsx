@@ -62,9 +62,9 @@ function Files({ groups, count, url, repoId, number, conflict, startOn }: { grou
   const clashFiles = groups.flatMap((g) => g.files).filter((f) => clashPaths.has(f.path));
   const clash: FileGroup | null = clashFiles.length
     ? {
-        key: CLASH as FileGroup["key"], title: conflict?.exact ? "בהתנגשות" : "חשודים בהתנגשות", files: clashFiles,
+        key: CLASH as FileGroup["key"], title: conflict?.exact ? "בקונפליקט" : "חשודים בקונפליקט", files: clashFiles,
         additions: clashFiles.reduce((n, f) => n + f.additions, 0), deletions: clashFiles.reduce((n, f) => n + f.deletions, 0),
-        note: conflict?.exact ? undefined : "ששני הצדדים שינו — לא בטוח שההתנגשות בכולם",
+        note: conflict?.exact ? undefined : "ששני הצדדים שינו — לא בטוח שהקונפליקט בכולם",
       }
     : null;
   const [only, setOnly] = useState<string | null>(startOn === CLASH && clash ? CLASH : null);
@@ -362,9 +362,9 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav, query = "" }
       "כותרת": h.pr.title, "מענף": h.pr.headBranch, "לענף": h.pr.baseBranch, "מצב": h.pr.state === "open" ? (h.pr.draft ? "פתוחה (טיוטה)" : "פתוחה") : h.pr.state === "merged" ? "מוזגה" : "נסגרה",
       "סקירה": h.pr.review === "approved" ? "מאושרת" : h.pr.review === "changes_requested" ? "התבקשו תיקונים" : "אין עדיין",
       "בדיקות": h.pr.checks === "passing" ? "עברו" : h.pr.checks === "failing" ? "נכשלו" : h.pr.checks === "running" ? "רצות" : "אין",
-      "התנגשות": h.pr.conflicts ? "יש" : "אין", "ממתינה": `${Math.round(h.pr.waitingHours)} שעות`,
+      "קונפליקט": h.pr.conflicts ? "יש" : "אין", "ממתינה": `${Math.round(h.pr.waitingHours)} שעות`,
       ...(d?.conflict?.files.length ? {
-        [d.conflict.exact ? "הקבצים בהתנגשות" : "קבצים חשודים בהתנגשות"]:
+        [d.conflict.exact ? "הקבצים בקונפליקט" : "קבצים חשודים בקונפליקט"]:
           d.conflict.files.map((f) => `${f.path} · הענף +${f.ours?.additions ?? 0} −${f.ours?.deletions ?? 0} · היעד +${f.theirs?.additions ?? 0} −${f.theirs?.deletions ?? 0}`),
       } : {}),
       ...(d?.freshness ? { "מאחורי הבסיס": `${d.freshness.behind} קומיטים, ${d.freshness.sharedFiles} קבצים שגם הבקשה הזו משנה` } : {}),
@@ -402,8 +402,8 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav, query = "" }
             {pr.state === "merged" && <span className="pill healthy">מוזגה</span>}
             {pr.state === "closed" && <span className="pill inactive">נסגרה בלי מיזוג</span>}
             {pr.draft && pr.state === "open" && <span className="pill inactive">טיוטה</span>}
-            {pr.state === "open" && pr.conflicts && <span className="pill critical">התנגשות</span>}
-            {pr.state === "open" && !pr.conflicts && pr.mergeable && <span className="pill healthy">אין התנגשות</span>}
+            {pr.state === "open" && pr.conflicts && <span className="pill critical">קונפליקט</span>}
+            {pr.state === "open" && !pr.conflicts && pr.mergeable && <span className="pill healthy">אין קונפליקט</span>}
           </div>
         </div>
         <div className="ob-actions">
@@ -443,7 +443,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav, query = "" }
                 <CardTitle info="pr_blockers">מה חוסם מיזוג</CardTitle>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>
                 {blockers.map((b) => <BlockerRow key={b.key} b={b}
-                  go={b.key === "conflict" && b.ok === false ? { hint: "הצג את הקבצים שמתנגשים", onClick: () => nav(`#/pull-requests/${repoId}/${number}/files?filter=conflicts`) } : undefined} />)}
+                  go={b.key === "conflict" && b.ok === false ? { hint: "הצג את הקבצים שבקונפליקט", onClick: () => nav(`#/pull-requests/${repoId}/${number}/files?filter=conflicts`) } : undefined} />)}
               </div>}
               {!d
                 ? <div className="panel">{loading("את מפת הקוד")}</div>
