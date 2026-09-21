@@ -174,13 +174,24 @@ function NodePopover({ node, xPct, yPct, onClose }: { node: CodeMapNode; xPct: n
       {node.subject && <div className={node.heading ? "s br" : "s"}>{node.subject}</div>}
       {node.message && <div className="msg">{node.message}</div>}
       {node.detail && <div className="d">{node.detail}</div>}
+      {!!node.brought?.length && (
+        <div className="bg">
+          <div className="k">{node.brought.length === 1 ? "הקומיט שהוא הכניס" : `${node.brought.length} הקומיטים שהוא הכניס`}</div>
+          <ul>{node.brought.map((b) => <li key={b.sha}><span className="sha">{b.sha}</span> <span className="t">{b.subject}</span></li>)}</ul>
+        </div>
+      )}
       <div className="m">
         {node.sha && <span className="sha">{node.sha}</span>}
         {node.author && <span>{node.author}</span>}
         {when && <span>{when}</span>}
         {typeof node.files === "number" && <span>{node.files} קבצים</span>}
       </div>
-      {node.url && <div style={{ marginTop: 6 }}><a href={node.url} target="_blank" rel="noreferrer">פתח בגיט־האוסט ↗</a></div>}
+      {(node.url || node.dccPath) && (
+        <div style={{ marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
+          {node.url && <a href={node.url} target="_blank" rel="noreferrer">פתח בגיט־האוסט ↗</a>}
+          {node.dccPath && <a href={node.dccPath}>פתח ב-DCC ›</a>}
+        </div>
+      )}
       {node.folder && <FolderBlock folder={node.folder} />}
     </div>
   );

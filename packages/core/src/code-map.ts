@@ -39,6 +39,10 @@ export type CodeMapNode = {
   message?: string;
   /** The commit or the pull request on the host. */
   url?: string;
+  /** The same pull request inside DCC (a `#/…` address), when it is known which repository and which request. */
+  dccPath?: string;
+  /** For a merge: the commits it brought in, oldest first — their titles are what pressing the dot lists. */
+  brought?: { sha: string; subject: string }[];
   /** One line in Hebrew: what this dot is, for someone who does not read git. */
   detail?: string;
   /** For work that exists only on this computer: the folder it sits in. */
@@ -72,7 +76,7 @@ export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: 
 
 /* ── what git says ────────────────────────────────────────────────── */
 
-export type CodeMapCommit = { sha: string; subject: string; author: string; at: string; files: string[]; /** The rest of the commit message, after its first line. */ body?: string; /** A merge commit: it has more than one parent, and brings in work done on another branch. */ merge?: boolean };
+export type CodeMapCommit = { sha: string; subject: string; author: string; at: string; files: string[]; /** The rest of the commit message, after its first line. */ body?: string; /** A merge commit: it has more than one parent, and brings in work done on another branch. */ merge?: boolean; /** Its parents, as short shas — how a merge is tied to the commits it brought in. */ parents?: string[] };
 
 export type CodeMapFacts = {
   baseBranch: string;
@@ -98,6 +102,8 @@ export type CodeMapFacts = {
   fetchedAt: string | null;
   /** The repository on the host, for linking a commit. */
   repoUrl: string | null;
+  /** DCC's own id for that repository, when known: it is what lets a merge link to its request inside DCC. */
+  repoId?: string | null;
   /** false when a commit's `files` is not that commit's own list (a host answer that only knows the whole branch's files): the map then shows no per-commit count. */
   perCommitFiles?: boolean;
   /** The working folder these facts were read from. */
@@ -138,6 +144,7 @@ function parseLog(out: string): CodeMapCommit[] {
       subject: (subject ?? "").trim(), body: (body ?? "").trim() || undefined,
       files: filesText.split("\n").map((f) => f.trim()).filter(Boolean),
       merge: (parents ?? "").trim().split(/\s+/).filter(Boolean).length > 1 || undefined,
+      parents: (parents ?? "").trim().split(/\s+/).filter(Boolean).map((p) => p.slice(0, 7)),
     });
   }
   return commits;
@@ -240,13 +247,37 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
   for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, c.merge ? "merge" : "other", f.repoUrl, c.merge ? `מיזוג ב-${f.baseBranch} מלפני שהענף שלנו נפתח.` : `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`, { onHost: true, folder: here }));
   const branchAt = base.nodes.length;
   const pointDetail = `הנקודה שממנה הענף שלנו יצא. כל מה שהיה ב-${f.baseBranch} עד כאן נמצא גם אצלנו.`;
-  base.nodes.push(
-    f.baselineCommit
-      ? nodeFrom(f.baselineCommit, f.baseAfter.length ? "branchPoint" : "current", f.repoUrl, pointDetail, { onHost: true, folder: here })
-      : { kind: f.baseAfter.length ? "branchPoint" : "current", detail: pointDetail, sha: f.baselineSha?.slice(0, 7) },
-  );
+  // The request's number, from "Merge pull request #7 …" or a squash commit's "… (#7)".
+  const requestNumber = (subject: string) => /^Merge pull request #(\d+)\b/.exec(subject)?.[1] ?? /\(#(\d+)\)\s*$/.exec(subject)?.[1];
+  const dccPathFor = (subject: string) => { const n = requestNumber(subject); return n && f.repoId ? `#/pull-requests/${f.repoId}/${n}` : undefined; };
+  const point: CodeMapNode = f.baselineCommit
+    ? nodeFrom(f.baselineCommit, f.baseAfter.length ? "branchPoint" : "current", f.repoUrl, pointDetail, { onHost: true, folder: here })
+    : { kind: f.baseAfter.length ? "branchPoint" : "current", detail: pointDetail, sha: f.baselineSha?.slice(0, 7) };
+  const pointDcc = f.baselineCommit ? dccPathFor(f.baselineCommit.subject) : undefined;
+  if (pointDcc) point.dccPath = pointDcc;
+  base.nodes.push(point);
 
   const ourFiles = new Set(f.ourCommits.flatMap((c) => c.files));
+  // What a merge brought in: the commits reachable from its later parents that are not already reachable from its first —
+  // the first parent is the base line itself, the others are the branches folded in. Only commits in this list can be named.
+  const inList = new Map(f.baseAfter.map((c) => [c.sha.slice(0, 7), c]));
+  const reach = (starts: string[]) => {
+    const seen = new Set<string>();
+    const stack = [...starts];
+    while (stack.length) {
+      const s = stack.pop()!.slice(0, 7);
+      if (seen.has(s) || !inList.has(s)) continue;
+      seen.add(s);
+      stack.push(...(inList.get(s)!.parents ?? []));
+    }
+    return seen;
+  };
+  const broughtBy = (c: CodeMapCommit) => {
+    const [first, ...others] = c.parents ?? [];
+    const onBaseLine = reach(first ? [first] : []);
+    return [...reach(others)].filter((s) => !onBaseLine.has(s)).map((s) => inList.get(s)!)
+      .sort((a, b) => a.at.localeCompare(b.at)).map((x) => ({ sha: x.sha, subject: x.subject }));
+  };
   f.baseAfter.forEach((c, i) => {
     const touching = c.files.some((x) => ourFiles.has(x));
     const newest = i === f.baseAfter.length - 1;
@@ -256,7 +287,11 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
         ? `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ונוגע בקבצים שגם אנחנו שינינו.`
         : `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ולא נוגע בקבצים שלנו.`;
     // A merge is drawn black, like the newest dot, wherever it sits on the base line.
-    base.nodes.push(nodeFrom(c, touching ? "attention" : newest ? "current" : c.merge ? "merge" : "other", f.repoUrl, detail, { onHost: true, folder: here }));
+    const node = nodeFrom(c, touching ? "attention" : newest ? "current" : c.merge ? "merge" : "other", f.repoUrl, detail, { onHost: true, folder: here });
+    if (c.merge) { const brought = broughtBy(c); if (brought.length) node.brought = brought; }
+    const dcc = dccPathFor(c.subject);
+    if (dcc) node.dccPath = dcc;
+    base.nodes.push(node);
   });
 
   if (f.behind > 0) {

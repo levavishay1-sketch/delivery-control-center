@@ -65,6 +65,7 @@ const asCommit = (c: GhCommit, files: string[] = []): CodeMapCommit => ({
   sha: short(c.sha), subject: subject(c.commit.message), author: c.commit.author.name, at: c.commit.author.date, files,
   body: c.commit.message.split("\n").slice(1).join("\n").trim() || undefined,
   merge: (c.parents?.length ?? 0) > 1 || undefined,
+  parents: c.parents?.map((p) => short(p.sha)),
 });
 
 /* ── files, grouped the way a person reads them ───────────────────── */
@@ -265,6 +266,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   } else {
     const facts: CodeMapFacts = {
       baseBranch: pr.baseBranch,
+      repoId,
       branch: pr.headBranch,
       baselineSha: mergeBase ? short(mergeBase) : null,
       baselineCommit: ours.merge_base_commit ? asCommit(ours.merge_base_commit) : null,

@@ -559,6 +559,10 @@ export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "merg
 export type CodeMapNode = {
   kind: CodeMapNodeKind; heading?: string; title?: string; sha?: string; subject?: string; author?: string; at?: string;
   files?: number; url?: string; detail?: string; folder?: string; message?: string;
+  /** The same pull request inside DCC (a `#/…` address). */
+  dccPath?: string;
+  /** For a merge: the commits it brought in, oldest first. */
+  brought?: { sha: string; subject: string }[];
 };
 export type CodeMapLane = { id: string; label?: string; note?: string; place?: CodeMapPlace; nodes: CodeMapNode[]; from?: { lane: string; at: number }; name?: string; url?: string; detail?: string; folder?: string };
 export type CodeMapArrow = { from: string; to: string; label: string; state: "done" | "pending" };
