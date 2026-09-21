@@ -153,6 +153,8 @@ import {
   updatePolicy,
   setClientRetention,
   PolicyError,
+  scheduleRetention,
+  archiveExpiredConversations,
 } from "@dcc/core";
 import websocket from "@fastify/websocket";
 import { blocker, gap, task } from "@dcc/db/schema";
@@ -468,6 +470,11 @@ app.put("/clients/:id/claude-retention", async (req) => {
   const dev = await actingUser(req);
   const b = z.object({ days: z.number().int().nullable() }).parse(req.body ?? {});
   return setClientRetention((req.params as { id: string }).id, b.days, { userId: dev.id });
+});
+// The daily retention pass, on demand — the same function the schedule runs; nothing expires early.
+app.post("/claude/retention/run", async (req) => {
+  await actingUser(req);
+  return archiveExpiredConversations();
 });
 app.post("/claude/messages/:id/run-code", async (req) => {
   const dev = await actingUser(req);
@@ -1556,6 +1563,9 @@ if (import.meta.main) {
   // marked failed (its button reruns it); a live Claude session is marked
   // disconnected and can be reopened from the same conversation.
   recoverOnboardingRuns().then((n) => { if (n) app.log.warn(`onboarding: ${n} interrupted stage(s)/session(s) recovered after restart`); }).catch((e) => app.log.error(e));
+  // Retention (claude-in-dcc §9.10): expired conversations lose their text
+  // once a day, inside this process — never a second process on the database.
+  scheduleRetention(app.log);
 
   // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
   // un-openable if the process is killed mid-write, so always close it.

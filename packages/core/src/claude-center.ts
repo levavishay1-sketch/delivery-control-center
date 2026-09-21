@@ -1,6 +1,6 @@
 import { and, desc, eq, sql, type SQL } from "drizzle-orm";
 import { db, usd } from "@dcc/db";
-import { claudeCall, client, conversationMessage, users } from "@dcc/db/schema";
+import { claudeCall, client, conversation, conversationMessage, users } from "@dcc/db/schema";
 import { loadPolicy } from "./routing.ts";
 
 /**
@@ -33,6 +33,8 @@ export function period(month: string | undefined): { from: Date; to: Date; month
 }
 
 export const ESCALATED = sql`(${claudeCall.policyRule} like '%escalated%' or ${claudeCall.policyRule} like '%model overridden%')`;
+/** The screen a conversation's topic belongs to — the same mapping the chat uses when it resolves a topic. */
+export const TOPIC_SCREEN = sql<string>`case ${conversation.topicKind} when 'wi' then 'requirement' when 'task' then 'task' when 'pr' then 'pull_request' when 'run' then 'onboarding' else 'dashboard' end`;
 
 function where(f: CenterFilter, p: { from: Date; to: Date }): SQL {
   const parts: SQL[] = [sql`${claudeCall.startedAt} >= ${p.from} and ${claudeCall.startedAt} < ${p.to}`];
@@ -63,6 +65,12 @@ export type ClaudeOverview = {
   byUser: (CenterBar & { questions: number; withoutModelPct: number; unhelpfulPct: number })[];
   policy: { version: number; defaults: number; escalated: number; manual: number; capped: number };
   tokens: { input: number; cacheRead: number; cacheWrite: number; output: number; cacheSharePct: number };
+  /** The measurements the chat is tuned by (claude-in-dcc §6.8): cost per question, tokens per turn, roll-overs and what their summaries cost, what retention removed. */
+  chat: { calls: number; costPerQuestionUsd: number | null; tokensPerTurn: number | null; rollovers: number; rolloverCostUsd: number; archived: number };
+  /** Answered without a model and "did not help", per screen — how much each screen says by itself. */
+  chatByScreen: { screen: string; questions: number; withoutModel: number; withoutModelPct: number; unhelpful: number; unhelpfulPct: number }[];
+  /** A capability that escalates in 30% or more of its calls has a disguised default. */
+  escalationByCapability: { capability: string; escalated: number; total: number; pct: number }[];
 };
 
 export async function claudeOverview(f: CenterFilter = {}): Promise<ClaudeOverview> {
@@ -112,6 +120,29 @@ export async function claudeOverview(f: CenterFilter = {}): Promise<ClaudeOvervi
     reasked: sql<number>`count(*) filter (where ${conversationMessage.helpful} = false and ${conversationMessage.helpfulSource} = 'reasked')::int`,
   }).from(conversationMessage).where(mw);
 
+  // The measurements (§6.8): what a chat question costs and carries, how
+  // often a conversation rolled over and what the summaries cost, what
+  // retention removed, how much each screen answers by itself, and which
+  // capability keeps escalating.
+  const [chatCalls] = await db.select({
+    n, usd: cost,
+    perTurn: sql<number>`coalesce(avg(${claudeCall.inputTokens} + ${claudeCall.cacheReadTokens} + ${claudeCall.cacheWriteTokens}), 0)::float`,
+  }).from(claudeCall).where(and(w, eq(claudeCall.capability, "chat")));
+  const [rollovers] = await db.select({ n, usd: cost }).from(claudeCall).where(and(w, eq(claudeCall.capability, "conversation_summary")));
+  const [archived] = await db.select({ n }).from(conversation)
+    .where(and(eq(conversation.status, "archived"), ...(f.clientId ? [eq(conversation.clientId, f.clientId)] : [])));
+  const byScreenRows = await db.select({
+    screen: TOPIC_SCREEN, answers: n,
+    system: sql<number>`count(*) filter (where ${conversationMessage.source} = 'system')::int`,
+    unhelpful: sql<number>`count(*) filter (where ${conversationMessage.helpful} = false)::int`,
+  }).from(conversationMessage)
+    .innerJoin(conversation, eq(conversation.id, conversationMessage.conversationId))
+    .where(mw).groupBy(TOPIC_SCREEN).orderBy(desc(n));
+  const escalationRows = await db.select({
+    capability: claudeCall.capability, total: n,
+    escalated: sql<number>`count(*) filter (where ${ESCALATED})::int`,
+  }).from(claudeCall).where(w).groupBy(claudeCall.capability).having(sql`count(*) filter (where ${ESCALATED}) > 0`).orderBy(desc(sql`count(*) filter (where ${ESCALATED})`));
+
   const [budget] = f.clientId
     ? await db.execute<{ budget: number }>(sql`select coalesce(sum(monthly_usd),0)::float as budget from client_budget where client_id = ${f.clientId}`).then((r) => r.rows)
     : await db.execute<{ budget: number }>(sql`select coalesce(sum(monthly_usd),0)::float as budget from client_budget`).then((r) => r.rows);
@@ -134,6 +165,14 @@ export async function claudeOverview(f: CenterFilter = {}): Promise<ClaudeOvervi
     byUser: byUserRows.map((r) => ({ key: r.key, label: r.label, usd: r.usd, calls: r.calls, questions: 0, withoutModelPct: 0, unhelpfulPct: 0 })),
     policy: { version: loadPolicy().version, defaults: t.calls - t.escalated, escalated: t.escalated - t.manual < 0 ? 0 : t.escalated - t.manual, manual: t.manual, capped: t.capped },
     tokens: { input: t.input, cacheRead: t.cacheRead, cacheWrite: t.cacheWrite, output: t.output, cacheSharePct: pct(t.cacheRead, inputAll) },
+    chat: {
+      calls: chatCalls?.n ?? 0,
+      costPerQuestionUsd: answers > 0 ? (chatCalls?.usd ?? 0) / answers : null,
+      tokensPerTurn: (chatCalls?.n ?? 0) > 0 ? Math.round(chatCalls!.perTurn) : null,
+      rollovers: rollovers?.n ?? 0, rolloverCostUsd: rollovers?.usd ?? 0, archived: archived?.n ?? 0,
+    },
+    chatByScreen: byScreenRows.map((r) => ({ screen: r.screen, questions: r.answers, withoutModel: r.system, withoutModelPct: pct(r.system, r.answers), unhelpful: r.unhelpful, unhelpfulPct: pct(r.unhelpful, r.answers) })),
+    escalationByCapability: escalationRows.map((r) => ({ capability: r.capability, escalated: r.escalated, total: r.total, pct: pct(r.escalated, r.total) })),
   };
 }
 

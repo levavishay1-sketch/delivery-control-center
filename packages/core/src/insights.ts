@@ -6,7 +6,7 @@ import { appendEvent, db, usd, withTenant } from "@dcc/db";
 import { claudeCall, claudeInsight, client, conversation, conversationMessage, users, workitem } from "@dcc/db/schema";
 import { runClaudeRaw } from "./ai-assist.ts";
 import { ChatError, ensureSystemFile, internalClientId } from "./chat/index.ts";
-import { ESCALATED, period } from "./claude-center.ts";
+import { ESCALATED, TOPIC_SCREEN, period } from "./claude-center.ts";
 import { glossaryFor } from "./glossary/index.ts";
 import { chatPolicy, estimateUsd, recommend } from "./routing.ts";
 
@@ -50,8 +50,8 @@ export type InsightsView = {
   escalated: InsightCallRow[];
 };
 
-/** The screen a conversation's topic belongs to — the same mapping the chat uses. */
-const SCREEN = sql<string>`case ${conversation.topicKind} when 'wi' then 'requirement' when 'task' then 'task' when 'pr' then 'pull_request' when 'run' then 'onboarding' else 'dashboard' end`;
+/** The screen a conversation's topic belongs to — the control center's one mapping. */
+const SCREEN = TOPIC_SCREEN;
 /** The question with case, punctuation and spacing normalised — the same normalisation the chat's "asked again" check uses. */
 const KEY = sql<string>`trim(regexp_replace(regexp_replace(lower(${conversationMessage.text}), '[?!.,"''״׳()]', ' ', 'g'), '\\s+', ' ', 'g'))`;
 
