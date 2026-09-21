@@ -17,6 +17,7 @@
     "db:guards": "npm -w @dcc/db run guards",
     "typecheck": "tsc -b",
   "audit:stale": "node scripts/audit-stale.mjs",
+    "sync": "node scripts/sync.mjs",
     "spec": "openspec"
   },
   "devDependencies": {
