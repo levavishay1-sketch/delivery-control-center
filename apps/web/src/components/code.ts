@@ -10,7 +10,7 @@
  * file that was shown.
  */
 
-export type TokenKind = "plain" | "comment" | "string" | "number" | "keyword" | "type" | "fn" | "punct" | "tag" | "attr";
+export type TokenKind = "plain" | "comment" | "string" | "number" | "keyword" | "type" | "fn" | "punct" | "tag" | "attr" | "regex";
 export type Token = { text: string; kind: TokenKind };
 
 type Rules = {
@@ -21,6 +21,8 @@ type Rules = {
   types?: Set<string>;
   /** `<tag attr=…>` is worth its own colour in markup and in JSX. */
   markup?: boolean;
+  /** `/…/g` is a value here. Without this a backtick inside a pattern opens a string that swallows the rest of the file. */
+  regex?: boolean;
 };
 
 const set = (s: string) => new Set(s.split(" "));
@@ -35,7 +37,7 @@ const CS_KEYWORDS = set(
 const SQL_KEYWORDS = set("select from where insert into values update set delete create table alter drop index view join left right inner outer on group by order having limit offset union all as and or not null distinct returning with primary key foreign references unique default check constraint");
 const CSS_KEYWORDS = set("important inherit initial unset auto none flex grid block inline absolute relative fixed sticky solid transparent");
 
-const C_LIKE: Rules = { line: ["//"], block: [["/*", "*/"]], quotes: ["\"", "'", "`"], keywords: JS_KEYWORDS, types: JS_TYPES, markup: true };
+const C_LIKE: Rules = { line: ["//"], block: [["/*", "*/"]], quotes: ["\"", "'", "`"], keywords: JS_KEYWORDS, types: JS_TYPES, markup: true, regex: true };
 
 const BY_LANG: Record<string, Rules> = {
   ts: C_LIKE, tsx: C_LIKE, js: C_LIKE, jsx: C_LIKE, mjs: C_LIKE, cjs: C_LIKE,
@@ -60,14 +62,40 @@ export const langOf = (path: string): string => {
 };
 
 const isWord = (c: string) => /[A-Za-z0-9_$]/.test(c);
+const ch0 = (s: string) => s[0];
+
+/** The end of a `/…/flags` pattern that starts at `from`, or `from` when this `/` is not one. */
+function scanRegex(text: string, from: number): number {
+  let j = from + 1;
+  let inClass = false;
+  while (j < text.length) {
+    const c = text[j]!;
+    if (c === "\\") { j += 2; continue; }
+    if (c === "\n") return from;            // a pattern never spans lines
+    if (c === "[") inClass = true;
+    else if (c === "]") inClass = false;
+    else if (c === "/" && !inClass) { j += 1; while (j < text.length && /[a-z]/.test(text[j]!)) j += 1; return j; }
+    j += 1;
+  }
+  return from;
+}
 
 /** Every token of the text, in order, including the newlines — nothing is dropped. */
 function scan(text: string, rules: Rules): Token[] {
   const out: Token[] = [];
-  const push = (t: string, kind: TokenKind) => { if (t) out.push({ text: t, kind }); };
+  /** The last token that is not blank space — what decides whether a `/` opens a pattern or divides. */
+  let prev: Token | null = null;
+  const push = (t: string, kind: TokenKind) => {
+    if (!t) return;
+    out.push({ text: t, kind });
+    if (t.trim()) prev = { text: t, kind };
+  };
   let i = 0;
   let plain = "";
   const flush = () => { push(plain, "plain"); plain = ""; };
+  /** A pattern may start where a value may start: after an operator, a comma, an opening bracket or a keyword — never after one. */
+  const valueExpected = () =>
+    !prev || prev.kind === "keyword" || (prev.kind === "punct" && !/[)\]]/.test(prev.text));
 
   while (i < text.length) {
     const rest = text.slice(i);
@@ -84,16 +112,24 @@ function scan(text: string, rules: Rules): Token[] {
       const stop = nl === -1 ? text.length : nl;
       flush(); push(text.slice(i, stop), "comment"); i = stop; continue;
     }
+    // A pattern is read before a quote, because a backtick or an apostrophe inside one is not a string.
+    if (rules.regex && ch0(rest) === "/" && valueExpected()) {
+      const end = scanRegex(text, i);
+      if (end > i) { flush(); push(text.slice(i, end), "regex"); i = end; continue; }
+    }
     const q = rules.quotes?.find((c) => rest.startsWith(c));
     if (q) {
       let j = i + 1;
+      let closed = false;
       while (j < text.length) {
         if (text[j] === "\\") { j += 2; continue; }
-        if (text.startsWith(q, j)) { j += q.length; break; }
+        if (text.startsWith(q, j)) { j += q.length; closed = true; break; }
         // A single-quoted or double-quoted string never runs past its line; a template literal may.
         if (text[j] === "\n" && q !== "`") break;
         j += 1;
       }
+      // An apostrophe that never closes is not a string — it is a word in Hebrew, or a stray character.
+      if (!closed && q !== "`") { plain += text[i]; i += 1; continue; }
       flush(); push(text.slice(i, j), "string"); i = j; continue;
     }
     const ch = text[i]!;

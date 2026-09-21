@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getPullRequestConflict, resolvePullRequestConflict, type ConflictContent, type ConflictFileContent } from "../api.ts";
+import { getPullRequestConflict, resolvePullRequestConflict, verifyPullRequestConflict, type ConflictContent, type ConflictFileContent, type VerifyResult } from "../api.ts";
 import { CardTitle } from "../ui.tsx";
-import { CodeBlock } from "../components/Code.tsx";
+import { CodeBlock, CodeEditor } from "../components/Code.tsx";
 import { langOf } from "../components/code.ts";
 import { Info } from "../claude/Info.tsx";
 import { errText } from "./onboarding/labels.ts";
@@ -127,7 +127,7 @@ function FileEditor({ file, choices, manual, approved, active, setActive, onChoo
           <p className="ob-sub" style={{ margin: "6px 0 8px" }}>
             זה הקובץ כפי שהוא בענף שלכם, פתוח לעריכה. ערכו אותו, והכניסו בעצמכם את מה שאתם רוצים לקחת מהיעד — הוא מוצג למעלה. מה שיישמר הוא בדיוק מה שכתוב כאן.
           </p>
-          <textarea className="cf-manual" dir="ltr" spellCheck={false} value={manual} onChange={(e) => onManual(e.target.value)} rows={22} />
+          <CodeEditor value={manual} lang={lang} onChange={onManual} rows={22} />
         </div>
       )}
 
@@ -153,6 +153,8 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
   const [choices, setChoices] = useState<Record<string, (Choice | null)[]>>({});
   const [manual, setManual] = useState<Record<string, string | null>>({});
   const [approved, setApproved] = useState<Record<string, boolean>>({});
+  const [check, setCheck] = useState<VerifyResult | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -179,11 +181,20 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
   const left = files.filter((f) => f.resolvable && !settled(f)).length;
   const ready = !!d && files.length > 0 && blocked.length === 0 && left === 0;
 
+  const payloadOf = () => files.map((f) => ({ path: f.path, content: manual[f.path] ?? compose(f, choices[f.path] ?? []) }));
+
+  const verify = async () => {
+    if (!d || !ready) return;
+    setChecking(true); setErr(null); setCheck(null);
+    try { setCheck(await verifyPullRequestConflict(repoId, number, payloadOf())); }
+    catch (e) { setErr(errText(e)); } finally { setChecking(false); }
+  };
+
   const save = async () => {
     if (!d || !ready) return;
     setBusy(true); setErr(null);
     try {
-      const payload = files.map((f) => ({ path: f.path, content: manual[f.path] ?? compose(f, choices[f.path] ?? []) }));
+      const payload = payloadOf();
       const r = await resolvePullRequestConflict(repoId, number, payload);
       setDone(`נוצר קומיט מיזוג ${r.commitSha} על ${r.branch} ונדחף. הקונפליקט נפתר ב-${r.files === 1 ? "קובץ אחד" : `${r.files} קבצים`}.`);
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
@@ -264,6 +275,37 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
               </div>
 
               <div className="panel">
+                <CardTitle info="pr_conflict_check">בדיקה שכלום לא נשבר</CardTitle>
+                <p className="ob-sub">
+                  DCC יריץ את הבדיקות של המאגר עצמו על התוצאה, בעותק מבודד, <b>לפני</b> שמשהו נדחף. זו אותה תשובה שהייתם מקבלים מהטרמינל.
+                </p>
+                <div className="ob-actions" style={{ marginTop: 10 }}>
+                  <button className="btn btn-secondary btn-sm" disabled={!ready || checking || busy} onClick={() => void verify()}>
+                    {checking ? "בודק…" : "בדוק את התוצאה"}
+                  </button>
+                </div>
+                {checking && <p className="ob-sub" style={{ marginTop: 8 }}>מכין עותק ומריץ. זה לוקח כמה עשרות שניות.</p>}
+                {check && !check.ran && <div className="ob-note warn" style={{ marginTop: 8 }}>{check.why}</div>}
+                {check?.ran && (
+                  <>
+                    <div className={`ob-note ${check.checks.every((c) => c.ok) ? "ok" : "crit"}`} style={{ margin: "8px 0" }}>
+                      {check.checks.every((c) => c.ok) ? "כל הבדיקות עברו על התוצאה." : "יש בדיקה שנכשלה על התוצאה. כדאי לתקן לפני שדוחפים."}
+                    </div>
+                    {check.checks.map((c) => (
+                      <div className="pr-chk" key={c.name}>
+                        <span className={`ic ${c.ok ? "yes" : "no"}`}>{c.ok ? "✓" : "✕"}</span>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div className="tt ob-code">{c.command}</div>
+                          <div className="dd">{c.ok ? `עבר · ${Math.round(c.ms / 1000)} שניות` : "נכשל"}</div>
+                          {!c.ok && <pre className="cf-out" dir="ltr">{c.output}</pre>}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+
+              <div className="panel">
                 <CardTitle info="pr_conflict_save">שמירת ההכרעה</CardTitle>
                 <p className="ob-sub">
                   ייווצר קומיט מיזוג אחד על <span className="ob-code">{d.head}</span>, בשמכם, והוא יידחף לגיט־האוסט. הבקשה תפסיק להיות בקונפליקט.
@@ -275,6 +317,9 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
                   </button>
                   <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void load()}>טען מחדש</button>
                 </div>
+                {check?.ran && !check.checks.every((c) => c.ok) && ready && (
+                  <p className="ob-sub" style={{ marginTop: 8 }}>בדיקה נכשלה על התוצאה. אפשר לשמור בכל זאת, אבל אז הענף יישאר שבור עד שיתוקן.</p>
+                )}
                 {!ready && !busy && (
                   <p className="ob-sub" style={{ marginTop: 8 }}>
                     {blocked.length ? `${blocked.length === 1 ? "קובץ אחד" : `${blocked.length} קבצים`} לא ניתנים להכרעה מכאן, ולכן אי אפשר לשמור.` : `נשארו ${left === 1 ? "קובץ אחד" : `${left} קבצים`} להכריע.`}

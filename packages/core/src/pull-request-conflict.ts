@@ -7,6 +7,7 @@ import { repo } from "@dcc/db/schema";
 import { ensureCheckout, git, resolveCommitIdentity } from "./ai-assist.ts";
 import { listPullRequests } from "./pull-requests.ts";
 import { appendRepoAiEvent } from "./repo-onboarding/events.ts";
+import { verifyCommit, type VerifyResult } from "./merge-verify.ts";
 
 /**
  * Resolving a conflict from inside DCC (`openspec/changes/pull-request-center`).
@@ -174,6 +175,48 @@ export async function resolveConflict(input: {
   repoId: string; number: number; userId: string; files: { path: string; content: string }[];
 }): Promise<{ commitSha: string; branch: string; base: string; files: number }> {
   const { pr, r, dir } = await openRequest(input.repoId, input.number);
+  const built = await buildMerge(input, { pr, dir });
+
+  // Not forced: the parent is the branch as it was a moment ago, so a branch
+  // that moved meanwhile is rejected by git rather than overwritten.
+  const push = await git(["push", "origin", `${built.sha}:refs/heads/${pr.headBranch}`], dir, { timeoutMs: 180_000 });
+  if (push.code !== 0) {
+    const moved = /non-fast-forward|fetch first|rejected/i.test(push.out);
+    throw new ConflictError(moved
+      ? `הענף ${pr.headBranch} השתנה בגיט־האוסט מאז שפתחתם את המסך, ולכן לא דחפנו כלום. רעננו והכריעו שוב על המצב החדש.`
+      : `הדחיפה נכשלה: ${push.out.slice(0, 300)}`);
+  }
+
+  if (r.clientId) {
+    await appendRepoAiEvent({
+      clientId: r.clientId, repoId: r.id, type: "pull_request.conflict_resolved",
+      payload: { number: pr.number, branch: pr.headBranch, base: pr.baseBranch, commit: built.sha, files: built.paths },
+      actorUserId: input.userId,
+    }).catch(() => { /* the merge is pushed; the record is best effort */ });
+  }
+  return { commitSha: built.sha.slice(0, 7), branch: pr.headBranch, base: pr.baseBranch, files: built.paths.length };
+}
+
+/**
+ * What the decisions produce, checked before anything leaves the machine:
+ * the merge commit is built, and the repository's own checks are run against
+ * it in a copy of its own. Nothing is pushed — a person sees whether their
+ * decision compiles, and then decides whether to save it.
+ */
+export async function verifyResolution(input: {
+  repoId: string; number: number; userId: string; files: { path: string; content: string }[];
+}): Promise<VerifyResult> {
+  const { pr, dir } = await openRequest(input.repoId, input.number);
+  const built = await buildMerge(input, { pr, dir });
+  return verifyCommit(dir, built.sha, `${input.repoId.slice(0, 8)}-${input.number}`);
+}
+
+/** The merge commit the decisions produce — built and kept in the repository's object store, pushed by nobody. */
+async function buildMerge(
+  input: { repoId: string; number: number; userId: string; files: { path: string; content: string }[] },
+  ctx: { pr: { headBranch: string; baseBranch: string }; dir: string },
+): Promise<{ sha: string; paths: string[] }> {
+  const { pr, dir } = ctx;
   const m = await mergeState(dir, pr.baseBranch, pr.headBranch);
 
   const given = new Map(input.files.map((f) => [f.path, f.content]));
@@ -210,26 +253,7 @@ export async function resolveConflict(input: {
       "commit-tree", tree.out.trim(), "-p", m.headSha, "-p", m.baseSha, "-m", message,
     ], dir);
     if (commit.code !== 0 || !commit.out.trim()) throw new ConflictError(`יצירת קומיט המיזוג נכשלה: ${commit.out.slice(0, 200)}`);
-    const sha = commit.out.trim();
-
-    // Not forced: the parent is the branch as it was a moment ago, so a branch
-    // that moved meanwhile is rejected by git rather than overwritten.
-    const push = await git(["push", "origin", `${sha}:refs/heads/${pr.headBranch}`], dir, { timeoutMs: 180_000 });
-    if (push.code !== 0) {
-      const moved = /non-fast-forward|fetch first|rejected/i.test(push.out);
-      throw new ConflictError(moved
-        ? `הענף ${pr.headBranch} השתנה בגיט־האוסט מאז שפתחתם את המסך, ולכן לא דחפנו כלום. רעננו והכריעו שוב על המצב החדש.`
-        : `הדחיפה נכשלה: ${push.out.slice(0, 300)}`);
-    }
-
-    if (r.clientId) {
-      await appendRepoAiEvent({
-        clientId: r.clientId, repoId: r.id, type: "pull_request.conflict_resolved",
-        payload: { number: pr.number, branch: pr.headBranch, base: pr.baseBranch, commit: sha, files: m.paths },
-        actorUserId: input.userId,
-      }).catch(() => { /* the merge is pushed; the record is best effort */ });
-    }
-    return { commitSha: sha.slice(0, 7), branch: pr.headBranch, base: pr.baseBranch, files: m.paths.length };
+    return { sha: commit.out.trim(), paths: m.paths };
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

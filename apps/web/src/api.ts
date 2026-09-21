@@ -626,6 +626,11 @@ export type ConflictFileContent = { path: string; content: string; segments: Con
 export type ConflictContent = { head: string; base: string; headSha: string; baseSha: string; files: ConflictFileContent[]; needsCommandLine: boolean };
 export const getPullRequestConflict = (repoId: string, number: number) =>
   get<ConflictContent>(`/repos/${repoId}/pull-requests/${number}/conflict`);
+/** The repository's own checks, run on the merged result before anything is pushed. */
+export type CheckResult = { name: string; command: string; ok: boolean; skipped?: string; ms: number; output: string };
+export type VerifyResult = { ran: boolean; why?: string; commit: string; checks: CheckResult[] };
+export const verifyPullRequestConflict = (repoId: string, number: number, files: { path: string; content: string }[]) =>
+  post<VerifyResult>(`/repos/${repoId}/pull-requests/${number}/conflict/verify`, { files });
 export const resolvePullRequestConflict = (repoId: string, number: number, files: { path: string; content: string }[]) =>
   post<{ commitSha: string; branch: string; base: string; files: number }>(`/repos/${repoId}/pull-requests/${number}/conflict/resolve`, { files });
 

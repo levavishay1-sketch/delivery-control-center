@@ -122,6 +122,7 @@ import {
   mergeRequest,
   pullRequestConflict,
   resolveConflict,
+  verifyResolution,
   ConflictError,
   ReviewRefused,
   repoBranches,
@@ -291,6 +292,15 @@ app.get("/repos/:id/pull-requests/:number/conflict", async (req, reply) => {
   await actingUser(req);
   const { id, number } = req.params as { id: string; number: string };
   try { return await pullRequestConflict(id, Number(number)); }
+  catch (e) { if (e instanceof ConflictError) return reply.code(409).send({ error: e.message }); throw e; }
+});
+
+/** Does the decision hold? The repository's own checks, run on the merged result before anything is pushed. */
+app.post("/repos/:id/pull-requests/:number/conflict/verify", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  const b = z.object({ files: z.array(z.object({ path: z.string().min(1).max(400), content: z.string().max(2_000_000) })).min(1).max(100) }).parse(req.body ?? {});
+  try { return await verifyResolution({ repoId: id, number: Number(number), userId: dev.id, files: b.files }); }
   catch (e) { if (e instanceof ConflictError) return reply.code(409).send({ error: e.message }); throw e; }
 });
 

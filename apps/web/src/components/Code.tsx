@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { highlight, highlightLine, type Token } from "./code.ts";
 
 /** The pieces of one line, coloured. Used by the comparison, which already works line by line. */
@@ -16,6 +16,29 @@ const Line = ({ toks }: { toks: Token[] }) =>
  * in conflict marked inside it, the way an editor shows them rather than as
  * a fragment lifted out of the file.
  */
+/**
+ * An editable file that still looks like code: the coloured text is drawn
+ * underneath, and the box the person types in sits on top of it, transparent,
+ * in exactly the same font and metrics. They scroll as one. The text itself
+ * only ever lives in the box — the colouring is a picture behind it.
+ */
+export function CodeEditor({ value, lang, onChange, rows = 22 }: { value: string; lang: string; onChange: (v: string) => void; rows?: number }) {
+  const lines = useMemo(() => highlight(value, lang), [value, lang]);
+  const back = useRef<HTMLDivElement>(null);
+  return (
+    <div className="ce" style={{ height: `${rows * 1.55}em` }}>
+      <div className="ce-back" ref={back} aria-hidden>
+        {lines.map((toks, n) => <div className="ce-row" key={n}><span className="cb-n">{n + 1}</span><span className="cb-t"><Line toks={toks} /></span></div>)}
+      </div>
+      <textarea
+        className="ce-input" dir="ltr" spellCheck={false} value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onScroll={(e) => { if (back.current) { back.current.scrollTop = e.currentTarget.scrollTop; back.current.scrollLeft = e.currentTarget.scrollLeft; } }}
+      />
+    </div>
+  );
+}
+
 export function CodeBlock({ text, lang, marks, activeMark, onMark, maxHeight = 420 }: {
   text: string;
   lang: string;
