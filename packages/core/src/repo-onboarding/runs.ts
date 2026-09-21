@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, recordClaudeCall, withTenant } from "@dcc/db";
 import { repo, repoAiEvent, repositoryOnboardingRun, repositoryOnboardingStage } from "@dcc/db/schema";
+import { git, runClaudeRaw } from "../ai-assist.ts";
 import { callsForEntity } from "../claude-center.ts";
 import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { recommend } from "../routing.ts";
+import { buildChangesDiff } from "./change-diff.ts";
 import { changeSummary, changedFiles, fileVersions } from "./changes.ts";
+import { NOTES_SYSTEM, noteSig, notesPrompt, parseNotes } from "./file-notes.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { appendRepoAiEvent } from "./events.ts";
 import { lastInputUser, markDisconnected, startClaudeSession, statusFile, stopClaudeSession, terminalLine, terminalState, writeTerminalInput } from "./session.ts";
@@ -16,7 +20,7 @@ import {
   type AutomationPolicy, type ChangedFile, type DeliverResult, type InitResult, type ModelPolicy, type PrepareResult, type ReviewResult, type RunSession,
   type RunStatus, type StageKey, type StageStatus, type StageUsage, type SessionTotals, sessionTotals,
 } from "./types.ts";
-import { ensureOnboardingWorkspace, existingSetup, trackedFileCount } from "./workspace.ts";
+import { ensureOnboardingWorkspace, existingSetup, runtimeDir, trackedFileCount } from "./workspace.ts";
 
 /**
  * The onboarding run: four stages around one live Claude Code session
@@ -344,7 +348,10 @@ export async function refreshReview(repoId: string, runId: string) {
   const { run, stages, ctx } = await loadRun(repoId, runId);
   const s = stages.find((x) => x.stageKey === "review");
   if (s?.status !== "WaitingForUser") throw new OnboardingError("שלב הסקירה לא ממתין");
-  return { changedFiles: await syncReviewFiles(ctx, run, s) };
+  const files = await syncReviewFiles(ctx, run, s);
+  // The list may have just changed, and the notes wait for it to be still.
+  setTimeout(() => { void kickReviewNotes(ctx).catch(() => {}); }, NOTES_SETTLE_MS + 500);
+  return { changedFiles: files };
 }
 
 export async function approveReview(repoId: string, runId: string, by: Actor) {
@@ -479,6 +486,7 @@ function stopMonitor(runId: string) {
   settled.delete(runId);
   looked.delete(runId);
   reviewSeen.delete(runId);
+  noteTries.delete(runId);
   initClosed.delete(runId);
 }
 
@@ -503,13 +511,106 @@ async function checkReviewFiles(ctx: Ctx) {
     if (review?.status !== "WaitingForUser" || s.state !== "live" || !s.transcriptPath || !run.workspacePath || !run.baselineSha) return;
     const lines = transcriptLineCount(s.transcriptPath);
     const seen = reviewSeen.get(ctx.runId);
-    if (seen && (seen.lines === lines || Date.now() - seen.at < REVIEW_REFRESH_MS)) return;
-    reviewSeen.set(ctx.runId, { lines, at: Date.now() });
-    await syncReviewFiles(ctx, run, review);
+    if (!seen || (seen.lines !== lines && Date.now() - seen.at >= REVIEW_REFRESH_MS)) {
+      reviewSeen.set(ctx.runId, { lines, at: Date.now() });
+      await syncReviewFiles(ctx, run, review);
+      return; // the list may have just changed: the notes are looked at on the next tick
+    }
+    void ensureReviewNotes(ctx, run, review);
   } catch { /* a transient error: the next tick tries again, and the button is there */ }
   finally {
     refreshing.delete(ctx.runId);
   }
+}
+
+/* ── the line next to each file ───────────────────────────────────── */
+
+/** Each changed file gets one line saying why it exists / what it was updated for
+ *  (`file-notes.ts`), written by a small model. It is asked for only when the
+ *  list has been still for a few seconds — Claude may be mid-way through
+ *  writing — only for files without a line for their current numbers, and at
+ *  most three times for the same set of files (a model that keeps answering in a
+ *  broken shape must not keep costing). A file the model could not explain is
+ *  marked with an empty line, and the screen says only that it was created,
+ *  updated or deleted. Every call is a ledger row under `onboarding_file_notes`. */
+const NOTES_SETTLE_MS = 10_000;
+const NOTES_RETRY_MS = 60_000;
+const NOTES_MAX_TRIES = 3;
+const noting = new Set<string>();
+const noteTries = new Map<string, { key: string; tries: number; at: number }>();
+
+async function ensureReviewNotes(ctx: Ctx, run: RunRow, review: StageRow | undefined) {
+  if (noting.has(ctx.runId) || review?.status !== "WaitingForUser" || !run.workspacePath || !run.baselineSha) return;
+  const result = (review.result ?? {}) as Partial<ReviewResult>;
+  const missing = (result.changedFiles ?? []).filter((f) => result.notes?.[f.path]?.sig !== noteSig(f));
+  if (!missing.length) return;
+  if (result.checkedAt && Date.now() - new Date(result.checkedAt).getTime() < NOTES_SETTLE_MS) return;
+  const key = missing.map((f) => `${f.path}:${noteSig(f)}`).join("|");
+  const before = noteTries.get(ctx.runId);
+  const same = before?.key === key;
+  if (same && (before.tries >= NOTES_MAX_TRIES || Date.now() - before.at < NOTES_RETRY_MS)) return;
+  noting.add(ctx.runId);
+  const tries = same ? before.tries + 1 : 1;
+  noteTries.set(ctx.runId, { key, tries, at: Date.now() });
+  try {
+    const built = await buildChangesDiff(git, run.workspacePath, run.baselineSha, missing, { maxFileLines: 220, maxTotalChars: 45_000 });
+    const decisions = (await runEvents(ctx))
+      .filter((e) => e.type === "onboarding.session.answer" || e.type === "onboarding.session.prompt")
+      .map((e) => {
+        const p = e.payload as { question?: string; answer?: string; text?: string };
+        return e.type === "onboarding.session.answer" ? `${p.question ?? ""} → ${p.answer ?? ""}` : `הקלדה ל-Claude: ${p.text ?? ""}`;
+      })
+      .slice(-14).map((d) => (d.length > 240 ? `${d.slice(0, 239)}…` : d));
+    const dir = runtimeDir(ctx.runId);
+    mkdirSync(dir, { recursive: true });
+    const sys = path.join(dir, "file-notes-system.txt");
+    if (!existsSync(sys) || readFileSync(sys, "utf8") !== NOTES_SYSTEM) writeFileSync(sys, NOTES_SYSTEM, "utf8");
+    const res = await runClaudeRaw(dir, notesPrompt({ repoName: ctx.repoName, files: missing, diff: built.text, decisions }), {
+      ledger: {
+        clientId: ctx.clientId, userId: run.triggeredBy, capability: "onboarding_file_notes", trigger: "session",
+        entity: { kind: "onboarding_run", id: ctx.runId }, screen: "onboarding", label: `הסבר ל-${missing.length} קבצים בסקירה`,
+      },
+      maxTurns: 1, timeoutMs: 90_000, env: { MAX_THINKING_TOKENS: "0" },
+      lean: { systemPromptFile: sys },
+    });
+    const lines = parseNotes(res.text, missing.map((f) => f.path));
+    // The list may have changed while the model wrote: a line is kept only for the version of the file it was written for.
+    const now = await loadRun(ctx.repoId, ctx.runId);
+    const cur = now.stages.find((x) => x.stageKey === "review");
+    if (cur?.status !== "WaitingForUser") return;
+    const stored = (cur.result ?? {}) as Partial<ReviewResult>;
+    const notes = { ...(stored.notes ?? {}) };
+    for (const f of missing) {
+      const live = (stored.changedFiles ?? []).find((x) => x.path === f.path);
+      if (!live || noteSig(live) !== noteSig(f)) continue;
+      if (lines[f.path]) notes[f.path] = { text: lines[f.path]!, sig: noteSig(f) };
+      else if (tries >= NOTES_MAX_TRIES) notes[f.path] = { text: "", sig: noteSig(f) };
+    }
+    await patchStage(ctx, "review", { result: { ...stored, notes } });
+  } catch (e) {
+    console.error("[review-notes] not written:", e instanceof Error ? e.message : e);
+    if (tries >= NOTES_MAX_TRIES) {
+      // Given up: the screen stops saying "writing the explanation".
+      try {
+        const now = await loadRun(ctx.repoId, ctx.runId);
+        const cur = now.stages.find((x) => x.stageKey === "review");
+        const stored = (cur?.result ?? {}) as Partial<ReviewResult>;
+        if (cur?.status === "WaitingForUser") {
+          const notes = { ...(stored.notes ?? {}) };
+          for (const f of missing) if (noteSig(f) === noteSig((stored.changedFiles ?? []).find((x) => x.path === f.path) ?? f)) notes[f.path] = { text: "", sig: noteSig(f) };
+          await patchStage(ctx, "review", { result: { ...stored, notes } });
+        }
+      } catch { /* the screen keeps the generic line */ }
+    }
+  } finally {
+    noting.delete(ctx.runId);
+  }
+}
+
+/** For the paths that do not go through the monitor: the button, and a review that was waiting when the API started. */
+async function kickReviewNotes(ctx: Ctx) {
+  const { run, stages, ctx: full } = await loadRun(ctx.repoId, ctx.runId);
+  await ensureReviewNotes(full, run, stages.find((x) => x.stageKey === "review"));
 }
 
 /* ── `/init` finished ─────────────────────────────────────────────── */
@@ -792,6 +893,8 @@ export async function recoverOnboardingRuns(): Promise<number> {
     }
     // A session already cut by an earlier restart must still read as disconnected on the screen.
     if (was === "live" || was === "disconnected") markDisconnected(run.id);
+    // A review that was waiting has no monitor until its session is resumed: its file notes are looked at once, a little after boot.
+    if (stages.some((s) => s.stageKey === "review" && s.status === "WaitingForUser")) setTimeout(() => { void kickReviewNotes(ctx).catch(() => {}); }, 20_000);
   }
   return touched;
 }

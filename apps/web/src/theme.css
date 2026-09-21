@@ -504,6 +504,8 @@ a { color: var(--color-accent); }
 .ob-files button { appearance: none; font: inherit; background: none; border: none; width: 100%; padding: 7px 2px; display: flex; align-items: center; gap: 8px; cursor: pointer; text-align: start; font-size: 12px; color: var(--ink-700); }
 .ob-file + .ob-file { border-top: 1px solid var(--divider); }
 .ob-files button[aria-pressed="true"] { background: var(--color-accent-muted); }
+.ob-file .note { padding: 0 2px 8px; font-size: 11.5px; line-height: 1.55; color: var(--ink-700); }
+.ob-file .note.pending { color: var(--ink-500); }
 .ob-files .f { flex: 1; min-width: 0; font-family: var(--mono); font-size: 11.5px; direction: ltr; text-align: left; unicode-bidi: isolate; overflow-wrap: anywhere; }
 .ob-files .add { color: var(--status-healthy); font-family: var(--mono); font-size: 11.5px; }
 .ob-files .del { color: var(--status-critical); font-family: var(--mono); font-size: 11.5px; }

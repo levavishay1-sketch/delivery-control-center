@@ -60,6 +60,16 @@ headers on a WebSocket); the server replies with `replay`, then streams
 | `review` | lists changed files vs baseline (tracked + untracked) | the person approves (or the automation gate does, with consent) |
 | `deliver` | commit as the acting user, push, PR / compare link, close the session | at once |
 
+**The line next to each file in the review.** Created: why, and what it
+contributes; updated: what prompted it; deleted: why. Written by a small model
+(`onboarding_file_notes`, Haiku) from the diff and from what the person decided
+in the session (`file-notes.ts`), and stored in the review result by path with a
+signature of the file's numbers, so a changed file gets a new line and an
+unchanged one is never paid for twice. It is asked for only after the list has
+been still for ~10 s, at most three times for the same set of files, and one call
+covers all files that lack a line. A file the model could not explain shows only
+"created / updated / deleted in the run".
+
 A stage is runnable when it is `Pending` or `Failed` and every earlier stage
 is `Completed`. Automation (`step_by_step` default, `guided`, `automatic`
 with consent, `custom`) decides which stages start by themselves after the

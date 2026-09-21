@@ -543,7 +543,7 @@ export type PrepareResult = {
   fileCount: number; existing: ExistingSetup;
 };
 export type InitResult = { sessionId: string; changedFiles: number; completedBy: string; auto?: boolean };
-export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean };
+export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean; notes?: Record<string, { text: string; sig: string }> };
 export type DeliverResult = {
   branch: string; base: string; commitSha: string | null; filesCommitted: number; remote: string | null; pushed: boolean;
   prNumber: number | null; prUrl: string | null; compareUrl: string | null; localOnly: boolean; note?: string;

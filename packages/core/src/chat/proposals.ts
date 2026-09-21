@@ -3,7 +3,9 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db, withTenant } from "@dcc/db";
 import { claudeCall, conversation, conversationMessage, repositoryOnboardingRun } from "@dcc/db/schema";
-import { existingCheckout, firstRepo, runClaudeRaw } from "../ai-assist.ts";
+import { existingCheckout, firstRepo, git, runClaudeRaw } from "../ai-assist.ts";
+import { changedFiles } from "../repo-onboarding/changes.ts";
+import { writeChangesDiff } from "../repo-onboarding/change-diff.ts";
 import { writePullRequestCode } from "../pull-request-detail.ts";
 import { ACTIONS, ActionRefused, actionEntityFor, runAction, type ActionKey } from "../actions/index.ts";
 import { recommend } from "../routing.ts";
@@ -89,6 +91,11 @@ const CHANGE_SYSTEM = `You answer one question about a change proposed to a soft
 
 When asked whether the change is good, safe, or worth merging: say in one or two sentences what it does, then name what would concern you — each with the file it is in and why it matters to this person — and if nothing concerns you, say that plainly rather than inventing a reservation. Judge only what is in front of you; if the part that would decide it was not read, say so. You are one reader and not an approval: the decision is the person's, and the review itself is submitted from the request's own screen.`;
 
+/** An onboarding run's files, asked about while the person is about to approve them: the question is almost always whether they are good. */
+const RUN_SYSTEM = `You answer one question about the changes an onboarding run made to a software repository, for a person who is not a developer and reads Hebrew. Answer in Hebrew, plainly, under 220 words, no markdown. The run is DCC's AI onboarding: Claude Code's \`/init\` wrote or changed files in an isolated copy of the repository — instructions for Claude such as CLAUDE.md, skills, hooks, a lint or test setup — and the person is about to approve them, after which DCC commits them and opens a pull request. You have read-only tools (Read, Grep, Glob): the working folder is the repository as it is now, and \`changes.diff\` (its path is in the question) is the whole change against where the run began — lock files are listed without their diff. Read as little as you need — the person pays for every token — and say what you read. Put file paths, commands and code in backticks, never translated.
+
+When asked whether the changes are good, useful, harmless, or safe to approve: say in one or two sentences what the run did overall, then one line per changed file or group — what it is for and whether it fits this repository. Check claims against the repository when that is cheap: a command named in CLAUDE.md exists in package.json, a path exists, a rule matches what the code does. Name what would concern you — something wrong, invented, or risky, or something that changes how the project builds or runs (a new dependency, a changed script, a lint rule that existing code would fail) — each with the file it is in and why it matters to this person. End with one sentence of recommendation: approve; approve after a specific fix (say which — they can ask Claude for it in the terminal while the review is open); or do not approve yet. If nothing concerns you, say so plainly rather than inventing a reservation. Judge only what you read, and say what you did not. You are one reader and not the approval: the decision is the person's.`;
+
 export async function runCodeQuestion(messageId: string, userId: string): Promise<{ message: ChatMessage; answer: ChatMessage }> {
   const { m, c } = await loadCard(messageId, userId, "declared_cost");
   const p = m.payload as unknown as DeclaredCostPayload;
@@ -101,14 +108,33 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
   let dir: string | null = null;
   let holds = "";
   let system = CODE_SYSTEM;
+  const extraDirs: string[] = [];
   if (topic.kind === "wi" && topic.workitemId) {
     const r = await firstRepo(topic.clientId, topic.workitemId);
     dir = r ? existingCheckout(r) : null;
     if (!dir) throw new ChatError(r ? `אין עותק מקומי של ${r.name} — הריצו קודם בחינת בשלות, שמביאה אותו` : "לדרישה הזו אין מאגר מקושר — אין קוד לקרוא");
   } else if (topic.kind === "run" && topic.id) {
-    const [run] = await db.select({ workspacePath: repositoryOnboardingRun.workspacePath }).from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, topic.id)).limit(1);
+    const [run] = await db.select({ workspacePath: repositoryOnboardingRun.workspacePath, baselineSha: repositoryOnboardingRun.baselineSha }).from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, topic.id)).limit(1);
     dir = run?.workspacePath ?? null;
     if (!dir) throw new ChatError("להרצה הזו אין עותק מבודד עדיין");
+    system = RUN_SYSTEM;
+    // The reading tools have no `git`, so the change is put on disk first: without
+    // it the reader cannot tell which files the run touched, or what they were before.
+    if (run?.baselineSha) {
+      const changeDir = path.join(chatDir(c.id), "change");
+      const files = await changedFiles(dir, run.baselineSha).catch(() => []);
+      if (files.length) {
+        const diffFile = path.join(changeDir, "changes.diff");
+        const w = await writeChangesDiff(git, dir, run.baselineSha, files, diffFile).catch(() => null);
+        if (w) {
+          extraDirs.push(changeDir);
+          holds = [
+            `ההרצה שינתה ${files.length} קבצים מול נקודת ההתחלה: ${files.map((f) => `${f.status} ${f.path} (+${f.additions} −${f.deletions})`).join("; ")}.`,
+            `ה-diff של כולם ב-\`${diffFile}\`${w.withoutBody.length ? ` (בלי הגוף של: ${w.withoutBody.join(", ")})` : ""}${w.cut.length ? ` (קוצר עבור: ${w.cut.join(", ")} — קראו את הקובץ עצמו)` : ""}.`,
+          ].join("\n");
+        }
+      }
+    }
   } else if (topic.kind === "pr" && topic.id) {
     const [prRepoId, num] = topic.id.split("/");
     if (!prRepoId || !num) throw new ChatError("חסר מזהה בקשת מיזוג");
@@ -133,7 +159,7 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
         workitemId: topic.workitemId, screen: topic.screen, label: p.question.slice(0, 80), conversationId: c.id, messageId: m.id, parentCallId: p.askedCallId,
       },
       maxTurns: 10, timeoutMs: 240_000, env: { MAX_THINKING_TOKENS: "0" },
-      lean: { systemPromptFile: sys, tools: "Read,Grep,Glob", addDirs: [dir] },
+      lean: { systemPromptFile: sys, tools: "Read,Grep,Glob", addDirs: [dir, ...extraDirs] },
     });
     const [a] = await withTenant(c.clientId, (tx) =>
       tx.insert(conversationMessage).values({ conversationId: c.id, clientId: c.clientId, role: "assistant", kind: "answer", source: "model", text: res.text.trim() || "(אין תשובה)", callId: res.callId, payload: { from: "code" } }).returning(),
@@ -158,7 +184,7 @@ export async function cancelCodeQuestion(messageId: string, userId: string): Pro
 /** What a reading on this topic will open, said on the card before the person approves it. */
 export function codeReads(topic: TopicKind): string {
   if (topic === "pr") return "קריאה בלבד: השינוי עצמו — ה-diff של הבקשה והקבצים ששונו כפי שהם אחריו, מהגיט־האוסט";
-  if (topic === "run") return "קריאה בלבד, בעותק המבודד של ההרצה";
+  if (topic === "run") return "קריאה בלבד, בעותק המבודד של ההרצה: השינויים שנעשו בו מול נקודת ההתחלה, והמאגר עצמו";
   return "קריאה בלבד, בעותק המקומי של המאגר";
 }
 
