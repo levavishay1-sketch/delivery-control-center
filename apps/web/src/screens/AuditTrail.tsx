@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAudit, type AuditPage } from "../api.ts";
 import { ICONS, Icon, PageHead } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 const ACTOR_IC: Record<string, string> = { user: "🧑", delegated: "🤖", system: "⚙️" };
 const actorLabel = (a: { kind: string; triggeredBy?: string }) =>
@@ -54,7 +55,7 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
 
       <div className="filter-bar">
         <div className="field">
-          <label>Actor</label>
+          <label>Actor<Info k="audit_actor" /></label>
           <select value={q.actorKind} onChange={(e) => set("actorKind", e.target.value)}>
             <option value="">All actors</option>
             <option value="user">People</option>
@@ -63,7 +64,7 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
           </select>
         </div>
         <div className="field">
-          <label>Action</label>
+          <label>Action<Info k="audit_action" /></label>
           <select value={q.type} onChange={(e) => set("type", e.target.value)}>
             <option value="">All actions</option>
             {["note.added", "gap.proposed", "gap.verified", "tasks.proposed", "task.progressed", "blocker.raised", "blocker.answered", "claude.call", "claude.session", "policy.changed", "review.completed", "git.activity"].map((t) => <option key={t} value={t}>{t}</option>)}

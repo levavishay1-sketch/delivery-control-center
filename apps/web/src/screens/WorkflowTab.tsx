@@ -366,11 +366,11 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
       {isCustom && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--border-hairline)" }}>
           <div className="field" style={{ marginBottom: 8 }}>
-            <label>דגש מיוחד לבדיקה הזו</label>
+            <label>דגש מיוחד לבדיקה הזו<Info k="prompt_emphasis" /></label>
             <textarea value={assessCustomEmphasis} onChange={(e) => setAssessCustomEmphasis(e.target.value)} rows={2} placeholder="למשל: תשים לב במיוחד להשפעה על מודול X" />
           </div>
           <div className="field">
-            <label>מודל (חובה לבחור)</label>
+            <label>מודל (חובה לבחור)<Info k="model_effort" /></label>
             <select value={assessCustomModel} onChange={(e) => setAssessCustomModel(e.target.value)}>
               <option value="">— בחר —</option>
               <option value="sonnet">Sonnet — מאוזן</option>
@@ -861,6 +861,7 @@ export function StepRail({ steps, done, unlocked, active, onPick, busy, liveInde
 }) {
   return (
     <div className="ov-steps">
+      <span className="ov-steps-info"><Info k="workflow_steps" /></span>
       {steps.map((s, i) => {
         const isDone = done[i] === true;
         const open = unlocked[i] === true;

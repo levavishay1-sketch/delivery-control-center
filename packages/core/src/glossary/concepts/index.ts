@@ -1,5 +1,7 @@
 import type { Concept } from "../index.ts";
+import { ADMIN_CONCEPTS } from "./admin.ts";
 import { CLAUDE_CONCEPTS } from "./claude.ts";
+import { CODE_CONCEPTS } from "./code.ts";
 import { ONBOARDING_CONCEPTS } from "./onboarding.ts";
 import { OVERVIEW_CONCEPTS } from "./overview.ts";
 import { PAGE_CONCEPTS } from "./pages.ts";
@@ -20,4 +22,6 @@ export const CONCEPTS: Concept[] = [
   ...ONBOARDING_CONCEPTS,
   ...CLAUDE_CONCEPTS,
   ...OVERVIEW_CONCEPTS,
+  ...ADMIN_CONCEPTS,
+  ...CODE_CONCEPTS,
 ];

@@ -5,6 +5,7 @@ import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 import { CardTitle, PrNumber } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { errText } from "./onboarding/labels.ts";
 
 /**
@@ -254,10 +255,10 @@ function Branches({ repoId }: { repoId: string }) {
       {data && (
         <>
           <div className="pr-tiles">
-            <div><div className="l">בקשה פתוחה</div><div className="v">{count("open_pr")}</div></div>
+            <div><div className="l">בקשה פתוחה<Info k="prs_open" /></div><div className="v">{count("open_pr")}</div></div>
             <div><div className="l">בעבודה</div><div className="v">{count("work")}</div></div>
             <div><div className="l">נסגרו בלי מיזוג</div><div className="v" style={{ color: count("stale") ? "var(--status-warning)" : undefined }}>{count("stale")}</div></div>
-            <div><div className="l">אפשר למחוק</div><div className="v" style={{ color: count("merged") ? "var(--status-healthy)" : undefined }}>{count("merged")}</div></div>
+            <div><div className="l">אפשר למחוק<Info k="branch_deletable" /></div><div className="v" style={{ color: count("merged") ? "var(--status-healthy)" : undefined }}>{count("merged")}</div></div>
           </div>
           <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
             <div className="pr-group">
@@ -280,7 +281,7 @@ function Branches({ repoId }: { repoId: string }) {
                   </div>
                 )}
                 {b.lastMessage && b.status !== "default" && <div className="l">"{b.lastMessage}"</div>}
-                <div className="l">איך הגיע לכאן: {b.origin}</div>
+                <div className="l">איך הגיע לכאן<Info k="branch_origin" />: {b.origin}</div>
                 <div className={`adv ${b.advice.tone}`}><b>{b.advice.title}.</b> {b.advice.detail}</div>
               </div>
             ))}
@@ -435,16 +436,16 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
               <div className="panel">
                 <CardTitle info="pr_facts">עובדות</CardTitle>
                 <div className="ob-kv">
-                  <div><div className="l">commits</div><div className="v">{d?.freshness?.ahead ?? "—"}</div></div>
-                  <div><div className="l">קבצים</div><div className="v">{d?.fileCount ?? pr.changedFiles}</div></div>
-                  <div><div className="l">היעד התקדם</div><div className="v">{d?.freshness ? `${d.freshness.behind}` : "—"}</div></div>
-                  <div><div className="l">קבצים משותפים</div><div className="v" style={{ color: d?.freshness?.sharedFiles ? "var(--status-warning)" : undefined }}>{d?.freshness?.sharedFiles ?? "—"}</div></div>
+                  <div><div className="l">commits<Info k="commits" /></div><div className="v">{d?.freshness?.ahead ?? "—"}</div></div>
+                  <div><div className="l">קבצים<Info k="pr_file_count" /></div><div className="v">{d?.fileCount ?? pr.changedFiles}</div></div>
+                  <div><div className="l">היעד התקדם<Info k="base_advanced" /></div><div className="v">{d?.freshness ? `${d.freshness.behind}` : "—"}</div></div>
+                  <div><div className="l">קבצים משותפים<Info k="shared_files" /></div><div className="v" style={{ color: d?.freshness?.sharedFiles ? "var(--status-warning)" : undefined }}>{d?.freshness?.sharedFiles ?? "—"}</div></div>
                 </div>
               </div>
               <div className="panel">
                 <CardTitle info="pr_people">אנשים</CardTitle>
                 <div className="pr-rl"><span className="l">פתח</span><span>{pr.author}</span></div>
-                <div className="pr-rl"><span className="l">סקירה</span><span>{pr.review === "approved" ? "אושר" : pr.review === "changes_requested" ? "התבקשו שינויים" : "אין אישור"}</span></div>
+                <div className="pr-rl"><span className="l">סקירה<Info k="pr_review" /></span><span>{pr.review === "approved" ? "אושר" : pr.review === "changes_requested" ? "התבקשו שינויים" : "אין אישור"}</span></div>
                 <div className="pr-rl"><span className="l">עודכן</span><span>{fmtDate(pr.updatedAt)}</span></div>
               </div>
             </div>

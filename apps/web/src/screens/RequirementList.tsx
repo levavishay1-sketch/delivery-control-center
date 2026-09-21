@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { deleteRequirement, getInitiatives, REQ_TYPE_HE, type Initiative } from "../api.ts";
 import { PageHead } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { NewRequirement } from "../forms.tsx";
 
 const PH: Record<string, { label: string; tone: string }> = {
@@ -28,7 +29,7 @@ export function RequirementList({ nav }: { nav: (h: string) => void }) {
       {err && <div className="empty">{err}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>דרישה</th><th>לקוח</th><th>סוג</th><th>שלב</th><th>תקציב</th><th>תת-דרישות</th><th></th></tr></thead>
+          <thead><tr><th>דרישה</th><th>לקוח</th><th>סוג<Info k="requirement_type" /></th><th>שלב<Info k="phase" /></th><th>תקציב<Info k="ai_budget" /></th><th>תת-דרישות<Info k="subrequirements" /></th><th></th></tr></thead>
           <tbody>
             {(rows ?? []).map((p) => {
               const ph = PH[p.phase] ?? { label: p.phase, tone: "inactive" };

@@ -5,6 +5,7 @@ import {
   type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
 import { CardTitle, PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 import { StepRail } from "./WorkflowTab.tsx";
@@ -439,13 +440,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         </div>
         {t.affectedPaths.length > 0 && (
           <div className="field" style={{ marginTop: 10 }}>
-            <label>קבצים צפויים</label>
+            <label>קבצים צפויים<Info k="expected_files" /></label>
             <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{t.affectedPaths.join(", ")}</div>
           </div>
         )}
         {t.compiledComponents.length > 0 && (
           <div className="field" style={{ marginTop: 10 }}>
-            <label>רכיבים מתקמפלים</label>
+            <label>רכיבים מתקמפלים<Info k="compiled_components" /></label>
             <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginTop: -2, marginBottom: 3 }}>
               הפרוייקטים שצריך לבנות ולפרוס יחד עם השינוי הזה.
             </p>
@@ -675,7 +676,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
                   {impl.checks && impl.checks.length > 0 && (
                     <div className="field" style={{ marginBottom: 12 }}>
-                      <label>תוצאות הבדיקות ({impl.checks.filter((c) => c.passed).length}/{impl.checks.length} עברו)</label>
+                      <label>תוצאות הבדיקות ({impl.checks.filter((c) => c.passed).length}/{impl.checks.length} עברו)<Info k="check_results" /></label>
                       <div className="rowlist" style={{ marginTop: 4 }}>
                         {impl.checks.map((c) => (
                           <div key={c.seq} className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4, paddingBlock: 8 }}>
@@ -699,7 +700,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
                   {impl.filesChanged.length > 0 && (
                     <div className="field" style={{ marginBottom: 10 }}>
-                      <label>קבצים שהשתנו ({impl.filesChanged.length})</label>
+                      <label>קבצים שהשתנו ({impl.filesChanged.length})<Info k="files_changed" /></label>
                       <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
                         {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
                       </div>
@@ -733,13 +734,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                     </div>
                   )}
                   <div className="field" style={{ marginBottom: 10 }}>
-                    <label>איפה זה יושב</label>
+                    <label>איפה זה יושב<Info k="where_it_sits" /></label>
                     <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", whiteSpace: "pre-wrap" }}>
                       {`${impl.dir}\n${impl.branch}${impl.commit ? `  (commit ${impl.commit})` : "  — ללא שינויים"}`}
                     </div>
                   </div>
                   <div className="field" style={{ marginBottom: 14 }}>
-                    <label>לבדיקה מקומית</label>
+                    <label>לבדיקה מקומית<Info k="local_check" /></label>
                     <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 8 }}>
                       <span style={{ whiteSpace: "pre-wrap" }}>{`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`}</span>
                       <a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`, "cmd")}>{copied === "cmd" ? "✓" : "העתק"}</a>
@@ -928,7 +929,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       <Card>
         {d.children.filter((c) => c.kind !== "check").length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({d.children.filter((c) => c.kind !== "check").length})</p>
+            <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({d.children.filter((c) => c.kind !== "check").length})<Info k="subtasks" /></p>
             <div className="rowlist">
               {d.children.filter((c) => c.kind !== "check").map((c) => (
                 <div className="row" key={c.id}>
@@ -943,7 +944,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         {d.children.filter((c) => c.kind === "check").length > 0 && (
           <div style={{ marginTop: 12 }}>
             <p className="section-lbl" style={{ marginBottom: 6 }}>
-              רשימת בדיקה להשלמת המשימה ({d.children.filter((c) => c.kind === "check").length})
+              רשימת בדיקה להשלמת המשימה ({d.children.filter((c) => c.kind === "check").length})<Info k="check" />
             </p>
             <p style={{ fontSize: 11, color: "var(--ov-label)", marginTop: -4, marginBottom: 6 }}>
               לא work items נפרדים ב-TFS — מתועדות ב-Discussion של המשימה הזו כשהיא מוקמת.

@@ -9,6 +9,7 @@ import {
   type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
 import { CardTitle, Pill, TypeChip } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
 import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
 import { WorkflowTab } from "./WorkflowTab.tsx";
@@ -220,7 +221,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const gapsPanel = (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות</p>
+        <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות<Info k="gaps_section" /></p>
         <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
           <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
             {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
@@ -363,7 +364,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </div>
       )}
 
-      <p className="section-lbl">חוסמים (Blockers)</p>
+      <p className="section-lbl">חוסמים (Blockers)<Info k="blockers_section" /></p>
       <p style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: -6, marginBottom: 10 }}>שאלה פתוחה שעוצרת את העבודה עד שמישהו עונה — למשל החלטה שצריך מגורם אחר.</p>
       <div className="filter-bar" style={{ marginBottom: 14 }}>
         <div className="field"><label>סוג</label>
@@ -434,23 +435,23 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 20, marginBottom: 20 }}>
             <div className="ov-card" style={{ padding: "16px 18px" }}>
               <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
-                <div className="ov-metric"><div className="lbl">Phase</div><div className="val">{wi.phase}</div></div>
-                <div className="ov-metric"><div className="lbl">Priority</div><div className="val">{wi.priority}</div></div>
-                <div className="ov-metric"><div className="lbl">Risk</div><div className="val">{wi.risk}</div></div>
-                <div className="ov-metric"><div className="lbl">Executor</div><div className="val">{wi.executor}</div></div>
-                <div className="ov-metric"><div className="lbl">AI budget</div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
+                <div className="ov-metric"><div className="lbl">Phase<Info k="phase" /></div><div className="val">{wi.phase}</div></div>
+                <div className="ov-metric"><div className="lbl">Priority<Info k="priority" /></div><div className="val">{wi.priority}</div></div>
+                <div className="ov-metric"><div className="lbl">Risk<Info k="risk" /></div><div className="val">{wi.risk}</div></div>
+                <div className="ov-metric"><div className="lbl">Executor<Info k="executor" /></div><div className="val">{wi.executor}</div></div>
+                <div className="ov-metric"><div className="lbl">AI budget<Info k="ai_budget" /></div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
                 <div className="ov-metric" style={{ cursor: "pointer" }}
                      title={cost ? `${cost.runCount} הרצות · ${cost.totalInputTokens + cost.totalOutputTokens} tokens — לחץ לפירוט` : undefined}
                      onClick={openCostDetail}>
-                  <div className="lbl">עלות AI בפועל 🔍</div>
+                  <div className="lbl">עלות AI בפועל 🔍<Info k="ai_cost" /></div>
                   <div className="val">{cost ? `$${cost.totalUsd.toFixed(2)}` : "—"}</div>
                 </div>
-                <div className="ov-metric"><div className="lbl">TFS</div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
+                <div className="ov-metric"><div className="lbl">TFS<Info k="tfs_tasks" /></div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{progressPct}%</span>
                 <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
-                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks</span>
+                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks<Info k="progress" /></span>
               </div>
             </div>
 
@@ -522,7 +523,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           </div>
 
           <div className="section">
-            <p className="section-lbl">Context Brief — what the next Claude session loads</p>
+            <p className="section-lbl">Context Brief — what the next Claude session loads<Info k="context_brief" /></p>
             <div className="panel"><pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "ui-monospace, monospace", fontSize: 11.5, lineHeight: 1.6, color: "var(--ink-700)" }}>{brief || "—"}</pre></div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPrompts, updatePromptTemplate, type PromptTemplate } from "../api.ts";
 import { CardTitle, PageHead } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 /**
  * The system's own prompt library — every DCC-driven Claude call should
@@ -50,7 +51,7 @@ function PromptCard({ p, onSaved }: { p: PromptTemplate; onSaved: () => void }) 
     <div className="panel" style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <div>
-          <p className="card-title" style={{ margin: 0 }}>{p.title}</p>
+          <p className="card-title" style={{ margin: 0 }}>{p.title}<Info k="prompt_template" /></p>
           <p style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--ink-400)", direction: "ltr", textAlign: "left", marginTop: 2 }}>{p.key}</p>
         </div>
         {!editing && <button className="btn btn-secondary btn-sm" onClick={open}>ערוך</button>}

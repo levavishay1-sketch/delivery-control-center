@@ -17,13 +17,13 @@ at the end.
 
 ## 2. Every screen
 
-- [ ] 2.1 Requirement (list, record, workflow tab, task)
-- [ ] 2.2 Pull requests (list, detail, branches) and repositories
-- [ ] 2.3 Clients, dashboard, alerts, budgets, audit trail, settings, prompts
-- [ ] 2.4 The Claude control center
-- [ ] 2.5 Onboarding, flow, task graph, code map, file compare
-- [ ] 2.6 One shared wording pass: duplicates and near-duplicates merged, the length limit met, no term left unexplained
-- [ ] 2.7 API restarted once; every screen opened and its "i" pressed; typecheck and audit green
+- [x] 2.1 Requirement (list, record, workflow tab, task)
+- [x] 2.2 Pull requests (list, detail, branches) and repositories
+- [x] 2.3 Clients, dashboard, alerts, budgets, audit trail, settings, prompts
+- [x] 2.4 The Claude control center
+- [x] 2.5 Onboarding, flow, task graph, code map, file compare
+- [x] 2.6 One shared wording pass: no two concepts share a title any more (the six that did were renamed so each hint reads on its own), every explanation is under the limit (longest 154 characters, median 100), and no English title is left without a Hebrew alias
+- [x] 2.7 API restarted (once per wave of registry changes, each time confirmed on /health and on a real screen); dashboard, requirements, requirement record, pull requests, repositories, budgets, settings and the control center opened and their "i" pressed; typecheck and audit green. Worth knowing: the web reads the registry once per page load, so after an API restart a tab that was already open keeps the old wording until it is reloaded
 
 ## 3. After merge
 

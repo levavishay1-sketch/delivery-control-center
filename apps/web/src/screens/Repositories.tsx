@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getRepos, getLatestOnboardingRun, type OnboardingStatus } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { NewRepo } from "../forms.tsx";
 
 const STATUS_HE: Record<OnboardingStatus, { label: string; tone: "inactive" | "warning" | "healthy" | "critical" | "active" | "ai" }> = {
@@ -48,7 +49,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
       {modal && <NewRepo onClose={() => setModal(false)} onDone={() => { setModal(false); reload(); }} />}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>Repository</th><th>לקוח</th><th>הטמעת AI</th><th>Git</th></tr></thead>
+          <thead><tr><th>Repository<Info k="repository" /></th><th>לקוח</th><th>הטמעת AI<Info k="onboarding_status" /></th><th>Git<Info k="git_connection" /></th></tr></thead>
           <tbody>
             {rows.map((r) => {
               const st = r.clientId ? states[r.id] : undefined;
@@ -63,7 +64,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
                   <td>
                     {r.clientName
                       ? <a style={{ cursor: "pointer" }} onClick={() => nav(`#/client/${r.clientId}`)}>{r.clientName}</a>
-                      : <span style={{ color: "var(--ink-400)", fontSize: 12 }}>משותף ({r.linkedClients} לקוחות)</span>}
+                      : <span style={{ color: "var(--ink-400)", fontSize: 12 }}>משותף ({r.linkedClients} לקוחות)<Info k="shared_repo" /></span>}
                   </td>
                   <td>
                     {!r.clientId

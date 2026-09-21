@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getWorkList, type WorkListRow } from "../api.ts";
 import { PageHead, TypeChip, initials } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { NewRequirement } from "../forms.tsx";
 
 const PRIO: Record<string, string> = { critical: "קריטית", high: "גבוהה", medium: "בינונית", low: "נמוכה" };
@@ -52,7 +53,7 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
       {err && <div className="empty">{err}</div>}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>דרישה</th><th>תחת</th><th>לקוח</th><th>אחראי</th><th>עדיפות</th><th>שלב</th><th>עודכן</th></tr></thead>
+          <thead><tr><th>דרישה</th><th>תחת</th><th>לקוח</th><th>אחראי<Info k="owner" /></th><th>עדיפות<Info k="priority" /></th><th>שלב<Info k="phase" /></th><th>עודכן<Info k="updated_at" /></th></tr></thead>
           <tbody>
             {filtered.map((w) => (
               <tr key={w.id}>

@@ -20,4 +20,16 @@ export const PULL_REQUEST_CONCEPTS: Concept[] = [
   { key: "pr_facts", kind: "section", title: "עובדות", screens: ["pull_request"], explain: "המספרים היבשים של הבקשה: כמה שינויים יש בה, כמה קבצים, כמה התקדם הענף שאליו היא מיועדת, וכמה קבצים משותפים לשניהם." },
   { key: "pr_people", kind: "section", title: "אנשים", screens: ["pull_request"], explain: "מי פתח את הבקשה, מה מצב הסקירה שלה ומתי עודכנה לאחרונה. כל פעולה נעשית בשם של אדם אמיתי." },
   { key: "branch", kind: "section", title: "מה זה ענף, ולמה יש כאלה", aliases: ["ענף", "branch", "ענפים"], screens: ["pull_request"], explain: "ענף הוא עותק עבודה מקביל של הקוד. כל עבודה מתחילה בענף משלה, ובסוף בקשת מיזוג מכניסה אותה לענף הראשי. ענפים לא נמחקים לבד." },
+
+  /* the figures of the pull request screens */
+  { key: "commits", kind: "field", title: "commits", aliases: ["קומיטים", "שמירות"], screens: ["pull_request"], explain: "כמה שמירות של עבודה נוספו בענף מאז שנפתח. כל שמירה היא צעד אחד עם הסבר מה נעשה בו." },
+  { key: "pr_file_count", kind: "field", title: "קבצים בבקשה", aliases: ["קבצים"], screens: ["pull_request"], explain: "כמה קבצים הבקשה משנה. מספר גדול לא בהכרח אומר שינוי גדול — לפעמים זו החלפה של שם בהרבה מקומות." },
+  { key: "base_advanced", kind: "field", title: "היעד התקדם", screens: ["pull_request"], explain: "כמה שינויים נוספו לענף היעד מאז שהבקשה נפתחה. ככל שהמספר גדל, כדאי לעדכן את הענף לפני שממזגים." },
+  { key: "shared_files", kind: "field", title: "קבצים משותפים", screens: ["pull_request"], explain: "כמה מהשינויים שנוספו ליעד נוגעים באותם קבצים שהבקשה משנה. זה מה שקובע אם צפויה התנגשות." },
+  { key: "prs_open", kind: "field", title: "פתוחות", screens: ["pull_request"], explain: "בקשות מיזוג שעדיין לא מוזגו ולא נסגרו. כל אחת ממתינה למישהו — לסקירה, לתיקון, או למיזוג." },
+  { key: "prs_attention", kind: "field", title: "דורש תשומת לב", screens: ["pull_request"], explain: "בקשות שמשהו בהן תקוע: בדיקה שנכשלה, התנגשות, או המתנה ארוכה מדי לסקירה." },
+  { key: "prs_ready", kind: "field", title: "מוכן למיזוג", screens: ["pull_request"], explain: "בקשות שעברו סקירה, הבדיקות שלהן ירוקות ואין בהן התנגשות. נשאר רק להחליט למזג." },
+  { key: "prs_synced", kind: "field", title: "סונכרן", screens: ["pull_request"], explain: "מתי DCC שאל לאחרונה את האתר המארח מה מצב הבקשות. 'סנכרן' שואל שוב עכשיו." },
+  { key: "branch_deletable", kind: "field", title: "אפשר למחוק", screens: ["pull_request"], explain: "ענפים שכבר מוזגו, ולכן כל מה שיש בהם נמצא בענף הראשי. מחיקה שלהם לא מאבדת שום עבודה." },
+  { key: "branch_origin", kind: "field", title: "איך הגיע לכאן", screens: ["pull_request"], explain: "מי פתח את הענף ולמה: אדם, סשן של Claude Code, או הרצה של DCC. כך יודעים למי לפנות לגבי ענף נשכח." },
 ];

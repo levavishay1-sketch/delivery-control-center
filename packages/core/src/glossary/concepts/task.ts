@@ -12,4 +12,13 @@ export const TASK_CONCEPTS: Concept[] = [
   { key: "task_result", kind: "section", title: "מה Claude עשה", screens: ["task"], explain: "מה קלוד שינה בפועל בהרצה: אילו קבצים נגע בהם, מה כתב ומה עלו הבדיקות. זה מה שתקבלו לסקירה לפני שמשהו נדחף." },
   { key: "task_delete", kind: "section", title: "מחיקת משימה", screens: ["task"], explain: "הסרת המשימה מהדרישה. אם היא כבר קיימת ב-TFS, המחיקה שם היא פעולה נפרדת — המסך אומר מה בדיוק יקרה לפני שמאשרים." },
   { key: "task_previous_run", kind: "section", title: "הרצה קודמת", screens: ["task"], explain: "הרצה שבוטלה או הוחלפה. היא נשארת כאן כדי שאפשר יהיה לראות מה נוסה קודם ולמה — שום דבר לא נמחק מההיסטוריה." },
+
+  /* the fields of the task screen */
+  { key: "expected_files", kind: "field", title: "קבצים צפויים", screens: ["task"], explain: "הקבצים שצפוי שהמשימה תיגע בהם, לפי מה שנכתב בה. זו הערכה מראש — הרשימה של מה שבאמת השתנה מופיעה אחרי ההרצה." },
+  { key: "compiled_components", kind: "field", title: "רכיבים מתקמפלים", screens: ["task"], explain: "החלקים בתוכנה שצריך לבנות ולהתקין מחדש יחד עם השינוי הזה, אחרת הוא לא ייכנס לתוקף בסביבה." },
+  { key: "files_changed", kind: "field", title: "קבצים שהשתנו", screens: ["task"], explain: "הקבצים שקלוד באמת נגע בהם בהרצה. אלה השינויים שיעברו סקירה ואחר כך יידחפו — כרגע הם רק בעותק המבודד." },
+  { key: "where_it_sits", kind: "field", title: "איפה זה יושב", screens: ["task"], explain: "התיקייה והענף שבהם השינוי נמצא כרגע, ומספר השמירה שלו. זה עותק מבודד — העותק שאתם עובדים בו לא נגוע." },
+  { key: "local_check", kind: "field", title: "לבדיקה מקומית", screens: ["task"], explain: "הפקודות להעתקה למי שרוצה לפתוח את השינוי במחשב שלו ולהסתכל עליו. אפשר גם פשוט לקרוא את רשימת הקבצים כאן." },
+  { key: "subtasks", kind: "field", title: "תת-משימות", screens: ["task"], explain: "משימות שנגזרו מהמשימה הזו. הן נעשות לפני שהיא נחשבת גמורה, וכל אחת מנוהלת במסך משלה." },
+  { key: "check_results", kind: "field", title: "תוצאות הבדיקות", screens: ["task"], explain: "מה עברו הבדיקות שרצו על המשימה, וכמה נכשלו. משימה שנפלה בבדיקות מחכה להחלטה של אדם ולא ממשיכה לבד." },
 ];

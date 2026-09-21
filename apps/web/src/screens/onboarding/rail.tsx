@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { AutomationPolicy, AutomationPreset, Effort, ModelPolicy, OnboardingCost, OnboardingEvent, OnboardingRunSummary, OnboardingStageDefinition, OnboardingStageKey } from "../../api.ts";
 import { CardTitle, Pill } from "../../ui.tsx";
+import { Info } from "../../claude/Info.tsx";
 import { CostLine } from "../../claude/CostLine.tsx";
 import {
   EFFORTS, EFFORT_HE, MODEL_OPTIONS, PRESET_HE, RUN_STATUS_HE, describePolicy, effortLabel, eventLabel, fmtDate, fmtDuration, fmtInt, fmtTime, fmtUsd,
@@ -157,9 +158,9 @@ export function CostPanel({ cost, title, nav }: { cost: OnboardingCost; title: (
     <div className="panel">
       <CardTitle info="run_cost">עלות ההרצה</CardTitle>
       <div className="ob-kv">
-        <div><div className="l">עלות AI</div><div className="v">{fmtUsd(cost.totalCostUsd)}</div></div>
-        <div><div className="l">קריאות למודל</div><div className="v">{fmtInt(cost.apiCalls)}</div></div>
-        <div><div className="l">טוקנים (קלט / פלט)</div><div className="v" style={{ fontSize: 12 }}>{fmtInt(cost.inputTokens)} / {fmtInt(cost.outputTokens)}</div></div>
+        <div><div className="l">עלות AI<Info k="ai_cost" /></div><div className="v">{fmtUsd(cost.totalCostUsd)}</div></div>
+        <div><div className="l">קריאות למודל<Info k="ledger" /></div><div className="v">{fmtInt(cost.apiCalls)}</div></div>
+        <div><div className="l">טוקנים (קלט / פלט)<Info k="tokens" /></div><div className="v" style={{ fontSize: 12 }}>{fmtInt(cost.inputTokens)} / {fmtInt(cost.outputTokens)}</div></div>
         <div><div className="l">זמן AI מצטבר</div><div className="v">{fmtDuration(cost.apiDurationMs)}</div></div>
       </div>
       {cost.byStage.length > 0 && (

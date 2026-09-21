@@ -7,6 +7,7 @@ import {
   type OnboardingStage, type OnboardingStageDefinition, type OnboardingStageKey, type PrepareResult, type ReviewResult,
 } from "../../api.ts";
 import { CardTitle, PageHead, Pill } from "../../ui.tsx";
+import { Info } from "../../claude/Info.tsx";
 import { CodeMapPanel } from "../../components/CodeMap.tsx";
 import { FileCompare } from "../../components/FileCompare.tsx";
 import { useClaudeContext } from "../../claude/context.ts";
@@ -304,9 +305,9 @@ function StageBody(p: StageCardProps) {
         {map}
         <p className="ob-sub" style={{ margin: "10px 0" }}>עותק מבודד על ענף חדש. הריפו שלך לא נגע.</p>
         <div className="ob-kv">
-          <div><div className="l">ענף</div><div className="v ob-code">{r.branch}</div></div>
-          <div><div className="l">נקודת התחלה</div><div className="v ob-code">{shortSha(r.baselineSha)}</div></div>
-          <div><div className="l">קבצים</div><div className="v">{fmtInt(r.fileCount)}</div></div>
+          <div><div className="l">ענף<Info k="run_branch" /></div><div className="v ob-code">{r.branch}</div></div>
+          <div><div className="l">נקודת התחלה<Info k="run_baseline" /></div><div className="v ob-code">{shortSha(r.baselineSha)}</div></div>
+          <div><div className="l">קבצים<Info k="run_files" /></div><div className="v">{fmtInt(r.fileCount)}</div></div>
         </div>
         <p className="ob-sub" style={{ marginTop: 10 }}>{found.length ? `כבר קיים בריפו: ${found.join(", ")}.` : "אין בריפו הגדרות קיימות של Claude Code."}</p>
       </>
@@ -334,8 +335,8 @@ function StageBody(p: StageCardProps) {
     return (
       <>
         <div className="ob-kv">
-          <div><div className="l">קבצים שהשתנו</div><div className="v">{fmtInt(r.changedFiles)}</div></div>
-          <div><div className="l">עלות השלב</div><div className="v">{fmtUsd(stageCost?.costUsd ?? 0)}</div></div>
+          <div><div className="l">קבצים שהשתנו<Info k="run_files" /></div><div className="v">{fmtInt(r.changedFiles)}</div></div>
+          <div><div className="l">עלות השלב<Info k="stage_cost" /></div><div className="v">{fmtUsd(stageCost?.costUsd ?? 0)}</div></div>
           <div><div className="l">סיים/ה</div><div className="v">{p.users[r.completedBy] ?? "—"}</div></div>
         </div>
         <p className="ob-sub" style={{ marginTop: 10 }}>הסשן נשאר פתוח עד המסירה: אפשר לבקש מ-Claude שינויים בטרמינל בכל שלב.</p>
@@ -360,7 +361,7 @@ function StageBody(p: StageCardProps) {
       <div className="ob-kv" style={{ marginTop: 10 }}>
         <div><div className="l">commit</div><div className="v ob-code">{r.commitSha ?? "—"}</div></div>
         <div><div className="l">ענף</div><div className="v ob-code">{r.branch}</div></div>
-        <div><div className="l">Pull Request</div><div className="v">{r.prUrl ? <a href={r.prUrl} target="_blank" rel="noreferrer">#{r.prNumber ?? "PR"}</a> : r.compareUrl ? <a href={r.compareUrl} target="_blank" rel="noreferrer">פתיחה ידנית</a> : "—"}</div></div>
+        <div><div className="l">Pull Request<Info k="run_pr" /></div><div className="v">{r.prUrl ? <a href={r.prUrl} target="_blank" rel="noreferrer">#{r.prNumber ?? "PR"}</a> : r.compareUrl ? <a href={r.compareUrl} target="_blank" rel="noreferrer">פתיחה ידנית</a> : "—"}</div></div>
       </div>
       <p className="ob-sub" style={{ marginTop: 10 }}>
         {r.note ?? (r.localOnly ? `אין remote לריפו: הענף נשאר מקומי. מזגו אותו ל-${r.base} ידנית.` : `ה-PR ממתין למיזוג ידני ל-${r.base}. המיזוג הוא "AI Ready".`)}
@@ -439,7 +440,7 @@ function PreStart({ repoId, repoName, crumb, onStarted, onCancel }: { repoId: st
             <p style={{ fontSize: 13, lineHeight: 1.65 }}>כך שמפתח שמקבל משימה יקבל מההתחלה את מה שהוא צריך לעבודה יעילה, חסכונית ואיכותית: הוראות, ידע שנטען לפי דרישה והגנות. התוכן נוצר על ידי <span className="ob-code">/init</span> של Claude Code עצמו, בשיחה איתך.</p>
           </div>
           <div className="panel">
-            <p className="section-lbl">מה יקרה, ב-{defs.length} שלבים</p>
+            <p className="section-lbl">מה יקרה, ב-{defs.length} שלבים<Info k="stage_overview" /></p>
             <div className="ob-overview" style={{ ["--ob-steps" as string]: defs.length }}>
               {defs.map((d) => (
                 <div key={d.key}>
@@ -451,14 +452,14 @@ function PreStart({ repoId, repoName, crumb, onStarted, onCancel }: { repoId: st
             </div>
           </div>
           <div className="panel">
-            <p className="section-lbl">מה ייכתב לריפו</p>
+            <p className="section-lbl">מה ייכתב לריפו<Info k="what_gets_written" /></p>
             <div className="ob-actions" style={{ gap: 6 }}>
               <span className="ob-chip">CLAUDE.md</span><span className="ob-chip">skills לפי דרישה</span><span className="ob-chip">hooks</span><span className="ob-chip">rules לפי נתיב</span>
             </div>
             <p className="ob-sub" style={{ marginTop: 8 }}>מה בדיוק — Claude מציע ואתם מחליטים בשיחה. הכל נכתב בענף חדש, ושום דבר לא יוצא לפני שתאשרו בסקירת התוצרים.</p>
           </div>
           <div className="panel">
-            <p className="section-lbl">על מה תישאלו</p>
+            <p className="section-lbl">על מה תישאלו<Info k="what_youll_be_asked" /></p>
             <p style={{ fontSize: 13, lineHeight: 1.65 }}>על מה ש-Claude לא יכול לדעת מהקוד: מה לעשות עם הגדרות קיימות, איך אתם בונים ומפרסמים, ומה השתנה בצוות. אפשר לבחור תשובה, לכתוב אחרת, או לשוחח איתו.</p>
           </div>
           <div className="ob-actions">

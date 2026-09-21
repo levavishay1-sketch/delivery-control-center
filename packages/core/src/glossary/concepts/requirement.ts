@@ -19,4 +19,14 @@ export const REQUIREMENT_CONCEPTS: Concept[] = [
   { key: "how_to_continue", kind: "section", title: "איך ממשיכים?", screens: ["requirement"], explain: "הצעד הראשון בדרישה חדשה: קלוד קורא אותה ואת הקוד ואומר אם היא ברורה מספיק כדי לפרק אותה למשימות." },
   { key: "research_work", kind: "section", title: "עבודת תחקור או בדיקות", aliases: ["תחקור", "עבודת בדיקות"], screens: ["requirement"], explain: "דרישה שהתוצאה שלה היא ממצאים או תוצאת אימות, ולא קוד. לכן אין פירוק למשימות פיתוח, אלא משימת מעקב אחת ב-TFS." },
   { key: "prompt_preview", kind: "section", title: "מה יישלח ל-Claude", aliases: ["תצוגה מקדימה", "הפרומפט", "פרומפט"], screens: ["requirement", "task"], explain: "ההוראות המדויקות שיישלחו לקלוד, לפני שנשלחות. שום דבר לא רץ ולא עולה כסף עד שתאשרו כאן. ההרצה עצמה תמיד באנגלית; העברית היא לקריאה." },
+
+  /* the figures on the requirement's card */
+  { key: "priority", kind: "field", title: "Priority", aliases: ["עדיפות"], screens: ["requirement"], explain: "כמה הדרישה דחופה ביחס לאחרות. זה מה שקובע במה מטפלים קודם כשיש כמה דרישות פתוחות." },
+  { key: "risk", kind: "field", title: "Risk", aliases: ["סיכון"], screens: ["requirement"], explain: "כמה הדרישה מסוכנת: עד כמה היא נוגעת בחלקים רגישים, וכמה לא ברור מה צריך. סיכון גבוה מצדיק בדיקה יסודית יותר לפני שמתחילים." },
+  { key: "executor", kind: "field", title: "Executor", aliases: ["מבצע", "מי מבצע"], screens: ["requirement"], explain: "מי אמור לבצע את הדרישה — אדם, קלוד, או שילוב. גם כשקלוד מבצע, הפעולה רצה תמיד בשם של אדם אמיתי." },
+  { key: "tfs_tasks", kind: "field", title: "משימות ב-TFS", aliases: ["כמה ב-TFS"], screens: ["requirement"], explain: "כמה מהמשימות של הדרישה כבר קיימות כפריטי עבודה אמיתיים ב-Azure DevOps. שאר המשימות עדיין מוצעות בלבד." },
+  { key: "progress", kind: "field", title: "התקדמות", aliases: ["אחוז", "כמה נעשה"], screens: ["requirement"], explain: "כמה מהמשימות של הדרישה כבר הושלמו, מתוך כל המשימות הפעילות שלה. משימה שבוטלה לא נספרת." },
+  { key: "context_brief", kind: "section", title: "Context Brief", aliases: ["תקציר הקשר", "מה קלוד טוען"], screens: ["requirement"], explain: "התקציר שכל סשן חדש של קלוד מקבל על הדרישה הזו — מה היא, מה כבר הוחלט ומה פתוח. כך הוא לא מתחיל מאפס בכל פעם." },
+  { key: "gaps_section", kind: "section", title: "פערים ואי-בהירויות", screens: ["requirement"], explain: "השאלות שהדרישה לא עונה עליהן ושצריך לסגור לפני שמתחילים. קלוד מציע אותן, ואדם מאשר, סוגר או דוחה — וכל תשובה נרשמת." },
+  { key: "blockers_section", kind: "section", title: "חוסמים", aliases: ["Blockers"], screens: ["requirement"], explain: "דברים שעוצרים את העבודה עד שמישהו עונה: גישה חסרה, החלטה או מידע. חוסם פתוח לא מונע להתחיל, אבל הוא נרשם." },
 ];
