@@ -56,6 +56,7 @@ npm run -w @dcc/db dev:prove   # 9 checks: RLS wall + append-only + validation
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run audit:stale            # leftovers of replaced designs, stale OpenSpec statuses
+npm run sync                   # after merges: master current, merged local branches gone, what is left
 ```
 
 Repository onboarding (`openspec/changes/repository-onboarding-native-init`)
@@ -147,6 +148,17 @@ stop and tell the user rather than working somewhere else.
 
 Claude may create a `fix/` or `task/` branch for this; a new `project/`
 branch is still the user's decision.
+
+**Keep this folder in step with the repository.** Run `npm run sync` first
+thing whenever a new request begins, and the moment the user says something
+was merged — before any other work. It fetches, moves this folder to an
+up-to-date `master` when the branch it was on is already in it, deletes the
+local branches that are entirely in `master`, and reports what is left: open
+pull requests, branches on the server, stashes, other folders, uncommitted
+files. Say its result in one line ("clean", or what is left). It never pushes
+and never touches uncommitted files. Do not start new work on a stale `master`
+or on a branch that has already been merged, and do not leave merged local
+branches behind for the user to notice.
 
 After a merge the branch is deleted (the repository deletes a PR's branch on
 merge by itself; the project branch goes when its final PR merges). A branch
