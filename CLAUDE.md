@@ -108,6 +108,20 @@ A project branch is about one subject: its name, its PR title and its
 OpenSpec change should describe the same thing. Work that grows into a
 second subject gets its own project branch instead of piling on.
 
+**The same holds inside one session.** A session often takes several
+requests. When a new request has no connection to the tasks already done
+in the session, it gets its own branch — a `fix/` off `master`, or a
+`task/` off the right project branch — before its first edit, and it ends
+in its own PR. Never let it ride on the branch of the earlier work: a
+branch that collects subjects makes a PR hard to review and hard to
+understand. Related requests (the same subject, or one that depends on the
+other) stay together. Branch from the current `origin/master` after a
+`git fetch`, not from the local `master`, which can be behind. When the
+working tree already holds uncommitted work, open the new branch in a
+separate `git worktree` so that work is not dragged along. Claude may
+create a `fix/` or `task/` branch for this; a new `project/` branch is
+still the user's decision.
+
 After a merge the branch is deleted (the repository deletes a PR's branch on
 merge by itself; the project branch goes when its final PR merges). A branch
 that was never merged and has been forgotten either gets a PR or is deleted
