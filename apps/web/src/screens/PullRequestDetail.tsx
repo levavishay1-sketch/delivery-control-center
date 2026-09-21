@@ -33,56 +33,43 @@ function waited(hours: number): string {
   return d === 1 ? "ממתין יום" : `ממתין ${d} ימים`;
 }
 
-function BlockerRow({ b }: { b: PrBlocker }) {
+/** A blocker that has somewhere to look (`go`) is a whole-row button with a small arrow; the rest are plain rows. */
+function BlockerRow({ b, go }: { b: PrBlocker; go?: { hint: string; onClick: () => void } }) {
   const tone = b.ok === true ? "yes" : b.ok === false ? "no" : "na";
-  return (
-    <div className="pr-chk">
+  const body = (
+    <>
       <span className={`ic ${tone}`}>{b.ok === true ? "✓" : b.ok === false ? "✕" : "–"}</span>
-      <div><div className="tt">{b.title}</div><div className="dd">{b.detail}</div></div>
-    </div>
+      <div style={{ flex: 1, minWidth: 0 }}><div className="tt">{b.title}</div><div className="dd">{b.detail}</div></div>
+    </>
   );
-}
-
-/** "יש התנגשות" tells a person nothing to act on. This says where: which files, and how big each side's change in them is. */
-function ConflictPanel({ conflict, loading, url, base }: { conflict: ConflictView | null; loading: boolean; url: string; base: string }) {
-  // Each side's numbers keep their own left-to-right order inside the Hebrew line.
-  const side = (s: { additions: number; deletions: number } | null) => (s ? <bdi dir="ltr"><span className="plus">+{s.additions}</span> <span className="minus">−{s.deletions}</span></bdi> : "—");
-  const named = (n: string) => <bdi dir="ltr">{n}</bdi>;
+  if (!go) return <div className="pr-chk">{body}</div>;
   return (
-    <div className="panel" style={{ marginBottom: 12 }}>
-      <CardTitle info="pr_conflict_files">{conflict && !conflict.exact ? "קבצים חשודים בהתנגשות" : "הקבצים בהתנגשות"}</CardTitle>
-      {loading && <p className="ob-sub">בודק אילו קבצים מתנגשים…</p>}
-      {!loading && !conflict?.files.length && <p className="ob-sub">הגיט־האוסט אומר שיש התנגשות, אבל לא הצלחנו לזהות באילו קבצים. פתחו את הבקשה בגיט־האוסט כדי לראות אותה.</p>}
-      {conflict && conflict.files.length > 0 && (
-        <>
-          <p className="ob-sub" style={{ marginBottom: 6 }}>
-            {conflict.exact
-              ? `${conflict.files.length === 1 ? "קובץ אחד" : `${conflict.files.length} קבצים`} שבהם הענף ו-${base} שינו את אותן שורות. בכל אחד מהם צריך להחליט איזו גרסה נשארת.`
-              : `אלה הקבצים ששני הצדדים שינו. ההתנגשות באחד מהם או יותר — אין לנו כאן ודאות באיזה, כי אין למערכת עותק מקומי של המאגר לחשב את המיזוג.`}
-          </p>
-          {conflict.files.map((f) => (
-            <div className="pr-chk" key={f.path} style={{ alignItems: "flex-start" }}>
-              <span className="ic no">✕</span>
-              <div style={{ minWidth: 0 }}>
-                <div className="tt ob-code" style={{ overflowWrap: "anywhere" }}>{f.path}</div>
-                <div className="dd">הענף: {side(f.ours)} · {named(base)}: {side(f.theirs)}</div>
-              </div>
-            </div>
-          ))}
-          <p className="ob-sub" style={{ marginTop: 8 }}>
-            המערכת לא מכריעה בשבילכם: מי שעובד על הענף מעדכן אותו מ-{base} ובוחר לכל קובץ איזו גרסה נשארת. אפשר גם{" "}
-            <a href={url} target="_blank" rel="noreferrer">לפתוח את הבקשה בגיט־האוסט ↗</a>, שם יש כלי הכרעה.
-          </p>
-        </>
-      )}
+    <div className="pr-chk go" role="button" tabIndex={0} title={go.hint} aria-label={`${b.title} — ${go.hint}`}
+      onClick={go.onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go.onClick(); } }}>
+      {body}
+      <span className="arrow" aria-hidden>‹</span>
     </div>
   );
 }
 
-function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; count: number; url: string; repoId: string; number: number }) {
-  const [only, setOnly] = useState<string | null>(null);
+const CLASH = "conflicts";
+
+function Files({ groups, count, url, repoId, number, conflict, startOn }: { groups: FileGroup[]; count: number; url: string; repoId: string; number: number; conflict: ConflictView | null; startOn: string | null }) {
+  // The files the request changes that also clash, as one more group to filter by. Their names come from the
+  // conflict, their status and sizes from the request's own list, so they open before/after like any other.
+  const clashPaths = new Set((conflict?.files ?? []).map((f) => f.path));
+  const clashFiles = groups.flatMap((g) => g.files).filter((f) => clashPaths.has(f.path));
+  const clash: FileGroup | null = clashFiles.length
+    ? {
+        key: CLASH as FileGroup["key"], title: conflict?.exact ? "בהתנגשות" : "חשודים בהתנגשות", files: clashFiles,
+        additions: clashFiles.reduce((n, f) => n + f.additions, 0), deletions: clashFiles.reduce((n, f) => n + f.deletions, 0),
+        note: conflict?.exact ? undefined : "ששני הצדדים שינו — לא בטוח שההתנגשות בכולם",
+      }
+    : null;
+  const [only, setOnly] = useState<string | null>(startOn === CLASH && clash ? CLASH : null);
   const [open, setOpen] = useState<string | null>(null);
-  const shown = only ? groups.filter((g) => g.key === only) : groups;
+  const shown = only === CLASH && clash ? [clash] : only ? groups.filter((g) => g.key === only) : groups;
   const add = groups.reduce((n, g) => n + g.additions, 0);
   const del = groups.reduce((n, g) => n + g.deletions, 0);
   return (
@@ -91,6 +78,7 @@ function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; co
         <div><b>{count} קבצים</b> <span className="l">· <span className="plus">+{add}</span> <span className="minus">−{del}</span></span></div>
         <div className="pr-chips">
           <button type="button" className={`chip${only === null ? " on" : ""}`} onClick={() => setOnly(null)}>הכל</button>
+          {clash && <button type="button" className={`chip crit${only === CLASH ? " on" : ""}`} onClick={() => setOnly(CLASH)}>{clash.title} {clash.files.length}</button>}
           {groups.map((g) => (
             <button key={g.key} type="button" className={`chip${only === g.key ? " on" : ""}`} onClick={() => setOnly(g.key)}>{g.title} {g.files.length}</button>
           ))}
@@ -348,7 +336,7 @@ function Timeline({ items }: { items: TimelineItem[] }) {
   );
 }
 
-export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: string; number: number; tab: Tab; nav: (h: string) => void }) {
+export function PullRequestDetailScreen({ repoId, number, tab, nav, query = "" }: { repoId: string; number: number; tab: Tab; nav: (h: string) => void; query?: string }) {
   // Something already fetched for this request paints immediately; the refresh happens behind it.
   const [d, setD] = useState<Detail | null>(() => cachedPullRequest(repoId, number));
   const [err, setErr] = useState<string | null>(null);
@@ -454,9 +442,9 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
               {blockers.length > 0 && <div className="panel" style={{ marginBottom: 12 }}>
                 <CardTitle info="pr_blockers">מה חוסם מיזוג</CardTitle>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>
-                {blockers.map((b) => <BlockerRow key={b.key} b={b} />)}
+                {blockers.map((b) => <BlockerRow key={b.key} b={b}
+                  go={b.key === "conflict" && b.ok === false ? { hint: "הצג את הקבצים שמתנגשים", onClick: () => nav(`#/pull-requests/${repoId}/${number}/files?filter=conflicts`) } : undefined} />)}
               </div>}
-              {pr.state === "open" && pr.conflicts && <ConflictPanel conflict={d?.conflict ?? null} loading={!d || (busy && !d.conflict?.files.length)} url={pr.url} base={pr.baseBranch} />}
               {!d
                 ? <div className="panel">{loading("את מפת הקוד")}</div>
                 : (
@@ -494,7 +482,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
         </>
       )}
 
-      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
+      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} conflict={d.conflict} startOn={new URLSearchParams(query).get("filter")} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
       {tab === "timeline" && (d ? <Timeline items={d.timeline} /> : <div className="panel">{loading("את היומן")}</div>)}
       {tab === "branches" && <Branches repoId={repoId} />}
     </div>

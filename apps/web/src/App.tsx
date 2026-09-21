@@ -68,7 +68,7 @@ export function App() {
   else if (path === "/pull-requests") screen = <PullRequests nav={nav} />;
   else if (path.startsWith("/pull-requests/")) {
     const [repoId, num, tab] = path.slice("/pull-requests/".length).split("/");
-    screen = <PullRequestDetailScreen repoId={repoId!} number={Number(num)} tab={(tab as Tab) || "overview"} nav={nav} />;
+    screen = <PullRequestDetailScreen repoId={repoId!} number={Number(num)} tab={(tab as Tab) || "overview"} nav={nav} query={hash.split("?")[1] ?? ""} />;
   }
   else if (path.startsWith("/repo/")) screen = <OnboardingScreen id={path.slice(6)} nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;

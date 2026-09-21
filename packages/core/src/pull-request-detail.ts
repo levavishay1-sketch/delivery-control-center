@@ -162,16 +162,6 @@ function topicsOf(files: GhFile[]): Topic[] {
 
 /* ── what blocks a merge, in the order that matters ───────────────── */
 
-function conflictDetail(conflict: ConflictView | null): string {
-  const base = "הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.";
-  if (!conflict?.files.length) return base;
-  const names = conflict.files.slice(0, 4).map((f) => f.path).join(", ");
-  const more = conflict.files.length > 4 ? ` ועוד ${conflict.files.length - 4}` : "";
-  return conflict.exact
-    ? `${base} הקבצים בהתנגשות: ${names}${more}.`
-    : `${base} הקבצים ששני הצדדים שינו (ההתנגשות באחד מהם או יותר): ${names}${more}.`;
-}
-
 /**
  * The files that really clash, found by running the merge in the local copy —
  * read-only: `merge-tree` writes objects and touches neither the working
@@ -194,12 +184,12 @@ async function clashingFiles(repoRow: { id: string; localPath: string | null } |
   return lines.slice(1, end === -1 ? undefined : end).filter(Boolean);
 }
 
-function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boolean, conflict: ConflictView | null = null): Blocker[] {
+function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boolean): Blocker[] {
   // Nothing blocks a request that has already been merged or closed.
   if (pr.state !== "open") return [];
   const b: Blocker[] = [];
   b.push(pr.conflicts
-    ? { key: "conflict", ok: false, title: "התנגשות מול היעד", detail: conflictDetail(conflict) }
+    ? { key: "conflict", ok: false, title: "התנגשות מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
     : { key: "conflict", ok: pr.mergeable === null ? null : true, title: pr.mergeable === null ? "מצב המיזוג עדיין נבדק" : "אין התנגשות", detail: pr.mergeable === null ? "הגיט־האוסט עדיין בודק אם אפשר למזג. כדאי לרענן בעוד רגע." : "הגיט־האוסט מצא שאפשר למזג בלי הכרעה ידנית." });
   b.push(pr.review === "approved"
     ? { key: "review", ok: true, title: "אושר בסקירה", detail: "לפחות אדם אחד עבר על השינוי ואישר." }
@@ -350,7 +340,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
 
   const parentOpen = !!pr.parentId;
   const checksKnown = pr.checks !== "none";
-  const blockers = blockersFor(pr, parentOpen, checksKnown, conflict);
+  const blockers = blockersFor(pr, parentOpen, checksKnown);
   const nextStep = nextStepFor(pr, blockers, behind, overlap.length);
 
   const timeline: TimelineItem[] = [];
