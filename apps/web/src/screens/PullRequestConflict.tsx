@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPullRequestConflict, resolvePullRequestConflict, verifyPullRequestConflict, type ConflictContent, type ConflictFileContent, type VerifyResult } from "../api.ts";
 import { CardTitle } from "../ui.tsx";
+import { useClaudeContext } from "../claude/context.ts";
 import { CodeBlock, CodeEditor } from "../components/Code.tsx";
 import { langOf } from "../components/code.ts";
 import { Info } from "../claude/Info.tsx";
@@ -201,6 +202,36 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
   };
 
   const file = files.find((f) => f.path === open) ?? null;
+
+  // What the chat knows while a person stands here. Without this it answers
+  // about whatever screen it last saw — they asked for help with a conflict
+  // and were told about the dashboard. The open place's two sides travel with
+  // it, capped, because that is what a question here is actually about.
+  const cut = (s: string, n = 1500) => (s.length > n ? `${s.slice(0, n)}\n… (נקטע)` : s);
+  const place = file?.segments.filter((s) => s.kind === "conflict")[active] as { ours: string; theirs: string } | undefined;
+  useClaudeContext(d ? {
+    screen: "pull_request_conflict",
+    topic: { kind: "pr", id: `${repoId}/${number}`, title: `בקשת מיזוג #${number} · פתרון קונפליקט` },
+    facts: {
+      "המסך": "פתרון קונפליקט — הכרעה בין שתי גרסאות של אותן שורות",
+      "הענף שלכם": d.head,
+      "ענף היעד": d.base,
+      "הקבצים בקונפליקט": files.map((f) => `${f.path} — ${f.resolvable ? `${f.conflicts} מקומות, ${settled(f) ? "הוכרע" : "עוד לא הוכרע"}` : "לא ניתן להכרעה מכאן"}`),
+      "הקובץ הפתוח": file?.path ?? "—",
+      ...(place ? {
+        "המקום הפתוח": `${active + 1} מתוך ${file?.conflicts}`,
+        "מה כתוב בענף שלכם": cut(place.ours),
+        "מה כתוב בענף היעד": cut(place.theirs),
+      } : {}),
+      "מצב הבדיקה": !check ? "לא רצה עדיין" : !check.ran ? (check.why ?? "לא רצה") : check.checks.every((c) => c.ok) ? "כל הבדיקות עברו" : "בדיקה נכשלה",
+      ...(check?.ran && !check.checks.every((c) => c.ok)
+        ? { "מה נכשל בבדיקה": check.checks.filter((c) => !c.ok).map((c) => `${c.command}:\n${cut(c.output, 900)}`) }
+        : {}),
+      "נשאר להכריע": left,
+      status: ready ? "מוכן לשמירה" : "בהכרעה",
+    },
+    suggestions: ["מה ההבדל בין שני הצדדים?", "מה כדאי לבחור כאן?", "מה קורה אם אבחר בשניהם?", ...(check?.ran && !check.checks.every((c) => c.ok) ? ["למה הבדיקה נכשלה?"] : [])],
+  } : null);
 
   return (
     <div className="cf">
