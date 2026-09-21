@@ -108,7 +108,6 @@ import {
   OnboardingError,
   startOnboardingRun,
   runOnboardingStage,
-  completeInitStage,
   resumeOnboardingSession,
   refreshReview,
   approveReview,
@@ -366,12 +365,6 @@ app.post("/repos/:id/onboarding/runs/:runId/stages/:stageKey/run", async (req) =
   const dev = await actingUser(req);
   const { id, runId, stageKey } = req.params as RunParams & { stageKey: string };
   return runOnboardingStage(id, runId, stageKey, { userId: dev.id });
-});
-
-app.post("/repos/:id/onboarding/runs/:runId/init/complete", async (req) => {
-  const dev = await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  return completeInitStage(id, runId, { userId: dev.id });
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/session/resume", async (req) => {

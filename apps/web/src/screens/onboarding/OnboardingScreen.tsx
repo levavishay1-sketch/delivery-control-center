@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  approveOnboardingReview, cancelOnboardingRun, completeOnboardingInit, getOnboardingFile, getOnboardingRun, getOnboardingStages, getRepos, getUsers,
+  approveOnboardingReview, cancelOnboardingRun, getOnboardingFile, getOnboardingRun, getOnboardingStages, getRepos, getUsers,
   listOnboardingRuns, refreshOnboardingReview, resumeOnboardingSession, runOnboardingStage, startOnboardingRun, updateOnboardingAutomation,
   updateOnboardingModelChoices,
   type AutomationPolicy, type DeliverResult, type Effort, type InitResult, type ModelPolicy, type OnboardingRunSummary, type OnboardingRunView,
@@ -46,6 +46,10 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
     getRepos().then((r) => setRepoName(r.repos.find((x) => x.id === id)?.name ?? "")).catch(() => {});
     getUsers().then((r) => setUsers(Object.fromEntries(r.users.map((u) => [u.id, u.displayName])))).catch(() => {});
   }, [id, loadRuns]);
+
+  // The run moved on by itself (DCC saw `/init` finish): show the stage it moved to, not the one the person was last looking at.
+  const currentKey = view?.run.currentStageKey ?? null;
+  useEffect(() => { if (currentKey === "review") setSelected("review"); }, [currentKey]);
 
   const over = useRef(false);
   const screenRef = useRef<(() => string) | null>(null);
@@ -167,15 +171,19 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
             runnable={runnable(sel)}
             busy={busy}
             onRun={() => act(`run:${sel}`, () => runOnboardingStage(id, run.id, sel))}
-            onCompleteInit={() => act("complete-init", () => completeOnboardingInit(id, run.id))}
             onResume={() => act("resume", () => resumeOnboardingSession(id, run.id))}
-            onRefreshReview={() => act("review-refresh", () => refreshOnboardingReview(id, run.id))}
-            onApprove={() => act("approve", () => approveOnboardingReview(id, run.id))}
             onSelect={setSelected}
           />
 
           <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} />
           <p className="ob-sub" style={{ marginTop: 10 }}>שאלות על מה שהסשן עושה — בצ'אט של קלוד (הכפתור למטה משמאל, או Ctrl K). הוא מקבל את מה שהתחדש בסשן ואת המסך שבטרמינל.</p>
+          {sel === "review" && byKey.get("review")?.status === "WaitingForUser" && (
+            <ReviewPanel
+              view={view} stage={byKey.get("review")!} busy={busy}
+              onRefreshReview={() => act("review-refresh", () => refreshOnboardingReview(id, run.id))}
+              onApprove={() => act("approve", () => approveOnboardingReview(id, run.id))}
+            />
+          )}
         </div>
 
         <div className="rail">
@@ -228,10 +236,7 @@ type StageCardProps = {
   runnable: boolean;
   busy: string | null;
   onRun: () => void;
-  onCompleteInit: () => void;
   onResume: () => void;
-  onRefreshReview: () => void;
-  onApprove: () => void;
   onSelect: (k: OnboardingStageKey) => void;
 };
 
@@ -259,7 +264,7 @@ function StageCard(p: StageCardProps) {
       {stage.status === "Failed" && !!stage.errors.length && <div className="ob-note crit" style={{ marginBottom: 10 }}>{stage.errors.join(" · ")}</div>}
       <StageBody {...p} />
 
-      {stage.status === "Completed" && p.next && nextStage && nextStage.status !== "Completed" && (
+      {stage.status === "Completed" && def.key !== "init" && p.next && nextStage && nextStage.status !== "Completed" && (
         <div style={{ marginTop: 14 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => p.onSelect(p.next!.key)}>המשך לשלב הבא: {shortTitle(p.next)} ›</button>
         </div>
@@ -327,11 +332,10 @@ function StageBody(p: StageCardProps) {
       return (
         <div style={{ display: "grid", gap: 10 }}>
           {st === "live"
-            ? <p style={{ fontSize: 13 }}>שיחה חיה עם Claude Code בטרמינל שלמטה. עונים לשאלות שלו שם, ואפשר גם לכתוב לו חופשי. כשהוא מסיים, לחצו על "סיימתי".</p>
-            : <div className="ob-note warn">{st === "disconnected" ? "הסשן נותק (השרת הופעל מחדש). אפשר לחדש אותו מאותה נקודה בשיחה." : "הסשן של Claude נסגר. אפשר לפתוח אותו מחדש מאותה נקודה, או לסיים את השלב."}</div>}
+            ? <p style={{ fontSize: 13 }}>שיחה חיה עם Claude Code בטרמינל שלמטה. עונים לשאלות שלו שם, ואפשר גם לכתוב לו חופשי. כש-Claude מסיים לכתוב, DCC מזהה את זה וממשיך לסקירה בעצמו.</p>
+            : <div className="ob-note warn">{st === "disconnected" ? "הסשן נותק (השרת הופעל מחדש). אפשר לחדש אותו מאותה נקודה בשיחה." : "הסשן של Claude נסגר. אם נכתבו קבצים, DCC ממשיך לסקירה בעצמו. אם לא, אפשר לפתוח אותו מחדש מאותה נקודה."}</div>}
           <div className="ob-actions">
-            <button className="btn btn-primary" disabled={!!p.busy} onClick={p.onCompleteInit}>{p.busy === "complete-init" ? "שומר…" : "✓ סיימתי עם ההטמעה"}</button>
-            {st !== "live" && <button className="btn btn-secondary" disabled={!!p.busy} onClick={p.onResume}>{p.busy === "resume" ? "מחדש…" : "↻ חדש את הסשן"}</button>}
+            {st !== "live" && <button className="btn btn-primary" disabled={!!p.busy} onClick={p.onResume}>{p.busy === "resume" ? "מחדש…" : "↻ חדש את הסשן"}</button>}
             {stageCost && <span className="ob-sub">עלות עד כה: {fmtUsd(stageCost.costUsd)}</span>}
           </div>
         </div>
@@ -343,15 +347,15 @@ function StageBody(p: StageCardProps) {
         <div className="ob-kv">
           <div><div className="l">קבצים שהשתנו<Info k="run_files" /></div><div className="v">{fmtInt(r.changedFiles)}</div></div>
           <div><div className="l">עלות השלב<Info k="stage_cost" /></div><div className="v">{fmtUsd(stageCost?.costUsd ?? 0)}</div></div>
-          <div><div className="l">סיים/ה</div><div className="v">{p.users[r.completedBy] ?? "—"}</div></div>
+          <div><div className="l">סיים/ה</div><div className="v">{r.auto ? "DCC זיהה שהוא סיים" : (p.users[r.completedBy] ?? "—")}</div></div>
         </div>
-        <p className="ob-sub" style={{ marginTop: 10 }}>הסשן נשאר פתוח עד המסירה: אפשר לבקש מ-Claude שינויים בטרמינל בכל שלב.</p>
+        <p className="ob-sub" style={{ marginTop: 10 }}>השלב נסגר ואי אפשר לחזור אליו. הסשן נשאר פתוח עד המסירה: אפשר לבקש מ-Claude שינויים בטרמינל בכל שלב.</p>
       </>
     );
   }
 
   if (stage.stageKey === "review") {
-    if (stage.status === "WaitingForUser") return <ReviewBody {...p} map={map} />;
+    if (stage.status === "WaitingForUser") return <ReviewIntro {...p} />;
     if (stage.status !== "Completed") return <p className="ob-sub">{waitingText}</p>;
     const r = stage.result as ReviewResult;
     return <p style={{ fontSize: 13 }}>{r.auto ? "אושר לפי מדיניות האוטומציה" : `אושר על ידי ${p.users[r.approvedBy ?? ""] ?? "—"}`} · {r.changedFiles.length} קבצים עוברים למסירה.</p>;
@@ -380,15 +384,31 @@ function Working({ text }: { text: string }) {
   return <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="spinner" style={{ width: 16, height: 16 }} /><span className="ob-sub" style={{ fontSize: 12.5 }}>{text}</span></div>;
 }
 
-function ReviewBody(p: StageCardProps & { map?: ReactNode }) {
+/** The review's card is short: the terminal comes next, alive, and the changed files sit under it (`ReviewPanel`). */
+function ReviewIntro(p: StageCardProps) {
+  const st = p.view.run.session.state;
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div className="ob-note warn">שום דבר לא יוצא מהמחשב עד שתאשרו. אפשר להמשיך לשוחח עם Claude בטרמינל כל עוד הסקירה פתוחה: מה שהוא משנה מופיע בתוצרים שמתחת לטרמינל: הרשימה מתעדכנת לבד, ואפשר גם ללחוץ "רענן רשימה".</div>
+      {st !== "live" && (
+        <div className="ob-note warn" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span>{st === "disconnected" ? "הסשן של Claude נותק (השרת הופעל מחדש)." : "הסשן של Claude נסגר."} כדי להמשיך לשוחח איתו, חדשו אותו מאותה נקודה בשיחה.</span>
+          <button className="btn btn-secondary btn-sm" disabled={!!p.busy} onClick={p.onResume}>{p.busy === "resume" ? "מחדש…" : "↻ חדש את הסשן"}</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** What changed against the baseline, and the approval — under the terminal, so Claude can be talked to while reading. */
+function ReviewPanel(p: { view: OnboardingRunView; stage: OnboardingStage; busy: string | null; onRefreshReview: () => void; onApprove: () => void }) {
   const r = (p.stage.result ?? { changedFiles: [], checkedAt: "" }) as ReviewResult;
   const [open, setOpen] = useState<string | null>(null);
   return (
-    <div style={{ display: "grid", gap: 10 }}>
-      {p.map}
-      <div className="ob-note warn">שום דבר לא יוצא מהמחשב עד שתאשרו. רוצים לשנות משהו? בקשו מ-Claude בטרמינל שלמטה, ואז רעננו את הרשימה.</div>
+    <div className="panel" style={{ display: "grid", gap: 10, marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 650 }}>מה השתנה ({r.changedFiles.length} קבצים)</span>
+        <span className="ob-sub">מתעדכן לבד כש-Claude משנה קבצים</span>
         <span style={{ flex: 1 }} />
         <button className="btn btn-secondary btn-sm" disabled={!!p.busy} onClick={p.onRefreshReview}>{p.busy === "review-refresh" ? "מרענן…" : "↻ רענן רשימה"}</button>
       </div>
@@ -402,7 +422,7 @@ function ReviewBody(p: StageCardProps & { map?: ReactNode }) {
                 <span className="add">+{f.additions}</span>
                 <span className="del">−{f.deletions}</span>
               </button>
-              {open === f.path && <FileCompare key={`${f.path}|${r.checkedAt}`} load={() => getOnboardingFile(p.view.run.repoId, p.view.run.id, f.path)} />}
+              {open === f.path && <FileCompare key={`${f.path}|${f.status}|${f.additions}|${f.deletions}`} load={() => getOnboardingFile(p.view.run.repoId, p.view.run.id, f.path)} />}
             </div>
           ))}
         </div>

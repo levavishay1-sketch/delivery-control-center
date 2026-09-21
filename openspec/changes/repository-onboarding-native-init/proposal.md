@@ -31,9 +31,10 @@ everything that happened.
    (`claude --session-id <uuid> "/init"` with `CLAUDE_CODE_NEW_INIT=1`) in
    a pseudo-terminal inside the workspace. The person answers its
    questions exactly as in a terminal.
-3. **סקירת תוצרים** — every changed file as a diff against the baseline;
-   the person approves. Changes are requested from Claude in the same
-   session, not by rewinding the run.
+3. **סקירת תוצרים** — every changed file as a diff against the baseline,
+   under the terminal; the person approves. Changes are requested from
+   Claude in the same session, not by rewinding the run. DCC opens this
+   stage by itself when it sees `/init` finish.
 4. **מסירה** — commit under the acting person's identity, push, open a
    pull request (or a compare link when `gh` is absent); then the session
    is closed.

@@ -542,7 +542,7 @@ export type PrepareResult = {
   baseFrom: "remote" | "local" | "head";
   fileCount: number; existing: ExistingSetup;
 };
-export type InitResult = { sessionId: string; changedFiles: number; completedBy: string };
+export type InitResult = { sessionId: string; changedFiles: number; completedBy: string; auto?: boolean };
 export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean };
 export type DeliverResult = {
   branch: string; base: string; commitSha: string | null; filesCommitted: number; remote: string | null; pushed: boolean;
@@ -691,10 +691,9 @@ export const getLatestOnboardingRun = (repoId: string) =>
 export const listOnboardingRuns = (repoId: string) => get<{ runs: OnboardingRunSummary[] }>(`/repos/${repoId}/onboarding/runs`);
 export const getOnboardingRun = (repoId: string, runId: string) => get<OnboardingRunView>(ob(repoId, runId));
 export const runOnboardingStage = (repoId: string, runId: string, stageKey: OnboardingStageKey) => post<{ started: string }>(`${ob(repoId, runId)}/stages/${stageKey}/run`, {});
-export const completeOnboardingInit = (repoId: string, runId: string) => post<{ completed: string }>(`${ob(repoId, runId)}/init/complete`, {});
 export const resumeOnboardingSession = (repoId: string, runId: string) => post<{ resumed: boolean }>(`${ob(repoId, runId)}/session/resume`, {});
 export const refreshOnboardingReview = (repoId: string, runId: string) => post<{ changedFiles: ChangedFile[] }>(`${ob(repoId, runId)}/review/refresh`, {});
-export const approveOnboardingReview = (repoId: string, runId: string) => post<{ approved: boolean }>(`${ob(repoId, runId)}/review/approve`, {});
+export const approveOnboardingReview =(repoId: string, runId: string) => post<{ approved: boolean }>(`${ob(repoId, runId)}/review/approve`, {});
 export const cancelOnboardingRun = (repoId: string, runId: string) => post<{ cancelled: boolean }>(`${ob(repoId, runId)}/cancel`, {});
 export const updateOnboardingAutomation = (repoId: string, runId: string, automation: AutomationPolicy | { preset: AutomationPreset }, consent?: boolean) =>
   patch<AutomationPolicy>(`${ob(repoId, runId)}/automation`, { automation, consent });

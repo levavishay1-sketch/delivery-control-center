@@ -8,7 +8,7 @@ const STATE_HE: Record<SessionState, string> = {
   none: "הסשן יתחיל בשלב ההטמעה",
   live: "● סשן Claude פעיל",
   ended: "הסשן נסגר",
-  disconnected: "הסשן נותק — אפשר לחדש אותו משלב ההטמעה",
+  disconnected: "הסשן נותק — אפשר לחדש אותו מכרטיס השלב",
 };
 
 /** What the person sees: the visible screen plus a little above it. */

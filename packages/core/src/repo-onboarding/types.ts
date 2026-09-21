@@ -40,14 +40,14 @@ export const STAGES: readonly StageDefinition[] = [
     key: "init", order: 1, kind: "ai", gate: false,
     title_he: "הטמעה עם Claude (/init)", short_he: "שיחה חיה עם Claude Code",
     why_he: "כאן נוצר התוכן: הוראות, skills ו-hooks.",
-    what_he: "/init של Claude Code סורק את הריפו, שואל אותך וכותב את הקבצים בענף. הסשן נשאר פתוח עד סוף ההרצה.",
+    what_he: "/init של Claude Code סורק את הריפו, שואל אותך וכותב את הקבצים בענף. כש-Claude מסיים לכתוב, DCC מזהה את זה וממשיך לסקירה בעצמו. השלב נסגר ואי אפשר לחזור אליו, אבל הסשן נשאר פתוח עד סוף ההרצה.",
     output_he: "CLAUDE.md, skills ו-hooks בענף. עדיין לא נשמרים ב-git.",
   },
   {
     key: "review", order: 2, kind: "human", gate: true,
     title_he: "סקירת תוצרים", short_he: "כל השינויים כ-diff, לאישורך",
     why_he: "ל-Claude אין מילה אחרונה. אדם מאשר מה ייכנס.",
-    what_he: "מציג את כל השינויים מול נקודת ההתחלה. שינוי? מבקשים מ-Claude בטרמינל, ומרעננים את הרשימה.",
+    what_he: "מציג את כל השינויים מול נקודת ההתחלה. שינוי? מבקשים מ-Claude בטרמינל, והרשימה מתעדכנת לבד (אפשר גם לרענן ידנית).",
     output_he: "אישור למעבר לשלב המסירה.",
   },
   {
@@ -189,7 +189,8 @@ export type PrepareResult = {
   existing: ExistingSetup;
 };
 
-export type InitResult = { sessionId: string; changedFiles: number; completedBy: string };
+/** `auto`: DCC saw that Claude finished and closed the stage itself; `completedBy` is then whoever started the run. */
+export type InitResult = { sessionId: string; changedFiles: number; completedBy: string; auto?: boolean };
 
 export type ChangedFile = { path: string; status: "A" | "M" | "D" | "R" | string; additions: number; deletions: number };
 export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean };
