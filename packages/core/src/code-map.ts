@@ -87,7 +87,10 @@ export type CodeMapFacts = {
   ourCommits: CodeMapCommit[];
   uncommittedFiles: number;
   behind: number;
+  /** How many of the commits that came in after the branch opened touch a file of ours. Needs each commit's own files. */
   behindTouching: number;
+  /** When the commits' own files are unknown (`perCommitFiles` false): how many files both sides changed. Says nothing about which commit. */
+  sharedFiles?: number;
   pushed: boolean;
   merged: boolean;
   prUrl: string | null;
@@ -207,6 +210,8 @@ export async function readCodeMapFacts(dir: string, input: { branch?: string | n
 /* ── the picture ──────────────────────────────────────────────────── */
 
 const he = (n: number, one: string, many: string) => (n === 1 ? one : `${n} ${many}`);
+/** "One shared file" / "3 shared files" — what the host can tell us when it does not say which commit touched what. */
+const sharedFilesPhrase = (n: number) => he(n, "קובץ אחד משותף", "קבצים משותפים");
 const commitUrl = (repoUrl: string | null, sha: string) => (repoUrl ? `${repoUrl}/commit/${sha}` : undefined);
 const filesLine = (n: number) => (n === 1 ? "קובץ אחד" : `${n} קבצים`);
 
@@ -251,9 +256,14 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
   });
 
   if (f.behind > 0) {
-    base.note = f.behindTouching > 0
-      ? `${he(f.behind, "שינוי אחד נכנס", "שינויים נכנסו")} מאז · ${he(f.behindTouching, "אחד נוגע", "נוגעים")} באותם קבצים`
-      : `${he(f.behind, "שינוי אחד נכנס", "שינויים נכנסו")} מאז שהתחלנו`;
+    const came = he(f.behind, "שינוי אחד נכנס", "שינויים נכנסו");
+    if (f.perCommitFiles === false) {
+      base.note = f.sharedFiles ? `${came} מאז · ${sharedFilesPhrase(f.sharedFiles)}` : `${came} מאז שהתחלנו`;
+    } else {
+      base.note = f.behindTouching > 0
+        ? `${came} מאז · ${he(f.behindTouching, "אחד נוגע", "נוגעים")} באותם קבצים`
+        : `${came} מאז שהתחלנו`;
+    }
   } else if (f.fetchedAt) {
     base.note = `נמשך ${new Date(f.fetchedAt).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" })}`;
   }
@@ -313,7 +323,8 @@ function caption(f: CodeMapFacts): string {
   if (f.merged) return `העבודה נכנסה ל-${f.baseBranch}.`;
   if (f.behind === 0 && !f.pushed) return `העבודה יושבת על הגרסה העדכנית של ${f.baseBranch}, ועדיין לא יצאה מהמחשב.`;
   if (f.behind === 0) return `העבודה יושבת על הגרסה העדכנית של ${f.baseBranch}.`;
-  if (f.behindTouching > 0) return `${f.baseBranch} התקדם ב-${f.behind} מאז שהתחלנו, ו-${f.behindTouching} מהם נוגעים באותם קבצים — כדאי לעדכן את הענף לפני המיזוג.`;
+  if (f.perCommitFiles === false && f.sharedFiles) return `${f.baseBranch} התקדם ב-${f.behind} מאז שהתחלנו, ויש ${sharedFilesPhrase(f.sharedFiles)} שגם אנחנו שינינו — כדאי לעדכן את הענף לפני המיזוג.`;
+  if (f.perCommitFiles !== false && f.behindTouching > 0) return `${f.baseBranch} התקדם ב-${f.behind} מאז שהתחלנו, ו-${f.behindTouching} מהם נוגעים באותם קבצים — כדאי לעדכן את הענף לפני המיזוג.`;
   return `${f.baseBranch} התקדם ב-${f.behind} מאז שהתחלנו, ואף אחד מהם לא נוגע בקבצים שלנו.`;
 }
 

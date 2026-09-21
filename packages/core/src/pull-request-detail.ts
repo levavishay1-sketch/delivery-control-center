@@ -39,7 +39,8 @@ export type PullRequestDetail = {
   codeMap: CodeMap | null;
   /** Why the map could not be drawn, when it could not. */
   codeMapProblem: string | null;
-  freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
+  /** `sharedFiles`: files both the target and this request changed. The host does not say which commit touched which. */
+  freshness: { behind: number; sharedFiles: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
   /** What the branch is about, in a few lines. */
   topics: Topic[];
@@ -173,13 +174,13 @@ function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boole
   return b;
 }
 
-function nextStepFor(pr: PullRequestRow, blockers: Blocker[], behind: number, behindTouching: number): NextStep {
+function nextStepFor(pr: PullRequestRow, blockers: Blocker[], behind: number, sharedFiles: number): NextStep {
   if (pr.state === "merged") return { title: "הבקשה כבר מוזגה", detail: `השינוי נכנס ל-${pr.baseBranch}${pr.closedAt ? ` ב-${new Date(pr.closedAt).toLocaleDateString("he-IL")}` : ""}. אין מה לעשות בה, והענף שלה אפשר למחוק אם לא נמחק.`, action: "done" };
   if (pr.state === "closed") return { title: "הבקשה נסגרה בלי מיזוג", detail: "השינוי לא נכנס. אם העבודה עדיין נחוצה, אפשר לפתוח בקשה חדשה מאותו ענף.", action: "done" };
-  if (behindTouching > 0 || pr.conflicts) {
+  if (sharedFiles > 0 || pr.conflicts) {
     return {
       title: "עדכנו את הענף מהיעד" + (blockers.some((b) => b.key === "review" && b.ok === false) ? ", ואז בקשו סקירה" : ""),
-      detail: `${pr.baseBranch} התקדם ב-${behind} מאז שהענף נפתח${behindTouching ? `, ו-${behindTouching} מהם נוגעים באותם קבצים` : ""}. לכן מה שנבדק כאן אינו מה שיתקבל אחרי המיזוג.`,
+      detail: `${pr.baseBranch} התקדם ב-${behind} מאז שהענף נפתח${sharedFiles ? `, ויש ${sharedFiles === 1 ? "קובץ אחד" : `${sharedFiles} קבצים`} שגם הבקשה הזו משנה` : ""}. לכן מה שנבדק כאן אינו מה שיתקבל אחרי המיזוג.`,
       action: "update_branch",
     };
   }
@@ -267,11 +268,13 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
       baselineSha: mergeBase ? short(mergeBase) : null,
       baselineCommit: ours.merge_base_commit ? asCommit(ours.merge_base_commit) : null,
       baseBefore: [],
-      baseAfter: theirCommits.map((c) => ({ ...c, files: overlap.length ? [...theirFiles].filter((f) => ourPaths.has(f)) : [] })),
+      // The host lists only the files both sides changed, not which commit changed what — so no commit is drawn as "touching".
+      baseAfter: theirCommits.map((c) => ({ ...c, files: [] })),
       ourCommits: (ours.commits ?? []).map((c) => asCommit(c, [...ourPaths])),
       uncommittedFiles: 0,
       behind,
-      behindTouching: overlap.length,
+      behindTouching: 0,
+      sharedFiles: overlap.length,
       perCommitFiles: false,
       pushed: true,
       merged: false,
@@ -309,7 +312,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
 
   const value: PullRequestDetail = {
     pr, blockers, nextStep, codeMap, codeMapProblem,
-    freshness: ours && theirs ? { behind, behindTouching: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
+    freshness: ours && theirs ? { behind, sharedFiles: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
     groups, topics: topicsOf(files), fileCount: files.length, timeline, body: view?.body ?? "",
     refs: mergeBase && ours?.commits?.length ? { base: mergeBase, head: ours.commits[ours.commits.length - 1]!.sha } : null,
   };

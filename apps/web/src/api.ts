@@ -593,7 +593,7 @@ export type PullRequestDetail = {
   nextStep: NextStep;
   codeMap: CodeMap | null;
   codeMapProblem: string | null;
-  freshness: { behind: number; behindTouching: number; ahead: number; baseBranch: string } | null;
+  freshness: { behind: number; sharedFiles: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
   topics: { title: string; detail: string }[];
   refs: { base: string; head: string } | null;
