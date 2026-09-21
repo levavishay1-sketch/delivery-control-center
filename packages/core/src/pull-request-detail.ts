@@ -5,7 +5,7 @@ import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
 import { existingCheckout, git, httpsRepoUrl } from "./ai-assist.ts";
 import { codeMapFrom, type CodeMap, type CodeMapCommit, type CodeMapFacts } from "./code-map.ts";
-import { ghJson, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
+import { forgetPullRequests, ghJson, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
 
 /**
  * One pull request, as its screen needs it
@@ -253,6 +253,13 @@ export async function pullRequestQuick(repoId: string, number: number): Promise<
  *  should not pay for them again. Kept briefly, and skipped on an explicit refresh. */
 const cache = new Map<string, { at: number; value: PullRequestDetail }>();
 const TTL_MS = 45_000;
+
+/** Everything DCC remembers about one request, dropped — used by the write paths, which know it just became untrue. */
+export function forgetPullRequest(repoId: string, number: number) {
+  cache.delete(`${repoId}:${number}`);
+  keptForFiles.delete(`${repoId}:${number}`);
+  forgetPullRequests();
+}
 
 export async function pullRequestDetail(repoId: string, number: number, opts: { refresh?: boolean } = {}): Promise<PullRequestDetail> {
   const key = `${repoId}:${number}`;

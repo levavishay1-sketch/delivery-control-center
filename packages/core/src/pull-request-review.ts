@@ -3,6 +3,7 @@ import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
 import { httpsRepoUrl } from "./ai-assist.ts";
 import { ghExec, ghLogin, listPullRequests } from "./pull-requests.ts";
+import { forgetPullRequest } from "./pull-request-detail.ts";
 
 /**
  * A review written in DCC and sent to the host
@@ -58,6 +59,8 @@ export async function submitReview(input: { repoId: string; number: number; deci
     if (/own pull request/i.test(why)) throw new ReviewRefused("הגיט־האוסט לא נותן לכותב הבקשה לאשר אותה. אישור רשמי ייתן משתמש אחר.");
     throw new ReviewRefused(`הגיט־האוסט לא קיבל את הסקירה${why ? `: ${why.slice(0, 160)}` : "."}`);
   }
+  // The request now reads differently on the host; what DCC cached a moment ago would show the old state back.
+  forgetPullRequest(input.repoId, input.number);
   return { posted: true };
 }
 
@@ -79,5 +82,6 @@ export async function mergeRequest(input: { repoId: string; number: number }): P
     }
     throw new ReviewRefused(`הגיט־האוסט לא מיזג את הבקשה${why ? `: ${why.slice(0, 160)}` : "."}`);
   }
+  forgetPullRequest(input.repoId, input.number);
   return { merged: true };
 }
