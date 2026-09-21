@@ -594,8 +594,12 @@ export type NextStep = { title: string; detail: string; action: "update_branch" 
 export type PullRequestFile = { path: string; status: string; additions: number; deletions: number; note?: string; from?: string };
 export type FileGroup = { key: string; title: string; note?: string; files: PullRequestFile[]; additions: number; deletions: number };
 export type TimelineItem = { at: string; kind: string; text: string; detail?: string; tag?: string; tone?: "warning" | "healthy" | "neutral" };
+/** Which files clash. `exact`: they are the ones that really conflict; otherwise they are only the files both sides changed. */
+export type ConflictFile = { path: string; ours: { additions: number; deletions: number } | null; theirs: { additions: number; deletions: number } | null };
+export type ConflictView = { exact: boolean; files: ConflictFile[] };
 export type PullRequestDetail = {
   pr: PullRequestRow;
+  conflict: ConflictView | null;
   blockers: PrBlocker[];
   nextStep: NextStep;
   codeMap: CodeMap | null;

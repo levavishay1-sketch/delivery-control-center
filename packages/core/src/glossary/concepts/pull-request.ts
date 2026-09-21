@@ -25,6 +25,7 @@ export const PULL_REQUEST_CONCEPTS: Concept[] = [
   { key: "commits", kind: "field", title: "commits", aliases: ["קומיטים", "שמירות"], screens: ["pull_request"], explain: "כמה שמירות של עבודה נוספו בענף מאז שנפתח. כל שמירה היא צעד אחד עם הסבר מה נעשה בו." },
   { key: "pr_file_count", kind: "field", title: "קבצים בבקשה", aliases: ["קבצים"], screens: ["pull_request"], explain: "כמה קבצים הבקשה משנה. מספר גדול לא בהכרח אומר שינוי גדול — לפעמים זו החלפה של שם בהרבה מקומות." },
   { key: "base_advanced", kind: "field", title: "היעד התקדם", screens: ["pull_request"], explain: "כמה שינויים נוספו לענף היעד מאז שהבקשה נפתחה. ככל שהמספר גדל, כדאי לעדכן את הענף לפני שממזגים." },
+  { key: "pr_conflict_files", kind: "section", title: "הקבצים בהתנגשות", aliases: ["קבצים מתנגשים", "קבצים בהתנגשות"], screens: ["pull_request"], explain: "הקבצים שבהם הענף והיעד שינו את אותן שורות, ו-git לא יודע איזו גרסה לקחת. אם מופיע 'חשודים', אלה קבצים ששני הצדדים שינו, ואין ודאות שההתנגשות בכולם." },
   { key: "shared_files", kind: "field", title: "קבצים משותפים", screens: ["pull_request"], explain: "כמה מהשינויים שנוספו ליעד נוגעים באותם קבצים שהבקשה משנה. זה מה שקובע אם צפויה התנגשות." },
   { key: "prs_open", kind: "field", title: "פתוחות", screens: ["pull_request"], explain: "בקשות מיזוג שעדיין לא מוזגו ולא נסגרו. כל אחת ממתינה למישהו — לסקירה, לתיקון, או למיזוג." },
   { key: "prs_attention", kind: "field", title: "דורש תשומת לב", screens: ["pull_request"], explain: "בקשות שמשהו בהן תקוע: בדיקה שנכשלה, התנגשות, או המתנה ארוכה מדי לסקירה." },

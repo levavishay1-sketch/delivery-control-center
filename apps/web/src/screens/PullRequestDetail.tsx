@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, mergePullRequest, submitPullRequestReview, type ReviewDecision, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
+import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, mergePullRequest, submitPullRequestReview, type ConflictView, type ReviewDecision, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
@@ -39,6 +39,42 @@ function BlockerRow({ b }: { b: PrBlocker }) {
     <div className="pr-chk">
       <span className={`ic ${tone}`}>{b.ok === true ? "✓" : b.ok === false ? "✕" : "–"}</span>
       <div><div className="tt">{b.title}</div><div className="dd">{b.detail}</div></div>
+    </div>
+  );
+}
+
+/** "יש התנגשות" tells a person nothing to act on. This says where: which files, and how big each side's change in them is. */
+function ConflictPanel({ conflict, loading, url, base }: { conflict: ConflictView | null; loading: boolean; url: string; base: string }) {
+  // Each side's numbers keep their own left-to-right order inside the Hebrew line.
+  const side = (s: { additions: number; deletions: number } | null) => (s ? <bdi dir="ltr"><span className="plus">+{s.additions}</span> <span className="minus">−{s.deletions}</span></bdi> : "—");
+  const named = (n: string) => <bdi dir="ltr">{n}</bdi>;
+  return (
+    <div className="panel" style={{ marginBottom: 12 }}>
+      <CardTitle info="pr_conflict_files">{conflict && !conflict.exact ? "קבצים חשודים בהתנגשות" : "הקבצים בהתנגשות"}</CardTitle>
+      {loading && <p className="ob-sub">בודק אילו קבצים מתנגשים…</p>}
+      {!loading && !conflict?.files.length && <p className="ob-sub">הגיט־האוסט אומר שיש התנגשות, אבל לא הצלחנו לזהות באילו קבצים. פתחו את הבקשה בגיט־האוסט כדי לראות אותה.</p>}
+      {conflict && conflict.files.length > 0 && (
+        <>
+          <p className="ob-sub" style={{ marginBottom: 6 }}>
+            {conflict.exact
+              ? `${conflict.files.length === 1 ? "קובץ אחד" : `${conflict.files.length} קבצים`} שבהם הענף ו-${base} שינו את אותן שורות. בכל אחד מהם צריך להחליט איזו גרסה נשארת.`
+              : `אלה הקבצים ששני הצדדים שינו. ההתנגשות באחד מהם או יותר — אין לנו כאן ודאות באיזה, כי אין למערכת עותק מקומי של המאגר לחשב את המיזוג.`}
+          </p>
+          {conflict.files.map((f) => (
+            <div className="pr-chk" key={f.path} style={{ alignItems: "flex-start" }}>
+              <span className="ic no">✕</span>
+              <div style={{ minWidth: 0 }}>
+                <div className="tt ob-code" style={{ overflowWrap: "anywhere" }}>{f.path}</div>
+                <div className="dd">הענף: {side(f.ours)} · {named(base)}: {side(f.theirs)}</div>
+              </div>
+            </div>
+          ))}
+          <p className="ob-sub" style={{ marginTop: 8 }}>
+            המערכת לא מכריעה בשבילכם: מי שעובד על הענף מעדכן אותו מ-{base} ובוחר לכל קובץ איזו גרסה נשארת. אפשר גם{" "}
+            <a href={url} target="_blank" rel="noreferrer">לפתוח את הבקשה בגיט־האוסט ↗</a>, שם יש כלי הכרעה.
+          </p>
+        </>
+      )}
     </div>
   );
 }
@@ -339,6 +375,10 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       "סקירה": h.pr.review === "approved" ? "מאושרת" : h.pr.review === "changes_requested" ? "התבקשו תיקונים" : "אין עדיין",
       "בדיקות": h.pr.checks === "passing" ? "עברו" : h.pr.checks === "failing" ? "נכשלו" : h.pr.checks === "running" ? "רצות" : "אין",
       "התנגשות": h.pr.conflicts ? "יש" : "אין", "ממתינה": `${Math.round(h.pr.waitingHours)} שעות`,
+      ...(d?.conflict?.files.length ? {
+        [d.conflict.exact ? "הקבצים בהתנגשות" : "קבצים חשודים בהתנגשות"]:
+          d.conflict.files.map((f) => `${f.path} · הענף +${f.ours?.additions ?? 0} −${f.ours?.deletions ?? 0} · היעד +${f.theirs?.additions ?? 0} −${f.theirs?.deletions ?? 0}`),
+      } : {}),
       ...(d?.freshness ? { "מאחורי הבסיס": `${d.freshness.behind} קומיטים, ${d.freshness.sharedFiles} קבצים שגם הבקשה הזו משנה` } : {}),
       "מה חוסם": h.blockers.filter((b) => b.ok === false).map((b) => `${b.title}: ${b.detail}`),
       "הצעד הבא": `${h.nextStep.title} — ${h.nextStep.detail}`, nextStep: `${h.nextStep.title} — ${h.nextStep.detail}`,
@@ -416,6 +456,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>
                 {blockers.map((b) => <BlockerRow key={b.key} b={b} />)}
               </div>}
+              {pr.state === "open" && pr.conflicts && <ConflictPanel conflict={d?.conflict ?? null} loading={!d || (busy && !d.conflict?.files.length)} url={pr.url} base={pr.baseBranch} />}
               {!d
                 ? <div className="panel">{loading("את מפת הקוד")}</div>
                 : (
