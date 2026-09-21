@@ -3,7 +3,7 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
-import { httpsRepoUrl } from "./ai-assist.ts";
+import { existingCheckout, git, httpsRepoUrl } from "./ai-assist.ts";
 import { codeMapFrom, type CodeMap, type CodeMapCommit, type CodeMapFacts } from "./code-map.ts";
 import { ghJson, ghText, listPullRequests, type PullRequestRow } from "./pull-requests.ts";
 
@@ -25,6 +25,16 @@ export type Blocker = {
   detail: string;
 };
 
+/**
+ * What a person needs in order to resolve a conflict: which files, and how big
+ * each side's change in them is. `exact` says whether the files are the ones
+ * that really clash (a merge was computed) or only the ones both sides
+ * changed — a merge may still go through on those, so it is a list of
+ * suspects, and the screen says so.
+ */
+export type ConflictFile = { path: string; ours: { additions: number; deletions: number } | null; theirs: { additions: number; deletions: number } | null };
+export type ConflictView = { exact: boolean; files: ConflictFile[] };
+
 export type NextStep = { title: string; detail: string; action: "update_branch" | "request_review" | "merge" | "open_host" | "wait" | "done" };
 
 export type FileGroupKey = "code" | "instructions" | "docs" | "config" | "build" | "other";
@@ -44,6 +54,8 @@ export type PullRequestDetail = {
   /** `sharedFiles`: files both the target and this request changed. The host does not say which commit touched which. */
   freshness: { behind: number; sharedFiles: number; ahead: number; baseBranch: string } | null;
   groups: FileGroup[];
+  /** Which files clash — only for an open request the host reports as conflicting. */
+  conflict: ConflictView | null;
   /** What the branch is about, in a few lines. */
   topics: Topic[];
   /** The two versions a file is compared between: where the branch left the base, and where it is now. */
@@ -152,13 +164,35 @@ function topicsOf(files: GhFile[]): Topic[] {
 
 /* ── what blocks a merge, in the order that matters ───────────────── */
 
+/**
+ * The files that really clash, found by running the merge in the local copy —
+ * read-only: `merge-tree` writes objects and touches neither the working
+ * folder nor any branch, and `fetch` only moves remote-tracking refs, so it
+ * is safe in a folder somebody is working in. Returns `null` when it cannot
+ * say (no local copy, no such refs, an older git), and the caller falls back
+ * to the files both sides changed.
+ */
+async function clashingFiles(repoRow: { id: string; localPath: string | null } | undefined, base: string, head: string): Promise<string[] | null> {
+  const dir = repoRow ? existingCheckout(repoRow) : null;
+  if (!dir) return null;
+  const fetched = await git(["fetch", "origin", base, head], dir, { timeoutMs: 60_000 });
+  if (fetched.code !== 0) return null;
+  const r = await git(["merge-tree", "--write-tree", "--name-only", "--no-messages", `origin/${base}`, `origin/${head}`], dir, { timeoutMs: 60_000 });
+  // 0 = merges cleanly, 1 = conflicts, anything else = the command itself failed.
+  if (r.code !== 1) return r.code === 0 ? [] : null;
+  // First line is the resulting tree; the conflicted paths follow, up to the first blank line.
+  const lines = r.out.split("\n").map((l) => l.trim());
+  const end = lines.indexOf("", 1);
+  return lines.slice(1, end === -1 ? undefined : end).filter(Boolean);
+}
+
 function blockersFor(pr: PullRequestRow, parentOpen: boolean, checksKnown: boolean): Blocker[] {
   // Nothing blocks a request that has already been merged or closed.
   if (pr.state !== "open") return [];
   const b: Blocker[] = [];
   b.push(pr.conflicts
-    ? { key: "conflict", ok: false, title: "התנגשות מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
-    : { key: "conflict", ok: pr.mergeable === null ? null : true, title: pr.mergeable === null ? "מצב המיזוג עדיין נבדק" : "אין התנגשות", detail: pr.mergeable === null ? "הגיט־האוסט עדיין בודק אם אפשר למזג. כדאי לרענן בעוד רגע." : "הגיט־האוסט מצא שאפשר למזג בלי הכרעה ידנית." });
+    ? { key: "conflict", ok: false, title: "קונפליקט מול היעד", detail: `הענף והיעד נוגעים באותן שורות. צריך לעדכן את הענף ולהכריע איזו גרסה נשארת.` }
+    : { key: "conflict", ok: pr.mergeable === null ? null : true, title: pr.mergeable === null ? "מצב המיזוג עדיין נבדק" : "אין קונפליקט", detail: pr.mergeable === null ? "הגיט־האוסט עדיין בודק אם אפשר למזג. כדאי לרענן בעוד רגע." : "הגיט־האוסט מצא שאפשר למזג בלי הכרעה ידנית." });
   b.push(pr.review === "approved"
     ? { key: "review", ok: true, title: "אושר בסקירה", detail: "לפחות אדם אחד עבר על השינוי ואישר." }
     : pr.review === "changes_requested"
@@ -229,7 +263,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   const list = await listPullRequests({ refresh: opts.refresh });
   const pr = findRequest(list, repoId, number);
   if (!pr) throw new Error("בקשת המיזוג לא נמצאה");
-  const [r] = await db.select({ adoRepoRef: repo.adoRepoRef }).from(repo).where(eq(repo.id, repoId)).limit(1);
+  const [r] = await db.select({ id: repo.id, adoRepoRef: repo.adoRepoRef, localPath: repo.localPath }).from(repo).where(eq(repo.id, repoId)).limit(1);
   const url = r?.adoRepoRef ? httpsRepoUrl(r.adoRepoRef) : null;
   const slug = url ? url.replace(/^https?:\/\/[^/]+\//, "").replace(/\.git$/, "") : null;
 
@@ -258,6 +292,19 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   // Which of the base's new commits touch a file this request also changes.
   const theirFiles = new Set((theirs?.files ?? []).map((f) => f.filename));
   const overlap = [...theirFiles].filter((f) => ourPaths.has(f));
+
+  // When the host says the request conflicts, say WHERE. The exact files come
+  // from a real merge in the local copy; without one, the files both sides
+  // changed are shown as suspects and marked as such.
+  let conflict: ConflictView | null = null;
+  if (pr.state === "open" && pr.conflicts) {
+    const size = (m: Map<string, GhFile>, p: string) => { const f = m.get(p); return f ? { additions: f.additions, deletions: f.deletions } : null; };
+    const oursBy = new Map((ours?.files ?? []).map((f) => [f.filename, f]));
+    const theirsBy = new Map((theirs?.files ?? []).map((f) => [f.filename, f]));
+    const exactPaths = await clashingFiles(r, pr.baseBranch, pr.headBranch);
+    const paths = exactPaths?.length ? exactPaths : overlap;
+    conflict = { exact: !!exactPaths?.length, files: paths.map((p) => ({ path: p, ours: size(oursBy, p), theirs: size(theirsBy, p) })) };
+  }
 
   let codeMap: CodeMap | null = null;
   let codeMapProblem: string | null = null;
@@ -318,7 +365,7 @@ export async function pullRequestDetail(repoId: string, number: number, opts: { 
   const value: PullRequestDetail = {
     pr, blockers, nextStep, codeMap, codeMapProblem,
     freshness: ours && theirs ? { behind, sharedFiles: overlap.length, ahead: ours.ahead_by ?? 0, baseBranch: pr.baseBranch } : null,
-    groups, topics: topicsOf(files), fileCount: files.length, timeline, body: view?.body ?? "",
+    groups, conflict, topics: topicsOf(files), fileCount: files.length, timeline, body: view?.body ?? "",
     refs: mergeBase && ours?.commits?.length ? { base: mergeBase, head: ours.commits[ours.commits.length - 1]!.sha } : null,
   };
   cache.set(key, { at: Date.now(), value });

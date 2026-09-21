@@ -212,7 +212,7 @@ const WAITING_HOURS = 24;
 
 function flagsFor(pr: Omit<PullRequestRow, "flags" | "waitingHours" | "parentId">, waitingHours: number, parentOpen: boolean): PullRequestRow["flags"] {
   const f: PullRequestRow["flags"] = [];
-  if (pr.conflicts) f.push({ key: "conflict", text: "התנגשות מול היעד", tone: "critical" });
+  if (pr.conflicts) f.push({ key: "conflict", text: "קונפליקט מול היעד", tone: "critical" });
   if (pr.checks === "failing") f.push({ key: "checks", text: "בדיקות נכשלו", tone: "critical" });
   if (parentOpen) f.push({ key: "parent", text: "ממתין ל-PR אחר שעוד לא מוזג", tone: "warning" });
   if (pr.draft) f.push({ key: "draft", text: "טיוטה", tone: "neutral" });

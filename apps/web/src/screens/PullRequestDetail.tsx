@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, mergePullRequest, submitPullRequestReview, type ReviewDecision, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
+import { cachedPullRequest, getPullRequest, getPullRequestFile, getPullRequestQuick, getRepoBranches, mergePullRequest, submitPullRequestReview, type ConflictView, type ReviewDecision, type BranchHealth, type RepoBranches, type PullRequestQuick, type PrBlocker, type FileGroup, type PullRequestDetail as Detail, type TimelineItem } from "../api.ts";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { TopicRows } from "../components/Topics.tsx";
@@ -67,20 +67,43 @@ function waited(hours: number): string {
   return d === 1 ? "ממתין יום" : `ממתין ${d} ימים`;
 }
 
-function BlockerRow({ b }: { b: PrBlocker }) {
+/** A blocker that has somewhere to look (`go`) is a whole-row button with a small arrow; the rest are plain rows. */
+function BlockerRow({ b, go }: { b: PrBlocker; go?: { hint: string; onClick: () => void } }) {
   const tone = b.ok === true ? "yes" : b.ok === false ? "no" : "na";
-  return (
-    <div className="pr-chk">
+  const body = (
+    <>
       <span className={`ic ${tone}`}>{b.ok === true ? "✓" : b.ok === false ? "✕" : "–"}</span>
-      <div><div className="tt">{b.title}</div><div className="dd">{b.detail}</div></div>
+      <div style={{ flex: 1, minWidth: 0 }}><div className="tt">{b.title}</div><div className="dd">{b.detail}</div></div>
+    </>
+  );
+  if (!go) return <div className="pr-chk">{body}</div>;
+  return (
+    <div className="pr-chk go" role="button" tabIndex={0} title={go.hint} aria-label={`${b.title} — ${go.hint}`}
+      onClick={go.onClick}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go.onClick(); } }}>
+      {body}
+      <span className="arrow" aria-hidden>‹</span>
     </div>
   );
 }
 
-function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; count: number; url: string; repoId: string; number: number }) {
-  const [only, setOnly] = useState<string | null>(null);
+const CLASH = "conflicts";
+
+function Files({ groups, count, url, repoId, number, conflict, startOn, onResolve }: { groups: FileGroup[]; count: number; url: string; repoId: string; number: number; conflict: ConflictView | null; startOn: string | null; onResolve: () => void }) {
+  // The files the request changes that also clash, as one more group to filter by. Their names come from the
+  // conflict, their status and sizes from the request's own list, so they open before/after like any other.
+  const clashPaths = new Set((conflict?.files ?? []).map((f) => f.path));
+  const clashFiles = groups.flatMap((g) => g.files).filter((f) => clashPaths.has(f.path));
+  const clash: FileGroup | null = clashFiles.length
+    ? {
+        key: CLASH as FileGroup["key"], title: conflict?.exact ? "בקונפליקט" : "חשודים בקונפליקט", files: clashFiles,
+        additions: clashFiles.reduce((n, f) => n + f.additions, 0), deletions: clashFiles.reduce((n, f) => n + f.deletions, 0),
+        note: conflict?.exact ? undefined : "ששני הצדדים שינו — לא בטוח שהקונפליקט בכולם",
+      }
+    : null;
+  const [only, setOnly] = useState<string | null>(startOn === CLASH && clash ? CLASH : null);
   const [open, setOpen] = useState<string | null>(null);
-  const shown = only ? groups.filter((g) => g.key === only) : groups;
+  const shown = only === CLASH && clash ? [clash] : only ? groups.filter((g) => g.key === only) : groups;
   const add = groups.reduce((n, g) => n + g.additions, 0);
   const del = groups.reduce((n, g) => n + g.deletions, 0);
   return (
@@ -89,11 +112,20 @@ function Files({ groups, count, url, repoId, number }: { groups: FileGroup[]; co
         <div><b>{count} קבצים</b> <span className="l">· <span className="plus">+{add}</span> <span className="minus">−{del}</span></span></div>
         <div className="pr-chips">
           <button type="button" className={`chip${only === null ? " on" : ""}`} onClick={() => setOnly(null)}>הכל</button>
+          {clash && <button type="button" className={`chip crit${only === CLASH ? " on" : ""}`} onClick={() => setOnly(CLASH)}>{clash.title} {clash.files.length}</button>}
           {groups.map((g) => (
             <button key={g.key} type="button" className={`chip${only === g.key ? " on" : ""}`} onClick={() => setOnly(g.key)}>{g.title} {g.files.length}</button>
           ))}
         </div>
       </div>
+      {only === CLASH && clash && (
+        <div className="pr-fhead" style={{ marginTop: -2 }}>
+          <p className="ob-sub" style={{ margin: 0, flex: 1, minWidth: 220 }}>
+            {conflict?.exact ? "בקבצים האלה שני הצדדים כתבו באותן שורות." : "אלה הקבצים ששני הצדדים שינו — הקונפליקט באחד מהם או יותר."} אפשר להכריע כאן, בלי טרמינל.
+          </p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={onResolve}>פתור את הקונפליקט</button>
+        </div>
+      )}
       {shown.map((g) => (
         <div className="panel pr-grp" key={g.key}>
           <div className="gh">
@@ -339,7 +371,7 @@ function Timeline({ items }: { items: TimelineItem[] }) {
   );
 }
 
-export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: string; number: number; tab: Tab; nav: (h: string) => void }) {
+export function PullRequestDetailScreen({ repoId, number, tab, nav, query = "" }: { repoId: string; number: number; tab: Tab; nav: (h: string) => void; query?: string }) {
   // Something already fetched for this request paints immediately; the refresh happens behind it.
   const [d, setD] = useState<Detail | null>(() => cachedPullRequest(repoId, number));
   const [err, setErr] = useState<string | null>(null);
@@ -385,7 +417,11 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       "כותרת": h.pr.title, "מענף": h.pr.headBranch, "לענף": h.pr.baseBranch, "מצב": h.pr.state === "open" ? (h.pr.draft ? "פתוחה (טיוטה)" : "פתוחה") : h.pr.state === "merged" ? "מוזגה" : "נסגרה",
       "סקירה": h.pr.review === "approved" ? "מאושרת" : h.pr.review === "changes_requested" ? "התבקשו תיקונים" : "אין עדיין",
       "בדיקות": h.pr.checks === "passing" ? "עברו" : h.pr.checks === "failing" ? "נכשלו" : h.pr.checks === "running" ? "רצות" : "אין",
-      "התנגשות": h.pr.conflicts ? "יש" : "אין", "ממתינה": `${Math.round(h.pr.waitingHours)} שעות`,
+      "קונפליקט": h.pr.conflicts ? "יש" : "אין", "ממתינה": `${Math.round(h.pr.waitingHours)} שעות`,
+      ...(d?.conflict?.files.length ? {
+        [d.conflict.exact ? "הקבצים בקונפליקט" : "קבצים חשודים בקונפליקט"]:
+          d.conflict.files.map((f) => `${f.path} · הענף +${f.ours?.additions ?? 0} −${f.ours?.deletions ?? 0} · היעד +${f.theirs?.additions ?? 0} −${f.theirs?.deletions ?? 0}`),
+      } : {}),
       ...(d?.freshness ? { "מאחורי הבסיס": `${d.freshness.behind} קומיטים, ${d.freshness.sharedFiles} קבצים שגם הבקשה הזו משנה` } : {}),
       "מה חוסם": h.blockers.filter((b) => b.ok === false).map((b) => `${b.title}: ${b.detail}`),
       "הצעד הבא": `${h.nextStep.title} — ${h.nextStep.detail}`, nextStep: `${h.nextStep.title} — ${h.nextStep.detail}`,
@@ -425,8 +461,8 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
             {pr.state === "merged" && <span className="pill healthy">מוזגה</span>}
             {pr.state === "closed" && <span className="pill inactive">נסגרה בלי מיזוג</span>}
             {pr.draft && pr.state === "open" && <span className="pill inactive">טיוטה</span>}
-            {pr.state === "open" && pr.conflicts && <span className="pill critical">התנגשות</span>}
-            {pr.state === "open" && !pr.conflicts && pr.mergeable && <span className="pill healthy">אין התנגשות</span>}
+            {pr.state === "open" && pr.conflicts && <span className="pill critical">קונפליקט</span>}
+            {pr.state === "open" && !pr.conflicts && pr.mergeable && <span className="pill healthy">אין קונפליקט</span>}
           </div>
         </div>
         <div className="ob-actions">
@@ -465,7 +501,8 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
               {blockers.length > 0 && <div className="panel" style={{ marginBottom: 12 }}>
                 <CardTitle info="pr_blockers">מה חוסם מיזוג</CardTitle>
                 <p className="ob-sub" style={{ marginBottom: 4 }}>המיזוג נפתח רק כשאין שורה אדומה.</p>
-                {blockers.map((b) => <BlockerRow key={b.key} b={b} />)}
+                {blockers.map((b) => <BlockerRow key={b.key} b={b}
+                  go={b.key === "conflict" && b.ok === false ? { hint: "הצג את הקבצים שבקונפליקט", onClick: () => nav(`#/pull-requests/${repoId}/${number}/files?filter=conflicts`) } : undefined} />)}
               </div>}
               {!d
                 ? <div className="panel">{loading("את מפת הקוד")}</div>
@@ -504,7 +541,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
         </>
       )}
 
-      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
+      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} conflict={d.conflict} startOn={new URLSearchParams(query).get("filter")} onResolve={() => nav(`#/pull-requests/${repoId}/${number}/conflict`)} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
       {tab === "timeline" && (d ? <Timeline items={d.timeline} /> : <div className="panel">{loading("את היומן")}</div>)}
       {tab === "branches" && <Branches data={branches} err={branchesErr} busy={branchesBusy} reload={(refresh) => void loadBranches(refresh)} />}
     </div>
