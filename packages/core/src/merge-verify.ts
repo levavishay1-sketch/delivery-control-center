@@ -107,12 +107,59 @@ function linkDependencies(from: string, to: string): string | null {
   return null;
 }
 
-/** What this repository says a change is verified by. */
-function checksOf(dir: string): { name: string; args: string[] }[] {
+/**
+ * TypeScript projects that no declared check reaches.
+ *
+ * A repository may keep several TypeScript projects and point its `typecheck`
+ * script at only some of them — this one does: `tsc -b` follows the root
+ * tsconfig's references, and `apps/web` has its own tsconfig that no reference
+ * names. A merge that breaks that project comes back green from every declared
+ * check, which is exactly what happened: two duplicate imports in a web file
+ * passed as "all checks passed" and took the site down.
+ *
+ * So every tsconfig the root's references do not reach is found and checked
+ * with `tsc -p <dir> --noEmit` — a command DCC did not invent a purpose for,
+ * only applied to a project the repository already declared. Nothing is run
+ * that the repository has no tsconfig for.
+ */
+function uncoveredProjects(dir: string): { name: string; args: string[]; label: string }[] {
+  const rootConfig = path.join(dir, "tsconfig.json");
+  const referenced = new Set<string>();
+  try {
+    const cfg = JSON.parse(readFileSync(rootConfig, "utf8")) as { references?: { path: string }[] };
+    for (const r of cfg.references ?? []) referenced.add(path.resolve(dir, r.path).toLowerCase());
+  } catch { /* no root tsconfig, or one that is not plain JSON: nothing is known to be covered */ }
+
+  const found: string[] = [];
+  const walk = (d: string, depth: number) => {
+    if (depth > 3) return;
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      if (!entry.isDirectory() || entry.name === "node_modules" || entry.name.startsWith(".") || entry.name === "dist") continue;
+      const sub = path.join(d, entry.name);
+      if (existsSync(path.join(sub, "tsconfig.json"))) found.push(sub);
+      walk(sub, depth + 1);
+    }
+  };
+  walk(dir, 0);
+
+  return found
+    .filter((sub) => !referenced.has(path.resolve(sub).toLowerCase()))
+    // A project that only re-exports another is not a project of its own.
+    .filter((sub) => { try { return !!(JSON.parse(readFileSync(path.join(sub, "tsconfig.json"), "utf8")) as { compilerOptions?: unknown }).compilerOptions; } catch { return true; } })
+    .map((sub) => {
+      const rel = path.relative(dir, sub).replace(/\\/g, "/");
+      return { name: `tsc:${rel}`, label: `npx tsc -p ${rel} --noEmit`, args: ["exec", "--", "tsc", "-p", rel, "--noEmit"] };
+    });
+}
+
+/** What this repository says a change is verified by — plus the TypeScript projects none of that reaches. */
+function checksOf(dir: string): { name: string; args: string[]; label?: string }[] {
   const scripts = readJson(path.join(dir, "package.json"))?.scripts ?? {};
   const found = WANTED.filter((n) => scripts[n]);
   const use = found.filter((n) => n !== LAST_RESORT).length ? found.filter((n) => n !== LAST_RESORT) : found;
-  return use.map((n) => ({ name: n, args: ["run", n] }));
+  const declared = use.map((n) => ({ name: n, args: ["run", n] }));
+  // Only where the repository declared some TypeScript check itself: a repository with none is told so, not handed one.
+  return declared.length ? [...declared, ...uncoveredProjects(dir)] : declared;
 }
 
 /**
@@ -142,7 +189,7 @@ export async function verifyCommit(sharedDir: string, commit: string, label: str
     for (const c of wanted) {
       const at = Date.now();
       const r = await run("npm", c.args, dir, PER_CHECK_MS);
-      checks.push({ name: c.name, command: `npm run ${c.name}`, ok: r.code === 0, ms: Date.now() - at, output: r.out.split("\n").slice(-40).join("\n") });
+      checks.push({ name: c.name, command: c.label ?? `npm run ${c.name}`, ok: r.code === 0, ms: Date.now() - at, output: r.out.split("\n").slice(-40).join("\n") });
     }
     return { ran: true, commit, checks };
   } finally {
