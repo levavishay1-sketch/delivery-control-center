@@ -6,6 +6,7 @@ import { db } from "@dcc/db";
 import { repo } from "@dcc/db/schema";
 import { ensureCheckout, git, resolveCommitIdentity } from "./ai-assist.ts";
 import { listPullRequests } from "./pull-requests.ts";
+import { forgetPullRequest } from "./pull-request-detail.ts";
 import { appendRepoAiEvent } from "./repo-onboarding/events.ts";
 import { verifyCommit, type VerifyResult } from "./merge-verify.ts";
 
@@ -186,6 +187,9 @@ export async function resolveConflict(input: {
       ? `הענף ${pr.headBranch} השתנה בגיט־האוסט מאז שפתחתם את המסך, ולכן לא דחפנו כלום. רעננו והכריעו שוב על המצב החדש.`
       : `הדחיפה נכשלה: ${push.out.slice(0, 300)}`);
   }
+
+  // The request changed on the host a moment ago; what DCC cached about it is now wrong for everyone, not only this screen.
+  forgetPullRequest(input.repoId, input.number);
 
   if (r.clientId) {
     await appendRepoAiEvent({

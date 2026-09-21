@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getPullRequestConflict, resolvePullRequestConflict, verifyPullRequestConflict, type ConflictContent, type ConflictFileContent, type VerifyResult } from "../api.ts";
+import { getPullRequest, getPullRequestConflict, resolvePullRequestConflict, verifyPullRequestConflict, type ConflictContent, type ConflictFileContent, type VerifyResult } from "../api.ts";
 import { CardTitle } from "../ui.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 import { CodeBlock, CodeEditor } from "../components/Code.tsx";
@@ -213,6 +213,9 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
     try {
       const payload = payloadOf();
       const r = await resolvePullRequestConflict(repoId, number, payload);
+      // The request just changed on the host. Drop what the app still believes
+      // about it, or going back shows the conflict that was just resolved.
+      await getPullRequest(repoId, number, true).catch(() => { /* the screen below refreshes again */ });
       setDone(`נוצר קומיט מיזוג ${r.commitSha} על ${r.branch} ונדחף. הקונפליקט נפתר ב-${r.files === 1 ? "קובץ אחד" : `${r.files} קבצים`}.`);
     } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
@@ -259,7 +262,8 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
       {err && <div className="ob-note crit" style={{ marginBottom: 12 }}>{err}</div>}
       {done && (
         <div className="ob-note ok" style={{ marginBottom: 12 }}>
-          {done} <button className="btn btn-secondary btn-sm" style={{ marginInlineStart: 8 }} onClick={back}>חזרה לבקשה</button>
+          {done} הגיט־האוסט מחשב מחדש אם אפשר למזג, וזה לוקח לו כמה שניות — אם הבקשה עדיין מסומנת בקונפליקט, לחצו "↻ סנכרן" בראש המסך שלה.
+          <button className="btn btn-secondary btn-sm" style={{ marginInlineStart: 8 }} onClick={back}>חזרה לבקשה</button>
         </div>
       )}
 

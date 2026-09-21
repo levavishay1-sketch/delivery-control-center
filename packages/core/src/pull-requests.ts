@@ -245,6 +245,9 @@ async function reposToWatch(): Promise<{ refs: RepoRef[]; skipped: PullRequestLi
 let cache: { at: number; list: PullRequestList } | null = null;
 const LIST_TTL_MS = 60_000;
 
+/** After DCC itself changes a request on the host, what it remembered a moment ago is wrong — so it forgets it. */
+export const forgetPullRequests = () => { cache = null; };
+
 /** Every open request DCC can see, with what DCC knows about it added — and the recent merged and closed ones after it. */
 export async function listPullRequests(opts: { refresh?: boolean } = {}): Promise<PullRequestList> {
   if (!opts.refresh && cache && Date.now() - cache.at < LIST_TTL_MS) return cache.list;
