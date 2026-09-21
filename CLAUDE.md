@@ -115,6 +115,23 @@ after looking at what it holds — never left to accumulate. The "ענפים" ta
 a pull request shows every branch of the repository and says which of these
 applies.
 
+## Before a large task — the model and effort box
+
+Before starting a **large** task, do not begin the work: invoke the
+`model-advisor` skill and put its recommendation to the user as a choice
+box with `AskUserQuestion` — approve, keep the current setting, one step
+up, or a free-text comment. Start only after the answer. The shape of the
+box and what to do with each answer are in the skill.
+
+- **Large** = it spans several files, packages or screens, or it is a whole
+  OpenSpec change or a group of its tasks. Not a question, a rename or a
+  small fix.
+- Ask once per phase, not once per task: a phase the user already approved
+  is not asked about again until the next phase begins.
+- A session cannot change its own model (`set_session_model` refuses the
+  session that calls it), so an approval means *asking the user to switch*
+  in the model menu or with `/model` and `/effort`, then waiting.
+
 ## This repo dogfoods itself
 
 Hooks (`hooks/`), skills (`skills/`), the `reviewer` subagent

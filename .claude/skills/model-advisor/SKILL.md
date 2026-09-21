@@ -1,6 +1,6 @@
 ---
 name: model-advisor
-description: Recommend which Claude model and which effort level to use for a task, what it will roughly cost, and how to group a large change into model phases. Use when the user asks which model or effort to pick, whether to switch model or raise effort, how much a task will cost, or says things like "באיזה מודל", "איזה מאמץ", "כמה זה יעלה", "שווה לעבור ל-Opus", "זה מסובך מדי ל-Sonnet". Also use before starting a large OpenSpec change, to plan its model phases up front.
+description: Recommend which Claude model and which effort level to use for a task, what it will roughly cost, and how to group a large change into model phases. Use when the user asks which model or effort to pick, whether to switch model or raise effort, how much a task will cost, or says things like "באיזה מודל", "איזה מאמץ", "כמה זה יעלה", "שווה לעבור ל-Opus", "זה מסובך מדי ל-Sonnet". Also use before starting any large task or OpenSpec change — plan its model phases up front and put the recommendation to the user as an approval box (see "The approval box").
 ---
 
 # model-advisor
@@ -152,6 +152,39 @@ model switches it costs.
 
 Give a cost estimate only when the size of the input is actually known,
 and say it is an estimate. A made-up number is worse than none.
+
+## The approval box — before a large task
+
+`CLAUDE.md` says *when* (before a large task, once per phase). This is
+*how*. Compute the recommendation as above, then ask it with
+`AskUserQuestion`, one question, and do not start the work until it is
+answered.
+
+- **header** `מודל ומאמץ`; **question** names the task in Hebrew.
+- **Options**, in this order, each with its consequence in the description:
+  1. `אשר: <model> · <effort> (מומלץ)` — the recommendation.
+  2. `הישאר על <current model> · <current effort>` — say what the risk is.
+  3. `צעד אחד למעלה: <next model or effort>` — the smaller move first: a
+     higher effort before a bigger model.
+  Drop option 2 or 3 when it equals option 1. The tool adds "Other" itself;
+  that is where the user writes a comment.
+- Put the answer shape from above (the box, *למה*, the switch signs) in
+  the recommended option's `preview`, so it is readable before choosing.
+
+What to do with the answer:
+
+- **Approve or a step up** — a session cannot change its own model:
+  `set_session_model` and `set_session_effort` refuse the session that
+  calls them. Say "החליפו בתפריט המודל, או הריצו `/model …` ו-`/effort …`",
+  and wait for the user to say it is done. If it already matches the
+  current session, say so and start.
+- **Keep the current** — go on, and state the risk once, in a line.
+- **A comment** — treat it as an instruction about how to do the task, not
+  only about the model. Adjust the recommendation; ask again only when the
+  comment changes the approach itself.
+
+Never show the box for something that is not large, and never again inside
+a phase the user already approved.
 
 ## Keeping this current
 
