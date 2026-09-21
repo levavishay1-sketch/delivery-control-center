@@ -243,9 +243,15 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
         const parent = p.lane.from ? byId.get(p.lane.from.lane) : undefined;
         const px = parent ? parent.xs[p.lane.from!.at] ?? first : first;
         const py = parent ? parent.y : p.y;
-        // Labels hang above the line, starting at the point the line starts, so they
-        // never sit on the dots and never collide with an arrow label.
+        // Labels start at the point the line starts, so they never sit on the dots. The base line keeps its name above;
+        // a branch that springs from another keeps its name below, so the arrow that climbs from its request up to the
+        // base has the gap between the two lines to itself. The badge follows the name and the note.
         const labelX = Math.min(D.width - 8, first + 6);
+        const below = !!parent;
+        const rows = (p.lane.label ? 1 : 0) + (p.lane.note ? 1 : 0);
+        const labelY = below ? p.y + 30 : p.y - 32;
+        const noteY = below ? p.y + (p.lane.label ? 45 : 30) : p.y - (p.lane.label ? 17 : 32);
+        const badgeY = below ? p.y + 24 + rows * 20 : p.y - 24;
         // The line that has no parent starts a little before its first dot, so a lane with one or two dots still reads as a line.
         const lineStart = parent ? first : Math.min(D.width - 24, first + D.lead);
         return (
@@ -253,14 +259,14 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
             {parent
               ? <path d={`M${px},${py} C${px},${py + 34} ${px - 14},${p.y} ${px - 44},${p.y} L${last},${p.y}`} fill="none" stroke={D.color.ours} strokeWidth={2} pointerEvents="none" />
               : <line x1={lineStart} y1={p.y} x2={last} y2={p.y} stroke={D.color.lineStroke} strokeWidth={2} pointerEvents="none" />}
-            {p.lane.label && <text x={labelX} y={p.y - 32} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
-            {p.lane.note && <text x={labelX} y={p.y - (p.lane.label ? 17 : 32)} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
+            {p.lane.label && <text x={labelX} y={labelY} textAnchor="end" fontSize={D.size.label} fill={parent ? D.color.oursText : D.color.label} fontFamily={D.font}>{p.lane.label}</text>}
+            {p.lane.note && <text x={labelX} y={noteY} textAnchor="end" fontSize={D.size.note} fill={D.color.muted} fontFamily={D.font}>{p.lane.note}</text>}
             {p.lane.nodes.map((n: CodeMapNode, i) => (
               <Node key={i} node={n} x={p.xs[i]!} y={p.y} picked={picked === `${p.lane.id}:${i}`}
                 onPick={() => onPick?.(`${p.lane.id}:${i}`, n, p.xs[i]!, p.y)} />
             ))}
             {/* The base line keeps its badge above, so the arrow that arrives from below has a clear landing. */}
-            {p.lane.place && <Badge place={p.lane.place} x={last - 16} y={p.y + (parent ? 24 : -24)} ours={!!parent} />}
+            {p.lane.place && <Badge place={p.lane.place} x={last - 16} y={badgeY} ours={!!parent} />}
           </g>
         );
       })}
@@ -269,17 +275,24 @@ export function CodeMapDrawing({ map, picked, onPick }: { map: CodeMap; picked?:
         const from = byId.get(a.from);
         const to = byId.get(a.to);
         if (!from || !to) return null;
-        const fx = (from.xs[from.xs.length - 1] ?? 0) - 12;
-        const fy = from.y - 10;
-        const tx = (to.xs[to.xs.length - 1] ?? 0) + 24;
-        const ty = to.y + 13;
+        // From the top of the last dot of the branch (the request's circle) to the bottom of the newest dot of the base:
+        // the arrow says "this goes in there", so it must start and end on those two dots and not somewhere between them.
+        const lastKind = (pl: Placed) => pl.lane.nodes[pl.lane.nodes.length - 1]?.kind ?? "other";
+        const fx = from.xs[from.xs.length - 1] ?? 0;
+        const fy = from.y - D.radius[lastKind(from)] - 2;
+        const tx = to.xs[to.xs.length - 1] ?? 0;
+        const ty = to.y + D.radius[lastKind(to)] + 4;
         const done = a.state === "done";
+        // The label sits beside the arrow, on the side that has room, and carries its own background.
+        const lw = a.label.length * 6.2 + 12;
+        const midX = (fx + tx) / 2;
+        const cx = midX - 12 - lw / 2 >= 8 ? midX - 12 - lw / 2 : midX + 12 + lw / 2;
+        const cy = (fy + ty) / 2;
         return (
           <g key={i}>
             <path d={`M${fx},${fy} L${tx},${ty}`} fill="none" stroke={done ? D.color.ours : D.color.other} strokeWidth={1.5} strokeDasharray="5 4" markerEnd={`url(#${done ? "cm-ar-ours" : "cm-ar-mute"})`} />
-            {/* The label sits on the arrow, so it carries its own background. */}
-            <rect x={(fx + tx) / 2 - 6 - (a.label.length * 6.2 + 12) / 2} y={(fy + ty) / 2 - 27} width={a.label.length * 6.2 + 12} height={17} rx={6} fill={D.color.surface} />
-            <text x={(fx + tx) / 2 - 6} y={(fy + ty) / 2 - 15} textAnchor="middle" fontSize={D.size.arrow} fill={done ? D.color.oursText : D.color.muted} fontFamily={D.font}>{a.label}</text>
+            <rect x={cx - lw / 2} y={cy - 9} width={lw} height={17} rx={6} fill={D.color.surface} />
+            <text x={cx} y={cy + 4} textAnchor="middle" fontSize={D.size.arrow} fill={done ? D.color.oursText : D.color.muted} fontFamily={D.font}>{a.label}</text>
           </g>
         );
       })}
