@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { getPullRequest, listPullRequests, type PullRequestDetail, type PullRequestList, type PullRequestRow } from "../api.ts";
 import { TopicRows } from "../components/Topics.tsx";
-import { PageHead, Pill } from "../ui.tsx";
+import { PageHead, Pill, PrNumber } from "../ui.tsx";
 
 /**
  * בקשות מיזוג — every open pull request DCC can see, from every client and
@@ -41,7 +41,7 @@ function Row({ pr, depth, onOpen }: { pr: PullRequestRow; depth: number; onOpen:
           onMouseEnter={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}
           onFocus={() => { void getPullRequest(pr.repo.id, pr.number).catch(() => {}); }}>
           <span className="pr-main">
-            <span className="pr-title br">{pr.headBranch}</span>
+            <span className="pr-title br">{pr.headBranch}<PrNumber n={pr.number} /></span>
             <span className="pr-meta">{pr.author} · {pr.state === "open" ? waited(pr.waitingHours) : `${pr.state === "merged" ? "מוזגה" : "נסגרה"} ${fmtDay(pr.closedAt ?? pr.updatedAt)}`} · {pr.changedFiles} קבצים · אל <span className="ob-code">{pr.baseBranch}</span></span>
             <span className="pr-flags">
               {pr.state === "merged" && <Pill tone="healthy">מוזגה</Pill>}
