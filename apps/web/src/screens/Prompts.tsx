@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getPrompts, updatePromptTemplate, type PromptTemplate } from "../api.ts";
-import { PageHead } from "../ui.tsx";
+import { CardTitle, PageHead } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 /**
  * The system's own prompt library — every DCC-driven Claude call should
@@ -50,7 +51,7 @@ function PromptCard({ p, onSaved }: { p: PromptTemplate; onSaved: () => void }) 
     <div className="panel" style={{ marginBottom: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
         <div>
-          <p className="card-title" style={{ margin: 0 }}>{p.title}</p>
+          <p className="card-title" style={{ margin: 0 }}>{p.title}<Info k="prompt_template" /></p>
           <p style={{ fontSize: 11, fontFamily: "var(--mono)", color: "var(--ink-400)", direction: "ltr", textAlign: "left", marginTop: 2 }}>{p.key}</p>
         </div>
         {!editing && <button className="btn btn-secondary btn-sm" onClick={open}>ערוך</button>}
@@ -60,22 +61,22 @@ function PromptCard({ p, onSaved }: { p: PromptTemplate; onSaved: () => void }) 
       {editing ? (
         <>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>שם</label>
+            {/* no-info: the prompt's own name */}<label>שם</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} />
           </div>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>תיאור קצר (מוצג כאן, לא נשלח ל-Claude)</label>
+            {/* no-info: the label already says what it is and where it goes */}<label>תיאור קצר (מוצג כאן, לא נשלח ל-Claude)</label>
             <input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="מתי ואיך הפרומפט הזה רץ" />
           </div>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>מודל ברירת מחדל</label>
+            <label>מודל ברירת מחדל<Info k="prompt_default_model" /></label>
             <select value={model} onChange={(e) => setModel(e.target.value)}>
               {MODEL_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
             <span className="hint" style={{ fontSize: 11, color: "var(--ink-400)" }}>אפשר לדרוס בזמן ההרצה עצמה.</span>
           </div>
           <div className="field" style={{ marginBottom: 12 }}>
-            <label>גוף הפרומפט</label>
+            <label>גוף הפרומפט<Info k="prompt_body" /></label>
             <textarea
               value={body} onChange={(e) => setBody(e.target.value)} rows={22}
               style={{ fontFamily: "var(--mono)", fontSize: 12, lineHeight: 1.6, direction: "ltr", textAlign: "left" }}
@@ -85,7 +86,7 @@ function PromptCard({ p, onSaved }: { p: PromptTemplate; onSaved: () => void }) 
             </span>
           </div>
           <div className="field" style={{ marginBottom: 12 }}>
-            <label>תרגום לעברית (לתצוגה מקדימה בלבד — לא נשלח ל-Claude)</label>
+            {/* no-info: the label already says what it is and where it goes */}<label>תרגום לעברית (לתצוגה מקדימה בלבד — לא נשלח ל-Claude)</label>
             <textarea
               value={bodyHe} onChange={(e) => setBodyHe(e.target.value)} rows={22}
               style={{ fontSize: 12, lineHeight: 1.6 }}
@@ -100,11 +101,11 @@ function PromptCard({ p, onSaved }: { p: PromptTemplate; onSaved: () => void }) 
       ) : (
         <>
           <div className="stat-line">
-            <span className="l">מודל ברירת מחדל</span>
+            <span className="l">מודל ברירת מחדל<Info k="prompt_default_model" /></span>
             <span>{MODEL_OPTIONS.find((o) => o.value === (p.defaultModel ?? ""))?.label ?? p.defaultModel}</span>
           </div>
           <div className="stat-line">
-            <span className="l">עודכן</span>
+            {/* no-info: when this prompt was last edited */}<span className="l">עודכן</span>
             <span>{new Date(p.updatedAt).toLocaleString("he-IL")}</span>
           </div>
         </>
@@ -128,13 +129,13 @@ export function Prompts() {
 
   return (
     <>
-      <PageHead title="פרומפטים" sub="ספריית הפרומפטים של המערכת — כל קריאה ל-Claude מ-DCC בנויה מתבנית כאן, לא ממחרוזת קבועה בקוד, לפי הקטגוריה שבה היא רצה ב-DCC." />
+      <PageHead info="page_prompts" title="פרומפטים" sub="ספריית הפרומפטים של המערכת — כל קריאה ל-Claude מ-DCC בנויה מתבנית כאן, לא ממחרוזת קבועה בקוד, לפי הקטגוריה שבה היא רצה ב-DCC." />
       {loading && <div className="spin">טוען…</div>}
       {empty && <div className="empty">אין עדיין פרומפטים בספרייה.</div>}
 
       {Array.from(categories.entries()).map(([cat, list]) => (
         <section key={cat} style={{ marginBottom: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{cat}</h3>
+          <CardTitle as="h3" info="prompt_category" style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{cat}</CardTitle>
           {list.map((p) => <PromptCard key={p.id} p={p} onSaved={reload} />)}
         </section>
       ))}

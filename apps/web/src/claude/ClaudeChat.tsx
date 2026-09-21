@@ -5,6 +5,7 @@ import { CostLine } from "./CostLine.tsx";
 import { ProposalCard } from "./ProposalCard.tsx";
 import { errText } from "../screens/onboarding/labels.ts";
 import { onChatCommand, useCurrentClaudeContext, type ClaudeScreenContext } from "./context.ts";
+import { BidiText } from "./BidiText.tsx";
 
 /**
  * The one chat (claude-in-dcc §4): a floating button on every screen, a
@@ -22,7 +23,7 @@ function withCode(line: string) {
   return line.split(/(`[^`]+`|\*\*[^*]+\*\*)/g).map((part, i) => {
     if (part.startsWith("`") && part.endsWith("`")) return <bdi key={i} className="ob-chip">{part.slice(1, -1)}</bdi>;
     if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
-    return part;
+    return <BidiText key={i} text={part} />;
   });
 }
 function Text({ text }: { text: string }) {

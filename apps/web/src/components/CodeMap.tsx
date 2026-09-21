@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { openFolder, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapPlace } from "../api.ts";
+import { Info } from "../claude/Info.tsx";
 
 /**
  * The code map — the one drawing DCC uses wherever git is involved: the
@@ -338,7 +339,7 @@ export function CodeMapPanel({ map, title = "מצב הקוד", legend = true }: 
   if (map?.problem) {
     return (
       <div className="cm">
-        <div className="cm-t">{title}</div>
+        <div className="cm-t">{title}<Info k="code_map" /></div>
         <div className="ob-note warn">{map.problem.text}</div>
         {map.problem.folder && <FolderBlock folder={map.problem.folder} label="התיקייה שנבדקה" />}
       </div>
@@ -348,7 +349,7 @@ export function CodeMapPanel({ map, title = "מצב הקוד", legend = true }: 
   const height = D.firstLaneY + (map.lanes.length - 1) * D.laneGap + 78;
   return (
     <div className="cm" onClick={() => setPick(null)}>
-      <div className="cm-t">{title} <span className="cm-hint">· לחצו על נקודה או על קו לפרטים</span></div>
+      <div className="cm-t">{title}<Info k="code_map" /> <span className="cm-hint">· לחצו על נקודה או על קו לפרטים</span></div>
       <div className="cm-wrap">
         <CodeMapDrawing map={map} picked={pick?.id ?? null}
           onPick={(id, node, x, y) => setPick((cur) => (cur?.id === id ? null : { id, node, xPct: (x / D.width) * 100, yPct: (y / height) * 100 }))} />

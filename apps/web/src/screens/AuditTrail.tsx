@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAudit, type AuditPage } from "../api.ts";
 import { ICONS, Icon, PageHead } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 const ACTOR_IC: Record<string, string> = { user: "🧑", delegated: "🤖", system: "⚙️" };
 const actorLabel = (a: { kind: string; triggeredBy?: string }) =>
@@ -46,7 +47,7 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_audit_trail"
         title="Audit Trail"
         sub="Every decision, draft, approval, and cost — in order, nothing hidden."
         actions={<button className="btn btn-secondary btn-sm"><Icon d={ICONS.export} size={13} /> Export</button>}
@@ -54,7 +55,7 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
 
       <div className="filter-bar">
         <div className="field">
-          <label>Actor</label>
+          <label>Actor<Info k="audit_actor" /></label>
           <select value={q.actorKind} onChange={(e) => set("actorKind", e.target.value)}>
             <option value="">All actors</option>
             <option value="user">People</option>
@@ -63,14 +64,15 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
           </select>
         </div>
         <div className="field">
-          <label>Action</label>
+          <label>Action<Info k="audit_action" /></label>
           <select value={q.type} onChange={(e) => set("type", e.target.value)}>
             <option value="">All actions</option>
             {["note.added", "gap.proposed", "gap.verified", "tasks.proposed", "task.progressed", "blocker.raised", "blocker.answered", "claude.call", "claude.session", "policy.changed", "review.completed", "git.activity"].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
+        {/* no-info: a date range, read by every reader the same way */}
         <div className="field"><label>From</label><input type="date" value={q.from} onChange={(e) => set("from", e.target.value)} /></div>
-        <div className="field"><label>To</label><input type="date" value={q.to} onChange={(e) => set("to", e.target.value)} /></div>
+        {/* no-info: see From */}<div className="field"><label>To</label><input type="date" value={q.to} onChange={(e) => set("to", e.target.value)} /></div>
         <button className="btn btn-secondary btn-sm" onClick={() => setQ({ actorKind: "", type: "", from: "", to: "", page: "1" })}>Clear</button>
       </div>
 

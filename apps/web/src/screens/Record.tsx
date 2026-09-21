@@ -8,7 +8,8 @@ import {
   getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, verifyGap,
   type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
-import { Pill, TypeChip } from "../ui.tsx";
+import { CardTitle, Pill, TypeChip } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
 import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
 import { WorkflowTab } from "./WorkflowTab.tsx";
@@ -220,7 +221,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const gapsPanel = (
     <div style={{ marginTop: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות</p>
+        <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות<Info k="gaps_section" /></p>
         <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
           <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
             {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
@@ -247,7 +248,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       )}
 
       <div className="filter-bar" style={{ margin: "10px 0 14px" }}>
-        <div className="field" style={{ flex: 1 }}><label>הוסף פער שזיהית בעצמך</label>
+        <div className="field" style={{ flex: 1 }}>{/* no-info: the label is the instruction */}<label>הוסף פער שזיהית בעצמך</label>
           <input value={newGap.description} onChange={(e) => setNewGap({ ...newGap, description: e.target.value })} placeholder="למשל: לא מוגדר מה קורה כשלקוח עובר דרגה באמצע חודש" style={{ minWidth: 260 }} />
         </div>
         <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5 }} title="כל פער עוצר את הפירוק בין כה וכה — זה רק מסמן שכדאי לטפל בו קודם">
@@ -328,7 +329,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
       {d.gaps.filter((g) => !isOpenGap(g)).length > 0 && (
         <div style={{ marginBottom: 22 }}>
-          <p className="section-lbl" style={{ marginBottom: 8 }}>טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})</p>
+          <p className="section-lbl" style={{ marginBottom: 8 }}><Info k="gaps_handled" />טופלו ({d.gaps.filter((g) => !isOpenGap(g)).length})</p>
           <div className="rowlist">
             {d.gaps.filter((g) => !isOpenGap(g)).map((g) => {
               const open = expandedClosed.has(g.id);
@@ -363,15 +364,15 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </div>
       )}
 
-      <p className="section-lbl">חוסמים (Blockers)</p>
+      <p className="section-lbl">חוסמים (Blockers)<Info k="blockers_section" /></p>
       <p style={{ fontSize: 11.5, color: "var(--ink-400)", marginTop: -6, marginBottom: 10 }}>שאלה פתוחה שעוצרת את העבודה עד שמישהו עונה — למשל החלטה שצריך מגורם אחר.</p>
       <div className="filter-bar" style={{ marginBottom: 14 }}>
-        <div className="field"><label>סוג</label>
+        <div className="field">{/* no-info: the options below name themselves */}<label>סוג</label>
           <select value={newBlk.questionType} onChange={(e) => setNewBlk({ ...newBlk, questionType: e.target.value })}>
             <option value="unclear_requirement">דרישה לא ברורה</option><option value="missing_access">חסרה גישה</option><option value="budget_exceeded">חריגת תקציב</option>
           </select>
         </div>
-        <div className="field" style={{ flex: 1 }}><label>השאלה</label>
+        <div className="field" style={{ flex: 1 }}>{/* no-info: the field is the question being added */}<label>השאלה</label>
           <input value={newBlk.question} onChange={(e) => setNewBlk({ ...newBlk, question: e.target.value })} placeholder="מה חוסם ומה צריך כדי להמשיך" style={{ minWidth: 260 }} />
         </div>
         <button className="btn btn-primary btn-sm" onClick={async () => { if (!newBlk.question.trim()) return; await post(`/workitems/${wi.id}/blockers`, { questionType: newBlk.questionType, question: newBlk.question.trim() }); setNewBlk({ questionType: "unclear_requirement", question: "" }); reload(); }}>הוסף חוסם</button>
@@ -393,7 +394,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
-          <h1>{wi.title}</h1>
+          <CardTitle as="h1" info="page_requirement">{wi.title}</CardTitle>
           <TypeChip type={wi.type} />
           {wi.key && <span style={{ fontFamily: "var(--mono)", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
@@ -434,23 +435,23 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 20, marginBottom: 20 }}>
             <div className="ov-card" style={{ padding: "16px 18px" }}>
               <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
-                <div className="ov-metric"><div className="lbl">Phase</div><div className="val">{wi.phase}</div></div>
-                <div className="ov-metric"><div className="lbl">Priority</div><div className="val">{wi.priority}</div></div>
-                <div className="ov-metric"><div className="lbl">Risk</div><div className="val">{wi.risk}</div></div>
-                <div className="ov-metric"><div className="lbl">Executor</div><div className="val">{wi.executor}</div></div>
-                <div className="ov-metric"><div className="lbl">AI budget</div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
+                <div className="ov-metric"><div className="lbl">Phase<Info k="phase" /></div><div className="val">{wi.phase}</div></div>
+                <div className="ov-metric"><div className="lbl">Priority<Info k="priority" /></div><div className="val">{wi.priority}</div></div>
+                <div className="ov-metric"><div className="lbl">Risk<Info k="risk" /></div><div className="val">{wi.risk}</div></div>
+                <div className="ov-metric"><div className="lbl">Executor<Info k="executor" /></div><div className="val">{wi.executor}</div></div>
+                <div className="ov-metric"><div className="lbl">AI budget<Info k="ai_budget" /></div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
                 <div className="ov-metric" style={{ cursor: "pointer" }}
                      title={cost ? `${cost.runCount} הרצות · ${cost.totalInputTokens + cost.totalOutputTokens} tokens — לחץ לפירוט` : undefined}
                      onClick={openCostDetail}>
-                  <div className="lbl">עלות AI בפועל 🔍</div>
+                  <div className="lbl">עלות AI בפועל 🔍<Info k="ai_cost" /></div>
                   <div className="val">{cost ? `$${cost.totalUsd.toFixed(2)}` : "—"}</div>
                 </div>
-                <div className="ov-metric"><div className="lbl">TFS</div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
+                <div className="ov-metric"><div className="lbl">TFS<Info k="tfs_tasks" /></div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{progressPct}%</span>
                 <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
-                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks</span>
+                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks<Info k="progress" /></span>
               </div>
             </div>
 
@@ -522,7 +523,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           </div>
 
           <div className="section">
-            <p className="section-lbl">Context Brief — what the next Claude session loads</p>
+            <p className="section-lbl">Context Brief — what the next Claude session loads<Info k="context_brief" /></p>
             <div className="panel"><pre style={{ margin: 0, whiteSpace: "pre-wrap", wordBreak: "break-word", fontFamily: "ui-monospace, monospace", fontSize: 11.5, lineHeight: 1.6, color: "var(--ink-700)" }}>{brief || "—"}</pre></div>
           </div>
         </div>
@@ -581,7 +582,7 @@ function CallsModal({ rows, loading, summary, nav, onClose }: {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px", zIndex: 100 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(980px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <h2 style={{ fontSize: 17, fontWeight: 650 }}>פירוט עלות AI</h2>
+          <CardTitle as="h2" info="ai_cost" style={{ fontSize: 17, fontWeight: 650 }}>פירוט עלות AI</CardTitle>
           <a onClick={onClose} style={{ cursor: "pointer", fontSize: 15, color: "var(--ink-500)" }}>✕</a>
         </div>
         <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>כל קריאה לקלוד על הדרישה הזו — מיומן הקריאות, כמו במרכז הבקרה. לחיצה על שורה פותחת את הפרטים.</p>
@@ -608,7 +609,7 @@ function CorrectNote({ ev, workitemId, onClose, onDone }: { ev: EventRow; workit
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 16px", zIndex: 100 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(520px, 100%)", padding: "22px 24px" }}>
-        <h2 style={{ fontSize: 17, fontWeight: 650, marginBottom: 12 }}>תיקון הערה</h2>
+        <CardTitle as="h2" info="note_correction" style={{ fontSize: 17, fontWeight: 650, marginBottom: 12 }}>תיקון הערה</CardTitle>
         <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 10 }}>ההערה המקורית תישאר ב-timeline מסומנת "תוקן". זו רשומה חדשה שמחליפה אותה.</p>
         <textarea value={text} onChange={(e) => setText(e.target.value)} style={{ width: "100%", minHeight: 110 }} />
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>

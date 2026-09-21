@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getDashboard, REQ_TYPE_HE, type Dashboard as D } from "../api.ts";
-import { ICONS, Icon, initials } from "../ui.tsx";
+import { CardTitle, ICONS, Icon, PageHead, initials } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { NewRequirement } from "../forms.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 
@@ -39,19 +40,20 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <div className="page-head">
-        <div className="titles">
-          <h1>לוח בקרה</h1>
-          <p>ברוך הבא למערכת ניהול הפרויקטים</p>
-        </div>
-        <div className="head-actions">
-          <div className="search-field">
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{ICONS.search}</svg>
-            חיפוש…
-          </div>
-          <button className="btn btn-primary" onClick={() => setModal("req")}><Icon d={ICONS.plus} size={14} /> הוספת דרישה</button>
-        </div>
-      </div>
+      <PageHead
+        info="page_dashboard"
+        title="לוח בקרה"
+        sub="ברוך הבא למערכת ניהול הפרויקטים"
+        actions={
+          <>
+            <div className="search-field">
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{ICONS.search}</svg>
+              חיפוש…
+            </div>
+            <button className="btn btn-primary" onClick={() => setModal("req")}><Icon d={ICONS.plus} size={14} /> הוספת דרישה</button>
+          </>
+        }
+      />
 
       {modal === "req" && <NewRequirement onClose={() => setModal(null)} onDone={(id) => { setModal(null); if (id) nav(`#/wi/${id}`); else reload(); }} />}
 
@@ -63,16 +65,16 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
           <div>
             {/* ---- stat tiles ---- */}
             <div className="stat-row">
-              <Stat ic={ICONS.folder} tone="accent" label="דרישות-על פעילות" num={d.stats.initiatives} sub={d.stats.initiativesDelta ? `+${d.stats.initiativesDelta} החודש` : "ללא שינוי"} link="כל הדרישות" onLink={() => nav("#/requirements")} />
-              <Stat ic={ICONS.list} tone="healthy" label="דרישות פתוחות" num={d.stats.openItems} sub={d.stats.itemsDelta ? `+${d.stats.itemsDelta} החודש` : "ללא שינוי"} link="כל הדרישות" onLink={() => nav("#/work")} />
-              <Stat ic={ICONS.triangle} tone="warning" warn label="דרישות חסומות" num={d.stats.blockedItems} sub="לטיפול מיידי" link="חסימות" onLink={() => nav("#/work?filter=blocked")} />
-              <Stat ic={ICONS.slash} tone="ai" label="עלות AI החודש" num={money(d.stats.aiCostUsd)} sub={`${d.stats.aiBudgetPct}% מהתקציב`} warn={d.stats.aiBudgetPct >= 80} link="תקציבים" onLink={() => nav("#/budgets")} />
+              <Stat info="initiatives" ic={ICONS.folder} tone="accent" label="דרישות-על פעילות" num={d.stats.initiatives} sub={d.stats.initiativesDelta ? `+${d.stats.initiativesDelta} החודש` : "ללא שינוי"} link="כל הדרישות" onLink={() => nav("#/requirements")} />
+              <Stat info="open_requirements" ic={ICONS.list} tone="healthy" label="דרישות פתוחות" num={d.stats.openItems} sub={d.stats.itemsDelta ? `+${d.stats.itemsDelta} החודש` : "ללא שינוי"} link="כל הדרישות" onLink={() => nav("#/work")} />
+              <Stat info="blocked" ic={ICONS.triangle} tone="warning" warn label="דרישות חסומות" num={d.stats.blockedItems} sub="לטיפול מיידי" link="חסימות" onLink={() => nav("#/work?filter=blocked")} />
+              <Stat info="ai_cost_month" ic={ICONS.slash} tone="ai" label="עלות AI החודש" num={money(d.stats.aiCostUsd)} sub={`${d.stats.aiBudgetPct}% מהתקציב`} warn={d.stats.aiBudgetPct >= 80} link="תקציבים" onLink={() => nav("#/budgets")} />
             </div>
 
             {/* ---- recent top-level requirements ---- */}
             <div className="section">
               <div className="section-head">
-                <p className="section-lbl" style={{ margin: 0 }}>דרישות-על אחרונות</p>
+                <p className="section-lbl" style={{ margin: 0 }}>דרישות-על אחרונות<Info k="initiatives" /></p>
                 <a onClick={() => nav("#/requirements")}>צפייה בכל הדרישות ←</a>
               </div>
               <div className="proj-grid">
@@ -109,12 +111,12 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
             {/* ---- recent work items ---- */}
             <div className="section">
               <div className="section-head">
-                <p className="section-lbl" style={{ margin: 0 }}>דרישות אחרונות</p>
+                <p className="section-lbl" style={{ margin: 0 }}>דרישות אחרונות<Info k="open_requirements" /></p>
                 <a onClick={() => nav("#/work")}>צפייה בכל הדרישות ←</a>
               </div>
               <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
                 <table className="wtable">
-                  <thead><tr><th>דרישה</th><th>תחת</th><th>אחראי</th><th>עדיפות</th><th>תקציב AI</th><th>עודכן לאחרונה</th><th></th></tr></thead>
+                  {/* no-info: the first column is the thing the row is about */}<thead><tr><th>דרישה</th><th>תחת</th><th>אחראי<Info k="owner" /></th><th>עדיפות<Info k="priority" /></th><th>תקציב AI<Info k="ai_budget" /></th><th>עודכן לאחרונה<Info k="updated_at" /></th><th></th></tr></thead>
                   <tbody>
                     {d.recentWorkItems.map((w) => (
                       <tr key={w.id}>
@@ -137,14 +139,14 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
           {/* ---- right rail ---- */}
           <div className="rail">
             <div className="panel">
-              <h4>פעולות מהירות</h4>
+              <CardTitle info="quick_actions">פעולות מהירות</CardTitle>
               <div className="qa-row" onClick={() => setModal("req")}><span className="qa-ic"><Icon d={ICONS.plus} size={13} /></span>הוספת דרישה</div>
               <div className="qa-row" onClick={() => nav("#/alerts")}><span className="qa-ic"><Icon d={ICONS.bell} size={13} /></span>צפייה בהתראות</div>
               <div className="qa-row" onClick={() => nav("#/budgets")}><span className="qa-ic"><Icon d={ICONS.slash} size={13} /></span>דוח תקציב</div>
             </div>
 
             <div className="panel">
-              <h4>התראות אחרונות</h4>
+              <CardTitle info="recent_alerts">התראות אחרונות</CardTitle>
               {d.alerts.map((a) => (
                 <div className="alert-row" key={a.id}>
                   <span className={`adot ${a.severity === "critical" ? "critical" : a.severity === "warn" ? "warn" : "info"}`} />
@@ -165,14 +167,14 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
   );
 }
 
-function Stat({ ic, tone, label, num, sub, warn, link, onLink }: {
-  ic: React.ReactNode; tone: string; label: string; num: React.ReactNode; sub: string; warn?: boolean; link: string; onLink: () => void;
+function Stat({ ic, tone, label, info, num, sub, warn, link, onLink }: {
+  ic: React.ReactNode; tone: string; label: string; info: string; num: React.ReactNode; sub: string; warn?: boolean; link: string; onLink: () => void;
 }) {
   return (
     <div className="stat-tile">
       <div className="stat-top">
         <div>
-          <div className="lbl">{label}</div>
+          <div className="lbl">{label}<Info k={info} /></div>
           <div className="num">{num}</div>
           <div className={`stat-sub ${warn ? "warn" : ""}`}>{sub}</div>
         </div>

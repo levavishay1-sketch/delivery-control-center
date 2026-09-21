@@ -4,7 +4,8 @@ import {
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
   type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
-import { PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { CardTitle, PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 import { StepRail } from "./WorkflowTab.tsx";
@@ -351,7 +352,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/wi/${d.requirement.id}`)}>⬅ לדרישה {d.requirement.key ?? ""}</button>
       </div>
 
-      <PageHead
+      <PageHead info="page_task"
         title={t.intent}
         sub={`${t.kind === "check" ? "בדיקה" : "משימה"} #${t.seq} · ${t.kind === "check" ? "לא ב-TFS בנפרד" : t.adoType ?? "Task"} · ${t.appetite}`}
         actions={
@@ -419,7 +420,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
       <Card>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <h3 style={{ fontSize: 14.5, fontWeight: 650, margin: 0 }}>הפרומט שיישלח ל-Claude</h3>
+          <CardTitle as="h3" info="prompt_preview" style={{ fontSize: 14.5, fontWeight: 650, margin: 0 }}>הפרומט שיישלח ל-Claude</CardTitle>
           {promptPreview && (
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <a onClick={() => setPromptLang("he")} style={{ fontSize: 11.5, fontWeight: promptLang === "he" ? 700 : 400, cursor: "pointer", color: promptLang === "he" ? "var(--color-accent)" : "var(--ink-500)" }}>עברית</a>
@@ -439,13 +440,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         </div>
         {t.affectedPaths.length > 0 && (
           <div className="field" style={{ marginTop: 10 }}>
-            <label>קבצים צפויים</label>
+            <label>קבצים צפויים<Info k="expected_files" /></label>
             <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{t.affectedPaths.join(", ")}</div>
           </div>
         )}
         {t.compiledComponents.length > 0 && (
           <div className="field" style={{ marginTop: 10 }}>
-            <label>רכיבים מתקמפלים</label>
+            <label>רכיבים מתקמפלים<Info k="compiled_components" /></label>
             <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginTop: -2, marginBottom: 3 }}>
               הפרוייקטים שצריך לבנות ולפרוס יחד עם השינוי הזה.
             </p>
@@ -456,7 +457,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
       {delReport && (
         <Card tone={delReport.safe ? undefined : "crit"}>
-          <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 4 }}>מחיקת משימה #{t.seq}</h3>
+          <CardTitle as="h3" info="task_delete" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 4 }}>מחיקת משימה #{t.seq}</CardTitle>
           {delReport.safe ? (
             <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
               אין תת-פריטים, אין קישור ל-TFS, אין קוד שמומש, ואין משימות אחרות שנגעו באותם קבצים — מחיקה בטוחה.
@@ -469,6 +470,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasChildren && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>
                 {delReport.subtree.length - 1} תת-פריטים יימחקו יחד עם המשימה
               </label>
@@ -494,6 +496,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasAdoLinks && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>חלק כבר קיים ב-TFS</label>
               <p style={{ fontSize: 12, color: "var(--ink-600)", marginTop: 2 }}>
                 פריטי TFS <b>לא</b> יימחקו — רק יתועד עליהם ב-Discussion שהוסרו מ-DCC:{" "}
@@ -510,6 +513,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasImplementedCode && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>יש קוד מומש שטרם בוטל</label>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5, marginTop: 4 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -526,6 +530,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
           {delReport.hasCoTouch && (
             <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>
                 {delReport.coTouchedBy.length} משימות אחרות כבר נגעו באותם קבצים
               </label>
@@ -560,17 +565,18 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
       {editing && (
         <Card>
-          <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 10 }}>עריכת משימה</h3>
+          {/* a form that shows its own fields; nothing to explain beyond them */}
+          <CardTitle as="h3" info={null} style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 10 }}>עריכת משימה</CardTitle>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>כותרת / intent</label>
+            <label>כותרת / intent<Info k="task_intent" /></label>
             <textarea value={editIntent} onChange={(e) => setEditIntent(e.target.value)} rows={2} />
           </div>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>הפרומט המדוייק שיורץ ל-Claude</label>
+            <label>הפרומט המדוייק שיורץ ל-Claude<Info k="prompt_preview" /></label>
             <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} rows={5} placeholder="ריק = ישתמש ב-intent" />
           </div>
           <div className="field" style={{ marginBottom: 12 }}>
-            <label>גודל</label>
+            <label>גודל<Info k="task_size" /></label>
             <select value={editAppetite} onChange={(e) => setEditAppetite(e.target.value as "small" | "standard" | "large")}>
               <option value="small">small</option>
               <option value="standard">standard</option>
@@ -578,7 +584,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
             </select>
           </div>
           <div className="field" style={{ marginBottom: 14 }}>
-            <label>מה מאפיין את השינוי?</label>
+            {/* no-info: a question whose options explain themselves */}<label>מה מאפיין את השינוי?</label>
             <div style={{ display: "flex", gap: 14, fontSize: 12.5, marginTop: 4 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <input type="radio" style={{ minWidth: 0 }} checked={editScope === "text"} onChange={() => setEditScope("text")} />
@@ -669,12 +675,12 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
             <>
               {impl && (
                 <>
-                  <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</h3>
+                  <CardTitle as="h3" info="task_result" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</CardTitle>
                   <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
 
                   {impl.checks && impl.checks.length > 0 && (
                     <div className="field" style={{ marginBottom: 12 }}>
-                      <label>תוצאות הבדיקות ({impl.checks.filter((c) => c.passed).length}/{impl.checks.length} עברו)</label>
+                      <label>תוצאות הבדיקות ({impl.checks.filter((c) => c.passed).length}/{impl.checks.length} עברו)<Info k="check_results" /></label>
                       <div className="rowlist" style={{ marginTop: 4 }}>
                         {impl.checks.map((c) => (
                           <div key={c.seq} className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4, paddingBlock: 8 }}>
@@ -698,7 +704,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
                   {impl.filesChanged.length > 0 && (
                     <div className="field" style={{ marginBottom: 10 }}>
-                      <label>קבצים שהשתנו ({impl.filesChanged.length})</label>
+                      <label>קבצים שהשתנו ({impl.filesChanged.length})<Info k="files_changed" /></label>
                       <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
                         {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
                       </div>
@@ -706,6 +712,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                   )}
                   {impl.affectedConsumers?.length > 0 && (
                     <div className="field" style={{ marginBottom: 10 }}>
+                      {/* no-info: the sentence under it is the explanation */}
                       <label>מי עוד נוגע בקבצים האלה ({impl.affectedConsumers.length})</label>
                       <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: -2, marginBottom: 6 }}>
                         קוד אחר שמפנה/משתמש בקבצים ששונו — יש לשקול לאסוף ולעדכן אותם יחד לפריסת טסט.
@@ -727,18 +734,18 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                   )}
                   {impl.testsRun && (
                     <div className="field" style={{ marginBottom: 10 }}>
-                      <label>בדיקות</label>
+                      <label>בדיקות<Info k="check" /></label>
                       <p style={{ fontSize: 12.5 }}>{impl.testsRun}</p>
                     </div>
                   )}
                   <div className="field" style={{ marginBottom: 10 }}>
-                    <label>איפה זה יושב</label>
+                    <label>איפה זה יושב<Info k="where_it_sits" /></label>
                     <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", whiteSpace: "pre-wrap" }}>
                       {`${impl.dir}\n${impl.branch}${impl.commit ? `  (commit ${impl.commit})` : "  — ללא שינויים"}`}
                     </div>
                   </div>
                   <div className="field" style={{ marginBottom: 14 }}>
-                    <label>לבדיקה מקומית</label>
+                    <label>לבדיקה מקומית<Info k="local_check" /></label>
                     <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 8 }}>
                       <span style={{ whiteSpace: "pre-wrap" }}>{`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`}</span>
                       <a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`, "cmd")}>{copied === "cmd" ? "✓" : "העתק"}</a>
@@ -747,7 +754,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
                   {impl.followUps.length > 0 && (
                     <div style={{ marginBottom: 14 }}>
-                      <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר</p>
+                      <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר<Info k="remaining_work" /></p>
                       <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5, lineHeight: 1.7 }}>
                         {impl.followUps.map((f, i) => <li key={i}>{f}</li>)}
                       </ul>
@@ -798,7 +805,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <Pill tone="inactive">↩ בוטל</Pill>
-                    <h3 style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</h3>
+                    <CardTitle as="h3" info="task_previous_run" style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</CardTitle>
                   </div>
                   {(() => {
                     const old = run.result as unknown as ImplementResult | null;
@@ -808,6 +815,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                         <p style={{ fontSize: 12.5, color: "var(--ink-500)", whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 8 }}>{old.summary}</p>
                         {old.filesChanged.length > 0 && (
                           <div className="field">
+                            {/* no-info: a list of file names from the run that was cancelled */}
                             <label>קבצים שהשתנו אז (כבר לא קיימים ב-branch)</label>
                             <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
                               {old.filesChanged.join(", ")}
@@ -841,6 +849,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                     <a onClick={() => setReopenOpen(true)} style={{ fontSize: 12, color: "var(--ink-500)", cursor: "pointer" }}>↩ פתח מחדש</a>
                   ) : (
                     <div className="field">
+                      {/* no-info: the label says what is being asked and where the answer is kept */}
                       <label>למה לפתוח מחדש? (יישמר בהיסטוריית הדרישה)</label>
                       <textarea
                         value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2}
@@ -899,6 +908,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                   </div>
                   {overrideReasonOpen && (
                     <div className="field" style={{ marginTop: 10 }}>
+                      {/* no-info: the label says what is being asked and where the answer is kept */}
                       <label>למה לאשר בכל זאת? (יישמר בהיסטוריית הדרישה)</label>
                       <textarea
                         value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2}
@@ -927,7 +937,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       <Card>
         {d.children.filter((c) => c.kind !== "check").length > 0 && (
           <div style={{ marginTop: 12 }}>
-            <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({d.children.filter((c) => c.kind !== "check").length})</p>
+            <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({d.children.filter((c) => c.kind !== "check").length})<Info k="subtasks" /></p>
             <div className="rowlist">
               {d.children.filter((c) => c.kind !== "check").map((c) => (
                 <div className="row" key={c.id}>
@@ -942,7 +952,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         {d.children.filter((c) => c.kind === "check").length > 0 && (
           <div style={{ marginTop: 12 }}>
             <p className="section-lbl" style={{ marginBottom: 6 }}>
-              רשימת בדיקה להשלמת המשימה ({d.children.filter((c) => c.kind === "check").length})
+              רשימת בדיקה להשלמת המשימה ({d.children.filter((c) => c.kind === "check").length})<Info k="check" />
             </p>
             <p style={{ fontSize: 11, color: "var(--ov-label)", marginTop: -4, marginBottom: 6 }}>
               לא work items נפרדים ב-TFS — מתועדות ב-Discussion של המשימה הזו כשהיא מוקמת.

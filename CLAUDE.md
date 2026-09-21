@@ -188,6 +188,44 @@ after looking at what it holds — never left to accumulate. The "ענפים" ta
 a pull request shows every branch of the repository and says which of these
 applies.
 
+## Every screen explains itself — the "i"
+
+The end user is a Hebrew speaker who is not fluent in developer concepts.
+So **every screen title, card, section title, figure and non-obvious field
+carries an "i"** that opens one or two plain Hebrew sentences saying what it
+is — and, for a costly or irreversible button, what happens if you press it.
+This is the default for anything built from now on, not something to remember
+per screen: the shared components (`PageHead`, `CardTitle`, `StatTile` in
+`apps/web/src/ui.tsx`) take a **required** `info` prop, and
+`npm run audit:stale` fails a raw `h1`–`h4` inside a screen, an unknown
+concept key, or a malformed entry.
+
+The wording lives in **one** place, keyed by **concept** and never by screen
+(`packages/core/src/glossary/concepts/`), and is read only through
+`getConcept` / `allConcepts` / `glossaryFor` — the same entries the chat
+answers from, so a person gets identical words from the "i" and from Claude.
+A new screen or component is not finished without it.
+
+How to add one, how to word it, and which elements get an "i" (a button
+usually does not): the `info-hints` skill in `.claude/skills/`, and
+`openspec/changes/info-hints/design.md` for why it is built this way.
+
+Two things hold this over time, and neither depends on remembering:
+
+- **Completeness.** The `info` prop is required, so a card or a page title
+  does not compile without one; `npm run audit:stale` fails a heading written
+  by hand and a label, column or figure that names something and opens no
+  explanation; and a hook says it the moment the file is saved. An element
+  that genuinely needs none opts out with `{/* no-info: why */}` above it —
+  the audit counts those, so an opt-out cannot quietly become the norm.
+- **Staying true.** `npm run info:drift` lists the explanations that sit on
+  the lines a change touched, and asks the one question a check cannot answer:
+  did the meaning change? **Run it before opening a pull request that touches
+  a screen**, and fix a wording that no longer matches in the same change. The
+  slower signal is in the קלוד screen: a question that keeps coming back about
+  an element that already has an "i" is marked there, because then the hint is
+  the suspect, not the screen.
+
 ## Before a large task — the model and effort box
 
 Before starting a **large** task, do not begin the work: invoke the

@@ -214,8 +214,9 @@ export type ConversationView = {
   status: string; continuedFrom: string | null; continuesAs: string | null; createdBy: string; createdByName: string | null;
   lastMessageAt: string; createdAt: string; retainUntil: string | null; messageCount: number; costUsd: number; calls: number; lastText: string | null;
 };
-export type GlossaryEntry = { key: string; title: string; aliases?: string[]; explain: string; press?: string; kind: "button" | "term" | "field" };
-export type ScreenGlossary = { screen: string; about: string; entries: GlossaryEntry[] };
+/** One explained concept — the same entry the "i" opens and the chat answers with (packages/core/src/glossary). */
+export type Concept = { key: string; title: string; aliases?: string[]; explain: string; press?: string; kind: "button" | "term" | "field" | "section" };
+export type ScreenGlossary = { screen: string; about: string; entries: Concept[] };
 export type ChatOpen = { topic: { key: string; kind: string; id: string | null; title: string; screen: string }; conversation: ConversationView | null; messages: ChatMessage[]; glossary: ScreenGlossary | null; suggestions: string[] };
 export type ChatAnswer = { conversation: ConversationView; messages: ChatMessage[]; rolledOver: boolean; suggestions: string[] };
 export const openChat = (body: { topic: TopicRef; context?: ChatContext }) => post<ChatOpen>("/claude/chat/open", body);
@@ -223,7 +224,7 @@ export const askChat = (body: { topic: TopicRef; context?: ChatContext; question
 export const markHelpful = (messageId: string, helpful: boolean, note?: string) => post<{ helpful: boolean }>(`/claude/messages/${messageId}/helpful`, { helpful, note });
 export const getConversations = (q: { clientId?: string; userId?: string; limit?: number } = {}) => get<{ conversations: ConversationView[] }>(`/claude/conversations${qs(q as CenterQuery)}`);
 export const getConversation = (id: string) => get<{ conversation: ConversationView; messages: ChatMessage[]; topic: TopicRef; suggestions: string[]; glossary: ScreenGlossary | null }>(`/claude/conversations/${id}`);
-export const getGlossary = (screen: string) => get<ScreenGlossary>(`/claude/glossary/${screen}`);
+export const getConcepts = () => get<{ concepts: Concept[] }>("/claude/glossary");
 /* actions through the chat (claude-in-dcc §5): a proposal is a message; running it is the person's click */
 export type ProposalPayload = {
   key: string; title: string; describe: string; params: Record<string, unknown>; consequential: boolean;
@@ -246,6 +247,8 @@ export type InsightCluster = {
   count: number; firstAskedAt: string; lastAskedAt: string; aboveThreshold: boolean;
   finding: string | null; recommendation: string | null; status: "new" | "open" | "task_opened" | "dismissed";
   workitemId: string | null; analysedCount: number | null; analysedAt: string | null;
+  /** The element whose "i" the question is about, when it names one. */
+  concept: { key: string; title: string; explain: string } | null;
 };
 export type InsightCallRow = {
   id: string; startedAt: string; clientName: string; userName: string; screen: string | null; capability: string; label: string;

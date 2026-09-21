@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { deleteConnection, deleteRepo, getConnections, getRepos } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { ConnectAdo, EditRepo, LinkRepo } from "../forms.tsx";
 
 export function Settings({ nav }: { nav: (h: string) => void }) {
@@ -16,7 +17,7 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead title="הגדרות" sub="חיבורים, repositories ו-model policy — לכל המערכת." />
+      <PageHead info="page_settings" title="הגדרות" sub="חיבורים, repositories ו-model policy — לכל המערכת." />
       {modal === "ado" && <ConnectAdo onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "repo" && <LinkRepo onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {editRepo && <EditRepo repo={editRepo} onClose={() => setEditRepo(null)} onDone={() => { setEditRepo(null); reload(); }} />}
@@ -24,7 +25,7 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
       <div className="settings-grid">
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p className="card-title" style={{ margin: 0 }}>חיבורי Azure DevOps</p>
+            <p className="card-title" style={{ margin: 0 }}>חיבורי Azure DevOps<Info k="ado_connection" /></p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("ado")}>+ חיבור</button>
           </div>
           {(conns ?? []).filter((c) => c.kind === "ado").map((c) => (
@@ -44,7 +45,7 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
 
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-            <p className="card-title" style={{ margin: 0 }}>Repositories</p>
+            <p className="card-title" style={{ margin: 0 }}>Repositories<Info k="repository" /></p>
             <button className="btn btn-secondary btn-sm" onClick={() => setModal("repo")}>+ חיבור</button>
           </div>
           {(repos ?? []).map((r) => (
@@ -63,7 +64,7 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
       </div>
 
       <div className="panel" style={{ marginTop: 18 }}>
-        <p className="card-title">Model policy</p>
+        <p className="card-title">Model policy<Info k="model_policy" /></p>
         <p className="card-sub">שכבת ה-global — מתוך config/model-policy.json</p>
         <div className="stat-line"><span className="l">זיהוי Gaps</span><span>sonnet → opus כשהעמימות גבוהה</span></div>
         <div className="stat-line"><span className="l">פירוק משימות</span><span>sonnet → opus כש-cross-repo</span></div>
