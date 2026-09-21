@@ -22,8 +22,8 @@ import { displayPath } from "./local-folder.ts";
 
 export type CodeMapPlace = "cloud" | "local" | "both";
 
-/** What a dot on a line means. `attention` is a change that touches the same files as ours. */
-export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
+/** What a dot on a line means. `attention` is a change that touches the same files as ours; `merge` is a merge commit on the base line. */
+export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "merge" | "branchPoint" | "pr" | "uncommitted" | "empty";
 
 export type CodeMapNode = {
   kind: CodeMapNodeKind;
@@ -72,7 +72,7 @@ export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: 
 
 /* ── what git says ────────────────────────────────────────────────── */
 
-export type CodeMapCommit = { sha: string; subject: string; author: string; at: string; files: string[]; /** The rest of the commit message, after its first line. */ body?: string };
+export type CodeMapCommit = { sha: string; subject: string; author: string; at: string; files: string[]; /** The rest of the commit message, after its first line. */ body?: string; /** A merge commit: it has more than one parent, and brings in work done on another branch. */ merge?: boolean };
 
 export type CodeMapFacts = {
   baseBranch: string;
@@ -126,17 +126,18 @@ const lines = (out: string) => out.split("\n").map((s) => s.trim()).filter(Boole
 // either one is impossible: git writes them, the text never does.
 const RS = "\x1e";
 const FS = "\x1f";
-const LOG_FORMAT = `%x1e%h%x1f%an%x1f%aI%x1f%s%x1f%b%x1f`;
+const LOG_FORMAT = `%x1e%h%x1f%an%x1f%aI%x1f%s%x1f%b%x1f%P%x1f`;
 
 function parseLog(out: string): CodeMapCommit[] {
   const commits: CodeMapCommit[] = [];
   for (const record of out.split(RS).slice(1)) {
-    const [sha, author, at, subject, body, filesText] = record.split(FS);
+    const [sha, author, at, subject, body, parents, filesText] = record.split(FS);
     if (!sha || filesText === undefined) continue;
     commits.push({
       sha: sha.trim(), author: (author ?? "").trim(), at: (at ?? "").trim(),
       subject: (subject ?? "").trim(), body: (body ?? "").trim() || undefined,
       files: filesText.split("\n").map((f) => f.trim()).filter(Boolean),
+      merge: (parents ?? "").trim().split(/\s+/).filter(Boolean).length > 1 || undefined,
     });
   }
   return commits;
@@ -236,7 +237,7 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
     url: f.repoUrl ? `${f.repoUrl}/tree/${encodeURIComponent(f.baseBranch)}` : undefined,
     detail: `הענף הראשי של הריפו — הגרסה הרשמית, שכולם עובדים ממנה. כל שינוי מתמזג אליו בסוף, ורק אז הצוות מקבל אותו.`,
   };
-  for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, "other", f.repoUrl, `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`, { onHost: true, folder: here }));
+  for (const c of f.baseBefore) base.nodes.push(nodeFrom(c, c.merge ? "merge" : "other", f.repoUrl, c.merge ? `מיזוג ב-${f.baseBranch} מלפני שהענף שלנו נפתח.` : `שינוי ב-${f.baseBranch} מלפני שהענף שלנו נפתח.`, { onHost: true, folder: here }));
   const branchAt = base.nodes.length;
   const pointDetail = `הנקודה שממנה הענף שלנו יצא. כל מה שהיה ב-${f.baseBranch} עד כאן נמצא גם אצלנו.`;
   base.nodes.push(
@@ -249,10 +250,13 @@ export function codeMapFrom(f: CodeMapFacts, opts: { branchLabel?: string } = {}
   f.baseAfter.forEach((c, i) => {
     const touching = c.files.some((x) => ourFiles.has(x));
     const newest = i === f.baseAfter.length - 1;
-    const detail = touching
-      ? `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ונוגע בקבצים שגם אנחנו שינינו.`
-      : `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ולא נוגע בקבצים שלנו.`;
-    base.nodes.push(nodeFrom(c, touching ? "attention" : newest ? "current" : "other", f.repoUrl, detail, { onHost: true, folder: here }));
+    const detail = c.merge
+      ? `מיזוג: הוא הכניס ל-${f.baseBranch} אחרי שהתחלנו עבודה שנעשתה בענף אחר.`
+      : touching
+        ? `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ונוגע בקבצים שגם אנחנו שינינו.`
+        : `נכנס ל-${f.baseBranch} אחרי שהתחלנו, ולא נוגע בקבצים שלנו.`;
+    // A merge is drawn black, like the newest dot, wherever it sits on the base line.
+    base.nodes.push(nodeFrom(c, touching ? "attention" : newest ? "current" : c.merge ? "merge" : "other", f.repoUrl, detail, { onHost: true, folder: here }));
   });
 
   if (f.behind > 0) {

@@ -21,7 +21,7 @@ const D = {
   minSpacing: 24,
   curveDx: 60,
   lead: 36,
-  radius: { other: 4, ours: 5, attention: 5, current: 7, branchPoint: 6, pr: 12, uncommitted: 6, empty: 6 },
+  radius: { other: 4, ours: 5, attention: 5, current: 7, merge: 7, branchPoint: 6, pr: 12, uncommitted: 6, empty: 6 },
   /** The dots drawn with a 2px ring, so their outer edge is one more than their radius. */
   ringed: new Set(["branchPoint", "uncommitted", "empty", "pr"]),
   color: {
@@ -71,6 +71,7 @@ function Node({ node, x, y, onPick, picked }: { node: CodeMapNode; x: number; y:
       case "ours": return <circle cx={x} cy={y} r={r} fill={D.color.ours} />;
       case "attention": return <circle cx={x} cy={y} r={r} fill={D.color.attention} />;
       case "current": return <circle cx={x} cy={y} r={r} fill={D.color.current} />;
+      case "merge": return <circle cx={x} cy={y} r={r} fill={D.color.current} />;
       case "branchPoint": return <circle cx={x} cy={y} r={r} fill={D.color.surface} stroke={D.color.ours} strokeWidth={2} />;
       case "uncommitted": return <circle cx={x} cy={y} r={r} fill={D.color.surface} stroke={D.color.attention} strokeWidth={2} strokeDasharray="3 2" />;
       case "empty": return <circle cx={x} cy={y} r={r} fill={D.color.surface} stroke={D.color.ours} strokeWidth={2} />;
@@ -102,6 +103,7 @@ const KIND_HE: Record<CodeMapNodeKind, string> = {
   ours: "שינוי שלנו",
   attention: "שינוי שנוגע בקבצים שלנו",
   current: "המצב העדכני",
+  merge: "מיזוג",
   branchPoint: "נקודת ההתחלה של הענף",
   pr: "בקשת מיזוג",
   uncommitted: "שינויים שעוד לא נשמרו",
@@ -312,7 +314,7 @@ const LEGEND: { color: string; ring?: boolean; text: string }[] = [
   { color: D.color.other, text: "שינוי של אחרים" },
   { color: D.color.ours, text: "שינוי שלנו" },
   { color: D.color.attention, text: "דורש תשומת לב" },
-  { color: D.color.current, text: "המצב העדכני" },
+  { color: D.color.current, text: "מיזוג, או המצב העדכני" },
   { color: D.color.ours, ring: true, text: "נקודת התחלה או בקשת מיזוג" },
 ];
 

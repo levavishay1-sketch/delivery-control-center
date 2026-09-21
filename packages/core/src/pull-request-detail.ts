@@ -53,7 +53,7 @@ export type PullRequestDetail = {
 
 /* ── what the host says ───────────────────────────────────────────── */
 
-type GhCommit = { sha: string; commit: { message: string; author: { name: string; date: string } } };
+type GhCommit = { sha: string; parents?: { sha: string }[]; commit: { message: string; author: { name: string; date: string } } };
 type GhFile = { filename: string; status?: string; additions: number; deletions: number; previous_filename?: string };
 type GhCompare = { ahead_by: number; behind_by: number; commits: GhCommit[]; files?: GhFile[]; merge_base_commit?: GhCommit };
 type GhReview = { state: string; body?: string; author?: { login?: string } | null; submittedAt?: string };
@@ -64,6 +64,7 @@ const subject = (message: string) => message.split("\n")[0]!.trim();
 const asCommit = (c: GhCommit, files: string[] = []): CodeMapCommit => ({
   sha: short(c.sha), subject: subject(c.commit.message), author: c.commit.author.name, at: c.commit.author.date, files,
   body: c.commit.message.split("\n").slice(1).join("\n").trim() || undefined,
+  merge: (c.parents?.length ?? 0) > 1 || undefined,
 });
 
 /* ── files, grouped the way a person reads them ───────────────────── */

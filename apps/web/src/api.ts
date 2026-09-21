@@ -555,7 +555,7 @@ export type OnboardingCost = {
   calls: ClaudeCallView[];
 };
 export type CodeMapPlace = "cloud" | "local" | "both";
-export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "branchPoint" | "pr" | "uncommitted" | "empty";
+export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "merge" | "branchPoint" | "pr" | "uncommitted" | "empty";
 export type CodeMapNode = {
   kind: CodeMapNodeKind; heading?: string; title?: string; sha?: string; subject?: string; author?: string; at?: string;
   files?: number; url?: string; detail?: string; folder?: string; message?: string;
