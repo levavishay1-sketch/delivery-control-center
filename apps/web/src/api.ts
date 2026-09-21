@@ -203,7 +203,7 @@ export const getWorkitemCalls = (id: string) => get<{ calls: ClaudeCallView[] }>
 
 /* the one chat (claude-in-dcc §4) */
 export type TopicRef = { kind: "wi" | "task" | "pr" | "run" | "app"; id?: string | null };
-export type ChatContext = { screen?: string | null; facts?: Record<string, unknown>; suggestions?: string[]; actions?: string[] };
+export type ChatContext = { screen?: string | null; facts?: Record<string, unknown>; suggestions?: string[]; actions?: string[]; place?: string | null };
 export type ChatMessage = {
   id: string; conversationId: string; role: string; kind: string; text: string; source: string;
   callId: string | null; payload: Record<string, unknown>; helpful: boolean | null; helpfulSource: string | null; createdAt: string;

@@ -25,6 +25,40 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "branches", label: "ענפים" },
 ];
 
+/** Each tab is a place the chat may take a person to; the keys are the screen map's (`@dcc/core` → `screens`). */
+const PLACE_OF_TAB: Record<Tab, string> = { overview: "pr_overview", files: "pr_files", timeline: "pr_timeline", branches: "pr_branches" };
+const FILE_STATUS: Record<string, string> = { A: "נוסף", M: "שונה", D: "נמחק", R: "הועבר", C: "הועתק" };
+
+/**
+ * What the open tab shows, in the words a person would use — the facts the
+ * chat answers from once it has come here. A tab that has not loaded yet
+ * says nothing; `ready` on the context is what holds the question back.
+ */
+function tabFacts(tab: Tab, d: Detail | null, branches: RepoBranches | null): Record<string, unknown> {
+  if (tab === "files") {
+    if (!d) return {};
+    const add = d.groups.reduce((n, g) => n + g.additions, 0);
+    const del = d.groups.reduce((n, g) => n + g.deletions, 0);
+    const rows = d.groups.flatMap((g) => g.files.map((f) => `${f.path} · ${FILE_STATUS[f.status] ?? f.status} · +${f.additions} −${f.deletions} · ${g.title}`));
+    return {
+      "כמה קבצים השתנו": d.fileCount,
+      "שורות שהשתנו": `נוספו ${add}, נמחקו ${del}`,
+      "הקבצים שהשתנו": rows.length > 80 ? [...rows.slice(0, 80), `…ועוד ${rows.length - 80} קבצים שלא נכנסו לרשימה כאן`] : rows,
+      ...(d.topics.length ? { "במה הבקשה נוגעת": d.topics.map((t) => `${t.title} — ${t.detail}`) } : {}),
+    };
+  }
+  if (tab === "timeline") return d ? { "היומן של הבקשה, לפי סדר": d.timeline.map((t) => `${fmtDate(t.at)} — ${t.text}${t.detail ? ` (${t.detail})` : ""}`) } : {};
+  if (tab === "branches") {
+    if (!branches) return {};
+    return {
+      "הענף הראשי של המאגר": branches.defaultBranch,
+      "הענפים במאגר": branches.rows.map((b) =>
+        `${b.name} · ${BRANCH_STATUS[b.status].label}${b.pr ? ` · בקשת מיזוג #${b.pr.number}` : ""} · ${b.unique} commits שאינם ב-${branches.defaultBranch} · ${b.advice.title}: ${b.advice.detail}`),
+    };
+  }
+  return {};
+}
+
 const fmtDate = (iso: string) => new Date(iso).toLocaleString("he-IL", { day: "numeric", month: "numeric", hour: "2-digit", minute: "2-digit" });
 function waited(hours: number): string {
   if (hours < 1) return "עודכן ממש עכשיו";
@@ -230,16 +264,9 @@ const BRANCH_STATUS: Record<BranchHealth["status"], { label: string; pill: strin
   merged: { label: "כבר מוזג", pill: "healthy" },
 };
 
-function Branches({ repoId }: { repoId: string }) {
-  const [data, setData] = useState<RepoBranches | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const load = useCallback(async (refresh?: boolean) => {
-    setBusy(true);
-    try { setData(await getRepoBranches(repoId, refresh)); setErr(null); } catch (e) { setErr(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
-  }, [repoId]);
-  useEffect(() => { void load(); }, [load]);
-
+/** The screen owns the fetch, so what is on this tab is also what the chat reads when it comes here to answer. */
+function Branches({ data, err, busy, reload }: { data: RepoBranches | null; err: string | null; busy: boolean; reload: (refresh?: boolean) => void }) {
+  const load = reload;
   const count = (s: BranchHealth["status"]) => data?.rows.filter((r) => r.status === s).length ?? 0;
   return (
     <>
@@ -328,14 +355,31 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
   }, [repoId, number]);
   useEffect(() => { void load(); }, [load]);
 
+  // The branches of the repository, fetched when that tab is the one open.
+  const [branches, setBranches] = useState<RepoBranches | null>(null);
+  const [branchesErr, setBranchesErr] = useState<string | null>(null);
+  const [branchesBusy, setBranchesBusy] = useState(false);
+  const loadBranches = useCallback(async (refresh?: boolean) => {
+    setBranchesBusy(true);
+    try { setBranches(await getRepoBranches(repoId, refresh)); setBranchesErr(null); } catch (e) { setBranchesErr(e instanceof Error ? e.message : String(e)); } finally { setBranchesBusy(false); }
+  }, [repoId]);
+  useEffect(() => { if (tab === "branches" && !branches) void loadBranches(); }, [tab, branches, loadBranches]);
+
   const go = (t: Tab) => nav(`#/pull-requests/${repoId}/${number}${t === "overview" ? "" : `/${t}`}`);
 
   // What the one chat knows about this screen (above the early returns — a hook).
   const h = d ?? q;
+  // Every tab is a place of its own on the chat's map (`@dcc/core/screens`):
+  // the chat comes to the tab that holds the answer, so each one hands over
+  // what it shows, and says when it is still loading.
+  const place = PLACE_OF_TAB[tab];
+  const ready = tab === "files" || tab === "timeline" ? !!d : tab === "branches" ? !!branches : true;
   useClaudeContext(h ? {
     screen: "pull_request",
+    place, ready,
     topic: { kind: "pr", id: `${repoId}/${number}`, title: `בקשת מיזוג #${number} · ${h.pr.repo.name}` },
     facts: {
+      ...tabFacts(tab, d, branches),
       "כותרת": h.pr.title, "מענף": h.pr.headBranch, "לענף": h.pr.baseBranch, "מצב": h.pr.state === "open" ? (h.pr.draft ? "פתוחה (טיוטה)" : "פתוחה") : h.pr.state === "merged" ? "מוזגה" : "נסגרה",
       "סקירה": h.pr.review === "approved" ? "מאושרת" : h.pr.review === "changes_requested" ? "התבקשו תיקונים" : "אין עדיין",
       "בדיקות": h.pr.checks === "passing" ? "עברו" : h.pr.checks === "failing" ? "נכשלו" : h.pr.checks === "running" ? "רצות" : "אין",
@@ -345,7 +389,9 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
       "הצעד הבא": `${h.nextStep.title} — ${h.nextStep.detail}`, nextStep: `${h.nextStep.title} — ${h.nextStep.detail}`,
       status: h.pr.state, blocker: h.blockers.find((b) => b.ok === false)?.title ?? null,
     },
-    suggestions: ["למה הבקשה לא עדכנית?", "אפשר למזג עכשיו?", "מה ההבדל בין ענף פרויקט לענף משימה?"],
+    suggestions: tab === "overview"
+      ? ["אילו קבצים השתנו בבקשה?", "אפשר למזג עכשיו?", "למה הבקשה לא עדכנית?"]
+      : ["אפשר למזג עכשיו?", "מה ההבדל בין ענף פרויקט לענף משימה?"],
   } : null);
 
   if (err) return <><button className="btn btn-secondary btn-sm" onClick={() => nav("#/pull-requests")}>› חזרה לרשימה</button><div className="ob-note crit" style={{ marginTop: 12 }}>{err}</div></>;
@@ -456,7 +502,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav }: { repoId: 
 
       {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
       {tab === "timeline" && (d ? <Timeline items={d.timeline} /> : <div className="panel">{loading("את היומן")}</div>)}
-      {tab === "branches" && <Branches repoId={repoId} />}
+      {tab === "branches" && <Branches data={branches} err={branchesErr} busy={branchesBusy} reload={(refresh) => void loadBranches(refresh)} />}
     </div>
   );
 }
