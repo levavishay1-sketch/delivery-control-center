@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Info } from "../claude/Info.tsx";
+import { CodeLine } from "./Code.tsx";
+import { langOf } from "./code.ts";
 
 /**
  * A file before and after, side by side, with the changes marked
@@ -113,18 +115,26 @@ function fold(rows: Row[]): Chunk[] {
   return chunks;
 }
 
-function Text({ c }: { c: NonNullable<Cell> }) {
-  if (!c.part || c.part[0] === c.part[1]) return <>{c.text || " "}</>;
-  return <>{c.text.slice(0, c.part[0])}<mark>{c.text.slice(c.part[0], c.part[1])}</mark>{c.text.slice(c.part[1])}</>;
+/** Coloured like an editor; where only part of the line changed, that part stays marked on top of the colours. */
+function Text({ c, lang }: { c: NonNullable<Cell>; lang: string }) {
+  if (!c.part || c.part[0] === c.part[1]) return <CodeLine text={c.text} lang={lang} />;
+  return (
+    <>
+      <CodeLine text={c.text.slice(0, c.part[0])} lang={lang} />
+      <mark><CodeLine text={c.text.slice(c.part[0], c.part[1])} lang={lang} /></mark>
+      <CodeLine text={c.text.slice(c.part[1])} lang={lang} />
+    </>
+  );
 }
 
-function Line({ c, side, kind }: { c: Cell; side: "l" | "r"; kind: Row["kind"] }) {
+function Line({ c, side, kind, lang }: { c: Cell; side: "l" | "r"; kind: Row["kind"]; lang: string }) {
   if (!c) return <div className="fc-cell empty" />;
   const tone = kind === "same" ? "" : side === "l" ? " del" : " add";
-  return <div className={`fc-cell${tone}`}><span className="fc-n">{c.n}</span><span className="fc-t"><Text c={c} /></span></div>;
+  return <div className={`fc-cell${tone}`}><span className="fc-n">{c.n}</span><span className="fc-t"><Text c={c} lang={lang} /></span></div>;
 }
 
 function Compare({ v }: { v: FileVersionsData }) {
+  const lang = useMemo(() => langOf(v.path), [v.path]);
   const rows = useMemo(() => buildRows(v.before, v.after), [v.before, v.after]);
   const chunks = useMemo(() => fold(rows), [rows]);
   const [unfolded, setUnfolded] = useState<Set<number>>(new Set());
@@ -146,8 +156,8 @@ function Compare({ v }: { v: FileVersionsData }) {
           </button>
         ) : c.rows.map((r, ri) => (
           <div className="fc-row" key={`${ci}-${ri}`}>
-            <Line c={r.left} side="l" kind={r.kind} />
-            <Line c={r.right} side="r" kind={r.kind} />
+            <Line c={r.left} side="l" kind={r.kind} lang={lang} />
+            <Line c={r.right} side="r" kind={r.kind} lang={lang} />
           </div>
         )))}
       </div>

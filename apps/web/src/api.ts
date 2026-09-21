@@ -622,7 +622,7 @@ export const getPullRequestFile =(repoId: string, number: number, path: string) 
 
 /** What the two sides wrote where they disagree, and the decision that settles it. */
 export type ConflictSegment = { kind: "text"; text: string } | { kind: "conflict"; ours: string; theirs: string };
-export type ConflictFileContent = { path: string; content: string; segments: ConflictSegment[]; conflicts: number; resolvable: boolean; why?: string };
+export type ConflictFileContent = { path: string; content: string; segments: ConflictSegment[]; conflicts: number; resolvable: boolean; why?: string; oursFile: string; theirsFile: string };
 export type ConflictContent = { head: string; base: string; headSha: string; baseSha: string; files: ConflictFileContent[]; needsCommandLine: boolean };
 export const getPullRequestConflict = (repoId: string, number: number) =>
   get<ConflictContent>(`/repos/${repoId}/pull-requests/${number}/conflict`);

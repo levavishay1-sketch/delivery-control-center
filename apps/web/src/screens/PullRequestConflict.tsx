@@ -1,23 +1,47 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getPullRequestConflict, resolvePullRequestConflict, type ConflictContent, type ConflictFileContent } from "../api.ts";
 import { CardTitle } from "../ui.tsx";
+import { CodeBlock } from "../components/Code.tsx";
+import { langOf } from "../components/code.ts";
 import { Info } from "../claude/Info.tsx";
 import { errText } from "./onboarding/labels.ts";
 
 /**
- * Deciding a conflict, in DCC (`openspec/changes/pull-request-center`).
+ * Deciding a conflict, laid out the way an editor's merge view is
+ * (`openspec/changes/pull-request-center`): the two files in full at the top,
+ * each with its own conflicting stretches marked inside it, and the result
+ * underneath. A person sees the conflict where it lives — in the file, with
+ * the code around it — and not as a fragment lifted out of it.
  *
- * GitHub's own web editor refuses this conflict — checked against this
- * repository's request #21: "These conflicts are too complex to resolve in
- * the web editor. Use the command line." So this screen is what a person has
- * instead of a terminal: the two versions side by side, a choice per place,
- * and one merge commit pushed to the request's branch in their name.
- *
- * Nothing here decides for them, and nothing is written until they press the
- * last button, which says exactly what it will do.
+ * GitHub's web editor refuses this conflict outright ("too complex… use the
+ * command line", checked against this repository's request #21), so this is
+ * what a person has instead of a terminal. Nothing is written until the last
+ * button, which says exactly what it will do.
  */
 
 type Choice = "ours" | "theirs" | "both";
+type Mark = { from: number; to: number; tone: "ours" | "theirs" };
+
+const lines = (s: string) => s.split("\n");
+
+/** Where each conflicting stretch sits inside one side's own file, found by matching its lines in order. */
+function marksIn(file: string, pieces: string[], tone: "ours" | "theirs"): Mark[] {
+  const all = lines(file);
+  const out: Mark[] = [];
+  let at = 0;
+  for (const piece of pieces) {
+    const want = lines(piece);
+    if (!piece.length) { out.push({ from: Math.min(at, all.length - 1), to: Math.min(at, all.length - 1), tone }); continue; }
+    let found = -1;
+    for (let i = at; i + want.length <= all.length; i++) {
+      if (want.every((w, k) => all[i + k] === w)) { found = i; break; }
+    }
+    if (found === -1) { out.push({ from: -1, to: -1, tone }); continue; }
+    out.push({ from: found, to: found + want.length, tone });
+    at = found + want.length;
+  }
+  return out;
+}
 
 const joinChoice = (c: Choice, ours: string, theirs: string) =>
   c === "ours" ? ours : c === "theirs" ? theirs : [ours, theirs].filter((s) => s.length).join("\n");
@@ -33,58 +57,87 @@ function compose(file: ConflictFileContent, choices: (Choice | null)[]): string 
   }).join("\n");
 }
 
-function Side({ title, tone, text }: { title: string; tone: "ours" | "theirs"; text: string }) {
+function Pane({ lang, tone, file, marks, active, onMark, note }: {
+  lang: string; tone: "ours" | "theirs"; file: string; marks: Mark[]; active: number; onMark: (i: number) => void; note: string;
+}) {
   return (
-    <div className="cf-side">
-      <div className={`h ${tone}`}>{title}</div>
-      <pre dir="ltr">{text || "(שורות ריקות)"}</pre>
+    <div className="cf-pane">
+      <div className={`h ${tone}`}>{note}</div>
+      <CodeBlock text={file} lang={lang} marks={marks.filter((m) => m.from >= 0)} activeMark={active} onMark={onMark} />
     </div>
   );
 }
 
-function FileEditor({ file, choices, manual, onChoose, onManual }: {
+function FileEditor({ file, choices, manual, approved, active, setActive, onChoose, onManual, onApprove }: {
   file: ConflictFileContent;
   choices: (Choice | null)[];
   manual: string | null;
+  approved: boolean;
+  active: number;
+  setActive: (i: number) => void;
   onChoose: (i: number, c: Choice) => void;
   onManual: (text: string | null) => void;
+  onApprove: () => void;
 }) {
+  const lang = langOf(file.path);
+  const places = useMemo(() => file.segments.filter((s) => s.kind === "conflict") as { kind: "conflict"; ours: string; theirs: string }[], [file]);
+  const ourMarks = useMemo(() => marksIn(file.oursFile, places.map((p) => p.ours), "ours"), [file, places]);
+  const theirMarks = useMemo(() => marksIn(file.theirsFile, places.map((p) => p.theirs), "theirs"), [file, places]);
+  const result = manual ?? compose(file, choices);
+
   if (!file.resolvable) {
     return <div className="ob-note warn" style={{ marginTop: 10 }}>{file.why ?? "את הקונפליקט בקובץ הזה אי אפשר להכריע כאן."} הכריעו אותו מהטרמינל, בעותק שלכם.</div>;
   }
-  const places = file.segments.filter((s) => s.kind === "conflict");
+
   return (
     <>
-      {manual === null && places.map((s, i) => {
-        if (s.kind !== "conflict") return null;
-        const c = choices[i] ?? null;
-        return (
-          <div className="cf-place" key={i}>
-            <div className="cf-num">מקום {i + 1} מתוך {places.length}{c ? " · הוכרע" : ""}</div>
-            <div className="cf-sides">
-              <Side title="הענף שלכם" tone="ours" text={s.ours} />
-              <Side title="מה שנוסף ביעד" tone="theirs" text={s.theirs} />
-            </div>
-            <div className="cf-acts">
-              <span className="ob-sub">מה נשאר?</span>
-              <button type="button" className={`chip${c === "ours" ? " on" : ""}`} onClick={() => onChoose(i, "ours")}>שלי</button>
-              <button type="button" className={`chip${c === "theirs" ? " on" : ""}`} onClick={() => onChoose(i, "theirs")}>של היעד</button>
-              <button type="button" className={`chip${c === "both" ? " on" : ""}`} onClick={() => onChoose(i, "both")}>שניהם, בזה אחר זה</button>
-            </div>
+      {manual === null ? (
+        <>
+          <div className="cf-panes">
+            <Pane lang={lang} tone="ours" file={file.oursFile} marks={ourMarks} active={active} onMark={setActive} note="הענף שלכם" />
+            <Pane lang={lang} tone="theirs" file={file.theirsFile} marks={theirMarks} active={active} onMark={setActive} note="מה שנוסף ביעד" />
           </div>
-        );
-      })}
-      {manual !== null && (
-        <div className="cf-place">
-          <div className="cf-num">עריכה ידנית של כל הקובץ</div>
-          <textarea className="cf-manual" dir="ltr" spellCheck={false} value={manual} onChange={(e) => onManual(e.target.value)} rows={18} />
-          <p className="ob-sub" style={{ marginTop: 6 }}>זה מה שיישמר בקובץ, בדיוק כפי שכתוב כאן.</p>
+
+          <div className="cf-places">
+            {places.map((p, i) => (
+              <div className={`cf-place${i === active ? " on" : ""}`} key={i} onClick={() => setActive(i)}>
+                <div className="cf-num">
+                  קונפליקט {i + 1} מתוך {places.length}
+                  {ourMarks[i] && ourMarks[i]!.from >= 0 ? ` · שורה ${ourMarks[i]!.from + 1} אצלכם` : ""}
+                  {choices[i] ? " · הוכרע" : ""}
+                </div>
+                <div className="cf-acts">
+                  <span className="ob-sub">מה נשאר?</span>
+                  <button type="button" className={`chip${choices[i] === "ours" ? " on" : ""}`} onClick={() => onChoose(i, "ours")}>שלי</button>
+                  <button type="button" className={`chip${choices[i] === "theirs" ? " on" : ""}`} onClick={() => onChoose(i, "theirs")}>של היעד</button>
+                  <button type="button" className={`chip${choices[i] === "both" ? " on" : ""}`} onClick={() => onChoose(i, "both")}>שניהם, בזה אחר זה</button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="cf-result">
+            <div className="h">התוצאה — כך ייראה הקובץ אחרי השמירה<Info k="pr_conflict_result" /></div>
+            <CodeBlock text={result} lang={lang} maxHeight={320} />
+          </div>
+        </>
+      ) : (
+        <div className="cf-result">
+          <div className="h">עריכת הקובץ שלכם<Info k="pr_conflict_manual" />{approved && <span className="l">אושר</span>}</div>
+          <p className="ob-sub" style={{ margin: "6px 0 8px" }}>
+            זה הקובץ כפי שהוא בענף שלכם, פתוח לעריכה. ערכו אותו, והכניסו בעצמכם את מה שאתם רוצים לקחת מהיעד — הוא מוצג למעלה. מה שיישמר הוא בדיוק מה שכתוב כאן.
+          </p>
+          <textarea className="cf-manual" dir="ltr" spellCheck={false} value={manual} onChange={(e) => onManual(e.target.value)} rows={22} />
         </div>
       )}
-      <div className="cf-acts" style={{ marginTop: 8 }}>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => onManual(manual === null ? compose(file, choices) : null)}>
-          {manual === null ? "ערוך את הקובץ ידנית" : "חזרה לבחירה בין הצדדים"}
-        </button>
+
+      <div className="cf-acts" style={{ marginTop: 10 }}>
+        {manual === null
+          ? <button type="button" className="btn btn-secondary btn-sm" onClick={() => onManual(file.oursFile)}>ערוך את הקובץ ידנית</button>
+          : <>
+              <button type="button" className="btn btn-primary btn-sm" disabled={approved} onClick={onApprove}>{approved ? "✓ העריכה אושרה" : "אשר עריכה"}</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => onManual(null)}>בטל את העריכה וחזור לבחירה</button>
+            </>}
       </div>
     </>
   );
@@ -96,8 +149,10 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [active, setActive] = useState(0);
   const [choices, setChoices] = useState<Record<string, (Choice | null)[]>>({});
   const [manual, setManual] = useState<Record<string, string | null>>({});
+  const [approved, setApproved] = useState<Record<string, boolean>>({});
 
   const load = useCallback(async () => {
     setErr(null);
@@ -107,14 +162,17 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
       setOpen(r.files.find((f) => f.resolvable)?.path ?? r.files[0]?.path ?? null);
       setChoices(Object.fromEntries(r.files.map((f) => [f.path, Array.from({ length: f.conflicts }, () => null)])));
       setManual(Object.fromEntries(r.files.map((f) => [f.path, null])));
+      setApproved({});
+      setActive(0);
     } catch (e) { setErr(errText(e)); }
   }, [repoId, number]);
   useEffect(() => { void load(); }, [load]);
 
+  // A file is settled when every place in it was decided, or when its own text was edited and approved.
   const settled = (f: ConflictFileContent) => {
-    const m = manual[f.path];
-    if (m !== null && m !== undefined) return m.trim().length > 0;
-    return f.resolvable && (choices[f.path] ?? []).every((c) => c !== null);
+    if (!f.resolvable) return false;
+    if (manual[f.path] != null) return !!approved[f.path] && (manual[f.path] ?? "").trim().length > 0;
+    return (choices[f.path] ?? []).every((c) => c !== null);
   };
   const files = d?.files ?? [];
   const blocked = files.filter((f) => !f.resolvable);
@@ -161,21 +219,29 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
               {file && (
                 <div className="panel">
                   <CardTitle info="pr_conflict_files"><bdi dir="ltr">{file.path}</bdi></CardTitle>
-                  <p className="ob-sub" style={{ marginBottom: 8 }}>
+                  <p className="ob-sub" style={{ marginBottom: 10 }}>
                     {file.resolvable
-                      ? `בקובץ הזה ${file.conflicts === 1 ? "מקום אחד" : `${file.conflicts} מקומות`} ששני הצדדים כתבו בהם אחרת. בכל מקום בחרו מה נשאר.`
+                      ? `שני הקבצים במלואם, ובתוכם מסומן ${file.conflicts === 1 ? "המקום" : "כל מקום"} ששני הצדדים כתבו בו אחרת. לחיצה על מקום מסומן קופצת אליו.`
                       : "הקובץ הזה לא ניתן להכרעה מכאן."}
                   </p>
                   <FileEditor
                     file={file}
                     choices={choices[file.path] ?? []}
                     manual={manual[file.path] ?? null}
+                    approved={!!approved[file.path]}
+                    active={active}
+                    setActive={setActive}
                     onChoose={(i, c) => setChoices((prev) => {
                       const cur = [...(prev[file.path] ?? [])];
                       cur[i] = c;
                       return { ...prev, [file.path]: cur };
                     })}
-                    onManual={(text) => setManual((prev) => ({ ...prev, [file.path]: text }))}
+                    // Editing always un-approves: what was approved is no longer what is written.
+                    onManual={(text) => {
+                      setManual((prev) => ({ ...prev, [file.path]: text }));
+                      setApproved((prev) => ({ ...prev, [file.path]: false }));
+                    }}
+                    onApprove={() => setApproved((prev) => ({ ...prev, [file.path]: true }))}
                   />
                 </div>
               )}
@@ -186,12 +252,12 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
                 <CardTitle info="pr_conflict_files">הקבצים בקונפליקט</CardTitle>
                 {files.map((f) => (
                   <div key={f.path} className={`pr-chk go${open === f.path ? " on" : ""}`} role="button" tabIndex={0}
-                    onClick={() => setOpen(f.path)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(f.path); } }}>
+                    onClick={() => { setOpen(f.path); setActive(0); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpen(f.path); setActive(0); } }}>
                     <span className={`ic ${!f.resolvable ? "na" : settled(f) ? "yes" : "no"}`}>{!f.resolvable ? "–" : settled(f) ? "✓" : "✕"}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div className="tt ob-code" style={{ overflowWrap: "anywhere" }}>{f.path}</div>
-                      <div className="dd">{!f.resolvable ? "לא ניתן להכרעה כאן" : settled(f) ? "הוכרע" : `${f.conflicts === 1 ? "מקום אחד" : `${f.conflicts} מקומות`} להכריע`}</div>
+                      <div className="dd">{!f.resolvable ? "לא ניתן להכרעה כאן" : settled(f) ? (manual[f.path] != null ? "נערך ואושר" : "הוכרע") : `${f.conflicts === 1 ? "מקום אחד" : `${f.conflicts} מקומות`} להכריע`}</div>
                     </div>
                   </div>
                 ))}
