@@ -55,7 +55,7 @@ function BlockerRow({ b, go }: { b: PrBlocker; go?: { hint: string; onClick: () 
 
 const CLASH = "conflicts";
 
-function Files({ groups, count, url, repoId, number, conflict, startOn }: { groups: FileGroup[]; count: number; url: string; repoId: string; number: number; conflict: ConflictView | null; startOn: string | null }) {
+function Files({ groups, count, url, repoId, number, conflict, startOn, onResolve }: { groups: FileGroup[]; count: number; url: string; repoId: string; number: number; conflict: ConflictView | null; startOn: string | null; onResolve: () => void }) {
   // The files the request changes that also clash, as one more group to filter by. Their names come from the
   // conflict, their status and sizes from the request's own list, so they open before/after like any other.
   const clashPaths = new Set((conflict?.files ?? []).map((f) => f.path));
@@ -84,6 +84,14 @@ function Files({ groups, count, url, repoId, number, conflict, startOn }: { grou
           ))}
         </div>
       </div>
+      {only === CLASH && clash && (
+        <div className="pr-fhead" style={{ marginTop: -2 }}>
+          <p className="ob-sub" style={{ margin: 0, flex: 1, minWidth: 220 }}>
+            {conflict?.exact ? "בקבצים האלה שני הצדדים כתבו באותן שורות." : "אלה הקבצים ששני הצדדים שינו — הקונפליקט באחד מהם או יותר."} אפשר להכריע כאן, בלי טרמינל.
+          </p>
+          <button type="button" className="btn btn-primary btn-sm" onClick={onResolve}>פתור את הקונפליקט</button>
+        </div>
+      )}
       {shown.map((g) => (
         <div className="panel pr-grp" key={g.key}>
           <div className="gh">
@@ -482,7 +490,7 @@ export function PullRequestDetailScreen({ repoId, number, tab, nav, query = "" }
         </>
       )}
 
-      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} conflict={d.conflict} startOn={new URLSearchParams(query).get("filter")} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
+      {tab === "files" && (d ? <Files groups={d.groups} count={d.fileCount} url={pr.url} repoId={repoId} number={number} conflict={d.conflict} startOn={new URLSearchParams(query).get("filter")} onResolve={() => nav(`#/pull-requests/${repoId}/${number}/conflict`)} /> : <div className="panel">{loading("את רשימת הקבצים")}</div>)}
       {tab === "timeline" && (d ? <Timeline items={d.timeline} /> : <div className="panel">{loading("את היומן")}</div>)}
       {tab === "branches" && <Branches repoId={repoId} />}
     </div>

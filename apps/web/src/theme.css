@@ -688,6 +688,21 @@ a { color: var(--color-accent); }
 .fc-links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; margin-top: 6px; }
 .pr-file-row.click { cursor: pointer; }
 .pr-file-row.click:hover { background: var(--surface-muted); }
+/* Deciding a conflict: the two sides of one place, and the choice between them. */
+.cf-place { border: 1px solid var(--border-soft); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px; }
+.cf-num { font-size: 11.5px; color: var(--ink-500); margin-bottom: 6px; }
+.cf-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cf-side { border: 1px solid var(--border-soft); border-radius: 8px; overflow: hidden; min-width: 0; }
+.cf-side .h { font-size: 11px; font-weight: 650; padding: 4px 9px; background: var(--surface-muted); border-bottom: 1px solid var(--border-soft); }
+.cf-side .h.ours { color: var(--color-accent-dark); }
+.cf-side .h.theirs { color: var(--status-warning); }
+.cf-side pre { margin: 0; padding: 8px 9px; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; }
+.cf-acts { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.cf-acts .chip { appearance: none; font: inherit; font-size: 11.5px; border: 1px solid var(--border-hairline); background: var(--surface); border-radius: 999px; padding: 3px 11px; color: var(--ink-700); cursor: pointer; }
+.cf-acts .chip.on { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+.cf-manual { width: 100%; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }
+.pr-chk.go.on { background: var(--surface-muted); }
+
 /* A blocker that has somewhere to look: the whole row is the button, and a small arrow points the way (left, in RTL). */
 .pr-chk.go { cursor: pointer; margin-inline: -8px; padding-inline: 8px; border-radius: 8px; }
 .pr-chk.go:hover, .pr-chk.go:focus-visible { background: var(--surface-muted); outline: none; }

@@ -6,6 +6,7 @@ export { recordSession, recordGitActivity, recordNote } from "./capture.ts";
 export { openLocalFolder, FolderRefused } from "./local-folder.ts";
 export { listPullRequests, type PullRequestRow, type PullRequestList } from "./pull-requests.ts";
 export { submitReview, mergeRequest, ReviewRefused, type ReviewDecision } from "./pull-request-review.ts";
+export { pullRequestConflict, resolveConflict, ConflictError, type ConflictContent, type ConflictFileContent, type ConflictSegment } from "./pull-request-conflict.ts";
 export { repoBranches, type RepoBranches, type BranchHealth } from "./repo-branches.ts";
 export { pullRequestDetail, pullRequestFile, type FileVersions, pullRequestQuick, type PullRequestQuick, type PullRequestDetail, type Blocker, type NextStep, type FileGroup, type TimelineItem, type ConflictFile, type ConflictView } from "./pull-request-detail.ts";
 export { codeMapForTask, codeMapForWorkspace, codeMapFrom, readCodeMapFacts, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapArrow, type CodeMapPlace, type CodeMapFacts } from "./code-map.ts";

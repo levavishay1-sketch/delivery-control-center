@@ -18,6 +18,7 @@ import { Prompts } from "./screens/Prompts.tsx";
 import { Repositories } from "./screens/Repositories.tsx";
 import { PullRequests } from "./screens/PullRequests.tsx";
 import { PullRequestDetailScreen, type Tab } from "./screens/PullRequestDetail.tsx";
+import { PullRequestConflictScreen } from "./screens/PullRequestConflict.tsx";
 import { OnboardingScreen } from "./screens/onboarding/OnboardingScreen.tsx";
 import { ClaudeCenter, type CenterTab } from "./screens/ClaudeCenter.tsx";
 import { ClaudeChat } from "./claude/ClaudeChat.tsx";
@@ -68,7 +69,9 @@ export function App() {
   else if (path === "/pull-requests") screen = <PullRequests nav={nav} />;
   else if (path.startsWith("/pull-requests/")) {
     const [repoId, num, tab] = path.slice("/pull-requests/".length).split("/");
-    screen = <PullRequestDetailScreen repoId={repoId!} number={Number(num)} tab={(tab as Tab) || "overview"} nav={nav} query={hash.split("?")[1] ?? ""} />;
+    screen = tab === "conflict"
+      ? <PullRequestConflictScreen repoId={repoId!} number={Number(num)} back={() => nav(`#/pull-requests/${repoId}/${num}`)} />
+      : <PullRequestDetailScreen repoId={repoId!} number={Number(num)} tab={(tab as Tab) || "overview"} nav={nav} query={hash.split("?")[1] ?? ""} />;
   }
   else if (path.startsWith("/repo/")) screen = <OnboardingScreen id={path.slice(6)} nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;

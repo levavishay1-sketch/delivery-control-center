@@ -620,6 +620,15 @@ export const mergePullRequest = (repoId: string, number: number) =>
 export const getPullRequestFile =(repoId: string, number: number, path: string) =>
   get<FileVersionsData>(`/repos/${repoId}/pull-requests/${number}/file?${new URLSearchParams({ path })}`);
 
+/** What the two sides wrote where they disagree, and the decision that settles it. */
+export type ConflictSegment = { kind: "text"; text: string } | { kind: "conflict"; ours: string; theirs: string };
+export type ConflictFileContent = { path: string; content: string; segments: ConflictSegment[]; conflicts: number; resolvable: boolean; why?: string };
+export type ConflictContent = { head: string; base: string; headSha: string; baseSha: string; files: ConflictFileContent[]; needsCommandLine: boolean };
+export const getPullRequestConflict = (repoId: string, number: number) =>
+  get<ConflictContent>(`/repos/${repoId}/pull-requests/${number}/conflict`);
+export const resolvePullRequestConflict = (repoId: string, number: number, files: { path: string; content: string }[]) =>
+  post<{ commitSha: string; branch: string; base: string; files: number }>(`/repos/${repoId}/pull-requests/${number}/conflict/resolve`, { files });
+
 /** Every branch of a repository and what to do about it. */
 export type BranchHealth = {
   name: string; status: "default" | "merged" | "open_pr" | "work" | "stale";

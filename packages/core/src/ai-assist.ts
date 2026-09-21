@@ -1141,14 +1141,16 @@ export type ImplementResult = {
  *  argument at every space, which silently breaks any commit message
  *  with spaces (e.g. "t1: ..." becomes three separate pathspec args). */
 /** Exported for `repo-onboarding/*` — same reasoning as `ensureCheckout`. */
-export function git(args: string[], cwd: string, opts?: { timeoutMs?: number }): Promise<{ code: number; out: string }> {
+/** `env`: extra variables for this one call — `GIT_INDEX_FILE` lets plumbing build a tree
+ *  in an index of its own, so nothing is staged in the working copy somebody may be using. */
+export function git(args: string[], cwd: string, opts?: { timeoutMs?: number; env?: Record<string, string> }): Promise<{ code: number; out: string }> {
   return new Promise((res) => {
     // GIT_TERMINAL_PROMPT=0 stops git's own credential prompt from hanging
     // a headless spawn — but a credential HELPER (e.g. Git Credential
     // Manager) can still pop its own GUI/browser prompt that this process
     // can never answer, so network operations (push/fetch against a
     // remote with no cached credential) also get a hard timeout below.
-    const p = spawn("git", args, { cwd, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+    const p = spawn("git", args, { cwd, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...(opts?.env ?? {}) } });
     let out = "";
     let done = false;
     const finish = (r: { code: number; out: string }) => { if (!done) { done = true; if (killer) clearTimeout(killer); res(r); } };
