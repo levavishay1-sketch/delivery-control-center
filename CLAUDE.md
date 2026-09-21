@@ -4,7 +4,7 @@
 
 ## Working in this repo
 
-- npm workspaces: packages under `packages/*`, apps under `apps/*`, `@dcc/*` names.
+- npm workspaces: packages under `packages/*`, apps under `apps/*` (`api`, `web`, `mcp`), `@dcc/*` names.
 - Node ≥ 22, ESM, `.ts` extensions in imports (NodeNext).
 - **Run TypeScript directly with `tsx`, never raw `node`.** Any script that
   imports across workspace packages (`@dcc/core` → `@dcc/db`, etc.) resolves
@@ -47,17 +47,25 @@
 ## Commands
 
 ```bash
-npm run typecheck              # tsc -b, whole repo
+npm run typecheck              # tsc -b: db, core, api, mcp — NOT apps/web
+npx tsc -p apps/web --noEmit   # web app has its own tsconfig; vite does not type-check
 npm run db:migrate             # drizzle-kit, real Postgres
 npm run db:guards              # append-only triggers + dcc_app role
 npm run -w @dcc/db dev:reset   # wipe local PGlite
 npm run -w @dcc/db dev:setup   # apply migrations to local PGlite
 npm run -w @dcc/db dev:prove   # 9 checks: RLS wall + append-only + validation
+npm run -w @dcc/api smoke      # 8 end-to-end checks against the API (needs the DB free, see PGlite note)
+npm run -w @dcc/core prove:routing    # routing proofs
+npm run -w @dcc/core prove:retention  # chat-retention proofs
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run audit:stale            # leftovers of replaced designs, stale OpenSpec statuses
 npm run sync                   # after merges: master current, merged local branches gone, what is left
 ```
+
+There is no test runner, linter, formatter or CI. A change is verified by
+`typecheck`, `audit:stale`, and the `dev:prove` / `smoke` / `prove:*` scripts.
+`smoke` and `dev:prove` hold the PGlite directory, so stop the API first.
 
 Repository onboarding (`openspec/changes/repository-onboarding-native-init`)
 runs the real, interactive Claude Code (`/init` with `CLAUDE_CODE_NEW_INIT=1`)
@@ -252,6 +260,8 @@ are the same mechanisms DCC gives to pilot clients — wired up here too via
 client. See `hooks/README.md` for what each hook does and its caveats
 (`SessionEnd` can't block termination; hook config is snapshotted at
 session start, so edits to `.claude/settings.json` need a fresh session).
+The hooks do nothing unless `DCC_DEV_EMAIL` and `DCC_HOOK_TOKEN` are set
+(`.claude/settings.local.json` and `.claude/launch.json` carry the dev values).
 
 **Two skill directories, don't mix them.** `skills/` at the root is the
 library DCC hands to a client's repository — those call `skills/dcc.mjs`
