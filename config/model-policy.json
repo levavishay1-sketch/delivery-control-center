@@ -1,6 +1,6 @@
 {
   "$comment": "Model routing policy (architecture §6, claude-in-dcc §6.3/§8.3/§9.9). Config-as-code: this is the GLOBAL layer; client-level overrides deep-merge on top. Every call to Claude declares its capability; route() picks a tier, effort and cap from here, and the decision is written on the call's ledger row together with `version`, so a cost change can be tied to a policy edit. The router is rules, not a model. escalateOn/downgradeOn are lists: ANY entry matching triggers (keys within one entry are AND). Edited from the control center (מדיניות ושמירה), which bumps `version` and records who changed it.",
-  "version": 6,
+  "version": 7,
   "tiers": {
     "haiku": { "model": "claude-haiku-4-5-20251001", "maxUsdPerCall": 0.05 },
     "sonnet": { "model": "claude-sonnet-5", "maxUsdPerCall": 0.75 },
@@ -22,6 +22,7 @@
     "$chat_comment": "The one chat. It answers from the facts the screen hands it; step zero answers glossary and fact questions with no call at all. Haiku, no thinking, short answers. A call whose input passes maxInputTokens is refused and recorded — the sign that the delta discipline broke.",
     "chat": { "default": "haiku", "effort": "low", "maxInputTokens": 60000 },
     "chat_code_read": { "default": "sonnet", "effort": "medium" },
+    "onboarding_file_notes": { "default": "haiku", "effort": "low", "maxUsdPerCall": 0.1 },
     "conversation_summary": { "default": "haiku", "effort": "low", "maxUsdPerCall": 0.1 },
     "usage_insights": { "default": "sonnet", "effort": "medium", "maxUsdPerCall": 0.5 },
     "$interactive_comment": "A person's own Claude Code session, reported by the SessionEnd hook — recorded so the ledger is every call, never routed.",

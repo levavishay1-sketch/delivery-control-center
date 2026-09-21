@@ -20,6 +20,7 @@ export type Capability =
   | "onboarding_init"
   | "chat"
   | "chat_code_read"
+  | "onboarding_file_notes"
   | "conversation_summary"
   | "usage_insights"
   | "interactive_session";

@@ -28,6 +28,7 @@ export const CAPABILITY_HE: Record<string, string> = {
   onboarding_init: "הטמעת מאגר",
   chat: "צ'אט",
   chat_code_read: "קריאה בקוד מהצ'אט",
+  onboarding_file_notes: "הסבר לקבצים בסקירה",
   conversation_summary: "סיכום שיחה",
   usage_insights: "ניתוח שאלות",
   interactive_session: "סשן Claude Code",

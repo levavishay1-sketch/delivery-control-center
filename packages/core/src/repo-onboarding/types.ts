@@ -193,7 +193,11 @@ export type PrepareResult = {
 export type InitResult = { sessionId: string; changedFiles: number; completedBy: string; auto?: boolean };
 
 export type ChangedFile = { path: string; status: "A" | "M" | "D" | "R" | string; additions: number; deletions: number };
-export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean };
+export type ReviewResult = {
+  changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean;
+  /** The line next to each file (`file-notes.ts`), by path. `sig` says which version of the file it was written for; an empty `text` is a file the model could not explain. */
+  notes?: Record<string, { text: string; sig: string }>;
+};
 
 export type DeliverResult = {
   branch: string;

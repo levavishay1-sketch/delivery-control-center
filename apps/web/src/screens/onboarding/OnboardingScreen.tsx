@@ -3,7 +3,7 @@ import {
   approveOnboardingReview, cancelOnboardingRun, getOnboardingFile, getOnboardingRun, getOnboardingStages, getRepos, getUsers,
   listOnboardingRuns, refreshOnboardingReview, resumeOnboardingSession, runOnboardingStage, startOnboardingRun, updateOnboardingAutomation,
   updateOnboardingModelChoices,
-  type AutomationPolicy, type DeliverResult, type Effort, type InitResult, type ModelPolicy, type OnboardingRunSummary, type OnboardingRunView,
+  type AutomationPolicy, type ChangedFile, type DeliverResult, type Effort, type InitResult, type ModelPolicy, type OnboardingRunSummary, type OnboardingRunView,
   type OnboardingStage, type OnboardingStageDefinition, type OnboardingStageKey, type PrepareResult, type ReviewResult,
 } from "../../api.ts";
 import { CardTitle, PageHead, Pill } from "../../ui.tsx";
@@ -47,9 +47,9 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
     getUsers().then((r) => setUsers(Object.fromEntries(r.users.map((u) => [u.id, u.displayName])))).catch(() => {});
   }, [id, loadRuns]);
 
-  // The run moved on by itself (DCC saw `/init` finish): show the stage it moved to, not the one the person was last looking at.
+  // The run moved on by itself (DCC saw `/init` finish) or by the person's approval: show the stage it moved to, not the one the person was last looking at.
   const currentKey = view?.run.currentStageKey ?? null;
-  useEffect(() => { if (currentKey === "review") setSelected("review"); }, [currentKey]);
+  useEffect(() => { if (currentKey === "review" || currentKey === "deliver") setSelected(currentKey); }, [currentKey]);
 
   const over = useRef(false);
   const screenRef = useRef<(() => string) | null>(null);
@@ -85,7 +85,9 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
       status: RUN_STATUS_HE[view.run.status]?.label ?? view.run.status,
     },
     liveFacts: () => ({ "המסך בטרמינל עכשיו": (screenRef.current?.() ?? "").slice(-3500) }),
-    suggestions: ["מה הוא רוצה ממני עכשיו?", "מה הוא עשה עד עכשיו?", "מה ההשלכות של כל אפשרות?", "איך ממשיכים מכאן?"],
+    suggestions: view.stages.find((s) => s.stageKey === "review")?.status === "WaitingForUser"
+      ? ["האם השינויים בקבצים טובים ואפשר לאשר?", "מה כל קובץ ששונה עושה?", "האם משהו מהשינויים עלול לפגוע בפרויקט?", "מה קורה אחרי שאני מאשר?"]
+      : ["מה הוא רוצה ממני עכשיו?", "מה הוא עשה עד עכשיו?", "מה ההשלכות של כל אפשרות?", "איך ממשיכים מכאן?"],
     actions: ["send_to_session"],
   } : null);
 
@@ -175,8 +177,13 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
             onSelect={setSelected}
           />
 
-          <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} />
-          <p className="ob-sub" style={{ marginTop: 10 }}>שאלות על מה שהסשן עושה — בצ'אט של קלוד (הכפתור למטה משמאל, או Ctrl K). הוא מקבל את מה שהתחדש בסשן ואת המסך שבטרמינל.</p>
+          {/* Delivery has no conversation left to have: the session closes with it, and its steps are one button. */}
+          {sel !== "deliver" && (
+            <>
+              <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} />
+              <p className="ob-sub" style={{ marginTop: 10 }}>שאלות על מה שהסשן עושה — בצ'אט של קלוד (הכפתור למטה משמאל, או Ctrl K). הוא מקבל את מה שהתחדש בסשן ואת המסך שבטרמינל.</p>
+            </>
+          )}
           {sel === "review" && byKey.get("review")?.status === "WaitingForUser" && (
             <ReviewPanel
               view={view} stage={byKey.get("review")!} busy={busy}
@@ -256,7 +263,9 @@ function StageCard(p: StageCardProps) {
         <span className="grow" />
         {p.runnable && (
           <button className="btn btn-primary" disabled={!!p.busy} onClick={p.onRun}>
-            {p.busy === `run:${def.key}` ? "מתחיל…" : stage.status === "Failed" ? "▶ הרץ שלב שוב" : "▶ הרץ שלב"}
+            {def.key === "deliver"
+              ? (p.busy === "run:deliver" ? "מבצע…" : stage.status === "Failed" ? "COMMIT + PUSH + PR שוב" : "COMMIT + PUSH + PR")
+              : (p.busy === `run:${def.key}` ? "מתחיל…" : stage.status === "Failed" ? "▶ הרץ שלב שוב" : "▶ הרץ שלב")}
           </button>
         )}
       </div>
@@ -264,7 +273,7 @@ function StageCard(p: StageCardProps) {
       {stage.status === "Failed" && !!stage.errors.length && <div className="ob-note crit" style={{ marginBottom: 10 }}>{stage.errors.join(" · ")}</div>}
       <StageBody {...p} />
 
-      {stage.status === "Completed" && def.key !== "init" && p.next && nextStage && nextStage.status !== "Completed" && (
+      {stage.status === "Completed" && def.key !== "init" && def.key !== "review" && p.next && nextStage && nextStage.status !== "Completed" && (
         <div style={{ marginTop: 14 }}>
           <button className="btn btn-secondary btn-sm" onClick={() => p.onSelect(p.next!.key)}>המשך לשלב הבא: {shortTitle(p.next)} ›</button>
         </div>
@@ -400,6 +409,15 @@ function ReviewIntro(p: StageCardProps) {
   );
 }
 
+const NOTE_FALLBACK: Record<string, string> = { A: "נוצר בהרצה", M: "עודכן בהרצה", D: "נמחק בהרצה", R: "הועבר בהרצה" };
+
+/** The line under a file: why it was created and what it adds, what it was updated for, why it was deleted (written by the server from the diff and the session's decisions). A line written for an older version of the file is not shown. */
+function FileNote({ f, note }: { f: ChangedFile; note: { text: string; sig: string } | undefined }) {
+  const fresh = note && note.sig === `${f.status}|${f.additions}|${f.deletions}` ? note : undefined;
+  if (fresh?.text) return <div className="note">{fresh.text}</div>;
+  return <div className="note pending">{NOTE_FALLBACK[f.status] ?? "שונה בהרצה"}{fresh ? "" : " · מנסח הסבר…"}</div>;
+}
+
 /** What changed against the baseline, and the approval — under the terminal, so Claude can be talked to while reading. */
 function ReviewPanel(p: { view: OnboardingRunView; stage: OnboardingStage; busy: string | null; onRefreshReview: () => void; onApprove: () => void }) {
   const r = (p.stage.result ?? { changedFiles: [], checkedAt: "" }) as ReviewResult;
@@ -422,6 +440,7 @@ function ReviewPanel(p: { view: OnboardingRunView; stage: OnboardingStage; busy:
                 <span className="add">+{f.additions}</span>
                 <span className="del">−{f.deletions}</span>
               </button>
+              <FileNote f={f} note={r.notes?.[f.path]} />
               {open === f.path && <FileCompare key={`${f.path}|${f.status}|${f.additions}|${f.deletions}`} load={() => getOnboardingFile(p.view.run.repoId, p.view.run.id, f.path)} />}
             </div>
           ))}
