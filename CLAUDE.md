@@ -102,6 +102,11 @@ covers the commit, the push and opening the PR; **merging stays a human
 action**. If something was not checked or does not hold, Claude says so and
 does none of it.
 
+**Name a PR by its number and its branch.** Whenever Claude mentions a pull
+request to the user, it gives the number, the branch and a short title —
+"#9 (`fix/finished-task-commit-and-pr`, commit and open the PR for a
+finished task)" — never the bare number, which tells the reader nothing.
+
 ### Branch names and what happens to a branch
 
 Name: `<type>/<short-description>` — lowercase English, words joined by
