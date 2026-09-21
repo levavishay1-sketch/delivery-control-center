@@ -114,8 +114,6 @@ a { color: var(--color-accent); }
 .nav-item:hover { background: var(--color-sidebar-hover); color: #fff; }
 .nav-item[aria-current="page"] { background: var(--color-accent); color: #fff; box-shadow: 0 4px 14px -4px rgb(79 70 229 / 0.55); }
 .nav-item .ic { flex-shrink: 0; opacity: 0.92; }
-.nav-count { margin-inline-start: auto; background: rgb(255 255 255 / 0.16); color: #fff; font-size: 10.5px; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
-.nav-item[aria-current="page"] .nav-count { background: rgb(255 255 255 / 0.28); }
 .nav-group-lbl { font-size: 10px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: var(--color-sidebar-text); opacity: .6; padding: 10px 12px 2px; }
 .sidebar-spacer { flex: 1; }
 .sidebar-foot { border-top: 1px solid rgb(255 255 255 / 0.09); padding-top: 14px; display: flex; align-items: center; gap: 10px; padding-inline: 8px; }
