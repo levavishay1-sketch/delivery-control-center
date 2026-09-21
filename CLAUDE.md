@@ -125,6 +125,16 @@ client. See `hooks/README.md` for what each hook does and its caveats
 (`SessionEnd` can't block termination; hook config is snapshotted at
 session start, so edits to `.claude/settings.json` need a fresh session).
 
+**Two skill directories, don't mix them.** `skills/` at the root is the
+library DCC hands to a client's repository — those call `skills/dcc.mjs`
+and Claude Code does not load them here. `.claude/skills/` is this
+repository's own, loaded by Claude Code in every session. A new skill
+for our own sessions goes in the second one, or it silently never fires.
+Today that is `model-advisor`: which model and effort level a task wants,
+and how to group a large change into phases instead of switching per
+task. Its facts live in `references/models.md` with the date they were
+checked — update that file when a model is released, not the method.
+
 ## Methodology
 
 OpenSpec (`/opsx:propose → /opsx:apply → /opsx:archive`) with a Shape-Up
