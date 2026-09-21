@@ -38,8 +38,10 @@
   `run.session`, and scan new transcript lines into events (the person's
   messages, `AskUserQuestion` answers), idempotently via a line cursor.
 - **Lifecycle** — PTY exit is recorded (event + dimmed line); the session can
-  be resumed while the run is in `init` or `review`. Delivery sends `/exit`
-  then kills; cancel and API shutdown kill every session.
+  be resumed only while the run is in `init` (after an API restart). When DCC
+  sees `/init` finish it sends `/exit` then kills, and there is no way back:
+  the terminal stays on screen, locked. Cancel and API shutdown kill every
+  session.
 
 WebSocket `GET /repos/:id/onboarding/runs/:runId/terminal`: the first
 message authenticates (`{type:"auth", token, email}` — a browser cannot set
@@ -51,7 +53,7 @@ headers on a WebSocket); the server replies with `replay`, then streams
 | key | run | completes when |
 |---|---|---|
 | `prepare` | worktree + branch + baseline + inventory line | at once |
-| `init` | starts (or resumes) the session | the person presses "סיימתי עם ההטמעה" |
+| `init` | starts (or resumes) the session | DCC sees Claude finish — a turn ended, the copy has changed, and the transcript stayed unchanged for ~6 s, or the session exited with the copy changed (`checkInitFinished`; the review then opens at once). There is no button for it |
 | `review` | lists changed files vs baseline (tracked + untracked) | the person approves (or the automation gate does, with consent) |
 | `deliver` | commit as the acting user, push, PR / compare link, close the session | at once |
 

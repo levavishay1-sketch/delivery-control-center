@@ -203,6 +203,22 @@ export function sessionIdle(file: string): { idle: boolean; why: string } {
   return { idle: false, why: "Claude עובד עכשיו" };
 }
 
+/**
+ * Whether Claude's last real entry is a finished answer, and how long the
+ * transcript is. `/init` has no end marker of its own, so "it is over" is
+ * decided by the caller from this plus the worktree: Claude ended a turn (no
+ * tool running, no question waiting) AND the copy has changed. Checked against
+ * three real runs: the turns that ended before any file was written were a
+ * background survey and a plain-text question; the first one after the writes
+ * was the summary.
+ */
+export function turnEnded(file: string): { ended: boolean; lineCount: number } {
+  const { entries, lineCount } = readEntries(file);
+  const real = entries.filter((e) => (e.type === "user" || e.type === "assistant") && !e.isMeta && !e.isSidechain);
+  const last = real[real.length - 1];
+  return { ended: last?.type === "assistant" && last.message?.stop_reason === "end_turn", lineCount };
+}
+
 /** The number of complete lines in the transcript now (where a later `promptSeenAfter` starts looking). */
 export const transcriptLineCount = (file: string): number => readEntries(file).lineCount;
 

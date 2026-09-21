@@ -40,21 +40,21 @@ export const STAGES: readonly StageDefinition[] = [
     key: "init", order: 1, kind: "ai", gate: false,
     title_he: "הטמעה עם Claude (/init)", short_he: "שיחה חיה עם Claude Code",
     why_he: "כאן נוצר התוכן: הוראות, skills ו-hooks.",
-    what_he: "/init של Claude Code סורק את הריפו, שואל אותך וכותב את הקבצים בענף. הסשן נשאר פתוח עד סוף ההרצה.",
+    what_he: "/init של Claude Code סורק את הריפו, שואל אותך וכותב את הקבצים בענף. כש-Claude מסיים לכתוב, DCC מזהה את זה, סוגר את הסשן וממשיך לסקירה בעצמו. אחרי זה הטרמינל נעול ואי אפשר לחזור להטמעה.",
     output_he: "CLAUDE.md, skills ו-hooks בענף. עדיין לא נשמרים ב-git.",
   },
   {
     key: "review", order: 2, kind: "human", gate: true,
     title_he: "סקירת תוצרים", short_he: "כל השינויים כ-diff, לאישורך",
     why_he: "ל-Claude אין מילה אחרונה. אדם מאשר מה ייכנס.",
-    what_he: "מציג את כל השינויים מול נקודת ההתחלה. שינוי? מבקשים מ-Claude בטרמינל, ומרעננים את הרשימה.",
+    what_he: "מציג את כל השינויים מול נקודת ההתחלה, לקריאה בלבד. הטרמינל נעול, ואישור מעביר למסירה.",
     output_he: "אישור למעבר לשלב המסירה.",
   },
   {
     key: "deliver", order: 3, kind: "deterministic", gate: false,
     title_he: "מסירה: commit ו-push", short_he: "commit על שמך, push ו-PR",
     why_he: "השינויים צריכים להגיע ל-git כדי שהצוות יקבל אותם.",
-    what_he: "DCC עושה commit על שמך, push לענף ופותח PR. אחרי זה הסשן נסגר.",
+    what_he: "DCC עושה commit על שמך, push לענף ופותח PR.",
     output_he: "PR פתוח שממתין למיזוג ידני.",
   },
 ];
@@ -189,7 +189,8 @@ export type PrepareResult = {
   existing: ExistingSetup;
 };
 
-export type InitResult = { sessionId: string; changedFiles: number; completedBy: string };
+/** `auto`: DCC saw that Claude finished and closed the stage itself; `completedBy` is then whoever started the run. */
+export type InitResult = { sessionId: string; changedFiles: number; completedBy: string; auto?: boolean };
 
 export type ChangedFile = { path: string; status: "A" | "M" | "D" | "R" | string; additions: number; deletions: number };
 export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean };

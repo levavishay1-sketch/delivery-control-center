@@ -10,10 +10,10 @@ import { changeSummary, changedFiles, fileVersions } from "./changes.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { appendRepoAiEvent } from "./events.ts";
 import { lastInputUser, markDisconnected, startClaudeSession, statusFile, stopClaudeSession, terminalLine, terminalState, writeTerminalInput } from "./session.ts";
-import { digestTranscript, promptSeenAfter, readStatusSnapshot, scanTranscript, sessionIdle, transcriptLineCount, type TranscriptFact } from "./transcript.ts";
+import { digestTranscript, promptSeenAfter, readStatusSnapshot, scanTranscript, sessionIdle, transcriptLineCount, turnEnded, type TranscriptFact } from "./transcript.ts";
 import {
   LIVE_RUN_STATUSES, STAGES, isStageKey, normalizeModelPolicy, normalizePolicy, policyNeedsConsent, presetPolicy, stageDefinition,
-  type AutomationPolicy, type ChangedFile, type DeliverResult, type ModelPolicy, type PrepareResult, type ReviewResult, type RunSession,
+  type AutomationPolicy, type ChangedFile, type DeliverResult, type InitResult, type ModelPolicy, type PrepareResult, type ReviewResult, type RunSession,
   type RunStatus, type StageKey, type StageStatus, type StageUsage, type SessionTotals, sessionTotals,
 } from "./types.ts";
 import { ensureOnboardingWorkspace, existingSetup, trackedFileCount } from "./workspace.ts";
@@ -272,30 +272,38 @@ async function onSessionExit(ctx: Ctx, exitCode: number | null) {
   await recordSessionSlice(ctx, null, lastInputUser(ctx.runId));
   await patchSession(ctx, { state: "ended", endedAt: new Date().toISOString(), exitCode });
   await event(ctx, "onboarding.session.ended", { exitCode }, lastInputUser(ctx.runId));
+  // The monitor is stopped now; a session that ended with `/init`'s files written is a finished `/init`.
+  await checkInitFinished(ctx);
 }
 
-/** "סיימתי עם ההטמעה" — the person decides when `/init` is done; the
- *  session stays open for the rest of the run. */
-export async function completeInitStage(repoId: string, runId: string, by: Actor) {
-  const { run, stages, ctx } = await loadRun(repoId, runId);
-  const s = stages.find((x) => x.stageKey === "init");
-  if (s?.status !== "Running") throw new OnboardingError("שלב ההטמעה לא פעיל");
+/** DCC saw `/init` finish (`checkInitFinished`): close the stage, close the
+ *  Claude session — the terminal stays on screen as it was, locked, and there
+ *  is no way back into the conversation — and open the review at once,
+ *  whatever the automation policy says about starting stages: reading the
+ *  changed files writes nothing, and the review's own gate still waits for a
+ *  person. The stage is closed on behalf of whoever started the run, and says
+ *  so (`auto`). */
+async function finishInit(ctx: Ctx, run: RunRow) {
+  const by: Actor = { userId: run.triggeredBy };
   await pollSession(ctx, run.triggeredBy);
   await recordSessionSlice(ctx, "init", by.userId);
-  const { run: fresh } = await loadRun(repoId, runId);
+  const { run: fresh } = await loadRun(ctx.repoId, ctx.runId);
   const fs = sessionOf(fresh);
   const files = await changedFiles(fresh.workspacePath!, fresh.baselineSha!);
-  await completeStage(ctx, "init", { sessionId: fs.id ?? "", changedFiles: files.length, completedBy: by.userId }, by.userId,
+  await completeStage(ctx, "init", { sessionId: fs.id ?? "", changedFiles: files.length, completedBy: by.userId, auto: true } satisfies InitResult, by.userId,
     { model: sessionModelId(fs), effort: sessionEffort(fs) } satisfies StageUsage);
-  void s;
-  await drive(repoId, runId);
-  return { completed: "init" };
+  initClosed.add(ctx.runId);
+  await event(ctx, "onboarding.init.auto_completed", { files: files.length }, by.userId);
+  terminalLine(ctx.runId, "[DCC] Claude סיים לכתוב. הסשן נסגר והטרמינל ננעל — עוברים לסקירת התוצרים.");
+  await stopClaudeSession(ctx.runId, true);
+  await drive(ctx.repoId, ctx.runId);
+  try { await runOnboardingStage(ctx.repoId, ctx.runId, "review", by, { automated: true }); } catch { /* the policy already started it */ }
 }
 
 export async function resumeOnboardingSession(repoId: string, runId: string, by: Actor) {
   const { run, stages, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
-  if (stages.find((s) => s.stageKey === "deliver")?.status === "Completed") throw new OnboardingError("המסירה כבר בוצעה");
+  if (stages.find((s) => s.stageKey === "init")?.status === "Completed") throw new OnboardingError("ההטמעה הסתיימה ואי אפשר לחזור אליה");
   if (!sessionOf(run).id) throw new OnboardingError("עדיין לא היה סשן בהרצה הזו — הריצו את שלב ההטמעה");
   if (terminalState(runId) === "live") throw new OnboardingError("הסשן כבר פעיל");
   await launchSession(ctx, run, by, true);
@@ -315,16 +323,6 @@ async function runReview(ctx: Ctx, run: RunRow, by: Actor, automated: boolean) {
     // The caller still holds this run's lock; drive once it is released.
     setTimeout(() => { void drive(ctx.repoId, ctx.runId); }, 0);
   }
-}
-
-/** Re-read the worktree — after asking Claude for a change during review. */
-export async function refreshReview(repoId: string, runId: string) {
-  const { run, stages, ctx } = await loadRun(repoId, runId);
-  const s = stages.find((x) => x.stageKey === "review");
-  if (s?.status !== "WaitingForUser") throw new OnboardingError("שלב הסקירה לא ממתין");
-  const files: ChangedFile[] = await changedFiles(run.workspacePath!, run.baselineSha!);
-  await patchStage(ctx, "review", { result: { ...((s.result ?? {}) as ReviewResult), changedFiles: files, checkedAt: new Date().toISOString() } });
-  return { changedFiles: files };
 }
 
 export async function approveReview(repoId: string, runId: string, by: Actor) {
@@ -395,6 +393,7 @@ async function pullRequestBody(ctx: Ctx, run: RunRow, files: ChangedFile[]): Pro
 export async function cancelOnboardingRun(repoId: string, runId: string, by: Actor) {
   const { run, stages, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה כבר הסתיימה");
+  closing.add(runId);
   await stopClaudeSession(runId, true);
   stopMonitor(runId);
   await recordSessionSlice(ctx, null, by.userId);
@@ -449,12 +448,63 @@ const polling = new Set<string>();
 
 function startMonitor(ctx: Ctx, fallbackActor: string) {
   stopMonitor(ctx.runId);
-  monitors.set(ctx.runId, setInterval(() => { void pollSession(ctx, fallbackActor); }, 3000));
+  monitors.set(ctx.runId, setInterval(() => { void pollSession(ctx, fallbackActor).then(() => checkInitFinished(ctx)); }, 3000));
 }
 function stopMonitor(runId: string) {
   const t = monitors.get(runId);
   if (t) clearInterval(t);
   monitors.delete(runId);
+  settled.delete(runId);
+  looked.delete(runId);
+  initClosed.delete(runId);
+}
+
+/* ── `/init` finished ─────────────────────────────────────────────── */
+
+/** `/init` has no end marker, so DCC decides from two facts: Claude ended a
+ *  turn, and the isolated copy has changed. The turn must also stay ended for
+ *  a few polls (nothing new in the transcript), so a turn that is followed at
+ *  once by more work does not count. A wrong call costs little: the session
+ *  stays open through the review, where Claude can still be asked for more.
+ *  A session that has exited with the copy changed is finished too — nothing
+ *  more will be written, and there is no button to say so. */
+const SETTLE_POLLS = 3;
+const settled = new Map<string, { lines: number; hits: number }>();
+/** What the worktree was last read for, so it is read once per settled transcript and not on every poll while the person thinks. */
+const looked = new Map<string, number>();
+const initClosed = new Set<string>();
+const checking = new Set<string>();
+/** Runs being cancelled: their session is killed on purpose, which must not read as a `/init` that ended. */
+const closing = new Set<string>();
+const SESSION_OVER = -1;
+
+async function checkInitFinished(ctx: Ctx) {
+  if (checking.has(ctx.runId) || initClosed.has(ctx.runId) || closing.has(ctx.runId)) return;
+  checking.add(ctx.runId);
+  try {
+    const { run, stages } = await loadRun(ctx.repoId, ctx.runId);
+    const init = stages.find((x) => x.stageKey === "init");
+    if (init?.status === "Completed") { initClosed.add(ctx.runId); return; }
+    const s = sessionOf(run);
+    if (init?.status !== "Running" || !run.workspacePath || !run.baselineSha || (s.state !== "live" && s.state !== "ended")) { settled.delete(ctx.runId); return; }
+    let at = SESSION_OVER;
+    if (s.state === "live") {
+      const t = s.transcriptPath ? turnEnded(s.transcriptPath) : null;
+      if (!t?.ended) { settled.delete(ctx.runId); return; }
+      const before = settled.get(ctx.runId);
+      const st = before && before.lines === t.lineCount ? { ...before, hits: before.hits + 1 } : { lines: t.lineCount, hits: 1 };
+      settled.set(ctx.runId, st);
+      if (st.hits < SETTLE_POLLS) return;
+      at = st.lines;
+    }
+    if (looked.get(ctx.runId) === at) return;
+    looked.set(ctx.runId, at);
+    if (!(await changedFiles(run.workspacePath, run.baselineSha)).length) return;
+    await finishInit(ctx, run);
+  } catch { /* a transient error: the next poll tries again */ }
+  finally {
+    checking.delete(ctx.runId);
+  }
 }
 
 const FACT_EVENT: Record<TranscriptFact["kind"], string> = {
