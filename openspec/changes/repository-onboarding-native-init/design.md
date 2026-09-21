@@ -38,10 +38,10 @@
   `run.session`, and scan new transcript lines into events (the person's
   messages, `AskUserQuestion` answers), idempotently via a line cursor.
 - **Lifecycle** — PTY exit is recorded (event + dimmed line); the session can
-  be resumed only while the run is in `init` (after an API restart). When DCC
-  sees `/init` finish it sends `/exit` then kills, and there is no way back:
-  the terminal stays on screen, locked. Cancel and API shutdown kill every
-  session.
+  be resumed while the run is in `init` or `review`. When DCC sees `/init`
+  finish it closes the stage (which cannot be reopened) but not the session:
+  the terminal stays live through the review. Delivery sends `/exit` then
+  kills; cancel and API shutdown kill every session.
 
 WebSocket `GET /repos/:id/onboarding/runs/:runId/terminal`: the first
 message authenticates (`{type:"auth", token, email}` — a browser cannot set

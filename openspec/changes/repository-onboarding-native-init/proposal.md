@@ -32,19 +32,19 @@ everything that happened.
    a pseudo-terminal inside the workspace. The person answers its
    questions exactly as in a terminal.
 3. **סקירת תוצרים** — every changed file as a diff against the baseline,
-   read-only; the person approves. There is no way back into the
-   conversation: the terminal stays on screen, locked.
+   under the terminal; the person approves. Changes are requested from
+   Claude in the same session, not by rewinding the run. DCC opens this
+   stage by itself when it sees `/init` finish.
 4. **מסירה** — commit under the acting person's identity, push, open a
-   pull request (or a compare link when `gh` is absent).
+   pull request (or a compare link when `gh` is absent); then the session
+   is closed.
 
-**One Claude Code session, for the `/init` stage.** A terminal under the
-stage card is always visible. While `/init` runs it is the real PTY stream —
-Claude's own screen, the person's keystrokes, slash commands (`/model`,
-`/cost`, …) behave exactly as they do in a terminal. DCC's own git steps
-appear in the same window, dimmed. When DCC sees `/init` finish it closes the
-session and the stage, and the terminal stays as it was, locked; if the API
-restarts while `/init` is still running, the same conversation is resumed
-with `--resume <session-id>`.
+**One Claude Code session for the whole run.** A terminal under the stage
+card is always visible. It is the real PTY stream — Claude's own screen,
+the person's keystrokes, slash commands (`/model`, `/cost`, …) behave
+exactly as they do in a terminal. DCC's own git steps appear in the same
+window, dimmed. The session survives stage changes; if the API restarts,
+the same conversation is resumed with `--resume <session-id>`.
 
 **The rail keeps today's concept** so future stages slot in: automation
 policy (presets + per-stage run/gate), model and effort, run cost, the

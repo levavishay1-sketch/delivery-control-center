@@ -29,21 +29,10 @@ function readScreen(xt: XTerm): string {
  * `screenRef` hands the assistant next to it a way to read what is on the
  * screen right now.
  */
-export function RunTerminal({ repoId, runId, screenRef, locked }: { repoId: string; runId: string; screenRef?: MutableRefObject<(() => string) | null>; locked: boolean }) {
+export function RunTerminal({ repoId, runId, screenRef }: { repoId: string; runId: string; screenRef?: MutableRefObject<(() => string) | null> }) {
   const host = useRef<HTMLDivElement>(null);
-  const termRef = useRef<XTerm | null>(null);
-  const lockedNow = useRef(locked);
-  lockedNow.current = locked;
   const [state, setState] = useState<SessionState>("none");
   const [connected, setConnected] = useState(false);
-
-  // Once `/init` is over the screen stays as it was: no typing, no blinking cursor.
-  useEffect(() => {
-    const t = termRef.current;
-    if (!t) return;
-    t.options.disableStdin = locked;
-    t.options.cursorBlink = !locked;
-  }, [locked]);
 
   useEffect(() => {
     const el = host.current;
@@ -60,9 +49,6 @@ export function RunTerminal({ repoId, runId, screenRef, locked }: { repoId: stri
     const fit = new FitAddon();
     term.loadAddon(fit);
     term.open(el);
-    termRef.current = term;
-    term.options.disableStdin = lockedNow.current;
-    term.options.cursorBlink = !lockedNow.current;
     try { fit.fit(); } catch { /* not laid out yet */ }
     if (screenRef) screenRef.current = () => readScreen(term);
 
@@ -109,15 +95,13 @@ export function RunTerminal({ repoId, runId, screenRef, locked }: { repoId: stri
     <div>
       <div className="ob-term">
         <div className="ob-term-bar">
-          <span>טרמינל · סשן Claude Code של ההטמעה</span>
-          <span className={!locked && state === "live" ? "live" : undefined}>{connected ? (locked ? "נעול · ההטמעה הסתיימה" : STATE_HE[state]) : "מתחבר…"}</span>
+          <span>טרמינל · סשן Claude Code אחד לכל ההרצה</span>
+          <span className={state === "live" ? "live" : undefined}>{connected ? STATE_HE[state] : "מתחבר…"}</span>
         </div>
         <div className="ob-term-body"><div ref={host} style={{ height: "100%" }} /></div>
       </div>
       <p className="ob-sub" style={{ margin: "6px 2px 0" }}>
-        {locked
-          ? "ההטמעה הסתיימה: המסך נשאר כפי שהיה, נעול לעריכה, ואי אפשר לחזור אליו."
-          : <>זה הסשן האמיתי של Claude Code. מה שמקלידים כאן מגיע אליו כמו בטרמינל, כולל פקודות כמו <span className="ob-code">/model</span> ו-<span className="ob-code">/cost</span>. כש-Claude מסיים לכתוב, DCC סוגר את הסשן והטרמינל ננעל.</>}
+        זה הסשן האמיתי של Claude Code, והוא נשאר פתוח בין השלבים עד המסירה. מה שמקלידים כאן מגיע אליו כמו בטרמינל, כולל פקודות כמו <span className="ob-code">/model</span> ו-<span className="ob-code">/cost</span>.
       </p>
     </div>
   );

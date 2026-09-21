@@ -276,13 +276,13 @@ async function onSessionExit(ctx: Ctx, exitCode: number | null) {
   await checkInitFinished(ctx);
 }
 
-/** DCC saw `/init` finish (`checkInitFinished`): close the stage, close the
- *  Claude session — the terminal stays on screen as it was, locked, and there
- *  is no way back into the conversation — and open the review at once,
- *  whatever the automation policy says about starting stages: reading the
- *  changed files writes nothing, and the review's own gate still waits for a
- *  person. The stage is closed on behalf of whoever started the run, and says
- *  so (`auto`). */
+/** DCC saw `/init` finish (`checkInitFinished`): close the stage and open the
+ *  review at once, whatever the automation policy says about starting stages —
+ *  reading the changed files writes nothing, and the review's own gate still
+ *  waits for a person. The stage cannot be reopened, but the Claude session
+ *  stays open for the rest of the run: the person can keep talking to it while
+ *  reviewing. The stage is closed on behalf of whoever started the run, and
+ *  says so (`auto`). */
 async function finishInit(ctx: Ctx, run: RunRow) {
   const by: Actor = { userId: run.triggeredBy };
   await pollSession(ctx, run.triggeredBy);
@@ -294,8 +294,7 @@ async function finishInit(ctx: Ctx, run: RunRow) {
     { model: sessionModelId(fs), effort: sessionEffort(fs) } satisfies StageUsage);
   initClosed.add(ctx.runId);
   await event(ctx, "onboarding.init.auto_completed", { files: files.length }, by.userId);
-  terminalLine(ctx.runId, "[DCC] Claude סיים לכתוב. הסשן נסגר והטרמינל ננעל — עוברים לסקירת התוצרים.");
-  await stopClaudeSession(ctx.runId, true);
+  terminalLine(ctx.runId, "[DCC] Claude סיים לכתוב — עוברים לסקירת התוצרים. הסשן נשאר פתוח, אפשר לבקש ממנו שינויים.");
   await drive(ctx.repoId, ctx.runId);
   try { await runOnboardingStage(ctx.repoId, ctx.runId, "review", by, { automated: true }); } catch { /* the policy already started it */ }
 }
@@ -303,7 +302,7 @@ async function finishInit(ctx: Ctx, run: RunRow) {
 export async function resumeOnboardingSession(repoId: string, runId: string, by: Actor) {
   const { run, stages, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
-  if (stages.find((s) => s.stageKey === "init")?.status === "Completed") throw new OnboardingError("ההטמעה הסתיימה ואי אפשר לחזור אליה");
+  if (stages.find((s) => s.stageKey === "deliver")?.status === "Completed") throw new OnboardingError("המסירה כבר בוצעה");
   if (!sessionOf(run).id) throw new OnboardingError("עדיין לא היה סשן בהרצה הזו — הריצו את שלב ההטמעה");
   if (terminalState(runId) === "live") throw new OnboardingError("הסשן כבר פעיל");
   await launchSession(ctx, run, by, true);
@@ -323,6 +322,16 @@ async function runReview(ctx: Ctx, run: RunRow, by: Actor, automated: boolean) {
     // The caller still holds this run's lock; drive once it is released.
     setTimeout(() => { void drive(ctx.repoId, ctx.runId); }, 0);
   }
+}
+
+/** Re-read the worktree — after asking Claude for a change during review. */
+export async function refreshReview(repoId: string, runId: string) {
+  const { run, stages, ctx } = await loadRun(repoId, runId);
+  const s = stages.find((x) => x.stageKey === "review");
+  if (s?.status !== "WaitingForUser") throw new OnboardingError("שלב הסקירה לא ממתין");
+  const files: ChangedFile[] = await changedFiles(run.workspacePath!, run.baselineSha!);
+  await patchStage(ctx, "review", { result: { ...((s.result ?? {}) as ReviewResult), changedFiles: files, checkedAt: new Date().toISOString() } });
+  return { changedFiles: files };
 }
 
 export async function approveReview(repoId: string, runId: string, by: Actor) {

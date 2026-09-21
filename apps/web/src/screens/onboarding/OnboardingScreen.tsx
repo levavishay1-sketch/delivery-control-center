@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   approveOnboardingReview, cancelOnboardingRun, getOnboardingFile, getOnboardingRun, getOnboardingStages, getRepos, getUsers,
-  listOnboardingRuns, resumeOnboardingSession, runOnboardingStage, startOnboardingRun, updateOnboardingAutomation,
+  listOnboardingRuns, refreshOnboardingReview, resumeOnboardingSession, runOnboardingStage, startOnboardingRun, updateOnboardingAutomation,
   updateOnboardingModelChoices,
   type AutomationPolicy, type DeliverResult, type Effort, type InitResult, type ModelPolicy, type OnboardingRunSummary, type OnboardingRunView,
   type OnboardingStage, type OnboardingStageDefinition, type OnboardingStageKey, type PrepareResult, type ReviewResult,
@@ -175,11 +175,12 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
             onSelect={setSelected}
           />
 
-          <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} locked={byKey.get("init")?.status === "Completed" || runOver} />
+          <RunTerminal repoId={id} runId={run.id} screenRef={screenRef} />
           <p className="ob-sub" style={{ marginTop: 10 }}>שאלות על מה שהסשן עושה — בצ'אט של קלוד (הכפתור למטה משמאל, או Ctrl K). הוא מקבל את מה שהתחדש בסשן ואת המסך שבטרמינל.</p>
           {sel === "review" && byKey.get("review")?.status === "WaitingForUser" && (
             <ReviewPanel
               view={view} stage={byKey.get("review")!} busy={busy}
+              onRefreshReview={() => act("review-refresh", () => refreshOnboardingReview(id, run.id))}
               onApprove={() => act("approve", () => approveOnboardingReview(id, run.id))}
             />
           )}
@@ -348,13 +349,13 @@ function StageBody(p: StageCardProps) {
           <div><div className="l">עלות השלב<Info k="stage_cost" /></div><div className="v">{fmtUsd(stageCost?.costUsd ?? 0)}</div></div>
           <div><div className="l">סיים/ה</div><div className="v">{r.auto ? "DCC זיהה שהוא סיים" : (p.users[r.completedBy] ?? "—")}</div></div>
         </div>
-        <p className="ob-sub" style={{ marginTop: 10 }}>הסשן נסגר והטרמינל נעול: אי אפשר לחזור להטמעה.</p>
+        <p className="ob-sub" style={{ marginTop: 10 }}>השלב נסגר ואי אפשר לחזור אליו. הסשן נשאר פתוח עד המסירה: אפשר לבקש מ-Claude שינויים בטרמינל בכל שלב.</p>
       </>
     );
   }
 
   if (stage.stageKey === "review") {
-    if (stage.status === "WaitingForUser") return <ReviewIntro />;
+    if (stage.status === "WaitingForUser") return <ReviewIntro {...p} />;
     if (stage.status !== "Completed") return <p className="ob-sub">{waitingText}</p>;
     const r = stage.result as ReviewResult;
     return <p style={{ fontSize: 13 }}>{r.auto ? "אושר לפי מדיניות האוטומציה" : `אושר על ידי ${p.users[r.approvedBy ?? ""] ?? "—"}`} · {r.changedFiles.length} קבצים עוברים למסירה.</p>;
@@ -362,7 +363,7 @@ function StageBody(p: StageCardProps) {
 
   if (stage.status === "Running") return <Working text="עושה commit על שמך, push לענף ופותח PR…" />;
   if (stage.status !== "Completed" && p.runnable) return <div style={{ display: "grid", gap: 10 }}>{map}<p className="ob-sub">{`יבצע commit על שמך, push לענף ${view.run.branchName ?? ""} ויפתח PR. main לא ישתנה עד שתמזגו.`}</p></div>;
-  if (stage.status !== "Completed") return <p className="ob-sub">{p.runnable ? `עוד לא רץ. יבצע commit על שמך, push לענף ${view.run.branchName ?? ""} ויפתח PR.` : waitingText}</p>;
+  if (stage.status !== "Completed") return <p className="ob-sub">{p.runnable ? `עוד לא רץ. יבצע commit על שמך, push לענף ${view.run.branchName ?? ""} ויפתח PR, ואז יסגור את הסשן.` : waitingText}</p>;
   const r = stage.result as DeliverResult;
   return (
     <>
@@ -383,19 +384,32 @@ function Working({ text }: { text: string }) {
   return <div style={{ display: "flex", alignItems: "center", gap: 10 }}><span className="spinner" style={{ width: 16, height: 16 }} /><span className="ob-sub" style={{ fontSize: 12.5 }}>{text}</span></div>;
 }
 
-/** The review's card is short: the locked terminal comes next, and the changed files sit under it (`ReviewPanel`). */
-function ReviewIntro() {
-  return <div className="ob-note warn">ההטמעה הסתיימה, והטרמינל נעול: אי אפשר לחזור אליה. שום דבר לא יוצא מהמחשב עד שתאשרו את התוצרים שמתחת לטרמינל.</div>;
+/** The review's card is short: the terminal comes next, alive, and the changed files sit under it (`ReviewPanel`). */
+function ReviewIntro(p: StageCardProps) {
+  const st = p.view.run.session.state;
+  return (
+    <div style={{ display: "grid", gap: 10 }}>
+      <div className="ob-note warn">שום דבר לא יוצא מהמחשב עד שתאשרו. אפשר להמשיך לשוחח עם Claude בטרמינל כל עוד הסקירה פתוחה: מה שהוא משנה מופיע בתוצרים שמתחת לטרמינל (לחצו "רענן רשימה").</div>
+      {st !== "live" && (
+        <div className="ob-note warn" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+          <span>{st === "disconnected" ? "הסשן של Claude נותק (השרת הופעל מחדש)." : "הסשן של Claude נסגר."} כדי להמשיך לשוחח איתו, חדשו אותו מאותה נקודה בשיחה.</span>
+          <button className="btn btn-secondary btn-sm" disabled={!!p.busy} onClick={p.onResume}>{p.busy === "resume" ? "מחדש…" : "↻ חדש את הסשן"}</button>
+        </div>
+      )}
+    </div>
+  );
 }
 
-/** What changed against the baseline, and the approval — under the terminal. Read-only: nothing can change it any more. */
-function ReviewPanel(p: { view: OnboardingRunView; stage: OnboardingStage; busy: string | null; onApprove: () => void }) {
+/** What changed against the baseline, and the approval — under the terminal, so Claude can be talked to while reading. */
+function ReviewPanel(p: { view: OnboardingRunView; stage: OnboardingStage; busy: string | null; onRefreshReview: () => void; onApprove: () => void }) {
   const r = (p.stage.result ?? { changedFiles: [], checkedAt: "" }) as ReviewResult;
   const [open, setOpen] = useState<string | null>(null);
   return (
     <div className="panel" style={{ display: "grid", gap: 10, marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 12, fontWeight: 650 }}>מה השתנה ({r.changedFiles.length} קבצים)</span>
+        <span style={{ flex: 1 }} />
+        <button className="btn btn-secondary btn-sm" disabled={!!p.busy} onClick={p.onRefreshReview}>{p.busy === "review-refresh" ? "מרענן…" : "↻ רענן רשימה"}</button>
       </div>
       {r.changedFiles.length === 0 ? <p className="ob-sub">אין שינויים מול נקודת ההתחלה.</p> : (
         <div className="ob-files">

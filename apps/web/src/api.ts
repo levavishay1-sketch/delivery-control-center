@@ -692,7 +692,8 @@ export const listOnboardingRuns = (repoId: string) => get<{ runs: OnboardingRunS
 export const getOnboardingRun = (repoId: string, runId: string) => get<OnboardingRunView>(ob(repoId, runId));
 export const runOnboardingStage = (repoId: string, runId: string, stageKey: OnboardingStageKey) => post<{ started: string }>(`${ob(repoId, runId)}/stages/${stageKey}/run`, {});
 export const resumeOnboardingSession = (repoId: string, runId: string) => post<{ resumed: boolean }>(`${ob(repoId, runId)}/session/resume`, {});
-export const approveOnboardingReview = (repoId: string, runId: string) => post<{ approved: boolean }>(`${ob(repoId, runId)}/review/approve`, {});
+export const refreshOnboardingReview = (repoId: string, runId: string) => post<{ changedFiles: ChangedFile[] }>(`${ob(repoId, runId)}/review/refresh`, {});
+export const approveOnboardingReview =(repoId: string, runId: string) => post<{ approved: boolean }>(`${ob(repoId, runId)}/review/approve`, {});
 export const cancelOnboardingRun = (repoId: string, runId: string) => post<{ cancelled: boolean }>(`${ob(repoId, runId)}/cancel`, {});
 export const updateOnboardingAutomation = (repoId: string, runId: string, automation: AutomationPolicy | { preset: AutomationPreset }, consent?: boolean) =>
   patch<AutomationPolicy>(`${ob(repoId, runId)}/automation`, { automation, consent });

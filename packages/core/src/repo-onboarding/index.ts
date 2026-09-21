@@ -1,6 +1,6 @@
 export {
   OnboardingError,
-  startOnboardingRun, runOnboardingStage, resumeOnboardingSession, approveReview, cancelOnboardingRun,
+  startOnboardingRun, runOnboardingStage, resumeOnboardingSession, refreshReview, approveReview, cancelOnboardingRun,
   updateOnboardingAutomation, updateOnboardingModelChoices, getOnboardingRunView, getOnboardingFileVersions, listOnboardingRuns, getLatestOnboardingRun,
   onboardingStageCatalogue, authorizeOnboardingTerminal, recoverOnboardingRuns,
   onboardingChatFacts, sendToOnboardingSession,
