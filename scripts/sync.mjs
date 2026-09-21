@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Brings this folder in step with the repository after pull requests were merged, and says what is left.
-// Run: `npm run sync` — at the start of every new piece of work, and as soon as something was merged.
+// Run: `npm run sync` — at the start of every new request, and as soon as something was merged.
 //
 // It only ever moves forward and never loses work:
 //   - fetches, and drops the remote branches that no longer exist;
@@ -8,7 +8,10 @@
 //   - on master, fast-forwards it to origin/master;
 //   - deletes local branches that are entirely in master (`git branch -d`, which refuses anything else).
 // It never pushes, never resets, and never touches uncommitted files.
-// Exit code 1 when something needs a look; the report says what.
+//
+// Open pull requests are open on purpose (the user merges in batches), so they are listed, not flagged.
+// What it flags — exit code 1 — is what nobody is looking after: a branch with no request, commits that were
+// never pushed, stashes, other working folders, a master that differs from the server's.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
@@ -34,6 +37,7 @@ else ok("fetched origin");
 // 2. Get onto an up-to-date master, when the branch we are on is already entirely in it.
 let current = git("branch", "--show-current").out;
 const tip = (ref) => git("rev-parse", ref).out;
+const count = (range) => Number(git("rev-list", "--count", range).out) || 0;
 const mainTip = tip(`origin/${MAIN}`);
 const inMaster = (ref) => git("merge-base", "--is-ancestor", ref, `origin/${MAIN}`).code === 0;
 if (current && current !== MAIN) {
@@ -46,8 +50,7 @@ if (current && current !== MAIN) {
     if (sw.code === 0) { ok(`"${current}" was already in ${MAIN} — switched to ${MAIN}`); current = MAIN; }
     else bad(`"${current}" is already in ${MAIN}, but git would not switch (an uncommitted file is in the way)`, [sw.err.split("\n")[0] ?? ""]);
   } else {
-    const ahead = git("rev-list", "--count", `origin/${MAIN}..HEAD`).out;
-    note(`on "${current}", which has ${ahead} commit(s) not in ${MAIN} yet — work in progress, left as it is`);
+    note(`on "${current}", which has ${count(`origin/${MAIN}..HEAD`)} commit(s) not in ${MAIN} yet — work in progress, left as it is`);
   }
 }
 if (current === MAIN) {
@@ -59,37 +62,56 @@ if (current === MAIN) {
   else bad(`${MAIN} differs from origin/${MAIN}`, [`local ${local.slice(0, 7)} · origin ${remote.slice(0, 7)}`]);
 }
 
-// 3. Local branches: what is entirely in master goes; anything else is reported, never deleted.
-const local = lines(git("branch", "--format=%(refname:short)").out).filter((b) => b !== MAIN && b !== current);
+// 3. The open pull requests: the branches somebody is looking after.
+const GH = ["C:\\Program Files\\GitHub CLI\\gh.exe", "gh"].find((c) => c === "gh" || existsSync(c));
+let openPrs = null;
+if (run(GH, ["--version"]).code === 0) {
+  const r = run(GH, ["pr", "list", "--state", "open", "--json", "number,headRefName,title,mergeable"]);
+  if (r.code === 0) { try { openPrs = JSON.parse(r.out || "[]"); } catch { openPrs = null; } }
+}
+const looked = new Set((openPrs ?? []).map((p) => p.headRefName));
+const remoteBranches = lines(git("ls-remote", "--heads", "origin").out).map((l) => l.replace(/^.*refs\/heads\//, ""));
+
+// 4. Local branches: what is entirely in master goes; what has a request is being looked after; the rest is reported.
+const localAll = lines(git("branch", "--format=%(refname:short)").out);
 const gone = [];
-const kept = [];
+const forgotten = [];
 const empty = [];
-for (const b of local) {
+for (const b of localAll.filter((x) => x !== MAIN && x !== current)) {
   if (tip(b) === mainTip) empty.push(b); // opened from master, nothing on it: not touched
   else if (inMaster(b) && git("branch", "-d", b).code === 0) gone.push(b);
-  else kept.push(b);
+  else if (!looked.has(b)) forgotten.push(b);
 }
 if (gone.length) ok(`deleted ${gone.length} local branch(es) already in ${MAIN}: ${gone.join(", ")}`);
 if (empty.length) note("local branches with nothing on them yet (same commit as master), left as they are", empty);
-if (kept.length) bad("local branches with work that is not in master", kept);
-else if (!empty.length) ok("no local branches left over");
+if (openPrs === null) note("the GitHub CLI did not answer — open pull requests were not checked, so a branch may look forgotten when it is not");
+if (forgotten.length) bad("local branches with work that is not in master and no open pull request", forgotten);
 
-// 4. The server: only master, and no open request.
-const remoteBranches = lines(git("ls-remote", "--heads", "origin").out).map((l) => l.replace(/^.*refs\/heads\//, "")).filter((b) => b !== MAIN);
-if (remoteBranches.length) bad("branches on the server other than master", remoteBranches);
-else ok("the server has only master");
+// 5. Work that exists only on this computer.
+const unpushed = [];
+for (const b of lines(git("branch", "--format=%(refname:short)").out).filter((x) => x !== MAIN)) {
+  const onServer = remoteBranches.includes(b);
+  const ahead = onServer ? count(`origin/${b}..${b}`) : count(`origin/${MAIN}..${b}`);
+  if (ahead > 0) unpushed.push(`${b}: ${ahead} commit(s)${onServer ? " not pushed" : ", the branch is not on the server"}`);
+}
+if (unpushed.length) bad("work that exists only on this computer", unpushed);
+else ok("everything committed is on the server");
 
-const GH = ["C:\\Program Files\\GitHub CLI\\gh.exe", "gh"].find((c) => c === "gh" || existsSync(c));
-const ghOk = run(GH, ["--version"]).code === 0;
-if (!ghOk) note("the GitHub CLI was not found — open pull requests were not checked");
+// 6. The server: what is there, and who is looking after it.
+const strays = remoteBranches.filter((b) => b !== MAIN && !looked.has(b));
+if (strays.length && openPrs !== null) bad("branches on the server with no open pull request", strays);
+else if (openPrs !== null) ok("the server has only master and the branches of open pull requests");
+if (openPrs === null) { /* already said above */ }
+else if (!openPrs.length) ok("no open pull requests");
 else {
-  const open = run(GH, ["pr", "list", "--state", "open", "--json", "number,headRefName", "--jq", '.[] | "#\\(.number)  \\(.headRefName)"']);
-  if (open.code !== 0) note("could not list open pull requests", [open.err.split("\n")[0] ?? ""]);
-  else if (open.out) bad("open pull requests", lines(open.out));
-  else ok("no open pull requests");
+  note(`${openPrs.length} open pull request(s), waiting for the user to merge`, openPrs.sort((a, b) => a.number - b.number).map((p) => {
+    const behind = remoteBranches.includes(p.headRefName) ? count(`origin/${p.headRefName}..origin/${MAIN}`) : "?";
+    const merge = p.mergeable === "CONFLICTING" ? "CONFLICTS with master" : p.mergeable === "MERGEABLE" ? "can merge" : "merge state unknown";
+    return `#${p.number}  ${p.headRefName} — ${p.title} · ${merge} · ${behind} behind ${MAIN}`;
+  }));
 }
 
-// 5. Other folders and stashes.
+// 7. Other folders and stashes.
 git("worktree", "prune");
 const trees = lines(git("worktree", "list").out);
 if (trees.length > 1) bad("other working folders of this repository", trees.slice(1));
@@ -98,13 +120,11 @@ const stashes = lines(git("stash", "list").out);
 if (stashes.length) bad("stashed changes", stashes);
 else ok("no stashes");
 
-// 6. What is uncommitted on purpose or not — said, not judged.
+// 8. What is uncommitted — said, not judged.
 const dirty = lines(git("status", "--short").out);
 if (dirty.length) note("uncommitted", dirty);
-const waiting = lines(git("diff", "docs/wishlist.md").out).filter((l) => /^\+- \*\*/.test(l));
-if (waiting.length) note(`${waiting.length} wishlist entr${waiting.length === 1 ? "y is" : "ies are"} waiting for a pull request`);
 
-// 7. The running app.
+// 9. The running app.
 try {
   const r = await fetch("http://localhost:3001/health", { signal: AbortSignal.timeout(2000) });
   console.log(`\n· the API answers on :3001 (${r.status})`);

@@ -108,6 +108,22 @@ request to the user, it gives the number, the branch and a short title —
 "#9 (`fix/finished-task-commit-and-pr`, commit and open the PR for a
 finished task)" — never the bare number, which tells the reader nothing.
 
+**A subject's branch stays open until the user merges it.** The user merges in
+batches — typically going through their open requests at the end of the day —
+so a subject's branch and its one PR stay open for days. Every later request on
+that subject, in any session, goes onto that same branch: find it (`npm run
+sync` lists the open requests with their branches), switch to it, and add
+commits. A finished task is committed and pushed to it as before, and the PR is
+opened once, not once per commit. A request on another subject gets a branch of
+its own. Claude never merges and never closes a request. At the start of each
+request, say in one line which branch it goes onto and why, so the user can
+correct it before any work is done; if a request touches two subjects, ask.
+Before the first edit on a branch that is behind `master`, bring it up to date
+with `git merge origin/master`; if that conflicts, stop and tell the user. A big
+subject the user asked a project branch for (for example `project/info-hints`)
+takes commits directly, one after another, with a single PR to `master` at the
+end; split it into task branches only when the user asks.
+
 ### Branch names and what happens to a branch
 
 Name: `<type>/<short-description>` — lowercase English, words joined by
@@ -153,12 +169,17 @@ branch is still the user's decision.
 thing whenever a new request begins, and the moment the user says something
 was merged — before any other work. It fetches, moves this folder to an
 up-to-date `master` when the branch it was on is already in it, deletes the
-local branches that are entirely in `master`, and reports what is left: open
-pull requests, branches on the server, stashes, other folders, uncommitted
-files. Say its result in one line ("clean", or what is left). It never pushes
-and never touches uncommitted files. Do not start new work on a stale `master`
-or on a branch that has already been merged, and do not leave merged local
-branches behind for the user to notice.
+local branches that are entirely in `master`, and reports what is left. Open
+pull requests are listed, not flagged — they are open on purpose — each with its
+number, branch, title, whether it can merge and how far behind `master` it is;
+what it flags is a branch nobody has a request for, commits that were not
+pushed, stashes, other folders, and uncommitted files. Say its result in one
+line ("clean", or what is left). When the user asks for a summary of their
+requests, or at the end of a working day, give that list as a table: number,
+branch, title, ready or not, behind `master`, conflicts. It never pushes and
+never touches uncommitted files. Do not start new work on a stale `master` or on
+a branch that has already been merged, and do not leave merged local branches
+behind for the user to notice.
 
 After a merge the branch is deleted (the repository deletes a PR's branch on
 merge by itself; the project branch goes when its final PR merges). A branch
@@ -208,10 +229,13 @@ checked — update that file when a model is released, not the method.
 
 The user's ideas for the project that are not yet committed to live in
 `docs/wishlist.md`; its header has the format and the statuses. When asked
-to "add to the wishlist", add one entry there and leave it **uncommitted**
-until the user says to commit — then all waiting entries go in one PR, since
-`master` changes only through one. Say at the end of a session that entries
-are waiting. When an idea becomes an OpenSpec change, delete its entry.
+to "add to the wishlist", add one entry there and **commit and push it at
+once** to the open wishlist branch — the one whose pull request is titled
+"Wishlist: new ideas"; if none is open, open a `fix/wishlist-<date>` branch off
+`origin/master` with such a request. An entry left only in the working folder
+is protected by nothing. That request stays open and the user merges it when
+they go through their requests; say at the end of a session which entries are
+waiting in it. When an idea becomes an OpenSpec change, delete its entry.
 
 ## Methodology
 
