@@ -156,6 +156,7 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
   const [approved, setApproved] = useState<Record<string, boolean>>({});
   const [check, setCheck] = useState<VerifyResult | null>(null);
   const [checking, setChecking] = useState(false);
+  const [waiting, setWaiting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setErr(null);
@@ -184,15 +185,30 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
 
   const payloadOf = () => files.map((f) => ({ path: f.path, content: manual[f.path] ?? compose(f, choices[f.path] ?? []) }));
 
+  /** Why there is nothing to check or save yet, in the words the person needs — never silence. */
+  const missing = (): string | null => {
+    if (!d) return null;
+    if (blocked.length) return `${blocked.length === 1 ? "קובץ אחד" : `${blocked.length} קבצים`} לא ניתנים להכרעה מכאן, ולכן אי אפשר לבנות תוצאה. הכריעו אותם מהטרמינל.`;
+    if (!left) return null;
+    const names = files.filter((f) => f.resolvable && !settled(f)).map((f) => f.path);
+    return `עוד לא הוכרעו כל הקבצים, ולכן אין עדיין תוצאה לבדוק. נשאר: ${names.join(", ")}.`;
+  };
+
   const verify = async () => {
-    if (!d || !ready) return;
+    if (!d) return;
+    const why = missing();
+    if (why) { setWaiting(why); return; }
+    setWaiting(null);
     setChecking(true); setErr(null); setCheck(null);
     try { setCheck(await verifyPullRequestConflict(repoId, number, payloadOf())); }
     catch (e) { setErr(errText(e)); } finally { setChecking(false); }
   };
 
   const save = async () => {
-    if (!d || !ready) return;
+    if (!d) return;
+    const why = missing();
+    if (why) { setWaiting(why); return; }
+    setWaiting(null);
     setBusy(true); setErr(null);
     try {
       const payload = payloadOf();
@@ -273,11 +289,14 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
                     approved={!!approved[file.path]}
                     active={active}
                     setActive={setActive}
-                    onChoose={(i, c) => setChoices((prev) => {
-                      const cur = [...(prev[file.path] ?? [])];
-                      cur[i] = c;
-                      return { ...prev, [file.path]: cur };
-                    })}
+                    onChoose={(i, c) => {
+                      setWaiting(null);
+                      setChoices((prev) => {
+                        const cur = [...(prev[file.path] ?? [])];
+                        cur[i] = c;
+                        return { ...prev, [file.path]: cur };
+                      });
+                    }}
                     // Editing always un-approves: what was approved is no longer what is written.
                     onManual={(text) => {
                       setManual((prev) => ({ ...prev, [file.path]: text }));
@@ -311,10 +330,12 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
                   DCC יריץ את הבדיקות של המאגר עצמו על התוצאה, בעותק מבודד, <b>לפני</b> שמשהו נדחף. זו אותה תשובה שהייתם מקבלים מהטרמינל.
                 </p>
                 <div className="ob-actions" style={{ marginTop: 10 }}>
-                  <button className="btn btn-secondary btn-sm" disabled={!ready || checking || busy} onClick={() => void verify()}>
+                  {/* Enabled even when there is nothing to check yet: a dead button explains nothing, so pressing it says what is missing. */}
+                  <button className="btn btn-secondary btn-sm" disabled={checking || busy} onClick={() => void verify()}>
                     {checking ? "בודק…" : "בדוק את התוצאה"}
                   </button>
                 </div>
+                {!checking && !ready && <p className="ob-sub" style={{ marginTop: 8 }}>{missing()}</p>}
                 {checking && <p className="ob-sub" style={{ marginTop: 8 }}>מכין עותק ומריץ. זה לוקח כמה עשרות שניות.</p>}
                 {check && !check.ran && <div className="ob-note warn" style={{ marginTop: 8 }}>{check.why}</div>}
                 {check?.ran && (
@@ -343,11 +364,12 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
                   המיזוג ל-<span className="ob-code">{d.base}</span> עצמו לא קורה כאן — אותו תאשרו בנפרד.
                 </p>
                 <div className="ob-actions" style={{ marginTop: 10 }}>
-                  <button className="btn btn-primary btn-sm" disabled={!ready || busy} onClick={() => void save()}>
+                  <button className="btn btn-primary btn-sm" disabled={busy || checking} onClick={() => void save()}>
                     {busy ? "שומר ודוחף…" : "שמור ודחוף את ההכרעה"}
                   </button>
-                  <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void load()}>טען מחדש</button>
+                  <button className="btn btn-secondary btn-sm" disabled={busy || checking} onClick={() => void load()}>טען מחדש</button>
                 </div>
+                {waiting && <div className="ob-note warn" style={{ marginTop: 8 }}>{waiting}</div>}
                 {check?.ran && !check.checks.every((c) => c.ok) && ready && (
                   <p className="ob-sub" style={{ marginTop: 8 }}>בדיקה נכשלה על התוצאה. אפשר לשמור בכל זאת, אבל אז הענף יישאר שבור עד שיתוקן.</p>
                 )}
