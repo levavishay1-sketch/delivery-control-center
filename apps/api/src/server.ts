@@ -119,6 +119,7 @@ import {
   getOnboardingFileVersions,
   pullRequestFile,
   submitReview,
+  mergeRequest,
   ReviewRefused,
   repoBranches,
   listOnboardingRuns,
@@ -279,6 +280,13 @@ app.post("/repos/:id/pull-requests/:number/review", async (req) => {
   const { id, number } = req.params as { id: string; number: string };
   const b = z.object({ decision: z.enum(["comment", "approve", "request_changes"]), text: z.string().max(4000).optional() }).parse(req.body ?? {});
   return submitReview({ repoId: id, number: Number(number), decision: b.decision, text: b.text ?? "" });
+});
+
+/** The host's own merge, without an approval — a temporary way through until each person acts as their own account. */
+app.post("/repos/:id/pull-requests/:number/merge", async (req) => {
+  await actingUser(req);
+  const { id, number } = req.params as { id: string; number: string };
+  return mergeRequest({ repoId: id, number: Number(number) });
 });
 
 /** Every branch of a repository, and what to do about each one. */
