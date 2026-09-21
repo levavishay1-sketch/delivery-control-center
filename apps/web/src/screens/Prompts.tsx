@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getPrompts, updatePromptTemplate, type PromptTemplate } from "../api.ts";
-import { PageHead } from "../ui.tsx";
+import { CardTitle, PageHead } from "../ui.tsx";
 
 /**
  * The system's own prompt library — every DCC-driven Claude call should
@@ -128,13 +128,13 @@ export function Prompts() {
 
   return (
     <>
-      <PageHead title="פרומפטים" sub="ספריית הפרומפטים של המערכת — כל קריאה ל-Claude מ-DCC בנויה מתבנית כאן, לא ממחרוזת קבועה בקוד, לפי הקטגוריה שבה היא רצה ב-DCC." />
+      <PageHead info="page_prompts" title="פרומפטים" sub="ספריית הפרומפטים של המערכת — כל קריאה ל-Claude מ-DCC בנויה מתבנית כאן, לא ממחרוזת קבועה בקוד, לפי הקטגוריה שבה היא רצה ב-DCC." />
       {loading && <div className="spin">טוען…</div>}
       {empty && <div className="empty">אין עדיין פרומפטים בספרייה.</div>}
 
       {Array.from(categories.entries()).map(([cat, list]) => (
         <section key={cat} style={{ marginBottom: 24 }}>
-          <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{cat}</h3>
+          <CardTitle as="h3" info="prompt_category" style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>{cat}</CardTitle>
           {list.map((p) => <PromptCard key={p.id} p={p} onSaved={reload} />)}
         </section>
       ))}

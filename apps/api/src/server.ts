@@ -133,6 +133,7 @@ import {
   listConversations,
   getConversation,
   ChatError,
+  allConcepts,
   glossaryFor,
   runProposal,
   cancelProposal,
@@ -491,6 +492,12 @@ app.post("/claude/messages/:id/run-code", async (req) => {
 app.post("/claude/messages/:id/run-code/cancel", async (req) => {
   const dev = await actingUser(req);
   return cancelCodeQuestion((req.params as { id: string }).id, dev.id);
+});
+
+/** Every concept, once: the web's "i" reads them all from here and looks each key up locally. */
+app.get("/claude/glossary", async (req) => {
+  await actingUser(req);
+  return { concepts: allConcepts() };
 });
 
 app.get("/claude/glossary/:screen", async (req, reply) => {

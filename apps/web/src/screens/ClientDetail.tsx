@@ -61,7 +61,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_client"
         crumb={<a onClick={() => nav("#/clients")}>← לקוחות</a>}
         title={d.client.name}
         sub={`${d.requirements.length} דרישות · ${d.repos.length} repositories · ${activeConns.length} חיבורים${d.client.adoProjectRef ? ` · ADO: ${d.client.adoProjectRef}` : ""}`}

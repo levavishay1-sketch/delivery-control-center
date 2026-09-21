@@ -8,7 +8,7 @@ import {
   getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, verifyGap,
   type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
-import { Pill, TypeChip } from "../ui.tsx";
+import { CardTitle, Pill, TypeChip } from "../ui.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
 import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
 import { WorkflowTab } from "./WorkflowTab.tsx";
@@ -393,7 +393,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       <p className="crumb"><a onClick={() => nav(wi.parentId ? `#/wi/${wi.parentId}` : `#/client/${wi.clientId}`)}>← {wi.parentId ? "לדרישת האב" : "ללקוח"}</a></p>
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
-          <h1>{wi.title}</h1>
+          <CardTitle as="h1" info="page_requirement">{wi.title}</CardTitle>
           <TypeChip type={wi.type} />
           {wi.key && <span style={{ fontFamily: "var(--mono)", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
@@ -581,7 +581,7 @@ function CallsModal({ rows, loading, summary, nav, onClose }: {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "6vh 16px", zIndex: 100 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(980px, 100%)", maxHeight: "88vh", overflowY: "auto", padding: "22px 24px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <h2 style={{ fontSize: 17, fontWeight: 650 }}>פירוט עלות AI</h2>
+          <CardTitle as="h2" info="ai_cost" style={{ fontSize: 17, fontWeight: 650 }}>פירוט עלות AI</CardTitle>
           <a onClick={onClose} style={{ cursor: "pointer", fontSize: 15, color: "var(--ink-500)" }}>✕</a>
         </div>
         <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 14 }}>כל קריאה לקלוד על הדרישה הזו — מיומן הקריאות, כמו במרכז הבקרה. לחיצה על שורה פותחת את הפרטים.</p>
@@ -608,7 +608,7 @@ function CorrectNote({ ev, workitemId, onClose, onDone }: { ev: EventRow; workit
   return (
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgb(16 18 43 / 0.35)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8vh 16px", zIndex: 100 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-panel)", width: "min(520px, 100%)", padding: "22px 24px" }}>
-        <h2 style={{ fontSize: 17, fontWeight: 650, marginBottom: 12 }}>תיקון הערה</h2>
+        <CardTitle as="h2" info="note_correction" style={{ fontSize: 17, fontWeight: 650, marginBottom: 12 }}>תיקון הערה</CardTitle>
         <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 10 }}>ההערה המקורית תישאר ב-timeline מסומנת "תוקן". זו רשומה חדשה שמחליפה אותה.</p>
         <textarea value={text} onChange={(e) => setText(e.target.value)} style={{ width: "100%", minHeight: 110 }} />
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>

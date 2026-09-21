@@ -3,10 +3,10 @@ import {
   analyseInsights, dismissInsight, getClaudeCalls, getClaudeOverview, getClients, getConversations, getInsights, getPolicy, openImprovementTask, putPolicy, setClientRetention,
   type ClaudeCallView, type ClaudeOverview, type ConversationView, type InsightsView, type PolicyCapability, type PolicyDoc, type PolicyPrice, type PolicyView,
 } from "../api.ts";
-import { PageHead, Pill } from "../ui.tsx";
+import { CardTitle, PageHead, Pill } from "../ui.tsx";
 import { CallsTable } from "../claude/CallsTable.tsx";
 import { CostLine } from "../claude/CostLine.tsx";
-import { GlossaryHint } from "../claude/GlossaryHint.tsx";
+import { Info } from "../claude/Info.tsx";
 import { chatCommand, useClaudeContext } from "../claude/context.ts";
 import { CAPABILITY_HE, EFFORTS, EFFORT_HE, MODEL_OPTIONS, OUTCOME_HE, capabilityLabel, effortLabel, fmtInt, fmtUsd, fmtWhen, modelLabel, outcomeOf, screenLabel } from "../claude/labels.ts";
 import { errText } from "./onboarding/labels.ts";
@@ -49,7 +49,7 @@ export function ClaudeCenter({ tab, openId, nav }: { tab: CenterTab; openId?: st
   const current = TABS.find((t) => t.key === tab) ?? TABS[0]!;
   return (
     <>
-      <PageHead
+      <PageHead info="page_claude"
         title="קלוד"
         sub="מרכז הבקרה: כל שיחה, כל קריאה, כל הכסף — במקום אחד. כל מספר על קלוד במסך אחר הוא חתך ממה שכאן."
         actions={
@@ -117,7 +117,7 @@ function ConversationsTab({ clientId, nav }: { clientId: string; nav: (h: string
       </div>
       <div className="rail">
         <div className="panel">
-          <h4>איך שיחות נפתחות</h4>
+          <CardTitle info="chat_how_conversations_open">איך שיחות נפתחות</CardTitle>
           <div className="ob-explain" style={{ marginTop: 0 }}>
             <div><b>לבד</b><span>המסך שאתם בו קובע את הנושא: דרישה, משימה, בקשת מיזוג, הטמעה — או "המערכת" כשאין ישות.</span></div>
             <div><b>נפרד</b><span>לכל נושא שיחה אחת לכל אדם. חוזרים אליה אחרי שבוע ומוצאים אותה כפי שהייתה.</span></div>
@@ -132,11 +132,11 @@ function ConversationsTab({ clientId, nav }: { clientId: string; nav: (h: string
 
 /* ── סקירה ─────────────────────────────────────────────────────────── */
 
-function Bars({ title, rows, labelOf, tone }: { title: string; rows: { key: string; label: string; usd: number; calls: number }[]; labelOf?: (k: string) => string; tone?: "ai" | "healthy" }) {
+function Bars({ title, info, rows, labelOf, tone }: { title: string; info: string; rows: { key: string; label: string; usd: number; calls: number }[]; labelOf?: (k: string) => string; tone?: "ai" | "healthy" }) {
   const max = Math.max(0, ...rows.map((r) => r.usd));
   return (
     <div className="panel">
-      <h4>{title}</h4>
+      <CardTitle info={info}>{title}</CardTitle>
       {rows.length === 0 ? <p className="ob-sub">אין קריאות בחודש הזה.</p> : (
         <div className="bars">
           {rows.slice(0, 8).map((r) => (
@@ -167,20 +167,20 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
     <>
       <div className="stat-row">
         <div className="stat-tile">
-          <div className="stat-top"><div><div className="lbl">עלות החודש</div><div className="num">{fmtUsd(t.costUsd)}</div></div><span className="badge-soft ai">$</span></div>
+          <div className="stat-top"><div><div className="lbl">עלות החודש<Info k="cost_this_month" /></div><div className="num">{fmtUsd(t.costUsd)}</div></div><span className="badge-soft ai">$</span></div>
           <div className="stat-sub muted">{t.budgetPct != null ? `${t.budgetPct}% מהתקציב · ` : ""}{fmtInt(t.calls)} קריאות</div>
           <a className="stat-link" onClick={() => nav("#/claude/calls")}>כל הקריאות ←</a>
         </div>
         <div className="stat-tile">
-          <div className="stat-top"><div><div className="lbl">נענו בלי מודל<GlossaryHint screen="claude" entry="without_model" /></div><div className="num">{t.questions > 0 ? `${t.answeredWithoutModelPct}%` : "—"}</div></div><span className="badge-soft healthy">✓</span></div>
+          <div className="stat-top"><div><div className="lbl">נענו בלי מודל<Info k="without_model" /></div><div className="num">{t.questions > 0 ? `${t.answeredWithoutModelPct}%` : "—"}</div></div><span className="badge-soft healthy">✓</span></div>
           <div className="stat-sub muted">{t.questions > 0 ? `${fmtInt(t.answeredWithoutModel)} מתוך ${fmtInt(t.questions)} שאלות בצ'אט` : "הצ'אט מגיע בשלב הבא"}</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-top"><div><div className="lbl">"לא עזר"<GlossaryHint screen="claude" entry="unhelpful" /></div><div className="num">{t.questions > 0 ? `${t.unhelpfulPct}%` : "—"}</div></div><span className="badge-soft warning">!</span></div>
+          <div className="stat-top"><div><div className="lbl">"לא עזר"<Info k="unhelpful" /></div><div className="num">{t.questions > 0 ? `${t.unhelpfulPct}%` : "—"}</div></div><span className="badge-soft warning">!</span></div>
           <div className="stat-sub muted">{t.questions > 0 ? `${fmtInt(t.unhelpful)} תשובות · ${fmtInt(t.reasked)} נשאלו שוב מיד` : "נמדד מהצ'אט"}</div>
         </div>
         <div className="stat-tile">
-          <div className="stat-top"><div><div className="lbl">לא עבד</div><div className="num">{fmtInt(failed + t.escalated)}</div></div><span className="badge-soft critical">✕</span></div>
+          <div className="stat-top"><div><div className="lbl">לא עבד<Info k="failed_calls" /></div><div className="num">{fmtInt(failed + t.escalated)}</div></div><span className="badge-soft critical">✕</span></div>
           <div className="stat-sub muted">{fmtInt(t.errors)} שגיאות · {fmtInt(t.timeouts)} פסק זמן · {fmtInt(t.escalated)} נדרש מודל חזק יותר</div>
           <a className="stat-link" onClick={() => nav("#/claude/calls")}>מה לא עבד ←</a>
         </div>
@@ -189,13 +189,13 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
       <div className="dash">
         <div>
           <div className="section" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <Bars title="לאן הולך הכסף · לפי לקוח" rows={o.byClient} />
-            <Bars title="לפי סוג פעולה" rows={o.byCapability} labelOf={capabilityLabel} tone="ai" />
-            <Bars title="לפי מודל" rows={o.byModel} labelOf={modelLabel} />
-            <Bars title="לפי מסך" rows={o.byScreen} labelOf={screenLabel} tone="healthy" />
+            <Bars title="לאן הולך הכסף · לפי לקוח" info="cost_by_client" rows={o.byClient} />
+            <Bars title="לפי סוג פעולה" info="cost_by_capability" rows={o.byCapability} labelOf={capabilityLabel} tone="ai" />
+            <Bars title="לפי מודל" info="cost_by_model" rows={o.byModel} labelOf={modelLabel} />
+            <Bars title="לפי מסך" info="cost_by_screen" rows={o.byScreen} labelOf={screenLabel} tone="healthy" />
           </div>
           <div className="panel">
-            <div className="section-head" style={{ marginBottom: 8 }}><h4 style={{ margin: 0 }}>לפי אדם</h4><a onClick={() => nav("#/claude/calls")}>לכל הקריאות ←</a></div>
+            <div className="section-head" style={{ marginBottom: 8 }}><CardTitle info="cost_by_person" style={{ margin: 0 }}>לפי אדם</CardTitle><a onClick={() => nav("#/claude/calls")}>לכל הקריאות ←</a></div>
             {o.byUser.length === 0 ? <p className="ob-sub">אין קריאות בחודש הזה.</p> : (
               <table className="wtable">
                 <thead><tr><th>מי</th><th className="num">קריאות</th><th className="num">עלות</th></tr></thead>
@@ -204,12 +204,12 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
             )}
           </div>
           <div className="panel">
-            <div className="section-head" style={{ marginBottom: 8 }}><h4 style={{ margin: 0 }}>מה מכוונים לפיו</h4><span className="ob-sub">המספרים שלפיהם נקבעים הספים במדיניות — לא הערכה</span></div>
+            <div className="section-head" style={{ marginBottom: 8 }}><CardTitle info="chat_targets" style={{ margin: 0 }}>מה מכוונים לפיו</CardTitle><span className="ob-sub">המספרים שלפיהם נקבעים הספים במדיניות — לא הערכה</span></div>
             <div className="stat-row" style={{ marginBottom: 12 }}>
               <div className="stat-tile"><div className="lbl">עלות לשאלה</div><div className="num">{o.chat.costPerQuestionUsd != null ? fmtUsd(o.chat.costPerQuestionUsd) : "—"}</div><div className="stat-sub muted">{fmtInt(o.chat.calls)} קריאות צ'אט ל-{fmtInt(t.questions)} שאלות</div></div>
               <div className="stat-tile"><div className="lbl">טוקנים לתור</div><div className="num">{o.chat.tokensPerTurn != null ? fmtInt(o.chat.tokensPerTurn) : "—"}</div><div className="stat-sub muted">קלט ומטמון, ממוצע לקריאת צ'אט</div></div>
-              <div className="stat-tile"><div className="lbl">גלגולים<GlossaryHint screen="claude" entry="rollover" /></div><div className="num">{fmtInt(o.chat.rollovers)}</div><div className="stat-sub muted">הסיכומים עלו {fmtUsd(o.chat.rolloverCostUsd)}</div></div>
-              <div className="stat-tile"><div className="lbl">נמחקו לפי השמירה<GlossaryHint screen="claude" entry="retention" /></div><div className="num">{fmtInt(o.chat.archived)}</div><div className="stat-sub muted">התוכן נמחק; העלות נשארה</div></div>
+              <div className="stat-tile"><div className="lbl">גלגולים<Info k="rollover" /></div><div className="num">{fmtInt(o.chat.rollovers)}</div><div className="stat-sub muted">הסיכומים עלו {fmtUsd(o.chat.rolloverCostUsd)}</div></div>
+              <div className="stat-tile"><div className="lbl">נמחקו לפי השמירה<Info k="retention" /></div><div className="num">{fmtInt(o.chat.archived)}</div><div className="stat-sub muted">התוכן נמחק; העלות נשארה</div></div>
             </div>
             {o.chatByScreen.length > 0 && (
               <table className="wtable">
@@ -229,23 +229,23 @@ function OverviewTab({ month, clientId, nav }: { month: string; clientId: string
         </div>
         <div className="rail">
           <div className="panel">
-            <h4>המדיניות בפועל</h4>
+            <CardTitle info="policy_in_practice">המדיניות בפועל</CardTitle>
             <div className="stat-line"><span className="l">קריאות לפי ברירת המחדל</span><span>{fmtInt(o.policy.defaults)}</span></div>
-            <div className="stat-line"><span className="l">הוסלמו לפי כלל<GlossaryHint screen="claude" entry="escalated" /></span><span>{fmtInt(o.policy.escalated)}</span></div>
+            <div className="stat-line"><span className="l">הוסלמו לפי כלל<Info k="escalated" /></span><span>{fmtInt(o.policy.escalated)}</span></div>
             <div className="stat-line"><span className="l">נבחרו ידנית</span><span>{fmtInt(o.policy.manual)}</span></div>
             <div className="stat-line"><span className="l">נדחו בתקרה</span><span>{fmtInt(o.policy.capped)}</span></div>
             <p className="ob-sub" style={{ marginTop: 8 }}>גרסת מדיניות {o.policy.version}. כל קריאה נושאת את הגרסה שלפיה נותבה.</p>
           </div>
           <div className="panel">
-            <h4>טוקנים</h4>
+            <CardTitle info="tokens">טוקנים</CardTitle>
             <div className="stat-line"><span className="l">קלט</span><span>{fmtInt(o.tokens.input)}</span></div>
-            <div className="stat-line"><span className="l">נקראו מהמטמון<GlossaryHint screen="claude" entry="cache" /></span><span>{fmtInt(o.tokens.cacheRead)} ({o.tokens.cacheSharePct}%)</span></div>
+            <div className="stat-line"><span className="l">נקראו מהמטמון<Info k="cache" /></span><span>{fmtInt(o.tokens.cacheRead)} ({o.tokens.cacheSharePct}%)</span></div>
             <div className="stat-line"><span className="l">נכתבו למטמון</span><span>{fmtInt(o.tokens.cacheWrite)}</span></div>
             <div className="stat-line"><span className="l">פלט</span><span>{fmtInt(o.tokens.output)}</span></div>
             <p className="ob-sub" style={{ marginTop: 8 }}>קריאה מהמטמון עולה עשירית ממחיר הקלט. שיעור נמוך אומר שהחלק הקבוע של הפרומפט קצר מדי או משתנה.</p>
           </div>
           <div className="panel">
-            <h4>לא נענה</h4>
+            <CardTitle info="unanswered">לא נענה</CardTitle>
             <div className="stat-line"><span className="l">"אין לי את זה במסך"</span><span>{fmtInt(t.unanswered)}</span></div>
             <p className="ob-sub" style={{ marginTop: 8 }}>כל אחת כזו היא מועמדת לעובדה שהמסך צריך למסור (סעיף 7.2).</p>
           </div>
@@ -331,12 +331,12 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
       <div>
         <div className="panel">
           <div className="section-head" style={{ marginBottom: 6 }}>
-            <h4 style={{ margin: 0 }}>שאלות שחוזרות<GlossaryHint screen="claude" entry="insights" /></h4>
+            <CardTitle info="insights" style={{ margin: 0 }}>שאלות שחוזרות</CardTitle>
             <button className="btn btn-primary btn-sm" type="button" disabled={busy === "analyse" || due.length === 0} title={due.length ? undefined : "אין שאלה מעל הסף שעוד לא נותחה"}
               onClick={() => void act("analyse", () => analyseInsights({ month, ...(clientId ? { clientId } : {}) }).then((r) => r.analysed
                 ? `נוסחו ${r.analysed} ממצאים בקריאה אחת${r.costUsd != null ? ` · ${fmtUsd(r.costUsd)}` : ""} · הקריאה רשומה ביומן בשמכם`
                 : "אין שאלות חדשות לנתח"))}>
-              {busy === "analyse" ? "מנתח…" : `נתח שאלות${due.length ? ` (${due.length})` : ""}`}<GlossaryHint screen="claude" entry="analyse" />
+              {busy === "analyse" ? "מנתח…" : `נתח שאלות${due.length ? ` (${due.length})` : ""}`}<Info k="analyse" />
             </button>
           </div>
           <p className="ob-sub">שאלה שחוזרת על אותו מסך היא פער במסך, לא בקלוד. הקיבוץ כאן לא עולה כסף. "נתח שאלות" היא קריאה אחת בשמכם ({estimate}) שמנסחת ממצא והמלצה לכל שאלה שחזרה {v.threshold} פעמים ומעלה — ונרשמת ביומן כמו כל קריאה.</p>
@@ -357,7 +357,7 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
                         : c.status === "dismissed" ? <Pill tone="inactive">לא רלוונטי</Pill>
                         : c.id && c.finding ? (
                           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                            <button className="btn btn-primary btn-sm" type="button" disabled={busy === c.id} onClick={() => void act(c.id!, () => openImprovementTask(c.id!).then(() => "נפתחה משימת שיפור על הלקוח הפנימי, בשמכם — הממצא וההמלצה הם ההערה הראשונה שלה"))}>פתח משימת שיפור<GlossaryHint screen="claude" entry="improvement_task" /></button>
+                            <button className="btn btn-primary btn-sm" type="button" disabled={busy === c.id} onClick={() => void act(c.id!, () => openImprovementTask(c.id!).then(() => "נפתחה משימת שיפור על הלקוח הפנימי, בשמכם — הממצא וההמלצה הם ההערה הראשונה שלה"))}>פתח משימת שיפור<Info k="improvement_task" /></button>
                             <button className="btn btn-secondary btn-sm" type="button" disabled={busy === c.id} onClick={() => void act(c.id!, () => dismissInsight(c.id!).then(() => null))}>לא רלוונטי</button>
                           </div>
                         ) : <span className="muted small">{c.aboveThreshold ? "ממתין לניתוח" : `ינותח מ-${v.threshold} פעמים`}</span>}
@@ -370,7 +370,7 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
         </div>
 
         <div className="panel">
-          <h4>"אין לי את זה במסך"</h4>
+          <CardTitle info="unanswered">"אין לי את זה במסך"</CardTitle>
           <p className="ob-sub">קלוד אמר שהמסך לא מוסר את מה שנשאל. כל שורה כזו היא מועמדת לעובדה שהמסך צריך להציג (סעיף 7.2).</p>
           {v.unanswered.length === 0 ? <p className="ob-sub">אין כאלה בחודש הזה.</p> : (
             <div className="rowlist">
@@ -386,7 +386,7 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
         </div>
 
         <div className="panel">
-          <h4>"לא עזר"<GlossaryHint screen="claude" entry="unhelpful" /></h4>
+          <CardTitle info="unhelpful">"לא עזר"</CardTitle>
           <p className="ob-sub">תשובות שאדם סימן שלא עזרו, או שאותה שאלה נשאלה שוב מיד אחריהן.</p>
           {v.unhelpful.length === 0 ? <p className="ob-sub">אין כאלה בחודש הזה.</p> : (
             <div className="rowlist">
@@ -407,7 +407,7 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
 
       <div className="rail">
         <div className="panel">
-          <h4>לא עבד</h4>
+          <CardTitle info="failed_calls">לא עבד</CardTitle>
           {v.failed.length === 0 ? <p className="ob-sub">אין שגיאות, פסקי זמן או דחיות בחודש הזה.</p> : v.failed.slice(0, 8).map((r) => (
             <div key={r.id} className="stat-line" style={{ alignItems: "flex-start" }}>
               <span className="l"><a onClick={() => nav(`#/claude/calls`)}>{capabilityLabel(r.capability)}</a><div className="muted small">{fmtWhen(r.startedAt)} · {r.userName}{r.errorText ? ` — ${r.errorText.slice(0, 80)}` : ""}</div></span>
@@ -416,7 +416,7 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
           ))}
         </div>
         <div className="panel">
-          <h4>נדרש מודל חזק יותר<GlossaryHint screen="claude" entry="escalated" /></h4>
+          <CardTitle info="escalated">נדרש מודל חזק יותר</CardTitle>
           {v.escalated.length === 0 ? <p className="ob-sub">אף קריאה לא הוסלמה בחודש הזה.</p> : v.escalated.slice(0, 8).map((r) => (
             <div key={r.id} className="stat-line" style={{ alignItems: "flex-start" }}>
               <span className="l">{capabilityLabel(r.capability)}<div className="muted small">{r.policyRule ?? ""}</div></span>
@@ -426,7 +426,7 @@ function InsightsTab({ month, clientId, nav }: { month: string; clientId: string
           <p className="ob-sub" style={{ marginTop: 8 }}>הרבה הסלמות באותו כלל = ברירת מחדל מוסווית. משנים אותה בלשונית "מדיניות ושמירה".</p>
         </div>
         <div className="panel">
-          <h4>מה עושים עם מסקנה</h4>
+          <CardTitle info="insight_actions">מה עושים עם מסקנה</CardTitle>
           <div className="ob-explain" style={{ marginTop: 0 }}>
             <div><b>מנתחים</b><span>קלוד מנסח ממצא והמלצה לכל שאלה שחזרה מעל הסף. קריאה אחת, בשמכם, ביומן.</span></div>
             <div><b>פותחים משימה</b><span>הממצא הופך לדרישה על הלקוח הפנימי של DCC — כמו כל דרישה: בחינת בשלות, פירוק, פיתוח.</span></div>
@@ -494,7 +494,7 @@ function PolicyTab() {
       <div>
         <div className="panel">
           <div className="section-head" style={{ marginBottom: 6 }}>
-            <h4 style={{ margin: 0 }}>המדיניות<GlossaryHint screen="claude" entry="policy" /> · גרסה {v.policy.version}</h4>
+            <CardTitle info="policy" style={{ margin: 0 }}>המדיניות · גרסה {v.policy.version}</CardTitle>
             <div style={{ display: "flex", gap: 8 }}>
               {dirty && <button className="btn btn-secondary btn-sm" type="button" disabled={saving} onClick={() => setDraft(JSON.parse(JSON.stringify(v.policy)) as PolicyDoc)}>בטל שינויים</button>}
               <button className="btn btn-primary btn-sm" type="button" disabled={!dirty || saving} onClick={() => void save()}>{saving ? "שומר…" : "שמור מדיניות"}</button>
@@ -524,7 +524,7 @@ function PolicyTab() {
         </div>
 
         <div className="panel">
-          <h4>הדרגות</h4>
+          <CardTitle info="policy_tiers">הדרגות</CardTitle>
           <table className="wtable">
             <thead><tr><th>דרגה</th><th>המודל</th><th>תקרה לקריאה ($)</th></tr></thead>
             <tbody>
@@ -540,12 +540,12 @@ function PolicyTab() {
         </div>
 
         <div className="panel">
-          <h4>הצ'אט</h4>
+          <CardTitle info="chat_settings">הצ'אט</CardTitle>
           <div className="ob-explain" style={{ marginTop: 0 }}>
             <div><b>גלגול לפי אורך</b><span><input type="number" step="1000" min="2000" value={draft.chat.rolloverInputTokens} onChange={(e) => setChat({ rolloverInputTokens: Number(e.target.value) })} style={{ width: 110 }} /> טוקנים — שיחה שהקשר שלה גדל מעבר לזה ממשיכה בשיחה חדשה עם סיכום קצר (קריאה שנרשמת).</span></div>
             <div><b>גלגול לפי שקט</b><span><input type="number" min="1" value={draft.chat.rolloverColdDays} onChange={(e) => setChat({ rolloverColdDays: Number(e.target.value) })} style={{ width: 80 }} /> ימים — אחרי שקט כזה השאלה הבאה פותחת המשך במקום להעמיס את כל העבר.</span></div>
-            <div><b>שמירה<GlossaryHint screen="claude" entry="retention" /></b><span><input type="number" min="1" value={draft.chat.retentionDays} onChange={(e) => setChat({ retentionDays: Number(e.target.value) })} style={{ width: 80 }} /> ימים — ברירת המחדל לכל הלקוחות; אחריהם טקסט השיחה נמחק, רשומות העלות נשארות.</span></div>
-            <div><b>סף החזרות<GlossaryHint screen="claude" entry="threshold" /></b><span><input type="number" min="2" value={draft.chat.insightsMinRepeats} onChange={(e) => setChat({ insightsMinRepeats: Number(e.target.value) })} style={{ width: 80 }} /> פעמים — כמה פעמים שאלה צריכה לחזור כדי שתנותח בלשונית "מסקנות".</span></div>
+            <div><b>שמירה<Info k="retention" /></b><span><input type="number" min="1" value={draft.chat.retentionDays} onChange={(e) => setChat({ retentionDays: Number(e.target.value) })} style={{ width: 80 }} /> ימים — ברירת המחדל לכל הלקוחות; אחריהם טקסט השיחה נמחק, רשומות העלות נשארות.</span></div>
+            <div><b>סף החזרות<Info k="threshold" /></b><span><input type="number" min="2" value={draft.chat.insightsMinRepeats} onChange={(e) => setChat({ insightsMinRepeats: Number(e.target.value) })} style={{ width: 80 }} /> פעמים — כמה פעמים שאלה צריכה לחזור כדי שתנותח בלשונית "מסקנות".</span></div>
             <div><b>הצהרת עלות</b><span>מעל <input type="number" step="0.05" min="0" value={draft.chat.declareCostAboveUsd} onChange={(e) => setChat({ declareCostAboveUsd: Number(e.target.value) })} style={{ width: 80 }} /> $ — שאלה שדורשת קריאה בקוד מוצגת עם עלות משוערת ומחכה לאישור.</span></div>
           </div>
         </div>
@@ -553,7 +553,7 @@ function PolicyTab() {
 
       <div className="rail">
         <div className="panel">
-          <h4>שמירה לפי לקוח</h4>
+          <CardTitle info="retention_per_client">שמירה לפי לקוח</CardTitle>
           <p className="ob-sub">ריק = ברירת המחדל ({v.retention.defaultDays} ימים). שינוי נרשם ביומן הפעילות של הלקוח.</p>
           {v.retention.clients.map((c) => (
             <div key={c.clientId} className="stat-line" style={{ gap: 8 }}>
@@ -566,7 +566,7 @@ function PolicyTab() {
           ))}
         </div>
         <div className="panel">
-          <h4>מחירון</h4>
+          <CardTitle info="price_list">מחירון</CardTitle>
           <p className="ob-sub">דולר למיליון טוקנים, לפי המחירון הרשמי. הקריאה מדווחת את עלותה בעצמה; המחירון כאן משמש לאומדנים ולחישוב מחדש. עורכים בקובץ <code>config/model-policy.json</code>.</p>
           {prices.map(([m, p]) => (
             <div key={m} className="stat-line" style={{ alignItems: "flex-start" }}>
@@ -576,7 +576,7 @@ function PolicyTab() {
           ))}
         </div>
         <div className="panel">
-          <h4>מה קורה כששומרים</h4>
+          <CardTitle info="policy_save_effect">מה קורה כששומרים</CardTitle>
           <div className="ob-explain" style={{ marginTop: 0 }}>
             <div><b>מיד</b><span>הקריאה הבאה מכל מסך מנותבת לפי הגרסה החדשה. קריאות שכבר רצות לא משתנות.</span></div>
             <div><b>נרשם</b><span>גרסה חדשה, מי שינה, מתי ומה — ביומן הפעילות של הלקוח הפנימי. כל שורה ביומן הקריאות נושאת את הגרסה שלה.</span></div>

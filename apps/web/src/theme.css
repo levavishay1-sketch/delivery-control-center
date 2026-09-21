@@ -819,15 +819,16 @@ a { color: var(--color-accent); }
 .cc-card .kv { display: grid; grid-template-columns: 74px 1fr; gap: 3px 10px; font-size: 12px; margin-top: 8px; }
 .cc-card .kv b { color: var(--ink-500); font-weight: 600; }
 .cc-card .acts { display: flex; gap: 8px; margin-top: 10px; align-items: center; flex-wrap: wrap; }
-/* the "?" next to a control, from the same glossary the chat answers from */
-.gl-wrap { position: relative; display: inline-block; }
-.gl-q { appearance: none; display: inline-flex; width: 18px; height: 18px; border-radius: 999px; border: 1px solid var(--border-hairline); background: var(--surface); color: var(--ink-500); font: inherit; font-size: 11px; font-weight: 700; align-items: center; justify-content: center; margin-inline-start: 6px; vertical-align: middle; cursor: pointer; padding: 0; }
-.gl-q:hover, .gl-q[aria-expanded="true"] { border-color: var(--color-accent); color: var(--color-accent-dark); }
-.gl-hint { position: absolute; top: 24px; inset-inline-start: 0; z-index: 50; width: 300px; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-panel); padding: 10px 12px; font-size: 12.5px; line-height: 1.6; color: var(--ink-700); text-align: start; font-weight: 400; white-space: normal; display: block; }
-.gl-hint b { display: block; color: var(--ink-900); font-size: 13px; margin-bottom: 2px; }
-.gl-hint .gl-press { display: block; margin-top: 4px; }
-.gl-hint .gl-press span { color: var(--ink-900); font-weight: 600; }
-.gl-hint .gl-foot { display: block; margin-top: 8px; font-size: 11px; color: var(--ink-500); }
+/* the "i" next to a card, a title, a figure or a field — one wording, from the concept registry (claude/Info.tsx) */
+.info-wrap { position: relative; display: inline-block; font-weight: 400; }
+.info-i { appearance: none; display: inline-flex; width: 17px; height: 17px; border-radius: 999px; border: 1px solid var(--border-hairline); background: var(--surface); color: var(--ink-500); font: italic 700 12px/1 Georgia, "Times New Roman", serif; align-items: center; justify-content: center; margin-inline-start: 6px; vertical-align: middle; cursor: pointer; padding: 0; }
+.info-i:hover, .info-i[aria-expanded="true"] { border-color: var(--color-accent); color: var(--color-accent-dark); }
+.info-i:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.info-hint { position: absolute; top: 24px; inset-inline-start: 0; z-index: 50; width: 300px; max-width: 86vw; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: var(--radius-md); box-shadow: var(--shadow-panel); padding: 10px 12px; font-size: 12.5px; line-height: 1.6; color: var(--ink-700); text-align: start; font-weight: 400; white-space: normal; display: block; }
+.info-hint b { display: block; color: var(--ink-900); font-size: 13px; margin-bottom: 2px; }
+.info-hint .info-press { display: block; margin-top: 4px; }
+.info-hint .info-press span { color: var(--ink-900); font-weight: 600; }
+.info-hint .info-foot { display: block; margin-top: 8px; font-size: 11px; color: var(--ink-500); }
 @media (max-width: 700px) { .cc-dock.float { width: 100vw; } .cc-fab { bottom: 12px; left: 12px; } }
 /* the conversations list (screens/ClaudeCenter.tsx) */
 .cv-row { display: grid; grid-template-columns: 26px 1fr auto; gap: 12px; align-items: center; padding: 11px 14px; border-top: 1px solid var(--border-hairline); background: var(--surface); cursor: pointer; }

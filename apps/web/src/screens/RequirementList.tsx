@@ -19,7 +19,7 @@ export function RequirementList({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_requirements"
         title="דרישות"
         sub={rows ? `${rows.length} דרישות-על` : undefined}
         actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ דרישה חדשה</button>}

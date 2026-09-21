@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { AutomationPolicy, AutomationPreset, Effort, ModelPolicy, OnboardingCost, OnboardingEvent, OnboardingRunSummary, OnboardingStageDefinition, OnboardingStageKey } from "../../api.ts";
-import { Pill } from "../../ui.tsx";
+import { CardTitle, Pill } from "../../ui.tsx";
 import { CostLine } from "../../claude/CostLine.tsx";
 import {
   EFFORTS, EFFORT_HE, MODEL_OPTIONS, PRESET_HE, RUN_STATUS_HE, describePolicy, effortLabel, eventLabel, fmtDate, fmtDuration, fmtInt, fmtTime, fmtUsd,
@@ -66,7 +66,7 @@ export function AutomationPanel({ policy, defs, busy, disabled, onSave }: {
   useEffect(() => { if (!editing) setDraft(policy); }, [policy, editing]);
   return (
     <div className="panel">
-      <h4>אוטומציה</h4>
+      <CardTitle info="automation">אוטומציה</CardTitle>
       <p style={{ fontSize: 12.5, marginBottom: 8 }}>{describePolicy(policy, defs)}</p>
       {!editing
         ? <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={() => { setDraft(policy); setConsent(false); setEditing(true); }}>שנה מדיניות</button>
@@ -131,7 +131,7 @@ export function ModelPanel({ choices, defs, recommended, busy, disabled, onSave 
   const init = choices.init;
   return (
     <div className="panel">
-      <h4>מודל ומאמץ</h4>
+      <CardTitle info="model_effort">מודל ומאמץ</CardTitle>
       <p style={{ fontSize: 12.5, marginBottom: 4 }}>{overridden ? "בחירה ידנית" : "לפי ההמלצה"}</p>
       <p className="ob-sub" style={{ marginBottom: 8 }}>{modelLabel(init?.model ?? recommended.init.model)} · מאמץ {effortLabel(init?.effort ?? recommended.init.effort)}</p>
       {!editing
@@ -155,7 +155,7 @@ export function ModelPanel({ choices, defs, recommended, busy, disabled, onSave 
 export function CostPanel({ cost, title, nav }: { cost: OnboardingCost; title: (key: string) => string; nav: (h: string) => void }) {
   return (
     <div className="panel">
-      <h4>עלות ההרצה</h4>
+      <CardTitle info="run_cost">עלות ההרצה</CardTitle>
       <div className="ob-kv">
         <div><div className="l">עלות AI</div><div className="v">{fmtUsd(cost.totalCostUsd)}</div></div>
         <div><div className="l">קריאות למודל</div><div className="v">{fmtInt(cost.apiCalls)}</div></div>
@@ -196,7 +196,7 @@ export function EventLogPanel({ events, title, users }: { events: OnboardingEven
   const list = [...events].reverse();
   return (
     <div className="panel">
-      <h4>יומן החלטות ואירועים</h4>
+      <CardTitle info="decision_log">יומן החלטות ואירועים</CardTitle>
       {list.length === 0 ? <p className="ob-sub">עדיין אין אירועים.</p> : (
         <div className="ob-timeline">
           {list.slice(0, 60).map((e) => {
@@ -223,7 +223,7 @@ export function RunsPanel({ runs, current, onPick }: { runs: OnboardingRunSummar
   if (runs.length < 2) return null;
   return (
     <div className="panel">
-      <h4>הרצות קודמות</h4>
+      <CardTitle info="previous_runs">הרצות קודמות</CardTitle>
       <div style={{ display: "grid", gap: 6 }}>
         {runs.map((r) => {
           const st = RUN_STATUS_HE[r.status];

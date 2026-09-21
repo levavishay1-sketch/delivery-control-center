@@ -40,7 +40,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_repositories"
         title="Repositories"
         sub={`${rows.length} repositories בכל הלקוחות`}
         actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ הוסף Repository</button>}

@@ -16,7 +16,7 @@ export function Settings({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead title="הגדרות" sub="חיבורים, repositories ו-model policy — לכל המערכת." />
+      <PageHead info="page_settings" title="הגדרות" sub="חיבורים, repositories ו-model policy — לכל המערכת." />
       {modal === "ado" && <ConnectAdo onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {modal === "repo" && <LinkRepo onClose={() => setModal(null)} onDone={() => { setModal(null); reload(); }} />}
       {editRepo && <EditRepo repo={editRepo} onClose={() => setEditRepo(null)} onDone={() => { setEditRepo(null); reload(); }} />}

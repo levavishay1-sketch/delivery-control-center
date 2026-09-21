@@ -14,7 +14,7 @@ export function ClientList({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead title="לקוחות" sub={rows ? `${rows.length} לקוחות` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ לקוח חדש</button>} />
+      <PageHead info="page_clients" title="לקוחות" sub={rows ? `${rows.length} לקוחות` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ לקוח חדש</button>} />
       {modal && <NewClient onClose={() => setModal(false)} onDone={() => { setModal(false); reload(); }} />}
       {err && <div className="empty">{err}</div>}
       <div className="proj-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>

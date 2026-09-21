@@ -15,7 +15,7 @@ export function Alerts({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead title="התראות" sub={rows ? `${rows.length} התראות` : undefined} />
+      <PageHead info="page_alerts" title="התראות" sub={rows ? `${rows.length} התראות` : undefined} />
       {err && <div className="empty">{err}</div>}
       <div className="rowlist">
         {(rows ?? []).map((a) => (

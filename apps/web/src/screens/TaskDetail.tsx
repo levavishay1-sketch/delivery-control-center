@@ -4,7 +4,7 @@ import {
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
   type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
-import { PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { CardTitle, PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 import { StepRail } from "./WorkflowTab.tsx";
@@ -351,7 +351,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/wi/${d.requirement.id}`)}>⬅ לדרישה {d.requirement.key ?? ""}</button>
       </div>
 
-      <PageHead
+      <PageHead info="page_task"
         title={t.intent}
         sub={`${t.kind === "check" ? "בדיקה" : "משימה"} #${t.seq} · ${t.kind === "check" ? "לא ב-TFS בנפרד" : t.adoType ?? "Task"} · ${t.appetite}`}
         actions={
@@ -419,7 +419,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
       <Card>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <h3 style={{ fontSize: 14.5, fontWeight: 650, margin: 0 }}>הפרומט שיישלח ל-Claude</h3>
+          <CardTitle as="h3" info="prompt_preview" style={{ fontSize: 14.5, fontWeight: 650, margin: 0 }}>הפרומט שיישלח ל-Claude</CardTitle>
           {promptPreview && (
             <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
               <a onClick={() => setPromptLang("he")} style={{ fontSize: 11.5, fontWeight: promptLang === "he" ? 700 : 400, cursor: "pointer", color: promptLang === "he" ? "var(--color-accent)" : "var(--ink-500)" }}>עברית</a>
@@ -456,7 +456,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
       {delReport && (
         <Card tone={delReport.safe ? undefined : "crit"}>
-          <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 4 }}>מחיקת משימה #{t.seq}</h3>
+          <CardTitle as="h3" info="task_delete" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 4 }}>מחיקת משימה #{t.seq}</CardTitle>
           {delReport.safe ? (
             <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
               אין תת-פריטים, אין קישור ל-TFS, אין קוד שמומש, ואין משימות אחרות שנגעו באותם קבצים — מחיקה בטוחה.
@@ -560,7 +560,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
       {editing && (
         <Card>
-          <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 10 }}>עריכת משימה</h3>
+          {/* a form that shows its own fields; nothing to explain beyond them */}
+          <CardTitle as="h3" info={null} style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 10 }}>עריכת משימה</CardTitle>
           <div className="field" style={{ marginBottom: 10 }}>
             <label>כותרת / intent</label>
             <textarea value={editIntent} onChange={(e) => setEditIntent(e.target.value)} rows={2} />
@@ -669,7 +670,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
             <>
               {impl && (
                 <>
-                  <h3 style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</h3>
+                  <CardTitle as="h3" info="task_result" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</CardTitle>
                   <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
 
                   {impl.checks && impl.checks.length > 0 && (
@@ -798,7 +799,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                     <Pill tone="inactive">↩ בוטל</Pill>
-                    <h3 style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</h3>
+                    <CardTitle as="h3" info="task_previous_run" style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</CardTitle>
                   </div>
                   {(() => {
                     const old = run.result as unknown as ImplementResult | null;

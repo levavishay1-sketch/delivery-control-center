@@ -6,7 +6,7 @@ import {
   type AutomationPolicy, type DeliverResult, type Effort, type InitResult, type ModelPolicy, type OnboardingRunSummary, type OnboardingRunView,
   type OnboardingStage, type OnboardingStageDefinition, type OnboardingStageKey, type PrepareResult, type ReviewResult,
 } from "../../api.ts";
-import { PageHead, Pill } from "../../ui.tsx";
+import { CardTitle, PageHead, Pill } from "../../ui.tsx";
 import { CodeMapPanel } from "../../components/CodeMap.tsx";
 import { FileCompare } from "../../components/FileCompare.tsx";
 import { useClaudeContext } from "../../claude/context.ts";
@@ -20,6 +20,9 @@ import { KIND_CHIP, RUN_STATUS_HE, STAGE_STATUS_HE, errText, fmtDate, fmtInt, fm
  * from its own button in its card; the terminal under the card is the real
  * session and stays on screen through every stage.
  */
+/** The concept behind each stage's "i" — the same entry its button opens. */
+const STAGE_INFO: Record<string, string | undefined> = { prepare: "prepare", init: "init", review: "onboarding_review", deliver: "deliver" };
+
 export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [repoName, setRepoName] = useState("");
   const [runs, setRuns] = useState<OnboardingRunSummary[] | null>(null);
@@ -116,7 +119,7 @@ export function OnboardingScreen({ id, nav }: { id: string; nav: (h: string) => 
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_onboarding_run"
         crumb={crumb}
         title={`הטמעת AI — ${view.repo.name}`}
         sub={`הרצה ${run.id.slice(0, 8)} · התחילה ${fmtDate(run.startedAt)}${run.baselineSha ? ` · commit ${shortSha(run.baselineSha)}` : ""}${run.branchName ? ` · ענף ${run.branchName}` : ""}`}
@@ -239,7 +242,7 @@ function StageCard(p: StageCardProps) {
   return (
     <div className="panel" style={{ marginBottom: 16 }}>
       <div className="ob-stage-head">
-        <h3>{def.order + 1}. {def.title_he}</h3>
+        <CardTitle as="h3" info={STAGE_INFO[def.key] ?? null}>{def.order + 1}. {def.title_he}</CardTitle>
         <span className={`ob-chip ${kind.cls}`}>{kind.label}</span>
         {def.key === "init" && <span className="ob-chip human">דורש אותך</span>}
         {stage.status === "Completed" && <span className="ob-chip ok">הסתיים</span>}
@@ -427,12 +430,12 @@ function PreStart({ repoId, repoName, crumb, onStarted, onCancel }: { repoId: st
   };
   return (
     <>
-      <PageHead crumb={crumb} title={`לפני שמתחילים — הטמעת AI${repoName ? ` לריפו ${repoName}` : ""}`} sub="הסבר קצר על התהליך. שום דבר עוד לא רץ." actions={onCancel && <button className="btn btn-secondary btn-sm" onClick={onCancel}>חזרה להרצה</button>} />
+      <PageHead info="page_onboarding_intro" crumb={crumb} title={`לפני שמתחילים — הטמעת AI${repoName ? ` לריפו ${repoName}` : ""}`} sub="הסבר קצר על התהליך. שום דבר עוד לא רץ." actions={onCancel && <button className="btn btn-secondary btn-sm" onClick={onCancel}>חזרה להרצה</button>} />
       {err && <div className="ob-note crit" style={{ marginBottom: 14 }}>{err}</div>}
       <div className="dash">
         <div style={{ minWidth: 0, display: "grid", gap: 16 }}>
           <div className="panel">
-            <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>מכינים את Claude לריפו הזה</h3>
+            <CardTitle as="h3" info="onboarding_intro" style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>מכינים את Claude לריפו הזה</CardTitle>
             <p style={{ fontSize: 13, lineHeight: 1.65 }}>כך שמפתח שמקבל משימה יקבל מההתחלה את מה שהוא צריך לעבודה יעילה, חסכונית ואיכותית: הוראות, ידע שנטען לפי דרישה והגנות. התוכן נוצר על ידי <span className="ob-code">/init</span> של Claude Code עצמו, בשיחה איתך.</p>
           </div>
           <div className="panel">
@@ -465,11 +468,11 @@ function PreStart({ repoId, repoName, crumb, onStarted, onCancel }: { repoId: st
         </div>
         <div className="rail">
           <div className="panel">
-            <h4>אוטומציה</h4>
+            <CardTitle info="automation">אוטומציה</CardTitle>
             <AutomationEditor defs={defs} value={policy} onChange={setPolicy} consent={consent} onConsent={setConsent} />
           </div>
           <div className="panel">
-            <h4>מודל ומאמץ</h4>
+            <CardTitle info="model_effort">מודל ומאמץ</CardTitle>
             <ModelEditor defs={defs} value={models} recommended={recommended} onChange={setModels} />
             <p className="ob-sub" style={{ marginTop: 8 }}>אפשר לשנות גם בזמן השיחה, עם <span className="ob-code">/model</span> ו-<span className="ob-code">/effort</span>.</p>
           </div>

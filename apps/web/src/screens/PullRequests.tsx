@@ -109,7 +109,7 @@ export function PullRequests({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_pull_requests"
         title="בקשות מיזוג"
         sub="כל מה שממתין לאישור, מכל הלקוחות. המיזוג עצמו נעשה בגיט־האוסט."
         actions={<button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => void load(true)}>{busy ? "מסנכרן…" : "↻ סנכרן"}</button>}

@@ -5,8 +5,8 @@ import {
   setTaskActive,
   ADO_LADDER, type FlowRun, type MaterializeResult, type PromptTemplate, type StartBuildResult, type TaskFlow, type WorkItemDetail,
 } from "../api.ts";
-import { Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
-import { GlossaryHint } from "../claude/GlossaryHint.tsx";
+import { CardTitle, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 import { TaskGraph } from "./TaskGraph.tsx";
 import { AddNote } from "../forms.tsx";
 
@@ -82,7 +82,7 @@ function ApproveTasksModal({ nodes, onApprove, onClose }: {
         boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
       }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700 }}>אישור יצירת משימות ב-TFS</h3>
+          <CardTitle as="h3" info="materialize" style={{ fontSize: 15, fontWeight: 700 }}>אישור יצירת משימות ב-TFS</CardTitle>
           <a onClick={onClose} style={{
             fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex",
             alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)",
@@ -405,7 +405,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
             boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700 }}>{previewData?.templateTitle ?? "תצוגה מקדימה"}</h3>
+              <CardTitle as="h3" info="prompt_preview" style={{ fontSize: 15, fontWeight: 700 }}>{previewData?.templateTitle ?? "תצוגה מקדימה"}</CardTitle>
               <a onClick={() => setPreviewKey(null)} style={{
                 fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex",
                 alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface-muted)",
@@ -486,7 +486,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
               assessNote ? (
                 <div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 6 }}>
-                    <h3 style={{ fontSize: 14.5, fontWeight: 700, color: "#1B1741" }}>מה Claude הבין ומה הוא חושב</h3>
+                    <CardTitle as="h3" info="assess_result" style={{ fontSize: 14.5, fontWeight: 700, color: "#1B1741" }}>מה Claude הבין ומה הוא חושב</CardTitle>
                     <div style={{ display: "flex", gap: 12 }}>
                       <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => kick("assess")}>🔁 הרץ שוב, אותן הגדרות</a>
                       <a style={{ fontSize: 11.5, color: "var(--color-accent)", cursor: "pointer" }} onClick={() => setShowRerunOptions((v) => !v)}>{showRerunOptions ? "✕ סגור" : "⚙ עומק / מודל אחר"}</a>
@@ -499,7 +499,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                       </p>
                       {tierPicker}
                       <button className="btn btn-primary btn-sm" disabled={isCustom && !assessCustomModel} onClick={() => { setShowRerunOptions(false); kick("assess"); }}>הרץ הערכה</button>
-                      <GlossaryHint screen="requirement" entry="assess" />
+                      <Info k="assess" />
                     </div>
                   )}
                   {/* rendered line-by-line, not as one pre-wrap blob: bullets
@@ -541,7 +541,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 </div>
               ) : (
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>איך ממשיכים?</h3>
+                  <CardTitle as="h3" info="how_to_continue" style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>איך ממשיכים?</CardTitle>
                   <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 14 }}>
                     הדרישה קיימת רק כאן ב-DCC. Claude יקרא אותה ואת ה-repo ויגיד אם היא אפויה מספיק לפירוק.
                   </p>
@@ -598,9 +598,9 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
             {/* ── 3. research/testing work (no breakdown at all) ── */}
             {isResearch && active === 2 && (
               <div>
-                <h3 style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>
+                <CardTitle as="h3" info="research_work" style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>
                   {wi.requirementType === "testing" ? "עבודת בדיקות" : "עבודת תחקור"}
-                </h3>
+                </CardTitle>
                 <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 12 }}>
                   {wi.requirementType === "testing"
                     ? "אין פירוק למשימות פיתוח — התוצאה היא תוצאת האימות עצמה. משימת מעקב אחת ב-TFS עוקבת אחרי העבודה."
@@ -651,13 +651,13 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
             {/* ── 3. breakdown ──────────────────────────────────── */}
             {!isResearch && active === 2 && (
               <div>
-                <h3 style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>פירוק למשימות</h3>
+                <CardTitle as="h3" info="breakdown" style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>פירוק למשימות</CardTitle>
                 <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 12 }}>
                   Claude יפרק את הדרישה להיררכיה של משימות עם תלויות. <b>עומק ההיררכיה קובע את הטיפוסים ב-TFS</b> ({ADO_LADDER.join(" › ")}).
                 </p>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                   <button className="btn btn-primary btn-sm" onClick={() => kick("breakdown")}>{nodes.length > 0 ? "פרק מחדש" : "פרק למשימות"}</button>
-                  <GlossaryHint screen="requirement" entry="breakdown" />
+                  <Info k="breakdown" />
                   {nodes.length > 0 && <button className="btn btn-secondary btn-sm" onClick={() => setView(3)}>לאישור המשימות ←</button>}
                 </div>
                 <Err />
@@ -684,7 +684,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                     onClose={() => setApproveModalOpen(false)}
                   />
                 )}
-                <h3 style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>אישור יצירת משימות ב-TFS</h3>
+                <CardTitle as="h3" info="materialize" style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>אישור יצירת משימות ב-TFS</CardTitle>
                 <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 4 }}>
                   {pending.length > 0
                     ? `${pending.length} מתוך ${nodes.length} ממתינות לאישור שלך. אחרי שהכל מאושר — ההקמה ב-TFS.`
@@ -809,7 +809,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
             {/* ── 5. start ──────────────────────────────────────── */}
             {active === 4 && (
               <div>
-                <h3 style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 6, color: "#1B1741" }}>מתחילים לעבוד</h3>
+                <CardTitle as="h3" info="start" style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 6, color: "#1B1741" }}>מתחילים לעבוד</CardTitle>
                 {!build ? <div className="spin">מכין…</div> : (
                   <>
                     <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 14 }}>פותחים branch לפי המוסכמה ומריצים Claude Code בתוך ה-repo.</p>

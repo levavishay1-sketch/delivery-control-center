@@ -77,7 +77,7 @@ export function AdoTasks({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_ado_tasks"
         title="Azure DevOps"
         sub={`${d.inTfs} פריטים ב-TFS${d.pending ? ` · ${d.pending} טרם הוקמו` : ""} · ${d.clients.length} לקוחות`}
         actions={

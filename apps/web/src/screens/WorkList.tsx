@@ -28,7 +28,7 @@ export function WorkList({ nav, query }: { nav: (h: string) => void; query: stri
 
   return (
     <>
-      <PageHead title="עבודות" sub={rows ? `${rows.length} דרישות בכל הלקוחות` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ דרישה חדשה</button>} />
+      <PageHead info="page_works" title="עבודות" sub={rows ? `${rows.length} דרישות בכל הלקוחות` : undefined} actions={<button className="btn btn-primary" onClick={() => setModal(true)}>+ דרישה חדשה</button>} />
       {modal && <NewRequirement onClose={() => setModal(false)} onDone={(id) => { setModal(false); if (id) nav(`#/wi/${id}`); else reload(); }} />}
       <div className="filter-bar">
         <div className="field"><label>חיפוש</label><input value={f.q} onChange={(e) => setF({ ...f, q: e.target.value })} placeholder="כותרת או מפתח…" /></div>

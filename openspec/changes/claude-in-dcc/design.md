@@ -233,7 +233,7 @@ client, and the chat's `retain_until` uses it when it is set.
 button bottom-left; floating or pinned beside the screen, the person's
 choice remembered; pinning unavailable under 1100 px), `CostLine` (model ·
 effort · tokens · cost, the same everywhere, also the zero-cost variant),
-`CallsTable`, `ProposalCard`, `HelpfulToggle`, `GlossaryHint`. The four
+`CallsTable`, `ProposalCard`, `HelpfulToggle`, `Info` (the "i", see `openspec/changes/info-hints`). The four
 cost displays that existed are replaced by `CostLine` / `CallsTable`.
 
 ## 9. Token economics, as built (§6)

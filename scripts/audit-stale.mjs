@@ -7,6 +7,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 const root = process.cwd();
 const SKIP = new Set(["node_modules", "dist", ".git", ".pgdata", "scratchpad"]);
@@ -62,6 +63,8 @@ const RETIRED = [
   "runRetro", "getRetroRunView", "RetroModal", "RetroResult", "RetroRun", "startRetro", "getRetro(", "/retro", "\"retro\"", "retro:",
   "requirement-retro-recommendations", "composeClientLetter", "getRecentClientLetters", "client_letter", "clientLetter", "ClientLetter",
   "gap-letter", "gapLetter", "gap_letter", "composeGapLetter", "getGapLetters", "letterHistory", "letterPicker", "letterDetail",
+  // the "?" hint keyed by screen and entry, retired 2026-09-21 by the "i" over the concept registry (openspec/changes/info-hints)
+  "GlossaryHint", "gl-wrap", "gl-hint", "getGlossary(", "export const GLOSSARY",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
 // docs/history/ holds the design records the user asked to keep. Everything else — the replacing
@@ -125,6 +128,61 @@ for (const pj of tracked.filter((f) => /(^|\/)package\.json$/.test(f) && f !== "
   if (unused.length) depIssues.push(`${pj}: ${unused.join(", ")}`);
 }
 depIssues.length ? note("dependencies never imported — verify, then remove", depIssues) : ok("no unused dependencies");
+
+// 7. The "i" (openspec/changes/info-hints): the registry is well-formed, every key a screen uses exists, every screen
+//    registered with the chat has a glossary, and no screen writes a heading that bypasses the shared components
+//    (they carry the "i"). The registry is read through its own access surface, as everything else does.
+const { allConcepts, glossaryScreens } = await import(pathToFileURL(path.resolve("packages/core/src/glossary/index.ts")).href);
+const concepts = allConcepts();
+const MAX_EXPLAIN = 240, MAX_PRESS = 320;
+const bad = [];
+const seen = new Map();
+for (const c of concepts) {
+  if (!/^[a-z][a-z0-9_]*$/.test(c.key ?? "")) bad.push(`key "${c.key}" is not snake_case`);
+  if (seen.has(c.key)) bad.push(`duplicate key "${c.key}"`);
+  seen.set(c.key, c);
+  if (!["button", "term", "field", "section"].includes(c.kind)) bad.push(`${c.key}: unknown kind "${c.kind}"`);
+  if (!c.title?.trim()) bad.push(`${c.key}: no title`);
+  if (!c.explain?.trim()) bad.push(`${c.key}: no explanation`);
+  else if (c.explain.length > MAX_EXPLAIN) bad.push(`${c.key}: explanation is ${c.explain.length} characters, over ${MAX_EXPLAIN} — shorten it`);
+  if (c.kind === "button" && !c.press?.trim()) bad.push(`${c.key}: a button needs "press" — what happens if you press it`);
+  if (c.kind !== "button" && c.press) bad.push(`${c.key}: only a button has "press"`);
+  if (c.press && c.press.length > MAX_PRESS) bad.push(`${c.key}: press is ${c.press.length} characters, over ${MAX_PRESS} — shorten it`);
+  for (const sc of c.screens ?? []) if (!glossaryScreens().includes(sc)) bad.push(`${c.key}: lists screen "${sc}", which has no glossary`);
+}
+bad.length ? fail(`the info registry is malformed (${bad.length})`, bad.slice(0, 20)) : ok(`the info registry is well-formed (${concepts.length} concepts)`);
+
+const webSrc = [...text].filter(([f]) => /^apps\/web\/src\/.*\.tsx?$/.test(f));
+const used = [];
+for (const [f, t] of webSrc) {
+  t.split("\n").forEach((line, i) => {
+    for (const m of line.matchAll(/<Info k="([^"]+)"/g)) used.push({ key: m[1], at: `${f}:${i + 1}` });
+    for (const m of line.matchAll(/\binfo=(?:"([^"]+)"|\{([^}]*)\})/g)) {
+      if (m[1]) used.push({ key: m[1], at: `${f}:${i + 1}` });
+      else for (const q of (m[2] ?? "").matchAll(/"([a-z][a-z0-9_]*)"/g)) used.push({ key: q[1], at: `${f}:${i + 1}` });
+    }
+  });
+}
+const unknown = used.filter((u) => !seen.has(u.key));
+unknown.length ? fail(`an "i" points at a concept that does not exist (${unknown.length})`, unknown.slice(0, 15).map((u) => `${u.at}  ${u.key}`)) : ok(`every "i" on a screen has an entry (${used.length} uses)`);
+
+const registered = new Set();
+for (const [f, t] of webSrc) if (/useClaudeContext\(/.test(t) && !f.endsWith("claude/context.ts")) for (const m of t.matchAll(/\bscreen: "(\w+)"/g)) registered.add(m[1]);
+const noGlossary = [...registered].filter((s) => !glossaryScreens().includes(s));
+noGlossary.length ? fail("screens registered with the chat that have no glossary line in glossary/screens.ts", noGlossary) : ok(`every chat screen has a glossary (${registered.size})`);
+
+const rawHeadings = [];
+for (const [f, t] of webSrc) {
+  if (!/^apps\/web\/src\/(screens|components)\//.test(f)) continue;
+  t.split("\n").forEach((line, i) => { if (/<h[1-4][\s>]/.test(line)) rawHeadings.push(`${f}:${i + 1}  ${line.trim().slice(0, 90)}`); });
+}
+rawHeadings.length ? fail(`headings written by hand inside a screen (${rawHeadings.length}) — use PageHead or CardTitle, which carry the "i"`, rawHeadings.slice(0, 20)) : ok("every screen heading goes through PageHead / CardTitle");
+
+const optedOut = webSrc.reduce((n, [, t]) => n + (t.match(/\binfo=\{null\}/g) ?? []).length, 0);
+if (optedOut) note(`headings that opted out of an "i" with info={null} (${optedOut}) — each should have a reason in review`, []);
+
+const unusedConcepts = concepts.filter((c) => !used.some((u) => u.key === c.key) && !(c.screens?.length));
+unusedConcepts.length ? note(`concepts no screen uses and no chat lists (${unusedConcepts.length})`, unusedConcepts.map((c) => c.key).slice(0, 25)) : ok("every concept is used by a screen or listed by a chat screen");
 
 console.log(failures ? `\n${failures} check(s) failed.` : "\nAll checks passed.");
 process.exit(failures ? 1 : 0);

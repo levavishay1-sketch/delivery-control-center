@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getDashboard, REQ_TYPE_HE, type Dashboard as D } from "../api.ts";
-import { ICONS, Icon, initials } from "../ui.tsx";
+import { CardTitle, ICONS, Icon, PageHead, initials } from "../ui.tsx";
 import { NewRequirement } from "../forms.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 
@@ -39,19 +39,20 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <div className="page-head">
-        <div className="titles">
-          <h1>לוח בקרה</h1>
-          <p>ברוך הבא למערכת ניהול הפרויקטים</p>
-        </div>
-        <div className="head-actions">
-          <div className="search-field">
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{ICONS.search}</svg>
-            חיפוש…
-          </div>
-          <button className="btn btn-primary" onClick={() => setModal("req")}><Icon d={ICONS.plus} size={14} /> הוספת דרישה</button>
-        </div>
-      </div>
+      <PageHead
+        info="page_dashboard"
+        title="לוח בקרה"
+        sub="ברוך הבא למערכת ניהול הפרויקטים"
+        actions={
+          <>
+            <div className="search-field">
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>{ICONS.search}</svg>
+              חיפוש…
+            </div>
+            <button className="btn btn-primary" onClick={() => setModal("req")}><Icon d={ICONS.plus} size={14} /> הוספת דרישה</button>
+          </>
+        }
+      />
 
       {modal === "req" && <NewRequirement onClose={() => setModal(null)} onDone={(id) => { setModal(null); if (id) nav(`#/wi/${id}`); else reload(); }} />}
 
@@ -137,14 +138,14 @@ export function Dashboard({ nav }: { nav: (h: string) => void }) {
           {/* ---- right rail ---- */}
           <div className="rail">
             <div className="panel">
-              <h4>פעולות מהירות</h4>
+              <CardTitle info="quick_actions">פעולות מהירות</CardTitle>
               <div className="qa-row" onClick={() => setModal("req")}><span className="qa-ic"><Icon d={ICONS.plus} size={13} /></span>הוספת דרישה</div>
               <div className="qa-row" onClick={() => nav("#/alerts")}><span className="qa-ic"><Icon d={ICONS.bell} size={13} /></span>צפייה בהתראות</div>
               <div className="qa-row" onClick={() => nav("#/budgets")}><span className="qa-ic"><Icon d={ICONS.slash} size={13} /></span>דוח תקציב</div>
             </div>
 
             <div className="panel">
-              <h4>התראות אחרונות</h4>
+              <CardTitle info="recent_alerts">התראות אחרונות</CardTitle>
               {d.alerts.map((a) => (
                 <div className="alert-row" key={a.id}>
                   <span className={`adot ${a.severity === "critical" ? "critical" : a.severity === "warn" ? "warn" : "info"}`} />

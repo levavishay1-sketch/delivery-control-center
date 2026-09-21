@@ -46,7 +46,7 @@ export function AuditTrail({ nav }: { nav: (h: string) => void }) {
 
   return (
     <>
-      <PageHead
+      <PageHead info="page_audit_trail"
         title="Audit Trail"
         sub="Every decision, draft, approval, and cost — in order, nothing hidden."
         actions={<button className="btn btn-secondary btn-sm"><Icon d={ICONS.export} size={13} /> Export</button>}
