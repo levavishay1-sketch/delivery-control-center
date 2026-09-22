@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCC — מ"תהליך הליבה" לסימולטור Flow · תיעוד הקשר</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#584EF3;--accent-dark:#453AD1;--accent-muted:#EDEBFC;
+  --page:#F5F4FA;--surface:#fff;--muted:#F5F4FA;--tint2:#FBFAFE;--hair:#E1DFF0;--soft:#EAE8F5;--divider:#EDEBFA;--badge:#F0EFF7;
+  --ink9:#1B1741;--ink7:#2E2A54;--ink5:#86829C;--ink4:#B3B0C9;
+  --ok:#1B9E5C;--ok-bg:#E3F5EB;--act:#2563eb;--act-bg:#eff6ff;--ai:#7c3aed;--ai-bg:#f5f3ff;
+  --warn:#E0912E;--warn-bg:#FDECD9;--crit:#E14C6B;--crit-bg:#FCE8ED;--off:#86829C;--off-bg:#eef0f5;
+  --tfs:#1e5fa8;--tfs-bg:#e6f0fb;
+  --r:12px;--shadow:0 2px 4px rgb(27 23 65/.05),0 8px 20px rgb(27 23 65/.07);
+  --font:"Rubik",-apple-system,"Segoe UI",Arial,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink9);font-family:var(--font);font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,p,ol,ul{margin:0}
+a{color:var(--accent)}
+.bar{position:sticky;top:0;z-index:50;background:#14112f;color:#fff;padding:9px 18px;display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
+.bar b{font-size:13px;margin-inline-end:6px;color:#c7c3e8;font-weight:600}
+.bar a{color:#c7c3e8;font-size:12px;text-decoration:none;border:1px solid #3a3380;border-radius:999px;padding:4px 11px;white-space:nowrap}
+.bar a:hover{background:#2b2470;color:#fff}
+.wrap{max-width:1120px;margin:0 auto;padding:26px 24px 90px}
+.eyebrow{font-size:11.5px;font-weight:650;letter-spacing:.08em;color:var(--accent);margin-bottom:6px}
+h1{font-size:27px;font-weight:700;letter-spacing:-.01em;line-height:1.3;text-wrap:balance}
+.lead{font-size:15px;line-height:1.8;color:var(--ink7);margin:12px 0 8px;max-width:94ch}
+h2{font-size:19px;font-weight:700;margin:38px 0 4px;scroll-margin-top:56px}
+h3{font-size:14.5px;font-weight:700;margin:18px 0 6px}
+.sub{font-size:13px;color:var(--ink5);line-height:1.7;margin-bottom:14px;max-width:98ch}
+p.tx{font-size:13.8px;line-height:1.85;color:var(--ink7);max-width:98ch;margin-bottom:10px}
+.panel{background:var(--surface);border:1.5px solid var(--hair);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;margin:12px 0}
+.note{border-radius:10px;padding:11px 14px;font-size:12.8px;line-height:1.7;margin:10px 0;max-width:98ch}
+.note.info{background:var(--act-bg);color:#1e3a8a}.note.warn{background:var(--warn-bg);color:#7a4a10}.note.ok{background:var(--ok-bg);color:#0f6e3d}.note.crit{background:var(--crit-bg);color:#8d1f39}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.act{background:var(--act-bg);color:var(--act)}.pill.ai{background:var(--ai-bg);color:var(--ai)}.pill.neu{background:var(--badge);color:var(--accent)}
+.mono{font-family:var(--mono);direction:ltr;unicode-bidi:isolate;font-size:11.5px;background:var(--muted);border:1px solid var(--soft);border-radius:5px;padding:0 5px}
+.sm{font-size:11.5px;color:var(--ink5);line-height:1.6}
+table.t{width:100%;border-collapse:collapse;font-size:12.8px;background:#fff;border:1.5px solid var(--hair);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow);margin:10px 0}
+table.t th{text-align:start;font-size:11px;font-weight:650;letter-spacing:.04em;color:var(--ink5);padding:10px 12px;background:var(--muted);border-bottom:1px solid var(--hair);white-space:nowrap}
+table.t td{padding:10px 12px;border-bottom:1px solid var(--divider);vertical-align:top;line-height:1.7;color:var(--ink7)}
+table.t tr:last-child td{border-bottom:none}
+table.t td b{color:var(--ink9)}
+.tblwrap{overflow-x:auto}
+.cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:12px 0}
+.pc{background:var(--surface);border:1.5px solid var(--hair);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px}
+.pc .n{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.04em}
+.pc h3{font-size:14px;margin:3px 0 5px}
+.pc p{font-size:12.6px;line-height:1.7;color:var(--ink7)}
+.timeline{border-inline-start:2px solid var(--hair);margin:14px 0 14px 4px;padding-inline-start:20px;display:grid;gap:18px}
+.timeline .tl{position:relative}
+.timeline .tl::before{content:"";position:absolute;inset-inline-start:-26px;top:3px;width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px var(--accent-muted)}
+.timeline .tl b{font-size:13.5px;color:var(--ink9)}
+.timeline .tl p{font-size:12.8px;line-height:1.7;color:var(--ink7);margin-top:3px;max-width:90ch}
+.qa{border-inline-start:3px solid var(--soft);padding:2px 14px 2px 0;margin:14px 0}
+.qa .q2{font-size:13px;font-weight:700;margin-bottom:4px}
+.qa p{font-size:12.8px;line-height:1.8;color:var(--ink7);max-width:96ch;margin-bottom:6px}
+@media(max-width:700px){.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>הקשר · תהליך הליבה ← סימולטור Flow</b>
+  <a href="#origin">מאיפה זה התחיל</a>
+  <a href="#verify">אימות המחקר מול קוד</a>
+  <a href="#process">הבדלי תהליך</a>
+  <a href="#core">תהליך הליבה</a>
+  <a href="#sim">סימולטור ה-Flow</a>
+  <a href="#status">מצב נוכחי</a>
+</div>
+<div class="wrap">
+
+<div class="eyebrow">תיעוד הקשר · נספח ל"מאמרים: דוח מחקר — סנכרון מול TFS"</div>
+<h1>מ"תהליך הליבה" לסימולטור Flow אינטראקטיבי — סיכום השיחה</h1>
+<p class="lead">המסמך הזה מתעד את כל מה שקרה בהמשך ישיר לדוח המחקר שכבר ב-PR הזה (<span class="mono">tfs-sync-report.html</span>): אימות הממצאים שלו מול הקוד בפועל, תרגום ההמלצות לשינויי תהליך בשפה פשוטה, והבנייה ההדרגתית של מוק אינטראקטיבי שממחיש את כל "תהליך הליבה" המוצע (<span class="mono">dcc-core-process.html</span>) — עד לכלי בדיקה שאפשר לשבת מולו ולדבר, לפני שמטמיעים אותו במוצר.</p>
+
+<h2 id="origin">מאיפה זה התחיל</h2>
+<p class="tx">ה-PR הזה נפתח עם מסמך מחקר עצמאי אחד: <b>tfs-sync-report.html</b> — סקירה של איך תוכנות תיווך, מערכות ניהול ומיקרוסופט עצמה מסתנכרנות מול Azure DevOps, עם טבלת השוואה בסופו בין "היום ב-DCC" לבין ההמלצות. מהמסמך הזה יצאו שלוש שאלות המשך, כל אחת הרחיבה את הבאה:</p>
+<div class="timeline">
+  <div class="tl"><b>1 · האם המסמך מדויק?</b><p>המשתמש לא רצה לקחת את טבלת "היום ב-DCC" על אמונה — ביקש אימות מול הקוד עצמו. כל אחת מ-13 השורות נבדקה ישירות מול <span class="mono">packages/core/src/ado-*.ts</span> (לא מהתיאור במסמך).</p></div>
+  <div class="tl"><b>2 · מה זה אומר בפועל, לא טכנית?</b><p>אימות ברמת קוד לא הסביר למשתמש מה משתנה בעבודה היומיומית. נבנתה טבלה שנייה, בשפת תהליך: מי מאשר מה, מתי דברים קורים אוטומטית, מי "מנצח" בהתנגשות.</p></div>
+  <div class="tl"><b>3 · אבל זה בכלל קשור לתהליך שאנחנו מתכננים?</b><p>המשתמש הביא מסמך נפרד לגמרי — <span class="mono">dcc-core-process.html</span>, "תהליך הליבה" המלא של DCC (קליטה → אפיון → תכנון → פיתוח → מסירה) — וביקש להבין את האינטראקציה בין השלבים שלו. זה הוביל לבקשה לבנות סימולציה חיה של התהליך הזה.</p></div>
+</div>
+
+<h2 id="verify">אימות המחקר מול הקוד</h2>
+<p class="tx">כל 13 השורות בטבלת "היום ב-DCC" שבדוח המחקר אומתו ישירות מול הקוד — לא מהתיאור במסמך. התוצאה: <b>כולן תואמות</b>, כולל מקומות שבהם הקוד עצמו מודה במגבלה (למשל הערה מפורשת ב-<span class="mono">tasks.ts</span>: "No poller or webhook exists in this codebase").</p>
+<div class="tblwrap"><table class="t">
+<thead><tr><th>נושא</th><th>מה נבדק</th><th>מקור בקוד</th></tr></thead>
+<tbody>
+<tr><td><b>מנוע הסנכרון</b></td><td>אין סריקה/webhook כלל — רק משיכה ידנית</td><td class="mono">tasks.ts</td></tr>
+<tr><td><b>זיווג</b></td><td>linkedAdoId אצלנו בלבד, אין שדה משקף ב-TFS</td><td class="mono">ado-sync.ts</td></tr>
+<tr><td><b>מניעת הד</b></td><td>אין מעקב rev, אין סינון לפי ChangedBy</td><td class="mono">ado-pull.ts</td></tr>
+<tr><td><b>זהות כתיבה</b></td><td>PAT יחיד לכל הלקוח, לא לפי משתמש</td><td class="mono">ado-sync.ts</td></tr>
+<tr><td><b>התנגשויות</b></td><td>TFS דורס כותרת/סוג/שלב ללא בדיקת בעלות</td><td class="mono">ado-pull.ts</td></tr>
+<tr><td><b>מצבים</b></td><td>מיפוי לפי שם קבוע באנגלית, לא קטגוריה</td><td class="mono">ado-map.ts</td></tr>
+<tr><td><b>שגיאות כתיבה</b></td><td><span class="mono">.catch(() =&gt; {})</span> — נבלעות בשקט</td><td class="mono">ado-sync.ts / ado-pull.ts</td></tr>
+<tr><td><b>הזדהות</b></td><td>Basic auth עם PAT יחיד, ללא Entra</td><td class="mono">ado-http.ts</td></tr>
+<tr><td><b>גרסאות API</b></td><td>הליכה יורדת 7.1→4.1 — כבר תקין</td><td class="mono">ado-http.ts</td></tr>
+</tbody>
+</table></div>
+<p class="sm">6 שורות נוספות (ייבוא ראשוני, כתיבה בטוחה, תקציב קצב, הערות) אומתו באותה שיטה — הפירוט המלא נשלח למשתמש כארטיפקט נפרד בשיחה.</p>
+<div class="note ok"><b>המסקנה:</b> הפער שהמחקר מתאר אמיתי, לא מוגזם. זה לא אומר שההמלצות עצמן נכונות לצוות — רק שנקודת המוצא שלהן מדויקת.</div>
+
+<h2 id="process">מה משתנה בתהליך העבודה — לא בקוד</h2>
+<p class="tx">בקשת ההמשך: לא עוד פרטים טכניים, אלא <b>מי מחליט מה</b>. שמונה שינויי תהליך, כל אחד מתויג לפי הסוג שלו:</p>
+<div class="cards">
+<div class="pc"><div class="n">שער אנושי חדש</div><h3>מי מאשר לפני שמידע נכנס</h3><p>היום TFS דורס בשקט. ההמלצה: אישור אנושי (בהשראת Aha!) לפני שפריט חדש נכנס, ודיאלוג שני-ערכים כשה"לא-בעלים" שינה שדה.</p></div>
+<div class="pc"><div class="n">בעלות לכל שדה</div><h3>מי "מנצח" בהתנגשות</h3><p>היום כלל אחד גורף ("TFS מנצח"). ההמלצה: לכל שדה בעלים מוגדר מראש — כך שברוב המקרים אין בכלל התנגשות.</p></div>
+<div class="pc"><div class="n">אמון/זהות</div><h3>מי מופיע כאחראי ב-TFS</h3><p>היום כתיבה בשם חשבון טכני משותף. ההמלצה: זהות אישית לכל משתמש — תואם את עיקרון "זהות היא תמיד אדם אמיתי" שכבר קיים ב-DCC.</p></div>
+<div class="pc"><div class="n">יכולת חדשה</div><h3>קליטת לקוח עם תהליך שונה</h3><p>היום מניחים שמות מצב קבועים באנגלית. ההמלצה: גילוי מפורש בזמן החיבור, מיפוי לפי קטגוריה, כישלון בקול רם.</p></div>
+</div>
+<p class="sm">4 שינויים נוספים (כישלון כתיבה גלוי, ייבוא ראשוני כתהליך נפרד, הרשאות אישיות עם דדליין קשיח מצד מיקרוסופט — 1.12.2026, והפרש בין "תהליך" ל"קוד") נשלחו כארטיפקט נפרד.</p>
+
+<h2 id="core">"תהליך הליבה" — קליטה, אפיון, ומה שביניהם</h2>
+<p class="tx">כדי לענות על "איך שני המסמכים מתחברים", נקרא לעומק <span class="mono">dcc-core-process.html</span> — מסמך נפרד שמתאר את כל מחזור החיים של עבודה ב-DCC, לא רק את הסנכרון מול TFS. הנקודה המרכזית שהובהרה:</p>
+<div class="qa"><div class="q2">קליטה ← אפיון: לא שני שלבים נפרדים</div>
+<p><b>"מה שהגיע"</b> הוא תיבת קליטה נייטרלית — כל דבר נכנס אליה לפני שהוחלט מה הוא: נושא חדש, תוספת לנושא פתוח, תשובה לשאלה, באג, שאלת קוד, או רעש. Claude מציע יעד, אדם מאשר.</p>
+<p><b>אפיון הוא לולאה אחת, לא שלושה שלבים</b> — המסמך אומר את זה במפורש: "סקירה, הבנה והבהרות הם סיבוב אחד שחוזר בכל פעם שמגיע מקור". תשובה לשאלה לא "סוגרת שלב" — היא נכנסת מחדש דרך קליטה כמקור חדש, מפעילה סקירה ממוקדת (רק על מה שהשתנה), מעדכנת את "ההבנה" (טבלת קביעות עם מצב: מאושרת/הנחה/פתוחה/סתירה), ואולי סוגרת או פותחת שאלה. <b>אין כפתור "סיימתי אפיון"</b> — הלולאה נרגעת, לא נגמרת.</p>
+<p class="sm">מוכנות למשימה נמדדת לפי קביעה בודדת, לא לפי כל הנושא — זה מה שמאפשר להתחיל לפתח לפני שהאפיון "הסתיים".</p></div>
+
+<h2 id="sim">סימולטור ה-Flow — מוק לאימות לפני הטמעה</h2>
+<p class="tx">מכאן עלתה הבקשה: לבנות תהליך זרימתי חי שמראה את כל תהליך הליבה — קליטה → אפיון → תכנון → פיתוח → מסירה — עם כל הענפים האפשריים (באג, שינוי, סתירה, הנחה, פריט שנולד ב-TFS), ניתן לצעידה קדימה/אחורה. הבנייה עברה כמה סבבים, כל אחד בתגובה ישירה למשוב:</p>
+<div class="timeline">
+  <div class="tl"><b>סבב 1 — סיור מודרך לינארי</b><p>27 צעדים ברצף אחד, עם מפת 5-תחנות קבועה למעלה שמדגישה איפה נמצאים. דוגמה עשירה משלנו: WI-300, "פורטל דוחות לסוכנים" למגדלור פיננסים — לא הדוגמה המקורית של המחקר (עמלות סוכנים), כדי לכסות טווח רחב יותר של תרחישים: פינג-פונג רב-סבבי, ~18 משימות עם תלויות, שינוי לפני/תוך-כדי/אחרי פיתוח, באג אמיתי.</p></div>
+  <div class="tl"><b>סבב 2 — מעטפת המוצר האמיתית</b><p>המשוב: זה צריך להיראות כאילו הוטמע במערכת עצמה, לא כמסמך נפרד. שוכפלו verbatim ה-sidebar, ה-CSS, וסט האייקונים מהאפליקציה הרצה (<span class="mono">apps/web/src/theme.css</span>, <span class="mono">App.tsx</span>, <span class="mono">ui.tsx</span>) — כולל הוספת פריט ניווט "בדיקת Flow" עם תגית "מוק". במקביל, 27 הצעדים אורגנו מחדש כ-9 תרחישים עצמאיים (לא סיפור אחד ארוך), כל אחד עם ניווט קדימה/אחורה משלו, נבחרים מבורר תרחישים.</p></div>
+  <div class="tl"><b>סבב 3 — מסכים מלאים, לא קטעים</b><p>המשוב: "אני רוצה לראות את המסכים האמיתיים". כל צעד הפך למסך מלא (breadcrumb, כותרת+טיפוס+מפתח, טאבים, סטטיסטיקות) במקום panel בודד — שלושה תבניות מסך: כרטיס דרישה/משימה, לוח משימות (עם רכיב <span class="mono">flow-node</span> האמיתי מהמערכת), ותיבת קליטה.</p></div>
+  <div class="tl"><b>סבב 4 — אינטראקטיביות אמיתית</b><p>המשוב: "תאפשר למשתמש לעשות כל מה שהוא יוכל לעשות במערכת". מסך "מה שהגיע" קיבל תפקוד אמיתי: הדבקת טקסט חופשי, מסווג-מוק שמזהה אם מוזכר הלקוח ואם יש סימן שאלה, והחלטה שונה בהתאם — כולל "לא ידוע איזה לקוח" כשאין התאמה, בדיוק כמו הכלל במסמך המקור. נוסף גם מערכת Toast למשוב על כל לחיצה.</p></div>
+  <div class="tl"><b>סבב 5 — שכבת הסבר</b><p>המשוב: "אני לא מבין כלום — מה הקשר בין שתי ההודעות, מה הטאבים, מה הקביעות". נוספה קופסת "💡 מה קורה בצעד הזה" מעל כל מסך (25 הסברים, אחד לכל צעד) וגם מילון מונחים כללי.</p></div>
+  <div class="tl"><b>סבב 6 — "i" על הכול, לא מילון נפרד</b><p>המשוב: להסיר את המילון, להחליף ב"i" נקודתי על כל אלמנט לא-ברור (בסגנון ה-<span class="mono">.i</span>/<span class="mono">data-h</span> שכבר קיים ב-<span class="mono">dcc-core-process.html</span> עצמו), ולהפוך הכול ללחיץ. יושמו: tooltip על כל טאב, כל תג סטטיסטיקה, כל סימן מצב קביעה (✓/~/?/⚡), סוג הפריט, המפתח, וה-stepper; לחיצה על כל דבר לא-בנוי מציגה Toast שמסביר מה זה היה עושה במערכת האמיתית — כדי שכלום לא ישאר "מת" בלי תגובה.</p></div>
+</div>
+<div class="note info"><b>שיטת עבודה:</b> כל שינוי בסימולטור אומת בקוד לפני שנשלח — <span class="mono">node --check</span> על ה-JS המוטמע, טעינת מבנה הנתונים בסביבת Node מדומה כדי להריץ את כל הצעדים בלי דפדפן אמיתי, ואיזון תגיות. לא נשלחה גרסה בלי בדיקה.</div>
+
+<h2 id="status">מצב נוכחי</h2>
+<p class="tx">הסימולטור (<span class="mono">dcc-flow-native.html</span>, בקובץ הזה ב-PR) הוא כלי עבודה חי, לא מסירה סגורה — המשתמש הגדיר את זה במפורש: "נתקן ונדבר על כל הדברים פה עד שיהיה מושלם ונוציא לפיתוח". זה אומר:</p>
+<ol style="padding-inline-start:20px;display:grid;gap:6px;font-size:13.5px;line-height:1.8;color:var(--ink7)">
+<li>המוק כולל 9 תרחישים, 25 צעדים, נתוני דוגמה בלבד (WI-300) — שום דבר לא persistent, שום קריאת רשת אמיתית.</li>
+<li>הדוגמה האינטראקטיבית האמיתית היחידה כרגע: מסך "מה שהגיע" (הדבקה → סיווג → אישור).</li>
+<li>הצעד הבא, לפי בקשת המשתמש: להמשיך לעבור על המסך ביחד, מסך אחר מסך, עד שהוא "מושלם" — ורק אז זה הופך לספק אמיתי לצוות הפיתוח.</li>
+</ol>
+
+</div>
+</body>
+</html>

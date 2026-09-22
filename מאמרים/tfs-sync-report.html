@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DCC — איך מערכות בעולם עובדות מול TFS · דוח מחקר</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --accent:#584EF3;--accent-dark:#453AD1;--accent-muted:#EDEBFC;
+  --page:#F5F4FA;--surface:#fff;--muted:#F5F4FA;--tint2:#FBFAFE;--hair:#E1DFF0;--soft:#EAE8F5;--divider:#EDEBFA;--badge:#F0EFF7;
+  --ink9:#1B1741;--ink7:#2E2A54;--ink5:#86829C;--ink4:#B3B0C9;
+  --ok:#1B9E5C;--ok-bg:#E3F5EB;--act:#2563eb;--act-bg:#eff6ff;--ai:#7c3aed;--ai-bg:#f5f3ff;
+  --warn:#E0912E;--warn-bg:#FDECD9;--crit:#E14C6B;--crit-bg:#FCE8ED;--off:#86829C;--off-bg:#eef0f5;
+  --tfs:#1e5fa8;--tfs-bg:#e6f0fb;
+  --r:12px;--shadow:0 2px 4px rgb(27 23 65/.05),0 8px 20px rgb(27 23 65/.07);
+  --font:"Rubik",-apple-system,"Segoe UI",Arial,sans-serif;--mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink9);font-family:var(--font);font-size:14px;line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4,p,ol,ul{margin:0}
+a{color:var(--accent)}
+.bar{position:sticky;top:0;z-index:50;background:#14112f;color:#fff;padding:9px 18px;display:flex;gap:6px 12px;align-items:center;flex-wrap:wrap}
+.bar b{font-size:13px;margin-inline-end:6px;color:#c7c3e8;font-weight:600}
+.bar a{color:#c7c3e8;font-size:12px;text-decoration:none;border:1px solid #3a3380;border-radius:999px;padding:4px 11px;white-space:nowrap}
+.bar a:hover{background:#2b2470;color:#fff}
+.wrap{max-width:1240px;margin:0 auto;padding:26px 24px 80px}
+.eyebrow{font-size:11.5px;font-weight:650;letter-spacing:.08em;color:var(--accent);margin-bottom:6px}
+h1{font-size:27px;font-weight:700;letter-spacing:-.01em;line-height:1.3;text-wrap:balance}
+.lead{font-size:15px;line-height:1.8;color:var(--ink7);margin:12px 0 8px;max-width:94ch}
+h2{font-size:19px;font-weight:700;margin:36px 0 4px;scroll-margin-top:64px}
+h3{font-size:14.5px;font-weight:700;margin:18px 0 6px}
+.sub{font-size:13px;color:var(--ink5);line-height:1.7;margin-bottom:14px;max-width:98ch}
+p.tx{font-size:13.8px;line-height:1.85;color:var(--ink7);max-width:98ch;margin-bottom:10px}
+.panel{background:var(--surface);border:1.5px solid var(--hair);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;margin:12px 0}
+.note{border-radius:10px;padding:11px 14px;font-size:12.8px;line-height:1.7;margin:10px 0;max-width:98ch}
+.note.info{background:var(--act-bg);color:#1e3a8a}.note.warn{background:var(--warn-bg);color:#7a4a10}.note.ok{background:var(--ok-bg);color:#0f6e3d}.note.crit{background:var(--crit-bg);color:#8d1f39}
+.pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.crit{background:var(--crit-bg);color:var(--crit)}.pill.act{background:var(--act-bg);color:var(--act)}.pill.off{background:var(--off-bg);color:var(--off)}.pill.tfs{background:var(--tfs-bg);color:var(--tfs)}.pill.neu{background:var(--badge);color:var(--accent)}
+.mono{font-family:var(--mono);direction:ltr;unicode-bidi:isolate;font-size:11.5px;background:var(--muted);border:1px solid var(--soft);border-radius:5px;padding:0 5px}
+.sm{font-size:11.5px;color:var(--ink5);line-height:1.6}
+table.t{width:100%;border-collapse:collapse;font-size:12.8px;background:#fff;border:1.5px solid var(--hair);border-radius:var(--r);overflow:hidden;box-shadow:var(--shadow);margin:10px 0}
+table.t th{text-align:start;font-size:11px;font-weight:650;letter-spacing:.04em;color:var(--ink5);padding:10px 12px;background:var(--muted);border-bottom:1px solid var(--hair);white-space:nowrap}
+table.t td{padding:10px 12px;border-bottom:1px solid var(--divider);vertical-align:top;line-height:1.7;color:var(--ink7)}
+table.t tr:last-child td{border-bottom:none}
+table.t td b{color:var(--ink9)}
+table.t td.q{font-weight:600;color:var(--ink9);width:24%}
+table.t tr.grp td{background:var(--muted);font-size:10.5px;font-weight:650;letter-spacing:.05em;color:var(--ink5);padding:6px 12px}
+.tblwrap{overflow-x:auto}
+.cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:12px 0}
+.cards.two{grid-template-columns:1fr 1fr}
+.pc{background:var(--surface);border:1.5px solid var(--hair);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 16px}
+.pc .n{font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.04em}
+.pc h3{font-size:14px;margin:3px 0 5px}
+.pc p{font-size:12.6px;line-height:1.7;color:var(--ink7)}
+.src{font-size:11px;color:var(--ink5);margin-top:6px}
+.src a{color:var(--ink5)}
+.own{font-size:10.5px;font-weight:650;border-radius:6px;padding:2px 7px;white-space:nowrap}
+.own.tfs{background:var(--tfs-bg);color:var(--tfs)}.own.dcc{background:var(--accent-muted);color:var(--accent-dark)}
+.verdict{border:1.5px solid var(--accent);background:linear-gradient(180deg,#fbfaff,#fff);border-radius:14px;padding:18px 22px;margin:16px 0}
+.verdict ol{padding-inline-start:20px;display:grid;gap:9px;font-size:13.6px;line-height:1.8;color:var(--ink7)}
+.verdict b{color:var(--ink9)}
+.qa{border-inline-start:3px solid var(--soft);padding:2px 14px 2px 0;margin:16px 0}
+.qa .q2{font-size:13.5px;font-weight:700;margin-bottom:4px}
+.qa .q2 .pill{margin-inline-start:8px}
+.qa p{font-size:13.2px;line-height:1.85;color:var(--ink7);max-width:96ch;margin-bottom:6px}
+.qa .src{margin-top:2px}
+</style>
+</head>
+<body>
+<div class="bar">
+  <b>מחקר · מערכות מול TFS</b>
+  <a href="#verdict">השורה התחתונה</a>
+  <a href="#who">מי נבדק</a>
+  <a href="#detect">זיהוי שינויים</a>
+  <a href="#pair">זיווג</a>
+  <a href="#echo">מניעת הד</a>
+  <a href="#identity">זהות</a>
+  <a href="#conflict">התנגשויות</a>
+  <a href="#content">הערות וקבצים</a>
+  <a href="#schema">תהליכים ומצבים</a>
+  <a href="#ops">תפעול</a>
+  <a href="#api">ה-API עצמו</a>
+  <a href="#dcc">מה זה אומר ל-DCC</a>
+</div>
+<div class="wrap">
+
+<div class="eyebrow">דוח מחקר · 22.9.2026 · המשך למסמך "תהליך הליבה"</div>
+<h1>איך מערכות ניהול בעולם עובדות מול TFS — תשובות חד-משמעיות</h1>
+<p class="lead">נבדקו שלוש משפחות: <b>תוכנות תיווך</b> שכל העסק שלהן הוא סנכרון בין מערכות עבודה (Exalate, TFS4JIRA, OpsHub, Planview Hub, getint, Unito, וכלי ההגירה של nkdAgility) · <b>מערכות ניהול</b> עם התממשקות מובנית ל-Azure DevOps (Aha!, Productboard, Targetprocess, ServiceNow, Airtable, ClickUp, qTest) · ו<b>הכלים של מיקרוסופט עצמה</b> (חיבור GitHub, תוסף האקסל, Power Automate). כל קביעה בדוח נסמכת על תיעוד רשמי, עם קישור; מה שלא נמצא במקור ראשוני מסומן "לא אומת". "Services" = הענן; "Server" = השרת המקומי (TFS).</p>
+
+<!-- ═══════ VERDICT ═══════ -->
+<h2 id="verdict">השורה התחתונה — הארכיטקטורה שכל העולם התכנס אליה</h2>
+<p class="sub">שלוש המשפחות, שנבנו בנפרד זו מזו, הגיעו כמעט לאותן תשובות. כשמוצר תיווך ותיק, מערכת ניהול מובילה ומיקרוסופט עצמה עושים אותו דבר — זו התשובה.</p>
+<div class="verdict">
+<ol>
+<li><b>סריקה לפי תאריך שינוי היא המנוע; התראות הן רק זירוז.</b> Planview Hub סורק כל דקה לפי ChangedDate ומוסיף סריקה מלאה יומית; Unito נופל לסריקה כל ~5 דקות כשאין webhook; TFS4JIRA ו-getint סורקים בלבד. אף אחד לא בונה על התראות כמקור אמת.</li>
+<li><b>הזיווג נשמר גם על הפריט עצמו וגם אצלנו.</b> שדה מותאם על הפריט ב-TFS שמצביע על התאום (דפוס ReflectedWorkItemId), ורישום מקביל במסד של המוצר. כך שורדים גם אובדן מצב אצלנו וגם מחיקה אצלם.</li>
+<li><b>לולאת הד נמנעת בזהות, לא בתזמון:</b> חשבון סנכרון ייעודי, וכל שינוי נכנס שה-ChangedBy שלו הוא החשבון הזה — נזרק. זה הפתרון של Exalate, של Unito ושל מיקרוסופט עצמה ב-Power Automate.</li>
+<li><b>כתיבה בשם אדם אמיתי אפשרית רק ב-bypassRules עם הרשאות מנהל אוסף</b> — וזה מסלול של כלי הגירה, לא של סנכרון חי. כל מוצרי הסנכרון החי כותבים בחשבון השירות ומצטטים את הכותב בטקסט. (ל-DCC יש דרך שלישית שאין לאף אחד מהם — ראו בפרק האחרון.)</li>
+<li><b>התנגשויות פותרים בבעלות לכל שדה, לא בהשוואת זמנים.</b> ברירת המחדל בשוק היא "המאוחר מנצח", אבל Planview הוסיפה מדיניות לכל שדה, ו-Aha! נתנה תור אישורים אנושי. הבחירה של DCC — בעלים אחד לכל שדה — היא הקצה הנכון של המגמה.</li>
+<li><b>הערות: רק חדשות, לעולם לא עריכות.</b> קונצנזוס מוחלט בכל המוצרים. תמונות בתוך טקסט עשיר הן מלכודת ידועה.</li>
+<li><b>מצבים ממופים לפי קטגוריה, לא לפי שם.</b> כך מיקרוסופט עצמה עושה ב-GitHub↔Boards. מצב לא ממופה נכשל בקול רם לתור שגיאות — אף אחד לא מנחש.</li>
+<li><b>מחיקה לא מתפשטת לעולם.</b> הצד השני מסומן והסנכרון נעצר; אף מוצר לא מוחק את התאום.</li>
+<li><b>ייבוא ראשוני הוא תהליך נפרד ומפורש:</b> תחום בשאילתה או בתאריך, מסודר מהישן לחדש והורים לפני ילדים, עם יכולת המשך מנקודת עצירה.</li>
+<li><b>שגיאה עוצרת רק את הזוג שנכשל,</b> יושבת בתור גלוי עם ניסיונות חוזרים מוגבלים, ואז מתריעה לאדם. שום דבר לא נבלע.</li>
+<li><b>תור אישורים אנושי לסנכרון קיים בעולם רק אצל Aha!</b> — יוצאות באישור, נכנסות חדשות באישור. הפילוסופיה של DCC (אדם מאשר) לא רק אפשרית, היא כבר מוצר מצליח.</li>
+<li><b>הזדהות: Entra קודם, PAT לשרת מקומי.</b> התאריכים קשיחים: PAT גלובלי נכבה ב-1.12.2026, וה-OAuth הישן של Azure DevOps נסגר ב-2026 (אין רישומים חדשים כבר מאפריל 2025). Power Automate כבר לא מקבל PAT בכלל. תמיכה בשרת מקומי = כתובת מלאה עם ה-Collection, וגרסאות API ישנות.</li>
+</ol>
+</div>
+
+<!-- ═══════ WHO ═══════ -->
+<h2 id="who">מי נבדק, ומה לקחנו מכל אחד</h2>
+<div class="tblwrap"><table class="t">
+<thead><tr><th>מוצר</th><th>מה הוא</th><th>ענן / שרת מקומי</th><th>הדבר האחד שלקחנו ממנו</th></tr></thead>
+<tbody>
+<tr class="grp"><td colspan="4">תוכנות תיווך — כל העסק שלהן הוא סנכרון</td></tr>
+<tr><td><b>Exalate</b></td><td>סנכרון Jira↔ADO מבוסס סקריפטים</td><td>שניהם (מחבר Server מ-2026)</td><td>משתמש-פרוקסי שהשינויים שלו לעולם לא מסונכרנים חזרה; מחיקה = אירוע שמנתק, לא מוחק</td></tr>
+<tr><td><b>TFS4JIRA</b> (Appfire)</td><td>סנכרון Jira↔TFS ותיק</td><td>שניהם (TFS 2015–2022)</td><td>שדה מותאם בשני הצדדים שמחזיק את מזהה התאום; "המאוחר מנצח" מנוסח במפורש</td></tr>
+<tr><td><b>OpsHub OIM</b></td><td>תיווך רב-מערכות + הגירות</td><td>שניהם</td><td>התחזות אמיתית לכותב דרך bypassRules; בחירת אסטרטגיית התנגשות מפורשת; התראות תקלה 1 שעה / 24 שעות</td></tr>
+<tr><td><b>Planview Hub</b> (Tasktop)</td><td>תיווך ארגוני מבוסס מודל</td><td>שניהם</td><td>סריקת שינויים כל דקה + סריקה מלאה יומית לתפוס מה ש-ChangedDate מפספס; מדיניות התנגשות לכל שדה; תור Transient עם 10 ניסיונות</td></tr>
+<tr><td><b>getint · Unito</b></td><td>סנכרון קל למערכות עבודה</td><td>getint שניהם · Unito ענן בלבד (לא אומת)</td><td>חשבון-בוט חובה; ייבוא היסטורי כברירת מחדל כבוי ("מהיום והלאה")</td></tr>
+<tr><td><b>nkdAgility migration-tools</b></td><td>כלי הגירה בקוד פתוח, סטנדרט בתעשייה</td><td>שניהם</td><td>דפוס ReflectedWorkItemId: הכלי חסר-מצב, כל האמת על הפריט עצמו — לכן ריצות ניתנות לחידוש</td></tr>
+<tr><td><b>ConnectALL</b> (Broadcom)</td><td>תיווך ארגוני</td><td>שניהם (מ-TFS 2015)</td><td>ניסוח מפורש: עדכון הערות לא נתמך, תמונות בתוך שדות עשירים שוברות סנכרון</td></tr>
+<tr class="grp"><td colspan="4">מערכות ניהול עם התממשקות מובנית — האנלוגיה הקרובה ל-DCC</td></tr>
+<tr><td><b>Aha! Roadmaps</b></td><td>ניהול מוצר ורודמאפ</td><td>שניהם</td><td><b>תור האישורים</b>: יוצא באישור אדם, נכנס חדש באישור אדם; כיוון לכל שדה (דו-כיווני / חד / פעם אחת); "יתומים" נכנסים למגרש חניה</td></tr>
+<tr><td><b>Productboard</b></td><td>ניהול מוצר</td><td>שניהם (Server דרך רשימת IP)</td><td>סטטוס דו-כיווני לפי חוקים שאדמין קבע; ההצגה: צ'יפ סטטוס חי בצד הפריט</td></tr>
+<tr><td><b>Targetprocess</b> (Apptio/IBM)</td><td>ניהול פורטפוליו</td><td>שניהם</td><td>חמישה webhooks לכל פרויקט כולל "הוערה הערה"; דוח ולידציה של מיפויים</td></tr>
+<tr><td><b>ServiceNow</b></td><td>ITSM</td><td>ענן</td><td>הפרדה בין "פעולות" (Spoke) ל"ייבוא נתונים" חד-כיווני שמשמר Native State/Type של המקור</td></tr>
+<tr><td><b>Airtable · ClickUp</b></td><td>כלי עבודה גמישים</td><td>ענן בלבד</td><td>רשימת שדות נעולים שלעולם לא נכתבים (זהות, ביקורת, מונים) — בעלות לפי שדה בפועל</td></tr>
+<tr><td><b>qTest</b> (Tricentis)</td><td>ניהול בדיקות</td><td>ענן</td><td>ניסוח "ADO הוא מקור האמת, חוץ מיצירת דפקטים" — אסימטריה מוצהרת</td></tr>
+<tr class="grp"><td colspan="4">מיקרוסופט עצמה — התנהגות הייחוס</td></tr>
+<tr><td><b>GitHub ↔ Boards</b></td><td>החיבור הרשמי</td><td>שניהם (Server+GHES: סריקה שעתית)</td><td>קישורים בלבד, בלי סנכרון שדות; מעבר מצב לפי <b>קטגוריה</b> עם נפילה מ-Resolved ל-Completed</td></tr>
+<tr><td><b>תוסף האקסל</b></td><td>עריכה המונית רשמית</td><td>שניהם</td><td>דיאלוג התנגשות לכל שורה: מציגים את שני הערכים ואדם בוחר — התקדים של מיקרוסופט לפתרון אנושי</td></tr>
+<tr><td><b>Power Automate</b></td><td>המחבר הרשמי לאוטומציה</td><td>ענן</td><td>עמוד המגבלות: טריגר העדכון מדלג על שינויי קישורים; PAT לא נתמך; לולאות נעצרות בתנאי על ChangedBy</td></tr>
+</tbody>
+</table></div>
+<p class="sm">MS Project הוצא משימוש רשמית (מאז Server 2019 אין תמיכה); Asana ו-monday אין להם סנכרון עומק רשמי משלהם — הם נשענים על מוצרי התיווך שלמעלה. IBM ELM לא נמצא תיעוד נגיש — דולג.</p>
+
+<!-- ═══════ DETECT ═══════ -->
+<h2 id="detect">1 · איך יודעים שמשהו השתנה ב-TFS</h2>
+<div class="qa"><div class="q2">מה המנוע — התראות (webhooks) או סריקה?</div>
+<p><b>סריקה לפי ChangedDate היא המנוע אצל כולם; התראות הן זירוז בלבד.</b> Planview Hub מגדיר "מרווח זיהוי שינויים" — שאילתא על כל מה שהשתנה מאז הפעם הקודמת לפי תאריך העדכון — עם המלצה של <b>דקה אחת</b>, ובנוסף "סריקה מלאה" (ברירת מחדל כל 24 שעות) שתפקידה המוצהר לתפוס "שינויים שלא מעדכנים את תאריך השינוי" — בעיקר מחיקות. Unito עובד עם webhooks היכן שיש, ונופל לסריקה "כל חמש דקות". TFS4JIRA ו-getint סורקים בלבד ("כל פריט שהשתנה מאז הריצה המוצלחת האחרונה"). OpsHub ממליץ 15–30 דקות לפי גודל.</p>
+<p class="src"><a href="https://support.jamasoftware.com/hc/en-us/articles/23366485369613">Planview/Jama · מרווחי סריקה</a> · <a href="https://blog.planview.com/se/whats-new-in-tasktop-integration-hub-18-3/">Planview · הסריקה המלאה</a> · <a href="https://guide.unito.io/unito-speed-explained">Unito</a> · <a href="https://appfire.atlassian.net/wiki/spaces/TFS4JIRA/pages/148177898">TFS4JIRA · האלגוריתם</a> · <a href="https://docs.opshub.com/integrate/best-practises">OpsHub</a></p></div>
+
+<div class="qa"><div class="q2">למה לא לסמוך על התראות בלבד?</div>
+<p>שלוש סיבות מתועדות: <b>(א)</b> התראות נופלות בשקט — אחרי כישלונות המנוי עובר ל"תקופת מבחן" שמפילה אירועים, ואחרי חצי שנה בלי הצלחה מבוטל. <b>(ב)</b> יש שינויים שלא מייצרים אירוע עדכון: עמוד המגבלות של Power Automate אומר במפורש שטריגר "פריט עודכן" <b>מדלג על הוספה/מחיקה של קישורים</b>, ויכול לפספס שדות מסוימים. <b>(ג)</b> מחיקות ושחזורים לא מזיזים ChangedDate — בשביל זה קיימת הסריקה המלאה של Planview. המסקנה החד-משמעית: התראות מקצרות את זמן התגובה לשניות, והסריקה היא רשת הביטחון שמבטיחה שכלום לא אבד.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/connectors/visualstudioteamservices/">Power Automate · מגבלות מתועדות</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/service-hooks/troubleshoot?view=azure-devops">Service hooks · תקופת מבחן</a></p></div>
+
+<div class="qa"><div class="q2">באיזה תדר סורקים?</div>
+<p><b>דקה אחת לפריטים חמים, סריקה מלאה פעם ביום.</b> אלה המספרים של Planview Hub, המוצר הכבד ביותר שנבדק. מוצרים קלים חיים טוב עם 5 דקות (Unito). מתחת לדקה אין אף מוצר — בגלל מגבלת הקצב של הענן (ראו פרק ה-API). לשרת מקומי אין מגבלת קצב גלובלית, אבל אף מוצר לא סורק תדיר יותר גם שם.</p></div>
+
+<div class="qa"><div class="q2">האם מישהו משתמש ב-Reporting Revisions API (ה-API שמיקרוסופט ייעדה לסנכרון)?</div>
+<p><b>אף מוצר לא מתעד שימוש בו</b> <span class="pill off">לא אומת (היעדר)</span> — כולם על WIQL/ChangedDate. הפירוט על ה-API הזה עצמו — בפרק ה-API למטה.</p></div>
+
+<!-- ═══════ PAIR ═══════ -->
+<h2 id="pair">2 · איך זוכרים איזה פריט אצלנו הוא איזה פריט אצלם</h2>
+<div class="qa"><div class="q2">איפה נשמר הזיווג?</div>
+<p><b>בשני מקומות בו-זמנית — על הפריט ב-TFS וגם במסד שלנו.</b> TFS4JIRA כותב שדה מותאם בשני הצדדים ("שדה בפריט העבודה שערכו מזהה ה-Jira, ולהפך"), עם נפילה לכתיבת המזהה בהערה כשאסור להוסיף שדות. כלי ההגירה של nkdAgility הם הצורה הטהורה: "לכלי אין שום מצב פנימי — הוא משתמש בשדה על פריט העבודה" (<span class="mono">Custom.ReflectedWorkItemId</span>), וזה מה שמאפשר "לחדש ריצות שנעצרו ולתחום לפי שאילתא". Exalate ו-getint מחזיקים את הזיווג במסד שלהם, עם פעולת Connect ו-Bulk Connect (קובץ CSV של זוגות) לחיבור פריטים שכבר קיימים בשני הצדדים.</p>
+<p><b>למה שניהם:</b> השדה על הפריט שורד אובדן מצב אצלנו (ואפשר לשאול את TFS "מי כבר מזווג" בשאילתא); הרישום אצלנו שורד ארגון שאוסר שדות מותאמים. DCC כבר מחזיק <span class="mono">linkedAdoId</span> אצלו — החצי החסר הוא השדה בצד TFS.</p>
+<p class="src"><a href="https://appfire.atlassian.net/wiki/spaces/TFS4JIRA/pages/148177898">TFS4JIRA · זיווג</a> · <a href="https://devopsmigration.io/docs/setup/reflected-workitem-id/">nkdAgility · ReflectedWorkItemId</a> · <a href="https://docs.exalate.com/docs/connect-operation">Exalate · Connect</a></p></div>
+
+<div class="qa"><div class="q2">מה קורה כשהצד השני מחק או העביר את הפריט?</div>
+<p>הזיווג הכפול הוא התשובה: הצד ששרד עדיין יודע מי היה התאום שלו. מחיקה מטופלת כאירוע (פרק 8 במסמך הליבה): מסמנים, עוצרים סנכרון, ולא מוחקים חזרה. העברת פריט בין פרויקטים משנה את הנתיב אבל לא את המזהה — הזיווג לפי מזהה שורד אותה.</p></div>
+
+<!-- ═══════ ECHO ═══════ -->
+<h2 id="echo">3 · איך שינוי שאנחנו כתבנו לא חוזר אלינו כ"שינוי חדש"</h2>
+<div class="qa"><div class="q2">המנגנון המוסכם</div>
+<p><b>זהות, לא תזמון.</b> Exalate: "שינויים שנעשו על ידי משתמש הפרוקסי אינם מסונכרנים… כדי למנוע לולאות", עם המלצה חד-משמעית להקים משתמש ייעודי לסנכרון בלבד. Unito ו-getint מחייבים חשבון-בוט. ומיקרוסופט עצמה, בעמוד האנטי-דפוסים של Power Automate, פותרת את הלולאה האינסופית באותה דרך: תנאי על הטריגר שמסנן את השינויים של חשבון הסנכרון (ChangedBy ≠ חשבון-הסנכרון).</p>
+<p><b>שכבת ביטחון שנייה:</b> השוואת חותם — TFS4JIRA מסנכרן רק מה שהשתנה מאז הריצה המוצלחת האחרונה ומשווה מי מהתאומים חדש יותר, כך שגם אם משהו חמק, אין פינג-פונג אינסופי אלא לכל היותר סיבוב אחד מיותר.</p>
+<p class="src"><a href="https://docs.exalate.com/docs/proxy-user">Exalate · Proxy user</a> · <a href="https://learn.microsoft.com/en-us/power-automate/guidance/coding-guidelines/avoid-anti-patterns">מיקרוסופט · מניעת לולאות</a> · <a href="https://guide.unito.io/how-to-create-a-bot-user-in-unito">Unito · bot user</a></p></div>
+<div class="note info"><b>ל-DCC זה אומר:</b> כשהכתיבות נעשות בזהויות אישיות של אנשי הצוות (ראו הפרק הבא), הסינון הוא לפי <b>מזהה האירוע האחרון שאנחנו כתבנו</b> (rev שנרשם אצלנו בזמן הכתיבה) ולא רק לפי זהות: שינוי נכנס שה-rev שלו ≤ ה-rev שכתבנו — הד; גדול ממנו — שינוי אמיתי, גם אם אותו אדם עשה אותו ידנית ב-TFS.</div>
+
+<!-- ═══════ IDENTITY ═══════ -->
+<h2 id="identity">4 · בשם מי נכתב ב-TFS, ומי מופיע בהיסטוריה</h2>
+<div class="qa"><div class="q2">האם אפשר לכתוב כך שבהיסטוריה של TFS יופיע האדם האמיתי?</div>
+<p><b>כן, בשתי דרכים בלבד — ו-DCC יכול להשתמש בטובה שבהן.</b></p>
+<p><b>דרך א — האסימון של האדם עצמו.</b> כשכל משתמש מחובר ב-PAT/Entra משלו, כל כתיבה שלו היא פשוט… שלו. זו הדרך הנקייה, והיא זמינה ל-DCC כי כל הכותבים הם אנשי הצוות שלנו — יתרון שאין לאף מוצר תיווך (המשתמשים שלהם מפוזרים בין חברות). זה גם מיישר קו עם עיקרון היסוד "זהות היא תמיד אדם אמיתי".</p>
+<p><b>דרך ב — התחזות דרך bypassRules.</b> OpsHub מתעד "התחזות משתמש וזמן בצד Azure DevOps, כך שכל גרסה מופיעה תחת הכותב המקורי", ומציין את התנאי: הרשאת "Bypass rules on work item updates" במצב Allow. nkdAgility דורש חברות ב-Project Collection Administrators, ו-ADO מחייב שבמצב הזה ChangedBy יקבל ערך. <b>זה מסלול הגירה, לא סנכרון חי</b> — הוא עוקף גם את חוקי השדות, ולכן מסוכן כמדיניות קבע.</p>
+<p><b>ומה עושים כל מוצרי הסנכרון החי?</b> כותבים בחשבון השירות ומצטטים: getint — "הערות יופיעו תחת החשבון שאיתו חיברתם"; Unito — "שם הכותב המקורי מופיע בטקסט, אבל ההערה מיוחסת לחשבון החיבור". Planview מתחזה רק היכן שהמחבר תומך.</p>
+<p class="src"><a href="https://www.opshub.com/migrations/migrate-to-azure-devops/">OpsHub · התחזות</a> · <a href="https://devopsmigration.io/docs/setup/permissions/">nkdAgility · הרשאות</a> · <a href="https://unito.io/blog/ufaq/do-users-need-accounts-in-both-tools-to-sync-changes">Unito · ייחוס</a></p></div>
+<div class="qa"><div class="q2">איך ממפים משתמש שלנו למשתמש TFS?</div>
+<p><b>לפי אימייל, עם החלטה מפורשת מה קורה כשאין התאמה.</b> OpsHub חושף בדיוק את שתי האפשרויות: "הכשל את האירוע אם המשתמש לא נמצא" או נפילה למשתמש ברירת מחדל. ל-DCC: משתמש DCC נושא אימייל; ההתאמה חד-חד-ערכית; אין התאמה — האירוע נכשל לתור, לא מנחשים.</p></div>
+
+<!-- ═══════ CONFLICT ═══════ -->
+<h2 id="conflict">5 · שני הצדדים שינו את אותו שדה — מי מנצח</h2>
+<div class="qa"><div class="q2">מה עושה השוק?</div>
+<p>ארבע רמות בגרות, מהפשוטה למתוחכמת: <b>(1) המאוחר מנצח</b> — TFS4JIRA ("ערכי הפריט שהשתנה לאחרונה מופצים") ו-getint. פשוט, ומאבד עדכונים בשקט. <b>(2) צד קבוע מנצח</b> — OpsHub נותן לבחור "Endpoint 1 Wins / Endpoint 2 Wins / מותאם / ידני". <b>(3) בעלות לכל שדה</b> — Planview Hub 20.2: "קבעו את ההתנהגות הרצויה לכל שדה בנפרד". <b>(4) אדם מכריע</b> — תוסף האקסל של מיקרוסופט מציג בהתנגשות את שני הערכים ואדם מסמן את הנכון; Aha! שמה שינויים בתור אישורים.</p>
+<p><b>התשובה החד-משמעית ל-DCC:</b> רמות 3+4 יחד, וזה בדיוק מה שכבר תוכנן במסמך הליבה — בעלים אחד לכל שדה (אין התנגשות מעצם הבנייה), והמסכים שבהם אדם מכריע כשה"בעלים" הוא DCC אבל מישהו שינה ידנית ב-TFS: מוצגים שני הערכים, כמו באקסל.</p>
+<p class="src"><a href="https://blog.planview.com/tasktop-hub-20-2/">Planview · per-field</a> · <a href="https://appfire.atlassian.net/wiki/spaces/TFS4JIRA/pages/148177898">TFS4JIRA · LWW</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/boards/backlogs/office/faqs?view=azure-devops">אקסל · התנגשויות</a></p></div>
+<div class="qa"><div class="q2">תור האישורים של Aha! — איך הוא באמת עובד</div>
+<p>שני שערים נפרדים, כל אחד עם ברירת מחדל אוטומטית שאפשר להקשיח: <b>יוצא</b> — "אם תבחרו זאת, בעל סביבת עבודה יצטרך לסקור ולשלוח כל שינוי"; <b>נכנס</b> — "רשומות לא ייובאו עד שיאושרו", כשהאוטומטי חל רק על ילדים של פריט שכבר מקושר. הסוקר רואה רשימת שינויים ממתינים, פותח כל אחד לפרטים, מסמן ולוחץ "שלח"/"ייבא או התעלם". פריט שהאב שלו לא מקושר "יוצג בתור כהצעת ייבוא" וייכנס ל"מגרש חניה". Aha! ממליצה על מצב האישורים לצוותים חדשים — "כדי לוודא מה נשלח ולמנוע שינויים לא מכוונים". <b>גבול חשוב:</b> האישור הנכנס חל על רשומות <i>חדשות</i>, לא על כל עדכון שדה — עדכוני שדות זורמים לפי הכיוון שהוגדר. DCC מרחיב את הדפוס גם לעדכונים נכנסים על פריט מקושר, דרך "מה שהגיע".</p>
+<p class="src"><a href="https://support.aha.io/aha-roadmaps/integrations/integration-guides/send-and-receive-changes-from-another-system">Aha! · Integration updates</a></p></div>
+
+<!-- ═══════ CONTENT ═══════ -->
+<h2 id="content">6 · הערות, קבצים, קישורים והיררכיה</h2>
+<div class="qa"><div class="q2">הערות (Discussion)</div>
+<p><b>מוסיפים חדשות; לא מסנכרנים עריכות ולא מחיקות — אף אחד, בשום כיוון.</b> ConnectALL: "רק הערות חדשות… עדכון הערות לא נתמך". Unito: "עריכת הערות ב-ADO לא תסונכרן". Aha!: בקישור ראשון הערות קיימות לא נשלחות, ועריכות לעולם לא. Targetprocess הוא היחיד עם אירוע ייעודי "הוערה הערה" לשני הכיוונים — אבל גם שם, הוספות בלבד. אזכור-משתמש (@) דורש סימון HTML מיוחד — בפרק ה-API.</p></div>
+<div class="qa"><div class="q2">קבצים מצורפים</div>
+<p>מסונכרנים כקובץ או כקישור (Unito), עם מניעת כפילות לפי מזהה הקובץ בצד השני — בדיוק כמו שכבר עשוי ב-DCC (<span class="mono">adoAttachmentId</span>). <b>המלכודת המתועדת: תמונות בתוך שדות טקסט עשיר.</b> ConnectALL מזהיר שתמונה בתוך Description/הערה "לא תסונכרן, וכל עדכון נוסף על הרשומה עלול לגרום לבעיות סנכרון"; Power Automate מפיל תמונות מעל 500KB. הכלל: תמונה מטופלת כקובץ מצורף + קישור, לא כתוכן מוטבע.</p></div>
+<div class="qa"><div class="q2">קישורים והיררכיה</div>
+<p>הורה-ילד ותלויות מסתנכרנים אצל כולם המבוגרים (TFS4JIRA רב-רמות, getint תלויות, Exalate מדריך ייעודי). שני כללים קשיחים: <b>הורה אחד בלבד</b> ב-TFS (עץ, לא גרף), ו<b>סדר יצירה</b> — קישור לפריט שעוד לא נוצר בצד השני נכשל; Planview בנתה בדיוק בשביל זה את תור ה-Transient שמנסה שוב אוטומטית ("קישורים לפריטים מאינטגרציה אחרת שעוד לא זרמו"). ולזכור את הממצא מ-Power Automate: <b>שינוי קישורים לא מרים אירוע עדכון</b> — עוד סיבה לסריקה.</p>
+<p class="src"><a href="https://techdocs.broadcom.com/us/en/ca-enterprise-software/valueops/connectall/4-0/adapters/azure-devops-vsts-or-tfs2015-ms-common-adapter/ado-msca-field-mapping.html">ConnectALL · הערות ותמונות</a> · <a href="https://blog.planview.com/tasktop-hub-release-22-3/">Planview · תור Transient</a> · <a href="https://guide.unito.io/azure-devops-common-problems">Unito · מגבלות</a></p></div>
+
+<!-- ═══════ SCHEMA ═══════ -->
+<h2 id="schema">7 · כל לקוח עם תהליך אחר — Agile, Scrum, CMMI, מותאם</h2>
+<div class="qa"><div class="q2">איך שורדים שמות מצבים שונים אצל כל לקוח?</div>
+<p><b>ממפים לפי קטגוריית מצב, לא לפי שם — כמו מיקרוסופט עצמה.</b> ב-GitHub↔Boards, מילת המפתח Fixed מעבירה "למצב הראשון בקטגוריית Resolved, ואם אין כזה — לראשון בקטגוריית Completed". חמש הקטגוריות (Proposed · InProgress · Resolved · Completed · Removed) קיימות בכל תהליך, גם מותאם. השמות מתגלים ב-API של המצבים לכל סוג פריט. DCC כבר תכנן כך במסמך הליבה — המחקר מאשר שזה הדפוס הרשמי.</p></div>
+<div class="qa"><div class="q2">ומה עם שדות חובה וחוקים שחוסמים מעבר?</div>
+<p><b>אף מוצר לא מנחש. או בדיקה מראש, או כישלון מסודר לתור.</b> ConnectALL מחייב מיפוי מלא של כל המצבים מראש; Exalate מספק מדריך מיפוי לכל תהליך; מה שלא ממופה — נכשל לתור השגיאות עם הודעה. כלי ההגירה עוקפים חוקים (bypassRules); כלי הסנכרון החי לא. ל-DCC: <span class="mono">validateOnly</span> לפני כל מעבר מצב (כמתוכנן), והודעת הכישלון של TFS מוצגת בעברית במסך "מול TFS".</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/azure/devops/boards/github/link-to-from-github?view=azure-devops">מיקרוסופט · מעבר לפי קטגוריה</a> · <a href="https://docs.exalate.com/docs/how-to-sync-statuses-in-azure-devops">Exalate · מיפוי מצבים</a></p></div>
+
+<!-- ═══════ OPS ═══════ -->
+<h2 id="ops">8 · תפעול: ייבוא ראשוני, שגיאות, ניטור</h2>
+<div class="qa"><div class="q2">ייבוא ראשוני של מאות/אלפי פריטים קיימים</div>
+<p><b>אף פעם לא אוטומטי-מלא.</b> Unito שולח מהיום והלאה כברירת מחדל ("created after"); TFS4JIRA עם כפתור מפורש "סנכרן פריטים קיימים", מעבד את התור <b>מהישן לחדש</b> עם אפשרות מיון לפי סוג "אם יש היררכיה" (הורים לפני ילדים); Exalate מזווג קיימים-מול-קיימים ב-CSV; nkdAgility מסנן "מה שכבר קיים ביעד" לפי השדה המשקף — ולכן ריצה שנקטעה פשוט ממשיכה. נתוני תפוקה מספריים: לא פורסמו אצל אף אחד <span class="pill off">לא אומת</span>.</p></div>
+<div class="qa"><div class="q2">שגיאה בסנכרון של פריט אחד</div>
+<p><b>עוצרת רק אותו, גלויה, מנוסה שוב אוטומטית, ואז אדם.</b> Exalate: שגיאה "חוסמת את סנכרון הישות" עד Resolve & Retry — פריט אחד, לא הכול. Planview: תור Transient עם "10 ניסיונות (כ-2.8 שעות)" ואז תור Failed. OpsHub שומר את פרטי האירוע שנכשל עד לטיפול, וממליץ להתריע על כשל מתמשך אחרי <b>שעה</b> ועל חוסר פעילות אחרי <b>24 שעות</b>. אלה בדיוק המספרים שכדאי לאמץ ב"כתיבות אחרונות ל-TFS" במסך של DCC.</p>
+<p class="src"><a href="https://docs.exalate.com/docs/error-handling">Exalate · שגיאות</a> · <a href="https://blog.planview.com/tasktop-hub-release-22-3/">Planview · תורים</a> · <a href="https://docs.opshub.com/integrate/best-practises">OpsHub · התראות</a></p></div>
+<div class="qa"><div class="q2">מה מציגים למשתמשים?</div>
+<p>שגיאות — לאדמין (תורים, דוח ולידציה של Targetprocess), לא למשתמש הקצה; למשתמש מציגים צ'יפ סטטוס חי ליד הפריט (Productboard) ותור אישורים (Aha!). אף מוצר לא מציג "סונכרן לאחרונה" בולט לכל פריט. DCC כבר מציג יותר מכולם במסך "מול TFS" — נשאר רק לחבר אליו את תור השגיאות האמיתי.</p></div>
+
+<!-- ═══════ API ═══════ -->
+<h2 id="api">9 · המכניקה של ה-API עצמו</h2>
+<p class="sub">הכול מהתיעוד הרשמי של מיקרוסופט, אלא אם צוין אחרת. <span class="pill tfs">Server</span> = הערה ייחודית לשרת מקומי.</p>
+
+<h3>זיהוי שינויים</h3>
+<div class="qa"><div class="q2">מה באמת יש בתוך התראת "פריט עודכן"?</div>
+<p>גרסת ה-payload המלאה (resourceVersion 1.0) מכילה לכל שדה שהשתנה <b>ערך ישן וערך חדש</b>, ותמונת מצב מלאה של הגרסה; התראת "הוערה הערה" מכילה את טקסט ההערה (בשדה System.History). התיעוד העדכני מציג דוגמה מפושטת בלבד — הפירוט מאומת מהשטח <span class="pill off">קהילה</span>, ולכן בחיבור ללקוח בודקים פעם אחת מול ההתראה האמיתית. מסננים לכל מנוי: נתיב אזור, סוג פריט, שדה שהשתנה (בממשק — שדה אחד בלבד; דרך ה-API אפשר יותר). מנוי בלי מסננים מכסה את כל הפרויקט. כל חמשת האירועים קיימים: נוצר, עודכן, נמחק, שוחזר, הוערה.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/azure/devops/service-hooks/events?view=azure-devops">Events</a> · <a href="https://tfsaggregator.github.io/docs/v3/rules/workitem/">מבנה ה-payload (קהילה)</a></p></div>
+<div class="qa"><div class="q2">כמה אפשר לסמוך על ההתראות? — המספרים המדויקים</div>
+<p>אין הבטחת סדר, וכפילויות אפשריות (המפתח לזיהוי כפילות: מזהה המנוי + מזהה האירוע; הסדר האמיתי — לפי <span class="mono">rev</span>). כשל זמני (408/502/503/504): עד 8 ניסיונות בכ-3 דקות. כל כשל אחר: המנוי עובר ל"תקופת מבחן" שבה <b>אירועים חדשים נזרקים</b> — לא נשמרים בתור — ורק האירוע שנכשל מנוסה שוב 7 פעמים לאורך כ-36 שעות; נכשל הכול — המנוי מושבת. תשובת 410 משביתה מיד; חצי שנה בלי הצלחה משביתה; גודל payload מוגבל ל-2MB. <b>המסקנה סופית: התראות הן זירוז, הסריקה היא האמת.</b></p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/azure/devops/service-hooks/troubleshoot?view=azure-devops">Troubleshoot</a></p></div>
+<div class="qa"><div class="q2">ה-API שנועד בדיוק לסנכרון — Reporting Work Item Revisions</div>
+<p>מיקרוסופט אומרת במפורש: קריאות בכמות גדולה עושים דרך <span class="mono">wit/reporting/workitemrevisions</span> — "אל תשתמשו בשאילתות לדיווח". ה-API מחזיר <b>כל גרסה של כל פריט</b> עם אסימון-המשך שמשמש כסימן-מים: שומרים אותו, ובקריאה הבאה מקבלים רק את מה שנוסף — כולל מחוקים (<span class="mono">includeDeleted</span>). קשרים (קישורים) אינם כלולים — להם יש reporting links API נפרד. שדות טקסט ארוכים לא חוזרים כברירת מחדל (<span class="mono">$expand=fields</span>). <b>אף מוצר בשוק לא מתעד שימוש בו — DCC יכול להיות מהראשונים, וזה חוסך את כל בעיות ה-ChangedDate.</b></p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/reporting-work-item-revisions/read-reporting-revisions-get?view=azure-devops-rest-7.1">Reporting revisions</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/integration-bestpractices?view=azure-devops">Best practices</a></p></div>
+<div class="qa"><div class="q2">ואם בכל זאת סורקים ב-WIQL?</div>
+<p>יש פרמטר <span class="mono">timePrecision</span> (בלעדיו השוואות תאריך הן ברמת יום); תוצאות נחתכות ב-<b>20,000 בשקט, בלי שגיאה</b>; שאילתא מוגבלת ל-30 שניות בענן (VS402335); להימנע מ-Contains על טקסט ארוך ומ-Ever. חלון חפיפה מומלץ: לא מתועד — מיקרוסופט פשוט אומרת "לא לסרוק בשאילתות".</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/wiql/query-by-wiql?view=azure-devops-rest-7.1">WIQL</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/organizations/settings/work/object-limits?view=azure-devops">Object limits</a></p></div>
+
+<h3>כתיבה</h3>
+<div class="qa"><div class="q2">איך כותבים בלי לדרוס מישהו?</div>
+<p>נעילה אופטימית מתועדת: מוסיפים לתחילת ה-PATCH פעולת <span class="mono">{"op":"test","path":"/rev","value":N}</span> — אם מישהו הקדים אותנו, הבקשה נכשלת וקוראים מחדש. <span class="mono">validateOnly=true</span> מריץ את כל החוקים בלי לשמור — זו הבדיקה המוקדמת "האם זה יעבור?". <span class="mono">suppressNotifications=true</span> קיים על יצירה ועדכון — הכתיבות שלנו לא מציפות התראות. עדכון שדות עושים <b>ב-PATCH אחד</b>, לא שדה-שדה: יש תקרה קשיחה של <b>10,000 גרסאות לפריט</b> דרך ה-API, וכל PATCH שורף גרסה.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/update?view=azure-devops-rest-7.1">Update</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/integration-bestpractices?view=azure-devops">10K revisions</a></p></div>
+<div class="qa"><div class="q2">bypassRules — מה הוא באמת מרשה, ומה המחיר</div>
+<p>עוקף את חוקי השדות והמעברים (שדות חובה, ערכים מותרים), ומאפשר להציב משתמש שכבר לא בארגון. כדי לגעת ב-<span class="mono">ChangedBy/CreatedBy/ChangedDate/CreatedDate</span> צריך בנוסף חברות ב-<b>Project Collection Service Accounts</b>; CreatedBy/CreatedDate ניתנים לקביעה <b>רק בגרסה הראשונה</b>; ChangedDate חייב לעלות בכל גרסה (VS402625 — כלי ההגירה מוסיפים ~2ms). ChangedBy לא יכול להיות ריק במצב הזה (VS403417). <b>מסקנה סופית: מסלול להגירה חד-פעמית בלבד; בסנכרון חי — אסור.</b></p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/previous-versions/azure/devops/integrate/previous-apis/wit/work-items?view=tfs-2017">התיעוד המחייב (ארכיון)</a> · <a href="https://github.com/nkdAgility/azure-devops-migration-tools/issues/751">VS402625</a></p></div>
+<div class="qa"><div class="q2">מגבלת הקצב — התקציב האמיתי</div>
+<p>ענן: <b>200 TSTU לזהות בחלון מתגלגל של 5 דקות</b>; קודם האטה (עד 30 שניות לבקשה) ואז 429 עם TF400733; מכבדים <span class="mono">Retry-After</span> וקוראים את כותרות <span class="mono">X-RateLimit-*</span>. <b>התקציב הוא לכל זהות בנפרד</b> — Service Principal מקבל דלי משלו, ולכן מנוע הסנכרון רץ בזהות משלו ולא שורף את התקציב של בני האדם. <span class="pill tfs">Server</span> אין שום מגבלה מובנית — הריסון שלנו בלבד.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rate-limits?view=azure-devops">Rate limits</a></p></div>
+
+<h3>הערות, קבצים, קישורים</h3>
+<div class="qa"><div class="q2">הערות (Discussion) ואזכורים</div>
+<p>ה-Comments API המודרני (עדיין preview: <span class="mono">7.1-preview.4</span>) נותן קריאה בדפדוף, הוספה, עריכה, מחיקה, תגובות וגרסאות; <span class="pill tfs">Server</span> קיים מ-Server 2019 (REST 5.0). כתיבה ל-System.History והערות הן אותו זרם דיון. <b>אזכור שמתריע למשתמש מתועד רשמית:</b> בעורך HTML — <span class="mono">&lt;a href="#" data-vss-mention="version:2.0,{userId}"&gt;@שם&lt;/a&gt;</span>; בעורך Markdown החדש — <span class="mono">@&lt;userId&gt;</span>; את ה-GUID מביאים מ-Graph (בענן). אזכור שהודבק כטקסט — לא מתריע. אורך מקסימלי להערה: לא מתועד.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/comments?view=azure-devops-rest-7.1">Comments API</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/organizations/notifications/at-mentions?view=azure-devops">@mentions</a></p></div>
+<div class="qa"><div class="q2">קבצים מצורפים</div>
+<p>שני צעדים: העלאה (<span class="mono">wit/attachments</span>) ואז קשר AttachedFile. ענן: עד <b>60MB לקובץ, עד 100 קבצים לפריט</b>; העלאה בחלקים נדרשת מעל 130MB (רלוונטי רק לשרת). <span class="pill tfs">Server</span> ברירת מחדל 4MB, ניתן להגדיל עד 2GB.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/attachments/create?view=azure-devops-rest-7.1">Attachments</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/organizations/settings/work/object-limits?view=azure-devops">Limits</a></p></div>
+<div class="qa"><div class="q2">קישורים — השמות המחייבים והמגבלות</div>
+<p>הורה-ילד: <span class="mono">System.LinkTypes.Hierarchy-Forward/-Reverse</span>, <b>הורה אחד בלבד</b>. תלות: <span class="mono">Dependency-Forward/-Reverse</span>, ללא מעגלים. וגם Related, Duplicate, Affects (CMMI), ו-Remote לקישור <b>בין ארגונים</b> (ענן בלבד, אותו טננט Entra). עד <b>1,000 קישורים לפריט</b>. קישור לבקשת מיזוג הוא ArtifactLink בפורמט <span class="mono">vstfs:///Git/PullRequestId/{project}%2F{repo}%2F{prId}</span> (מתועד); commit ו-branch — מאומתים מהשטח <span class="pill off">קהילה</span>.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/azure/devops/boards/queries/link-type-reference?view=azure-devops">Link types</a></p></div>
+<div class="qa"><div class="q2">סל המיחזור</div>
+<p>פריט שנמחק <b>נשאר לנצח</b> — אין תפוגה אוטומטית ואין הגדרה כזו. שחזור מחזיר שדות, קבצים, תגיות וקישורים (אזור/איטרציה מתאפסים לשורש אם הצומת נמחק). Destroy הוא סופי ודורש הרשאת Project Administrators. יש API מלא: רשימת מחוקים, שליפה, שחזור, השמדה — הסריקה המלאה משתמשת בו כדי לגלות מחיקות ושחזורים.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/recyclebin?view=azure-devops-rest-7.1">Recycle bin API</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/boards/backlogs/remove-delete-work-items?view=azure-devops">Remove/delete</a></p></div>
+
+<h3>סכימה, זהויות, הזדהות</h3>
+<div class="qa"><div class="q2">גילוי התהליך של כל לקוח — הכול קריא ב-API</div>
+<p>סוגי פריטים לפרויקט; שדות לכל סוג כולל <b>חובה וערכים מותרים</b> (<span class="mono">$expand=Properties</span>); מצבים לכל סוג <b>עם הקטגוריה</b> (<span class="mono">stateCategory</span>) דרך processes API; ואפילו החוקים עצמם קריאים (בתהליכים מורשים). זיהוי תבנית התהליך: <span class="mono">projects/{id}?includeCapabilities=true</span>. <span class="pill tfs">Server</span> עם תהליך XML ישן — אין processes API; שם נשארים עם גילוי דרך workitemtypes + בדיקת validateOnly. השער הסופי בכל מקרה: validateOnly.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/processes/states/list?view=azure-devops-rest-7.1">States+category</a> · <a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-types-field/list?view=azure-devops-rest-7.1">Fields per type</a> · <a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/processes/rules/list?view=azure-devops-rest-7.1">Rules</a></p></div>
+<div class="qa"><div class="q2">שיוך לאדם — מה כותבים בשדה AssignedTo</div>
+<p>הצורה החד-משמעית: <span class="mono">"שם תצוגה &lt;email&gt;"</span> (או אובייקט זהות מלא; מחרוזת ריקה מנקה). משתמש לא מוכר — נדחה, אלא אם bypassRules. רזולוציית משתמשים: Graph API בענן; <span class="pill tfs">Server</span> — identities API. העברת פריט בין פרויקטים ושינוי סוג דרך ה-API: <b>ענן בלבד</b> (מסומן "not TFS").</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-items/update?view=azure-devops-rest-7.1">Update · דוגמאות זהות</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/boards/backlogs/move-change-type?view=azure-devops">Move/change type</a></p></div>
+<div class="qa"><div class="q2">הזדהות — לוח הזמנים שקובע את התכנון <span class="pill crit">תאריכים קשיחים</span></div>
+<p><b>PAT גלובלי (כל הארגונים) מפסיק לעבוד ב-1.12.2026.</b> אפליקציות OAuth הישנות של Azure DevOps: אין רישום חדש מאז 23.4.2025, וסוף חיים ב-2026. הדרך קדימה בענן: <b>Entra — Service Principal / Managed Identity</b>, שמצטרפים לארגון כמו משתמש, עם תקציב קצב משלהם (ולא יכולים ליצור PAT). מדיניות ארגונית יכולה להגביל יצירת PAT, היקפים ואורך חיים. <span class="pill tfs">Server</span> נשאר על PAT (מ-TFS 2017) או NTLM/AD. גרסאות: Services 7.1 · Server 2022 = 7.0 · 2020 = 6.0 · 2019 = 5.0 · TFS 2018 = 4.0 — ההליכה היורדת שכבר קיימת ב-DCC נכונה.</p>
+<p class="src"><a href="https://learn.microsoft.com/en-us/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops">PATs</a> · <a href="https://devblogs.microsoft.com/devops/no-new-azure-devops-oauth-apps/">סוף OAuth הישן</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/integrate/get-started/authentication/service-principal-managed-identity?view=azure-devops">Service principals</a> · <a href="https://learn.microsoft.com/en-us/azure/devops/integrate/concepts/rest-api-versioning?view=azure-devops">Versioning</a></p></div>
+
+<!-- ═══════ DCC ═══════ -->
+<h2 id="dcc">10 · מה כל זה אומר ל-DCC — פער מול היום, ואישורים לתכנון</h2>
+<p class="sub">מול הקוד הקיים (<span class="mono">ado-http.ts</span>, <span class="mono">ado-pull.ts</span>, <span class="mono">task-ado-sync.ts</span>) ומול מסמך תהליך הליבה.</p>
+<div class="tblwrap"><table class="t">
+<thead><tr><th style="width:22%">נושא</th><th style="width:26%">היום ב-DCC</th><th>ההחלטה החד-משמעית מהמחקר</th></tr></thead>
+<tbody>
+<tr><td class="q">מנוע הסנכרון</td><td>אין. משיכה ידנית ("מישהו לחץ"), בלי סריקה ובלי התראות.</td><td>שלוש שכבות: <b>Reporting Revisions עם סימן-מים</b> כזרם האמת (ה-API שמיקרוסופט ייעדה לזה, ואף מתחרה לא משתמש בו) · התראות כזירוז לשניות בודדות · סריקת סל המיחזור פעם ביום למחיקות ושחזורים. שרת מקומי ישן — אותו דבר בלי התראות, וזה מספיק.</td></tr>
+<tr><td class="q">זיווג</td><td><span class="mono">linkedAdoId</span> אצלנו בלבד.</td><td>להוסיף שדה משקף בצד TFS (<span class="mono">DCC.ReflectedId</span>) כשמותר, עם נפילה מתועדת לתגית/הערה כשאסור. זיווג כפול = ריצות ניתנות לחידוש.</td></tr>
+<tr><td class="q">מניעת הד</td><td>לא קיים (אין סריקה).</td><td>לרשום אצלנו את ה-rev אחרי כל כתיבה שלנו; שינוי נכנס עם rev ≤ שנרשם — נזרק. בנוסף לסנן לפי זהות כשכותבים בחשבון שירות.</td></tr>
+<tr><td class="q">בשם מי כותבים</td><td>PAT אחד לחיבור — כל הכתיבות בשם אדם אחד.</td><td><b>אסימון אישי לכל משתמש</b> (Entra בענן, PAT בשרת) — ההיסטוריה ב-TFS מציגה את האדם האמיתי בלי שום טריק. חשבון שירות רק לסריקה ולפעולות רקע, עם ציטוט הכותב בטקסט. bypassRules — לעולם לא בסנכרון חי.</td></tr>
+<tr><td class="q">התנגשויות</td><td>TFS דורס בכיוון הנכנס (כותרת/סוג/שלב), השאר לא מנוהל.</td><td>בעלים לכל שדה (כמתוכנן) + דיאלוג שני-ערכים בסגנון האקסל של מיקרוסופט כשמישהו שינה ידנית שדה בבעלות DCC. תור האישורים של Aha! מאשר את דפוס "מה שהגיע" גם לעדכונים נכנסים.</td></tr>
+<tr><td class="q">הערות</td><td>כותבים ל-System.History; לא קוראים.</td><td>לקרוא ולכתוב דרך Comments API, הוספות בלבד, בלי סנכרון עריכות. תמונות — כקובץ+קישור, לעולם לא מוטבעות.</td></tr>
+<tr><td class="q">מצבים</td><td>מיפוי לפי שמות קבועים (Agile בלבד).</td><td>גילוי מצבים לכל סוג בזמן החיבור ומיפוי לפי <b>קטגוריה</b>; מצב לא ממופה נכשל בקול רם. validateOnly לפני כל מעבר.</td></tr>
+<tr><td class="q">שגיאות כתיבה</td><td>נבלעות בשקט (מעבר מצב שנדחה).</td><td>תור לכל זוג: עד 10 ניסיונות ~3 שעות ← Failed ← התראה. כשל מתמשך שעה — מתריעים; חיבור שקט 24 שעות — מתריעים.</td></tr>
+<tr><td class="q">ייבוא ראשוני</td><td>משיכת הכול בבת אחת, TFS דורס.</td><td>ייבוא תחום בשאילתא/תאריך, מהישן לחדש, הורים לפני ילדים, ניתן להמשכה. ברירת מחדל ללקוח חדש: "מהיום והלאה".</td></tr>
+<tr><td class="q">כתיבה בטוחה</td><td>PATCH ישיר, בלי נעילה, שדה אחרי שדה.</td><td>כל כתיבה: <span class="mono">test /rev</span> (נעילה אופטימית) + <span class="mono">validateOnly</span> לפני מעבר מצב + <span class="mono">suppressNotifications</span> + כל השדות ב-PATCH אחד (תקרת 10,000 גרסאות לפריט היא אמיתית).</td></tr>
+<tr><td class="q">תקציב קצב</td><td>לא מנוהל.</td><td>מנוע הסנכרון רץ בזהות Entra משלו — דלי 200 TSTU נפרד שלא נוגע בבני האדם; מכבדים Retry-After וקוראים את כותרות X-RateLimit. בשרת מקומי — ריסון עצמי באותם מספרים.</td></tr>
+<tr><td class="q">הזדהות</td><td>PAT אחד לחיבור.</td><td>ענן: Entra (SP למנוע, אסימון אישי לכל משתמש) — <b>PAT גלובלי מת ב-1.12.2026</b> וה-OAuth הישן נסגר. שרת מקומי: PAT אישי לכל משתמש. מסך החיבור מבקש את הכתובת המלאה כולל Collection.</td></tr>
+<tr><td class="q">גרסאות ו-Server</td><td>הליכה יורדת 7.1→4.1 — טוב.</td><td>נשאר. להוסיף: זיהוי יכולות לפי הגרסה שנתפסה (Comments API מ-Server 2019, processes API רק בתהליך מורשה) והתאמת המנוע — בלי hooks בסביבת Server ישנה, הסריקה לבדה נושאת הכול.</td></tr>
+</tbody>
+</table></div>
+<div class="note ok"><b>שלושה אישורים חשובים לתכנון הקיים:</b> (1) "בעלים אחד לכל שדה" — Planview הגיעו לזה אחרי שנים, Airtable אוכפים בפועל; התכנון של DCC נכון. (2) "אדם מאשר שינוי נכנס" — Aha! הוכיחה שזה מוצר עובד, לא פנטזיה. (3) "מחיקה לא מתפשטת" — כבר כתוב כך גם בקוד הקיים של DCC (Removed + הערה) וגם אצל כל המוצרים.</div>
+<div class="note warn"><b>שלושה דברים שנשארו "לא אומת" גם אחרי כל המחקר</b> — לבדוק פעם אחת מול סביבה אמיתית בזמן המימוש: (1) המבנה המלא של payload ההתראות (ערך ישן/חדש) — התיעוד העדכני מפושט והאימות הוא קהילתי; (2) פורמט ה-vstfs לקישור commit ו-branch (של בקשת מיזוג — מתועד); (3) האם Service Principal יכול לקבל את הרשאת bypassRules (לא נצטרך אותה בסנכרון חי, רלוונטי רק אם יוחלט על ייבוא היסטוריה מלא).</div>
+
+</div>
+</body>
+</html>
