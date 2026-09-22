@@ -1,0 +1,834 @@
+<title>בדיקת Flow · DCC</title>
+<meta name="description" content="מוק בתוך מעטפת המוצר האמיתית: המסכים המלאים של כל תרחישי תהליך הליבה, ניתנים לבחירה ולניווט קדימה-אחורה, לאימות לפני הטמעה">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root {
+  color-scheme: light;
+  --color-accent:#584EF3;--color-accent-dark:#453AD1;--color-accent-muted:#EDEBFC;
+  --color-sidebar-from:#221C5E;--color-sidebar-to:#1B1741;--color-sidebar-hover:#322a86;
+  --color-sidebar-text:#c7c3e8;
+  --surface-page:#F5F4FA;--surface:#ffffff;--surface-muted:#F5F4FA;--surface-tint-2:#FBFAFE;
+  --border-hairline:#E1DFF0;--border-soft:#EAE8F5;--divider:#EDEBFA;--badge-bg:#F0EFF7;
+  --ink-900:#1B1741;--ink-700:#2E2A54;--ink-500:#86829C;--ink-400:#B3B0C9;
+  --status-healthy:#1B9E5C;--status-healthy-bg:#E3F5EB;
+  --status-active:#2563eb;--status-active-bg:#eff6ff;
+  --status-ai:#7c3aed;--status-ai-bg:#f5f3ff;
+  --status-warning:#E0912E;--status-warning-bg:#FDECD9;
+  --status-critical:#E14C6B;--status-critical-bg:#FCE8ED;
+  --status-inactive:#86829C;--status-inactive-bg:#eef0f5;
+  --status-neutral:#584EF3;--status-neutral-bg:#F0EFF7;
+  --type-project:#4d7c0f;--type-task:#0284c7;--type-bug:#e11d48;--type-change:#c026d3;
+  --tfs:#1e5fa8;--tfs-bg:#e6f0fb;
+  --radius-card:12px;--radius-md:10px;--radius-sm:9px;
+  --shadow-panel:0 2px 4px rgb(27 23 65/.05),0 8px 20px rgb(27 23 65/.07);
+  --font:"Rubik",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--surface-page); color: var(--ink-900); font-family: var(--font);
+  font-size: 14px; line-height: 1.45; font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased; direction: rtl; text-align: right;
+}
+button { font-family: inherit; }
+svg { display: block; }
+h1, h2, h3, p, dl, dd, dt { margin: 0; }
+a { color: var(--color-accent); cursor: pointer; }
+
+.shell { display: flex; align-items: stretch; min-height: 100vh; }
+.sidebar { flex: 0 0 244px; background: linear-gradient(180deg, var(--color-sidebar-from), var(--color-sidebar-to)); display: flex; flex-direction: column; padding: 22px 14px; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.brand-mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(160deg, #7d76f0, var(--color-accent) 60%); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+.brand-word { color: #fff; font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+.brand-word span { display: block; color: var(--color-sidebar-text); font-size: 11px; font-weight: 400; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav-item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: var(--radius-md); color: var(--color-sidebar-text); font-size: 13.5px; font-weight: 500; cursor: default; border: none; background: transparent; width: 100%; text-align: start; }
+.nav-item[aria-current="page"] { background: var(--color-accent); color: #fff; box-shadow: 0 4px 14px -4px rgb(79 70 229/.55); }
+.nav-item .ic { flex-shrink: 0; opacity: .92; }
+.nav-item .beta { margin-inline-start: auto; font-size: 9px; font-weight: 700; background: rgb(255 255 255/.18); border-radius: 999px; padding: 1px 6px; }
+.sidebar-spacer { flex: 1; }
+.sidebar-foot { border-top: 1px solid rgb(255 255 255/.09); padding-top: 14px; display: flex; align-items: center; gap: 10px; padding-inline: 8px; }
+.avatar-chip { width: 30px; height: 30px; border-radius: 999px; background: var(--color-sidebar-hover); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.sidebar-foot .who p { color: #fff; font-size: 12.5px; font-weight: 500; }
+.sidebar-foot .who span { color: var(--color-sidebar-text); font-size: 11px; }
+
+.canvas { flex: 1; padding: 22px 26px 40px; min-width: 0; }
+.workspace { background: var(--surface-page); border-radius: 24px; padding: 30px 34px 38px; min-height: calc(100vh - 44px); }
+
+/* ── scenario picker strip (chrome ABOVE the mocked screen) ── */
+.simbar { background: var(--surface); border: 1.5px solid var(--border-hairline); border-radius: var(--radius-card); box-shadow: var(--shadow-panel); padding: 14px 16px; margin-bottom: 22px; }
+.simbar .simhead { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.simbar .simhead b { font-size: 13px; }
+.scenario-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+.scenario-btn { appearance: none; font: inherit; text-align: start; cursor: pointer; border: 1.5px solid var(--border-hairline); background: var(--surface-muted); border-radius: var(--radius-md); padding: 8px 12px; display: flex; flex-direction: column; gap: 2px; min-width: 158px; flex: 1 1 158px; }
+.scenario-btn .k { font-size: 9.5px; font-weight: 650; letter-spacing: .03em; color: var(--ink-500); }
+.scenario-btn .t { font-size: 12.5px; font-weight: 700; color: var(--ink-900); }
+.scenario-btn.on { border-color: var(--color-accent); background: var(--color-accent-muted); }
+.scenario-btn.on .t { color: var(--color-accent-dark); }
+.screenframe { border: 1.5px dashed var(--border-hairline); border-radius: 18px; padding: 3px; position: relative; }
+.screenframe::before { content: "מסך מדומה — " attr(data-tag); position: absolute; top: -11px; inset-inline-start: 16px; background: var(--surface-page); padding: 0 8px; font-size: 10.5px; font-weight: 650; color: var(--ink-500); }
+.screeninner { background: var(--surface-page); border-radius: 15px; padding: 24px 26px 30px; }
+
+/* ── real page chrome (verbatim from the app) ── */
+.crumb { font-size: 12px; color: var(--ink-500); display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.crumb a { color: var(--ink-500); text-decoration: none; }
+.crumb a:hover { color: var(--color-accent); }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
+.page-head .titles h1 { font-size: 23px; font-weight: 650; letter-spacing: -.01em; }
+.page-head .titles p { margin-top: 5px; color: var(--ink-500); font-size: 13px; max-width: 60ch; }
+.rec-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.rec-head h1 { font-size: 21px; font-weight: 650; }
+.rec-key { font-family: var(--mono); color: var(--ink-400); font-size: 12.5px; }
+
+.btn { appearance: none; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; padding: 9px 16px; border-radius: 10px; white-space: nowrap; }
+.btn-primary { background: var(--color-accent); color: #fff; box-shadow: 0 6px 16px -6px rgb(79 70 229/.55); }
+.btn-primary:hover { background: var(--color-accent-dark); }
+.btn-secondary { background: var(--surface); color: var(--ink-700); border: 1px solid var(--border-hairline); }
+.btn-secondary:hover { background: var(--surface-muted); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+
+.panel { background: var(--surface); border: 1.5px solid var(--border-hairline); border-radius: var(--radius-card); box-shadow: var(--shadow-panel); padding: 18px 20px; }
+.panel .panel { border-width: 1px; border-color: var(--border-soft); background: var(--surface-muted); box-shadow: none; }
+.panel + .panel { margin-top: 14px; }
+.dash { display: grid; grid-template-columns: minmax(0,1fr) 288px; gap: 20px; align-items: start; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+.pill .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.pill.warning { background: var(--status-warning-bg); color: var(--status-warning); }
+.pill.critical { background: var(--status-critical-bg); color: var(--status-critical); }
+.pill.active { background: var(--status-active-bg); color: var(--status-active); }
+.pill.healthy { background: var(--status-healthy-bg); color: var(--status-healthy); }
+.pill.ai { background: var(--status-ai-bg); color: var(--status-ai); }
+.pill.inactive { background: var(--status-inactive-bg); color: var(--status-inactive); }
+.pill.neutral { background: var(--status-neutral-bg); color: var(--status-neutral); }
+.pill.tfs { background: var(--tfs-bg); color: var(--tfs); }
+.type-chip { font-size: 10.5px; font-weight: 650; padding: 2px 8px; border-radius: 6px; color: #fff; }
+.type-chip.project { background: var(--type-project); }
+.type-chip.task { background: var(--type-task); }
+.type-chip.bug { background: var(--type-bug); }
+.type-chip.change { background: var(--type-change); }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border-hairline); margin: 14px 0 20px; flex-wrap: wrap; }
+.tab { appearance: none; border: none; background: transparent; cursor: pointer; padding: 10px 14px; font-size: 12.5px; font-weight: 550; color: var(--ink-500); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tab[aria-selected="true"] { color: var(--color-accent); border-color: var(--color-accent); }
+.tab .cnt { font-size: 10px; background: var(--badge-bg); border-radius: 999px; padding: 1px 6px; margin-inline-start: 5px; }
+
+.callout { display: flex; align-items: flex-start; gap: 12px; border-radius: var(--radius-card); padding: 14px 16px; margin-top: 14px; }
+.callout.crit { background: var(--status-critical-bg); }
+.callout.warn { background: var(--status-warning-bg); }
+.callout.ai { background: var(--status-ai-bg); }
+.callout.ok { background: var(--status-healthy-bg); }
+.callout.info { background: var(--status-active-bg); }
+.callout .body p.q { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.callout .body p.r { font-size: 12.5px; color: var(--ink-700); line-height: 1.65; }
+.callout .body p.meta { font-size: 11.5px; color: var(--ink-500); margin-top: 6px; }
+
+.detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; background: var(--surface-muted); border-radius: var(--radius-card); padding: 16px 18px; margin-bottom: 18px; }
+.detail-grid dt { font-size: 11px; color: var(--ink-500); margin-bottom: 3px; }
+.detail-grid dd { font-size: 15px; font-weight: 650; }
+.detail-grid dd.warn { color: var(--status-warning); }
+.detail-grid dd.crit { color: var(--status-critical); }
+.detail-grid dd.ok { color: var(--status-healthy); }
+
+.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.stat-tile { display: flex; flex-direction: column; gap: 6px; background: var(--surface); border: 1.5px solid var(--border-hairline); border-radius: var(--radius-card); box-shadow: var(--shadow-panel); padding: 14px 16px; }
+.stat-tile .lbl { font-size: 12px; color: var(--ink-500); }
+.stat-tile .num { font-size: 24px; font-weight: 700; }
+.stat-tile .num.warn { color: var(--status-warning); }
+.stat-tile .num.ok { color: var(--status-healthy); }
+
+.progress-block { margin: 6px 0 2px; }
+.progress-block .top { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; color: var(--ink-500); }
+.progress-track { height: 7px; border-radius: 999px; background: var(--surface-muted); overflow: hidden; }
+.progress-fill { height: 100%; background: linear-gradient(90deg, #6d64f5, var(--color-accent)); border-radius: 999px; }
+
+.rowlist { border: 1px solid var(--border-hairline); border-radius: var(--radius-md); overflow: hidden; background: var(--surface); }
+.row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--border-hairline); font-size: 13px; cursor: default; }
+.row:first-child { border-top: none; }
+.row.on { background: var(--color-accent-muted); }
+.row .ic { width: 28px; height: 28px; border-radius: 999px; background: var(--surface-muted); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }
+.row .title { font-weight: 600; }
+.row .sub { font-size: 12px; color: var(--ink-500); margin-top: 2px; line-height: 1.55; }
+.row .spacer { flex: 1; }
+.row .meta { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+
+.alert-row { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-hairline); }
+.alert-row:first-of-type { border-top: none; }
+.alert-row .adot { width: 7px; height: 7px; border-radius: 999px; margin-top: 6px; flex-shrink: 0; }
+.alert-row .adot.critical { background: var(--status-critical); }
+.alert-row .adot.warn { background: var(--status-warning); }
+.alert-row .adot.info { background: var(--status-healthy); }
+.alert-row .abody p.at { font-size: 12.5px; font-weight: 600; }
+.alert-row .abody p.as { font-size: 11.5px; color: var(--ink-500); margin-top: 1px; line-height: 1.55; }
+
+.rail { display: flex; flex-direction: column; gap: 14px; }
+.rail .panel { padding: 14px 16px; }
+.rail h4 { font-size: 12.5px; font-weight: 650; margin-bottom: 10px; }
+.qa-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border-hairline); font-size: 12.3px; }
+.qa-row:first-child { border-top: none; }
+.qa-row .a { width: 26px; height: 26px; border-radius: 999px; background: var(--color-accent-muted); color: var(--color-accent-dark); font-size: 10px; font-weight: 650; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.qa-row .sp { flex: 1; }
+.qa-row .age { font-size: 11px; color: var(--ink-500); }
+.qa-row .age.late { color: var(--status-critical); font-weight: 600; }
+
+.claim { display: flex; gap: 10px; padding: 10px 0; border-top: 1px solid var(--border-hairline); }
+.claim:first-child { border-top: none; }
+.claim .m { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; flex-shrink: 0; margin-top: 1px; }
+.claim .m.ok { background: var(--status-healthy-bg); color: var(--status-healthy); }
+.claim .m.as { background: var(--status-active-bg); color: var(--status-active); }
+.claim .m.q { background: var(--status-warning-bg); color: var(--status-warning); }
+.claim .m.cf { background: var(--status-critical-bg); color: var(--status-critical); }
+.claim .m.nw { background: var(--status-ai-bg); color: var(--status-ai); }
+.claim .x { font-size: 13px; line-height: 1.65; }
+.claim .kn { font-family: var(--mono); font-size: 10.5px; color: var(--ink-400); margin-inline-end: 4px; }
+.claim .chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
+.cp { font-size: 10.5px; background: var(--surface-muted); border: 1px solid var(--border-soft); border-radius: 6px; padding: 1px 7px; color: var(--ink-700); white-space: nowrap; }
+.mono { font-family: var(--mono); direction: ltr; unicode-bidi: isolate; font-size: 11px; background: var(--surface-muted); border: 1px solid var(--divider); border-radius: 5px; padding: 1px 6px; }
+.sm { font-size: 11.5px; color: var(--ink-500); line-height: 1.55; }
+
+.flow-shell { background: #fff; border: 1px solid #e5e8ef; border-radius: 16px; overflow: hidden; }
+.flow-shell-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; flex-wrap: wrap; border-bottom: 1px solid #e5e8ef; }
+.flow-shell-header .title { font-size: 13px; font-weight: 700; color: var(--ink-900); }
+.flow-shell-header .subtitle { font-size: 11px; color: var(--ink-500); margin-top: 2px; }
+.flow-body { padding: 14px 16px; display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; }
+.flow-col-lbl { text-align: center; color: var(--ink-400); font-size: 10px; font-weight: 800; letter-spacing: .07em; margin-bottom: 4px; }
+.flow-node { width: 100%; background: #fff; border: 1px solid #e5e8ef; border-inline-start: 5px solid #98a2b3; border-radius: 12px; padding: 9px 11px; text-align: start; box-shadow: 0 5px 14px rgba(16,24,40,.07); font-size: 11.8px; margin-bottom: 8px; }
+.flow-node b { display: block; font-weight: 700; margin-bottom: 2px; }
+.flow-node.done { border-inline-start-color: #13835b; background: #f8fdfa; }
+.flow-node.ready { border-inline-start-color: #5556e8; }
+.flow-node.decision { border-inline-start-color: #ba7208; background: #fffaf0; }
+.flow-node.blocked { border-inline-start-color: #c93b3b; background: #fff8f8; }
+.flow-node.waiting { border-inline-start-color: #98a2b3; }
+.flow-node.bug { border-inline-start-color: #c93b3b; background: #fff8f8; border-inline-start-style: dashed; }
+.flow-badge { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 3px 8px 3px 7px; font-size: 10.5px; font-weight: 700; margin-top: 4px; }
+.flow-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; display: inline-block; flex-shrink: 0; }
+.flow-badge.done { background: #eaf8f1; color: #13835b; }
+.flow-badge.ready { background: #eff0ff; color: #4344c9; }
+.flow-badge.decision { background: #fff6df; color: #ba7208; }
+.flow-badge.blocked { background: #fff0f0; color: #c93b3b; }
+.flow-badge.waiting { background: #f2f4f7; color: #667085; }
+.flow-legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; color: #667085; font-size: 10.5px; padding: 10px 16px; border-top: 1px solid #e5e8ef; }
+.flow-legend span { display: flex; align-items: center; gap: 5px; }
+.flow-legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+.code { direction: ltr; text-align: left; font-family: var(--mono); font-size: 11px; line-height: 1.6; background: #1B1741; color: #E3E1F7; border-radius: 9px; padding: 9px 11px; white-space: pre-wrap; margin-top: 8px; }
+.code .c { color: #ffcf70; } .code .g { color: #8be0ac; }
+
+.ov-steps { display: flex; gap: 6px; padding: 16px 0 0; flex-wrap: wrap; align-items: center; }
+.ov-step { flex: 1 1 105px; border: 1.5px solid var(--border-hairline); background: var(--surface-muted); border-radius: 10px; padding: 8px 10px; text-align: start; font: inherit; }
+.ov-step.active { border-color: var(--color-accent); background: var(--color-accent-muted); }
+.ov-step .n { font-size: 10.5px; color: var(--ink-500); }
+.ov-step .lbl { font-size: 12px; font-weight: 700; color: var(--ink-900); margin-top: 3px; }
+.ov-arrow { color: #C7C4E3; align-self: center; font-size: 14px; }
+.action-row { display: flex; gap: 10px; flex-wrap: wrap; padding-top: 16px; border-top: 1px solid var(--border-hairline); margin-top: 16px; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(8px); background: #14112f; color: #fff; border-radius: 999px; padding: 10px 20px; font-size: 13px; z-index: 200; box-shadow: 0 10px 30px rgb(0 0 0/.3); opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; max-width: 90vw; text-align: center; }
+.toast.on { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* teaching layer — deliberately NOT styled like the fake product screens,
+   so it always reads as "the narrator talking to you", never as UI */
+.explain { background: #fffaf0; border: 1.5px solid #f1dfae; border-radius: 14px; padding: 14px 18px; margin-bottom: 16px; }
+.explain .eh { font-size: 12px; font-weight: 700; color: #6a4a10; display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.explain p { font-size: 13px; line-height: 1.75; color: #4a3a0c; }
+.explain p + p { margin-top: 6px; }
+.explain b { color: #2b2003; }
+
+/* inline "i" info bubble — hover for a one-off explanation of THIS
+   specific element, everywhere it might not be obvious */
+.i { display: inline-flex; width: 16px; height: 16px; border-radius: 999px; border: 1px solid var(--border-hairline); background: var(--surface); color: var(--ink-500); font: italic 700 11px/1 Georgia, serif; align-items: center; justify-content: center; margin-inline-start: 5px; cursor: help; flex: none; position: relative; vertical-align: middle; }
+.i:hover, .i:focus-visible { border-color: var(--color-accent); color: var(--color-accent-dark); }
+.i:hover::after, .i:focus-visible::after { content: attr(data-h); position: absolute; top: 22px; inset-inline-start: -8px; width: 240px; background: var(--surface); border: 1px solid var(--border-hairline); border-radius: 10px; box-shadow: var(--shadow-panel); padding: 9px 11px; font: 400 12px/1.6 var(--font); color: var(--ink-700); z-index: 80; text-align: right; white-space: normal; letter-spacing: 0; }
+.tab .i, .scenario-btn .i { color: inherit; opacity: .6; }
+
+/* clickable affordance for cards that aren't real buttons but should feel real */
+.clickable { cursor: pointer; transition: transform .12s, box-shadow .12s; }
+.clickable:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgb(27 23 65/.1); }
+
+/* scenario-nav strip (within-scenario prev/next, sits above the mocked screen) */
+.simnav { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.simstep { appearance: none; font: inherit; cursor: pointer; border: 1px solid var(--border-hairline); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 11.5px; font-weight: 600; color: var(--ink-500); }
+.simstep.active { background: var(--color-accent); border-color: var(--color-accent); color: #fff; }
+.simctl { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
+.simctl .cnt { font-size: 11.5px; color: var(--ink-500); white-space: nowrap; }
+
+@media (max-width: 980px) {
+  .two, .detail-grid, .dash, .stat-row { grid-template-columns: 1fr; }
+  .flow-body { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .shell { flex-direction: column; }
+  .sidebar { flex: 0 0 auto; flex-direction: row; align-items: center; gap: 12px; padding: 10px 12px; overflow-x: auto; }
+  .brand-word { display: none; }
+  .nav { flex-direction: row; gap: 4px; flex-wrap: nowrap; }
+  .nav-item { width: auto; white-space: nowrap; padding: 7px 11px; font-size: 12.5px; }
+  .nav-item .ic { display: none; }
+  .sidebar-spacer { display: none; }
+  .sidebar-foot .who { display: none; }
+  .canvas { padding: 14px 12px 28px; }
+  .workspace { padding: 18px 14px 22px; border-radius: 16px; min-height: 0; }
+  .flow-body, .screeninner { grid-template-columns: 1fr; }
+  .screeninner { padding: 18px 14px 22px; }
+}
+</style>
+
+<div class="shell" dir="rtl">
+  <nav class="sidebar" aria-label="ניווט">
+    <div class="brand"><div class="brand-mark">DC</div><div class="brand-word">Delivery Control<span>Center</span></div></div>
+    <div class="nav" id="navList"></div>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-foot"><div class="avatar-chip">דנ</div><div class="who"><p>דנה רז</p><span>ראש צוות</span></div></div>
+  </nav>
+
+  <div class="canvas"><div class="workspace">
+
+    <div class="simbar">
+      <div class="simhead">
+        <b>🧪 בדיקת Flow — תהליך הליבה</b>
+        <span class="pill neutral"><span class="dot"></span>מוק · טרם הוטמע</span>
+        <span class="sm" style="margin-inline-start:auto">כל תרחיש מציג את המסך <b>האמיתי</b> שהוא יעבור, מלא, כמו שהוא ייראה כשזה יוטמע.</span>
+      </div>
+      <div class="scenario-bar" id="scenarioBar"></div>
+      <div class="simnav">
+        <div id="stepPills" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        <div class="simctl">
+          <span class="cnt" id="stepCnt"></span>
+          <button class="btn btn-secondary btn-sm" id="btnPrev">→ הקודם</button>
+          <button class="btn btn-primary btn-sm" id="btnNext">הבא ←</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="explain" id="explainBox"></div>
+
+    <div class="screenframe" id="screenLabel">
+      <div class="screeninner" id="stageBody"></div>
+    </div>
+
+  </div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const I = {
+  dashboard: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/>',
+  briefcase: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/>',
+  folder: '<path d="M4 4h5l2 3h9v13H4z"/>',
+  layers: '<path d="m12 2 9 5-9 5-9-5z"/><path d="m3 12 9 5 9-5"/><path d="m3 17 9 5 9-5"/>',
+  repo: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>',
+  branch: '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/><circle cx="18" cy="6" r="3"/>',
+  spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z"/>',
+  message: '<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1 1.55 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9a1.7 1.7 0 0 0 1.55 1H21a2 2 0 0 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>',
+  inbox: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+};
+function icon(name, size=17){ return `<svg class="ic" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${I[name]||''}</svg>`; }
+const NAV = [
+  {label:'לוח בקרה', ic:'dashboard'},{label:'לקוחות', ic:'briefcase'},{label:'דרישות', ic:'folder'},
+  {label:'Azure DevOps', ic:'layers'},{label:'Repositories', ic:'repo'},{label:'בקשות מיזוג', ic:'branch'},
+  {label:'קלוד', ic:'spark'},{label:'פרומפטים', ic:'message'},
+  {label:'בדיקת Flow', ic:'inbox', active:true, beta:'מוק'},
+  {label:'הגדרות', ic:'gear'},{label:'משתמשים', ic:'user'},{label:'יומן פעילויות', ic:'list'},
+];
+document.getElementById('navList').innerHTML = NAV.map(n=>`
+  <button class="nav-item" ${n.active?'aria-current="page"':''} data-toast="${n.active?'אתם כבר כאן — זה המסך הזה בדיוק.':`מסך "${n.label}" האמיתי — לא חלק מהמוק הזה. רק "בדיקת Flow" מוק.`}">${icon(n.ic)}${n.label}${n.beta?`<span class="beta">${n.beta}</span>`:''}</button>`).join('');
+
+/* i(text): the hover info-bubble everywhere something isn't self-explanatory */
+const ii = text => `<span class="i" tabindex="0" data-h="${String(text).replace(/"/g,'&quot;')}">i</span>`;
+
+/* recurring tab/stat labels get a tooltip automatically, looked up by their
+   visible text — so every screen that reuses a standard label (they mostly
+   do) gets an explanation for free, without editing all 25 steps by hand */
+const TAB_HINTS = {
+  'סקירה כללית':'תמונת מצב כללית של הדרישה — סטטוס, בעלים, תאריכים. לא בנינו את התוכן שלה בדוגמה הזו; לחצו כדי לראות למה.',
+  'אפיון':'לולאת סקירה־הבנה־הבהרות. זה הטאב שבנוי בפועל ברוב הצעדים כאן.',
+  'משימות':'גרף המשימות שנגזרו מהקביעות המאושרות של הדרישה.',
+  'קבצים':'מסמכים וצרופות שקושרו לדרישה. לא בנינו את התוכן שלה בדוגמה הזו.',
+  'סקירה':'סיכום המשימה או הבקשה: מצב, בעלים, קישור ל-TFS.',
+  'פעילות':'יומן הפעולות שClaude ביצע, צעד אחרי צעד, עם שעה וסיבה.',
+  'שלי':'פריטים שנמסרו על ידכם או הוקצו אליכם.',
+  'מגדלור · ללא בעלים':'פריטים של הלקוח הזה שאף אחד עוד לא לקח באחריות. מי שלוחץ "אני לוקח" הופך לבעלים.',
+  'סוננו':'רעש ופריטים שסומנו "לא רלוונטי". נשמרים 30 יום ואז נמחקים.',
+  'יומן':'ציר הזמן המלא של הבקשה — כל הערה, כל דחיפה, כל שינוי סטטוס.',
+};
+const STAT_HINTS = {
+  'קביעות מאושרות':'הלקוח או הצוות אישרו אותן בפירוש — אפשר לבנות עליהן בלי חשש.',
+  'הנחות':'החלטנו לא לחכות לתשובה. מישהו בתפקיד המתאים אישר ברירת מחדל רשומה.',
+  'שאלות פתוחות':'קביעות שעדיין ממתינות לתשובה מהלקוח או מהצוות.',
+  'סתירות':'שני מקורות אמרו דברים הפוכים על אותה קביעה.',
+  'סבב נוכחי':'כמה פעמים כבר הסתובבה לולאת האפיון (סקירה־הבנה־הבהרות) על הנושא הזה.',
+  'סבב':'ראו "סבב נוכחי" — אותו מושג.',
+  'משימות':'סך כל המשימות שנגזרו מהדרישה עד כה.',
+  'הושלמו':'משימות שהושלמו ומוזגו לענף הנושא.',
+  'ב-TFS':'משימות שכבר קיימות כפריט אמיתי ב-Azure DevOps, לא רק הצעה.',
+  'סיכון פתוח':'החלטות שהתקבלו על סמך הנחה, לא על תשובה מאושרת — מתועדות כדי שלא יישכחו.',
+  'בדיקות':'תוצאת ריצת הבדיקות האוטומטיות על הקוד של הבקשה.',
+  'חור פתוח':'"חור מסומן" בקוד — מקום שקשור לפרט שעדיין לא ודאי. חוסם מיזוג עד שנסגר.',
+  'סוקר':'מי שצריך לאשר את בקשת המיזוג.',
+  'סטטוס':'המצב הנוכחי של בקשת המיזוג.',
+  'סוקר ≠ מפתח':'כלל שנאכף אוטומטית — מי שכתב קוד לא יכול לאשר את המיזוג של עצמו.',
+  'קונפליקט צפוי':'שתי משימות נוגעות באותו קובץ — מתגלה לפני שהעבודה מתחילה, לא רק בסוף.',
+};
+
+const crumb = parts => `<p class="crumb">${parts.map((p,i)=> i<parts.length-1 ? `<a data-toast="בלחיצה: חוזרים למסך '${p}'. לא מומש בדוגמה הזו — משתמשים בסיור התרחישים למעלה.">${p}</a><span>›</span>` : `<span>${p}</span>`).join('')}</p>`;
+const tabs = (list, on) => `<div class="tabs" role="tablist">${list.map((t,i)=>{
+    const hint = TAB_HINTS[t.replace(/\s*\(\d+\)$/,'')];
+    return `<button class="tab" aria-selected="${i===on}" data-toast="${i===on?'אתם כבר בטאב הזה.':(hint||'הטאב הזה לא נבנה בדוגמה — קיים במסך האמיתי.')}">${t}${hint?ii(hint):''}</button>`;
+  }).join('')}</div>`;
+const dgrid = stats => `<div class="detail-grid">${stats.map(s=>{
+    const hint = s.h || STAT_HINTS[s.l];
+    return `<div${hint?` class="clickable" data-toast="${hint}"`:''}><dt>${s.l}${hint?ii(hint):''}</dt><dd class="${s.c||''}">${s.v}</dd></div>`;
+  }).join('')}</div>`;
+
+const OVSTEP_HINTS = {
+  'פיתוח':'Claude כותב את הקוד עכשיו, בעותק מבודד ועל ענף נפרד למשימה הזו בלבד.',
+  'סקירה והחלטה':'הקוד מוכן ומחכה לבן-אדם שיסקור ויאשר את בקשת המיזוג — תמיד מישהו שאינו הכותב.',
+  'הושלם':'המשימה מוזגה לענף הנושא. אי אפשר לפתוח אותה מחדש — שינויים נוספים הופכים למשימת המשך.',
+};
+/* ── screen template: requirement / task detail record ── */
+function recordScreen(step){
+  return `
+    ${crumb(step.crumb)}
+    <div class="rec-head">
+      <h1>${step.title}</h1>
+      <span class="type-chip ${step.chipCls}">${step.chip}${ii(step.chip==='דרישה' ? 'מה שהיינו קוראים לו "נושא": קביעות ומשימות סביב עניין אחד, עם ענף ובקשת מיזוג אחת ל-master.' : step.chip==='משימה' ? 'יחידת עבודה אחת = פריט אחד ממש ב-Azure DevOps, לא רק רעיון פנימי.' : 'בקשת כניסת קוד (Pull Request) רגילה — משימה שמבקשת להיכנס לענף הנושא, או נושא שמבקש להיכנס ל-master.')}</span>
+      ${step.key?`<span class="rec-key clickable" data-toast="זה המזהה הקבוע של הפריט — מופיע ככה גם ב-Git, גם ב-Azure DevOps, וגם בכל מסך אחר שבו הוא יופיע.">${step.key}</span>`:''}
+      ${step.headPill||''}
+    </div>
+    ${tabs(step.tabs, step.activeTab)}
+    ${step.stats?dgrid(step.stats):''}
+    ${step.rail ? `<div class="dash"><div>${step.main}</div><div class="rail">${step.rail}</div></div>` : step.main}
+    ${step.ovsteps?`<div class="ov-steps">${step.ovsteps.map((s,i)=>`<button class="ov-step ${i===step.ovActive?'active':''}" data-toast="${i===step.ovActive?'אתם כבר בשלב הזה.':(OVSTEP_HINTS[s]||'שלב אחר במחזור החיים של המשימה.')}"><div class="n">שלב ${i+1}${ii(OVSTEP_HINTS[s]||'')}</div><div class="lbl">${s}</div></button>${i<step.ovsteps.length-1?'<span class="ov-arrow">←</span>':''}`).join('')}</div>`:''}
+    ${step.actions?`<div class="action-row">${step.actions}</div>`:''}
+  `;
+}
+
+/* ── screen template: inbox / "מה שהגיע" list+detail — REAL interactivity:
+   paste text, get a mock classification, approve it. State lives in
+   inboxState[key], keyed per scenario+step so each screen keeps its own
+   items across navigation. ── */
+const inboxState = {};
+function classify(text){
+  const t = text.trim();
+  const hasClient = /מגדלור/.test(t);
+  const looksQuestion = /\?/.test(t);
+  if (!hasClient) return { label:'לא ידוע איזה לקוח', tone:'critical', conf:null,
+    note:'הכתובת/השולח לא מופיעים אצל אף לקוח. שיוך שגוי היה מכניס מידע של לקוח אחד לתוך לקוח אחר — לכן לא מנחשים.' };
+  if (looksQuestion) return { label:'שאלה על הקוד / תוספת לנושא פתוח', tone:'active', conf:'בינוני',
+    note:'מזכיר את מגדלור ונשמע כמו שאלה. Claude יבדוק אם זו שאלה על הקוד הקיים או המשך לנושא הפתוח WI-300, ויציג את שתי האפשרויות.' };
+  return { label:'תוספת לנושא פתוח · WI-300', tone:'healthy', conf:'גבוה',
+    note:'מזכיר את מגדלור ואת נושא הדוחות הפתוח — Claude מקשר את זה כמקור חדש לנושא, לא כפריט נפרד.' };
+}
+function inboxScreen(step){
+  const key = step.key;
+  const st = inboxState[key] || (inboxState[key] = { items: step.seed.map(s=>({...s})), selected:0, composing:false });
+  const sel = st.items[st.selected] || st.items[0];
+  const listHtml = st.items.map((it,i)=>`
+    <div class="row ${i===st.selected?'on':''}" data-action="selectInbox" data-key="${key}" data-idx="${i}" style="cursor:pointer">
+      <div class="ic">${it.icon}</div>
+      <div><div class="title">${it.title}</div><div class="sub">${it.sub}</div>
+      ${it.linkNote?`<div class="sm" style="color:var(--color-accent-dark);margin-top:3px">${it.linkNote}</div>`:''}
+      <div class="meta">${it.approved?'<span class="pill healthy">אושר ✓</span>':(it.classification?`<span class="pill ${it.classification.tone}">${it.classification.label}</span>`:'')}</div></div>
+    </div>`).join('');
+  const composeHtml = st.composing ? `
+    <div class="panel" style="margin-bottom:12px">
+      <div class="sm" style="margin-bottom:6px">הדביקו כאן מייל, הודעת Slack, או סיכום שיחה — בדיוק כמו שהייתם עושים במקור עצמו.</div>
+      <textarea id="composeText" rows="4" style="width:100%;font:inherit;font-size:12.8px;padding:8px 10px;border:1px solid var(--border-hairline);border-radius:9px;resize:vertical" placeholder="לדוגמה: מגדלור מבקשים גם אפשרות הדפסה של הדוח…"></textarea>
+      <div class="action-row" style="margin-top:10px;padding-top:0;border-top:none">
+        <button class="btn btn-primary btn-sm" data-action="composeSubmit" data-key="${key}">✦ נתח וסווג</button>
+        <button class="btn btn-secondary btn-sm" data-action="composeCancel" data-key="${key}">בטל</button>
+      </div>
+    </div>` : '';
+  const detailHtml = sel ? `
+    <div class="sm" style="margin-bottom:8px">${sel.icon} ${sel.title}${sel.meta?' · '+sel.meta:''}</div>
+    <p style="font-size:13px;line-height:1.75;font-style:italic;background:var(--surface-muted);border-inline-start:3px solid var(--border-hairline);border-radius:8px;padding:10px 12px">"${sel.body}"</p>
+    ${sel.classification ? `
+      <div class="callout ${sel.classification.tone==='healthy'?'ok':sel.classification.tone==='critical'?'crit':sel.classification.tone==='active'?'info':'ai'}">
+        <div class="body"><p class="q">מה CLAUDE מציע${sel.classification.conf?' · ביטחון '+sel.classification.conf:''}</p><p class="r">${sel.classification.label}</p><p class="meta">${sel.classification.note}</p></div>
+      </div>` : ''}
+    ${sel.approved
+      ? `<div class="callout ok"><div class="body"><p class="r">✓ אושר — נכנס לנושא הפתוח (או נפתח נושא חדש, לפי ההצעה).</p></div></div>`
+      : `<div class="action-row"><button class="btn btn-primary btn-sm" data-action="approveInbox" data-key="${key}">✓ אשר את השיוך</button><button class="btn btn-secondary btn-sm" data-toast="במסך האמיתי: גוררים את הפריט ליעד אחר, מפצלים אותו, או מסמנים 'פנימי'">תקן שיוך</button></div>`}
+  ` : '<div class="sm">אין פריט נבחר.</div>';
+  return `
+    ${crumb(['לוח בקרה','מה שהגיע'])}
+    <div class="page-head">
+      <div class="titles"><h1>מה שהגיע${ii('כל דבר שנמסר למערכת — מייל, Slack, TFS — נכנס לכאן קודם, לפני שהוחלט לאן הוא שייך. זו עוד לא "דרישה".')}</h1><p>Claude כבר עבר על כל פריט ומציע לאן הוא שייך. <b>נסו זאת:</b> הדביקו טקסט משלכם — עם או בלי "מגדלור" בפנים — ותראו איך הסיווג משתנה.</p></div>
+      <button class="btn btn-secondary btn-sm clickable" data-action="composeToggle" data-key="${key}">+ הדבק או גרור</button>
+    </div>
+    ${tabs(['שלי','מגדלור · ללא בעלים','סוננו'], 0)}
+    ${composeHtml}
+    <div class="two">
+      <div class="rowlist">${listHtml}</div>
+      <div class="panel">${detailHtml}</div>
+    </div>
+  `;
+}
+
+/* ── screen template: task board / flow graph ── */
+function boardScreen(step){
+  return `
+    ${crumb(step.crumb)}
+    <div class="page-head"><div class="titles"><h1>${step.title}</h1><p>${step.sub||''}</p></div></div>
+    ${step.stats?`<div class="stat-row">${step.stats.map(s=>{
+        const hint = s.h || STAT_HINTS[s.l];
+        return `<div class="stat-tile${hint?' clickable':''}"${hint?` data-toast="${hint}"`:''}><span class="lbl">${s.l}${hint?ii(hint):''}</span><span class="num ${s.c||''}">${s.v}</span></div>`;
+      }).join('')}</div>`:''}
+    ${step.main}
+  `;
+}
+
+const SCENARIOS = [
+
+{ id:'happy', label:'תהליך תקין', k:'5 שלבים', steps:[
+  { tag:'מה שהגיע', tpl:'inbox', key:'happy-0',
+    note:`<p>זה מסך הכניסה למערכת — <b>הכל נכנס לכאן קודם</b>, מכל מקור, לפני שהוחלט מה זה. יש כאן שתי הודעות נפרדות, מימים שונים, אבל שתיהן <b>על אותו עניין</b>:</p>
+      <p>✉ ההודעה של <b>רונית</b> היא זו שפתחה הכל — Claude מציע בגללה לפתוח נושא חדש. 💬 ההודעה של <b>עידן</b> הגיעה יום אחרי, בלי קשר ישיר אליה — אבל Claude זיהה שהיא ממשיכה בדיוק את אותו עניין (איך הסוכנים מתחברים), ולכן היא כבר מסומנת <b>"אושר ✓"</b>: מישהו כבר אישר את השיוך שלה לפני שהגעתם למסך הזה. לחצו על כל הודעה כדי לראות את הפרטים שלה מימין.</p>
+      <p>הטאבים "מגדלור · ללא בעלים" ו"סוננו" למעלה הם חלק קבוע מהמסך האמיתי (תורים אחרים לגמרי) — לא רלוונטיים לתרחיש הזה, פשוט קיימים תמיד. הצעד הבא ("אפיון") מראה מה קורה אחרי ששתי ההודעות אושרו.</p>`,
+    seed:[
+      { icon:'✉', title:'רונית לוי · מגדלור', sub:'"אפשר שיהיה לסוכנים מסך שרואים בו את הדוח שלהם בעצמם?"', meta:'17.9',
+        body:'כל חודש שולחים לסוכנים דוח ידני באקסל — אפשר שיהיה להם מסך שרואים בו את זה בעצמם?',
+        classification:{ label:'נושא חדש', tone:'healthy', conf:'גבוה', note:'לא נראה כתוספת לנושא פתוח או תשובה לשאלה ממתינה.' }, approved:false },
+      { icon:'💬', title:'עידן · Slack · מגדלור', sub:'יש כבר Azure AD SSO…', meta:'18.9',
+        linkNote:'⤷ המשך לאותה שיחה של רונית למעלה — כבר אושר ומקושר',
+        body:'שמעתי שאתם בונים משהו לסוכנים — רק תדעו שיש לנו כבר Azure AD SSO מופעל, אין צורך בהתחברות נפרדת.',
+        classification:{ label:'תוספת לנושא פתוח · WI-300', tone:'healthy', conf:'בינוני', note:'עונה על מה שיהיה חסר בהבנה — איך הסוכנים מתחברים.' }, approved:true },
+    ], render: function(){ return inboxScreen(this); } },
+  { tag:'אפיון', tpl:'record',
+    note:`<p>הגענו לכאן כי בצעד הקודם שתי ההודעות אושרו לתוך נושא חדש — <b>WI-300</b>. זה "כרטיס דרישה": הכותרת, הסוג ("דרישה") והמפתח (WI-300) הם הזיהוי הקבוע שלה בכל מסך שבו תופיע מעכשיו.</p>
+      <p>הטאב "אפיון" מסומן כי זה מה שרלוונטי כרגע; "סקירה כללית"/"משימות"/"קבצים" הם טאבים אחרים באותו מסך (לא בנינו את התוכן שלהם בתרחיש הזה — הם שם כדי שהמסך יראה שלם). שורת המספרים למטה מסכמת את מצב ה"הבנה": קביעה אחת, וכבר מאושרת — זו שנוצרה משתי ההודעות ביחד. "הבא" עובר לתכנון המשימות שנגזרות ממנה.</p>`,
+    render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300 · פורטל דוחות לסוכנים'], title:'פורטל דוחות לסוכנים', chip:'דרישה', chipCls:'project', key:'WI-300',
+    tabs:['סקירה כללית','אפיון','משימות (18)','קבצים'], activeTab:1,
+    stats:[{l:'קביעות מאושרות',v:'1',c:'ok'},{l:'הנחות',v:'0'},{l:'שאלות פתוחות',v:'0',c:'ok'},{l:'סבב נוכחי',v:'1'}],
+    main:`<div class="panel"><div class="claim"><span class="m ok">✓</span><span class="i" data-h="מאושרת: הלקוח או הצוות אישרו את זה בפירוש. אפשר לבנות על זה בלי חשש.">i</span><div><div class="x"><span class="kn">ק1</span>סוכן מתחבר דרך Azure AD SSO הקיים, רואה רק את הדוחות שלו. <span class="pill healthy">מאושרת</span></div>
+      <div class="chips"><span class="cp">✉ רונית · 17.9</span><span class="cp">💬 עידן · 18.9</span></div></div></div></div>`,
+    rail:`<div class="panel"><h4>מוכן לצאת למשימות</h4><p class="sm">קביעה מאושרת, בלי הנחה — מספיק כדי לפרק ולבנות עד הסוף.</p></div>`
+  })},
+  { tag:'תכנון',
+    note:`<p>עכשיו שיש קביעה מאושרת אחת, Claude מפרק אותה לרשימת משימות אמיתיות — כל תיבה בגרף היא <b>משימה אחת שתיווצר ממש ב-Azure DevOps (TFS)</b>, לא רק רעיון פנימי. "4 שלבים" הוא סדר תלות טכני (מה חייב לקרות לפני מה), לא לוח זמנים.</p>
+      <p>#1 (SSO) כבר "מוכנה" כי הקביעה שהיא נשענת עליה כבר אושרה בצעד הקודם; שאר המשימות "ממתינות" כי הן תלויות ב-#1 שיקרה קודם. מוצגות כאן רק 4 מתוך 18 המשימות, כדוגמה מייצגת.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות'], title:'משימות · WI-300', sub:'18 משימות · 4 שלבים · מימין לשמאל',
+    stats:[{l:'משימות',v:'18'},{l:'הושלמו',v:'0'},{l:'ב-TFS',v:'0'},{l:'סיכון פתוח',v:'0',c:'ok'}],
+    main:`<div class="flow-shell"><div class="flow-shell-header"><div><div class="title">גרף המשימות</div><div class="subtitle">פירוק ראשוני</div></div></div>
+      <div class="flow-body">
+        <div><div class="flow-col-lbl">שלב 1</div><div class="flow-node ready clickable" data-toast="בלחיצה במערכת האמיתית: נפתח מסך המשימה #1 · Azure AD SSO בפירוט מלא — לא בנוי כאן בדוגמה."><b>#1</b>Azure AD SSO<span class="flow-badge ready"><i></i>מוכנה</span></div></div>
+        <div><div class="flow-col-lbl">שלב 2</div><div class="flow-node waiting clickable" data-toast="בלחיצה במערכת האמיתית: נפתח מסך המשימה #4 · API דוח סוכן בפירוט מלא — לא בנוי כאן בדוגמה."><b>#4</b>API דוח סוכן<span class="flow-badge waiting"><i></i>אחרי #1</span></div></div>
+        <div><div class="flow-col-lbl">שלב 3</div><div class="flow-node waiting clickable" data-toast="בלחיצה במערכת האמיתית: נפתח מסך המשימה #8 · ייצוא אקסל בפירוט מלא — לא בנוי כאן בדוגמה."><b>#8</b>ייצוא אקסל<span class="flow-badge waiting"><i></i>אחרי #4</span></div></div>
+        <div><div class="flow-col-lbl">שלב 4</div><div class="flow-node waiting clickable" data-toast="בלחיצה במערכת האמיתית: נפתח מסך המשימה #16 · התראות מייל בפירוט מלא — לא בנוי כאן בדוגמה."><b>#16</b>התראות מייל<span class="flow-badge waiting"><i></i>אחרי #4</span></div></div>
+      </div>
+      <div class="flow-legend"><span><i style="background:#13835b"></i>הושלמה</span><span><i style="background:#5556e8"></i>מוכנה</span><span><i style="background:#98a2b3"></i>ממתינה</span></div></div>`
+  })},
+  { tag:'פיתוח',
+    note:`<p>הגענו הנה כי משימה #1 הפכה "מוכנה" בצעד הקודם — עכשיו Claude בפועל כותב עבורה קוד, על ענף Git נפרד משלה. ה-stepper למטה (פיתוח → סקירה והחלטה → הושלם) הוא ההתקדמות של <b>המשימה הזו בלבד</b>, לא של כל הנושא WI-300.</p>
+      <p>כרגע אנחנו בשלב "פיתוח": הקוד נכתב והבדיקות עברו, ואין "חור" (פרט חסר) — כי הקביעה שהמשימה נשענת עליה הייתה מאושרת במלואה, לא הנחה. (בתרחיש "הנחת עבודה" תראו מה קורה כשכן יש חור.) הצעד הבא מראה מה קורה כשזה עובר לבקשת מיזוג.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#1 · Azure AD SSO'], title:'Azure AD SSO', chip:'משימה', chipCls:'task', key:'TFS #7201 · task/WI-300-t1-sso',
+    tabs:['סקירה','פעילות'], activeTab:0,
+    main:`<div class="panel"><div class="row"><div class="ic">◐</div><div><div class="title">מה Claude עשה</div>
+      <div class="sub">קרא הבנה גרסה 4 → הוסיף OAuth redirect flow → 5 בדיקות עוברות → פתח בקשת מיזוג #61.</div></div></div>
+      <div class="callout ok"><div class="body"><p class="r">קביעה מאושרת, בלי הנחה בתמונה — נבנתה עד הסוף, בלי חור. עולה לסקירה.</p></div></div></div>`,
+    ovsteps:['פיתוח','סקירה והחלטה','הושלם'], ovActive:0
+  })},
+  { tag:'מסירה',
+    note:`<p>המשימה #1 סיימה פיתוח ופתחה בקשת מיזוג (Pull Request) — זה מסך כללי שמרכז את <b>כל</b> בקשות המיזוג במערכת, לא רק של WI-300. הכרטיס הזה מייצג בקשה ספציפית אחת: הענף של המשימה (task/WI-300-t1-sso) רוצה להיכנס לענף המשותף של הנושא (topic/WI-300) — לא ישר ל-master.</p>
+      <p>הרשימה למטה היא בדיקות אוטומטיות שהמערכת מריצה <b>לפני</b> שמישהו יכול בכלל לאשר מיזוג. כולן ירוקות, ולכן הבקשה כבר סומנה "מוזגה" למעלה.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','בקשות מיזוג','#61'], title:'task/WI-300-t1-sso → topic/WI-300', chip:'בקשת מיזוג', chipCls:'task', key:null,
+    headPill:'<span class="pill healthy">מוזגה<span class="i" data-h="הבקשה אושרה ונכנסה לענף הנושא — הקוד שלה חי שם עכשיו.">i</span></span>',
+    tabs:['סקירה','קבצים','יומן'], activeTab:0,
+    stats:[{l:'בדיקות',v:'עוברות',c:'ok'},{l:'חור פתוח',v:'אין',c:'ok'},{l:'סוקר',v:'דנה ≠ מפתח'},{l:'סטטוס',v:'מוזג ✓',c:'ok'}],
+    main:`<div class="panel"><div class="alert-row"><span class="adot info"></span><div class="abody"><p class="at">כל הבדיקות עוברות</p></div></div>
+      <div class="alert-row"><span class="adot info"></span><div class="abody"><p class="at">אין חור פתוח</p><p class="as">בדיקת מצב הייתה חוסמת מיזוג אילו היה</p></div></div>
+      <div class="alert-row"><span class="adot info"></span><div class="abody"><p class="at">הסוקר ≠ המפתח</p><p class="as">נאכף אוטומטית</p></div></div></div>`
+  })},
+]},
+
+{ id:'contradiction', label:'סתירה בין שני אנשים', k:'אפיון', steps:[
+  { tag:'הסתירה מופיעה',
+    note:`<p>זה אותו מסך "אפיון" של WI-300 שראיתם בתרחיש "תהליך תקין" — רק בנקודת זמן אחרת, אחרי שהצטברו עוד קביעות. הבחירה בתרחיש אחר <b>לא ממשיכה</b> מאיפה שהפסקתם קודם — כל תרחיש מתחיל מהתחלה משלו.</p>
+      <p>השורה עם ⚡ היא קביעה במצב מיוחד: שני אנשים אצל הלקוח אמרו שני דברים סותרים לגמרי — קראו את שני הציטוטים בתוך הטקסט. זה שונה מ"שאלה" רגילה (מצב "?"): שם פשוט אין תשובה; כאן יש כבר <b>שתי</b> תשובות שסותרות זו את זו.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300'], title:'פורטל דוחות לסוכנים', chip:'דרישה', chipCls:'project', key:'WI-300',
+    tabs:['סקירה כללית','אפיון','משימות','קבצים'], activeTab:1,
+    stats:[{l:'קביעות מאושרות',v:'2'},{l:'הנחות',v:'0'},{l:'שאלות פתוחות',v:'0'},{l:'סתירות',v:'1',c:'warn'}],
+    main:`<div class="panel"><div class="claim"><span class="m cf">⚡</span><span class="i" data-h="סתירה: שני מקורות אמרו דברים הפוכים. יש שאלה אחת שממתינה למי שמוגדר כמחליט.">i</span><div><div class="x"><span class="kn">ק3</span><b>סתירה:</b> "ייצוא לאקסל מספיק" (רונית, שיחה, 19.9) ↔ "חייבים גם PDF חתום לביקורת" (קומפליינס, ישיבה, 20.9)</div>
+      <div class="chips"><span class="cp">☎ 19.9</span><span class="cp">🗣 ישיבה 20.9</span></div></div></div></div>`,
+    rail:`<div class="panel"><h4>למה לא בוחרים צד</h4><p class="sm">Claude מנסח שאלה אחת עם הצעה שמיישבת את שניהם, ושולח למי שמוגדר אצל הלקוח כ<b>מחליט</b>.</p></div>`
+  })},
+  { tag:'שאלה למחליטה',
+    note:`<p>בצעד הקודם התגלתה הסתירה. כאן רואים מה Claude עושה איתה: הוא <b>לא</b> מחליט לבד מי צודק — הוא מנסח שאלה אחת ושולח אותה לאדם ספציפי, שמוגדר מראש כ"מחליט" אצל הלקוח הזה (רונית, בפאנל הימני "אצל מי הכדור"). שימו לב שההמלצה של Claude ("שניהם") כבר כלולה בתוך השאלה — כדי שרונית תוכל פשוט לאשר, במקום לנסח פתרון מאפס.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300'], title:'פורטל דוחות לסוכנים', chip:'דרישה', chipCls:'project', key:'WI-300',
+    tabs:['סקירה כללית','אפיון','משימות','קבצים'], activeTab:1,
+    main:`<div class="panel"><div class="callout warn"><div class="body"><p class="q">שאלה אחת · אצל רונית (מחליטה אצל מגדלור)</p>
+      <p class="r">אקסל בלבד, או גם PDF חתום לצורך ביקורת?</p>
+      <p class="meta">Claude ממליץ להציע: שניהם — זה לא סותר טכנית, רק מרחיב את ההיקף במעט.</p></div></div></div>`,
+    rail:`<div class="panel"><h4>אצל מי הכדור</h4><div class="qa-row"><span class="a">רל</span><div class="sp"><div>רונית לוי · מחליטה</div><div class="sm">סתירה ק3</div></div><span class="age">היום</span></div></div>`
+  })},
+  { tag:'נפתרת',
+    note:`<p>רונית ענתה במייל (השורה העליונה). התשובה שלה הופכת אוטומטית למקור חדש שמעדכן את הקביעה שהייתה בסתירה — היא עוברת ממצב "⚡ סתירה" למצב "✓ מאושרת". שימו לב למספרים למעלה: "קביעות מאושרות" עלה מ-2 ל-3, ו"סתירות" ירד מ-1 ל-0.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300'], title:'פורטל דוחות לסוכנים', chip:'דרישה', chipCls:'project', key:'WI-300',
+    tabs:['סקירה כללית','אפיון','משימות','קבצים'], activeTab:1,
+    stats:[{l:'קביעות מאושרות',v:'3',c:'ok'},{l:'הנחות',v:'0'},{l:'שאלות פתוחות',v:'0',c:'ok'},{l:'סתירות',v:'0',c:'ok'}],
+    main:`<div class="panel"><div class="row"><div class="ic">✉</div><div><div class="title">רונית לוי · 21.9</div><div class="sub">"צודקים, בואו נעשה גם וגם — אקסל לשימוש היומיומי, PDF חתום לביקורת."</div></div></div>
+      <div class="claim"><span class="m ok">✓</span><span class="i" data-h="מאושרת: הלקוח או הצוות אישרו את זה בפירוש. אפשר לבנות על זה בלי חשש.">i</span><div><div class="x"><span class="kn">ק3</span>תומך גם באקסל וגם ב-PDF חתום. <span class="pill healthy">מאושרת · היה סתירה</span></div></div></div>
+      <div class="callout ok"><div class="body"><p class="r">הלולאה לא "נגמרת" — היא נרגעת, עד שיגיע המקור הבא.</p></div></div></div>`
+  })},
+]},
+
+{ id:'assumption', label:'הנחת עבודה — 3 סיומים', k:'אפיון → פיתוח', steps:[
+  { tag:'הנחה מאושרת',
+    note:`<p>שוב אותו מסך אפיון, בנקודת זמן משלו (לא המשך של תרחיש אחר). הפעם רואים סוג שלישי של קביעה: <b>"~" הנחה</b>. זה קורה כשאף אחד לא ענה על משהו, אבל הצוות (לא הלקוח!) מחליט לא לחכות — קובע ברירת מחדל וממשיך. שימו לב <b>מי</b> אישר בטקסט: "ראש צוות", לא רונית. זה בדיוק ההבדל בין "הנחה" ל"מאושרת": הנחה היא החלטה פנימית שלנו, שממשיכה בלי תשובה מהלקוח.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300'], title:'פורטל דוחות לסוכנים', chip:'דרישה', chipCls:'project', key:'WI-300',
+    tabs:['סקירה כללית','אפיון','משימות','קבצים'], activeTab:1,
+    stats:[{l:'קביעות מאושרות',v:'3'},{l:'הנחות',v:'1',c:'warn'},{l:'שאלות פתוחות',v:'0'},{l:'סבב',v:'2'}],
+    main:`<div class="panel"><div class="claim"><span class="m as">~</span><span class="i" data-h="הנחה: אף אחד לא ענה, אבל הצוות (לא הלקוח) החליט לא לחכות וקבע ברירת מחדל רשומה.">i</span><div><div class="x"><span class="kn">ק4</span>גרף המגמה מציג 12 חודשים אחורה. <b>הנחה שלנו</b> — אישר: ראש צוות, 20.9.</div>
+      <div class="chips"><span class="cp">הנחת עבודה</span><span class="cp">לא מופיע באף מקור</span></div></div></div></div>`,
+    rail:`<div class="panel"><h4>הנחה היא החלטה רשומה</h4><p class="sm">לא "שכחנו לשאול" — מי אישר, מתי, מה נשען עליה. העבודה מתחילה עכשיו.</p></div>`
+  })},
+  { tag:'חור מסומן בקוד',
+    note:`<p>עברנו ממסך <b>דרישה</b> (WI-300 כולה) למסך <b>משימה</b> ספציפית — #6, שכבר בפיתוח. ההבדל חשוב: משימה תמיד עוסקת בפריט TFS אחד; דרישה יכולה להכיל הרבה משימות.</p>
+      <p>כשמשימה נשענת על <b>הנחה</b> (לא על קביעה מאושרת), Claude עדיין בונה אותה עד הסוף — אבל משאיר "חור מסומן" בדיוק במקום שתלוי בהנחה, ורואים אותו ממש כשורת קוד עם הערה. זה לא באג ולא טעות — זה סימון מכוון שאומר "כאן יש דבר שעדיין לא בטוח". שלושת הצעדים הבאים הם שלוש דרכים <b>שונות</b> שבהן זה עלול להסתיים בהמשך — לא המשך ליניארי אחד אחרי השני.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#6 · Dashboard'], title:'Dashboard לסוכן', chip:'משימה', chipCls:'task', key:'TFS #7206 · task/WI-300-t6-dashboard',
+    headPill:'<span class="pill active">Active<span class="i" data-h="המצב של הפריט המקביל ב-Azure DevOps ממש עכשיו — לא רק תווית פנימית של DCC.">i</span></span>',
+    tabs:['סקירה','פעילות'], activeTab:0,
+    main:`<div class="panel"><div class="callout warn"><div class="body"><p class="q">◐ חור מסומן · קשור ל-ק4</p>
+      <p class="r"><b>ידוע:</b> הדשבורד מציג גרף מגמה. <b>לא סופי:</b> כמה חודשים אחורה. <b>הנחה:</b> 12 חודשים.</p></div></div>
+      <div class="code"><span class="c">// DCC-OPEN Q4 — טווח ההיסטוריה לא אושר סופית. הנחה: 12 חודשים.</span>
+public const int HistoryMonths = <span class="g">12</span>;</div>
+      <div class="sm" style="margin-top:8px">בקשת המיזוג #63 היא <b>טיוטה</b> — לא ניתן למזג עד שהחור נסגר.</div></div>`,
+    ovsteps:['פיתוח','סקירה והחלטה','הושלם'], ovActive:0
+  })},
+  { tag:'סיום א׳ — מאשרים',
+    note:`<p>זו <b>אחת משלוש</b> אפשרויות המשך לאותו "חור" מהצעד הקודם — לא המשך חובה שלו, אלא "מה יכול לקרות, גרסה 1". כאן רונית פשוט מאשרת שההנחה הייתה נכונה. שימו לב ב-stepper למטה: המשימה כבר עברה ל"סקירה והחלטה" — כי ברגע שההנחה אושרה, אין יותר סיבה לחכות.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#6 · Dashboard'], title:'Dashboard לסוכן', chip:'משימה', chipCls:'task', key:'TFS #7206',
+    tabs:['סקירה','פעילות'], activeTab:0,
+    main:`<div class="panel"><div class="callout ok"><div class="body"><p class="q">רונית: "כן, 12 חודשים מספיק"</p>
+      <p class="r"><b>החור נסגר לבד.</b> התשובה זהה להנחה — אין מה לתקן בקוד. קביעה 4 → מאושרת, בקשת המיזוג יוצאת מטיוטה ועוברת לסקירה רגילה.</p></div></div></div>`,
+    ovsteps:['פיתוח','סקירה והחלטה','הושלם'], ovActive:1
+  })},
+  { tag:'סיום ב׳ — עונים אחרת',
+    note:`<p>"מה יכול לקרות, גרסה 2" — שוב מאותה נקודת פתיחה (חור פתוח על #6), לא המשך של הצעד הקודם. הפעם רונית עונה <b>אחרת</b> מההנחה. שימו לב: המשימה נשארת בשלב "פיתוח" ולא מתקדמת — כי צריך תיקון קטן קודם.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#6 · Dashboard'], title:'Dashboard לסוכן', chip:'משימה', chipCls:'task', key:'TFS #7206',
+    tabs:['סקירה','פעילות'], activeTab:0,
+    main:`<div class="panel"><div class="callout warn"><div class="body"><p class="q">רונית: "לצורך רגולציה צריך 3 שנים, לא 12 חודשים"</p>
+      <p class="r"><b>ריצת תיקון ממוקדת.</b> Claude משנה רק את ההפרש — שורה אחת, בדיקה אחת, כ-35 שניות. קביעה 4 מתעדכנת, הבקשה עוברת לסקירה. בזכות שהחור רוכז במקום אחד.</p></div></div></div>`,
+    ovsteps:['פיתוח','סקירה והחלטה','הושלם'], ovActive:0
+  })},
+  { tag:'סיום ג׳ — מיזוג על סיכון',
+    note:`<p>"מה יכול לקרות, גרסה 3" — שוב מאותה נקודת פתיחה. הפעם אף אחד לא ענה בכלל, אבל יש לחץ זמן. שימו לב שזו החלטה מסוג שונה לגמרי מהשתיים הקודמות — היא לא ביחס לתשובה שהתקבלה, אלא החלטה מודעת לקחת סיכון ולהמשיך בלי תשובה בכלל.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#6 · Dashboard'], title:'Dashboard לסוכן', chip:'משימה', chipCls:'task', key:'TFS #7206',
+    tabs:['סקירה','פעילות'], activeTab:0,
+    main:`<div class="panel"><div class="callout crit"><div class="body"><p class="q">לחץ זמן — ראש הצוות: "מזג בכל זאת, על סמך ההנחה"</p>
+      <p class="r">זו החלטת סיכון — רק <b>ראש צוות</b> יכול לקבל אותה, לא המפתח. נרשמת על הנושא כ"סיכון פתוח". אם התשובה תתברר שונה, נפתחת משימת המשך — #6 לא נפתחת מחדש.</p></div></div></div>`,
+    ovsteps:['פיתוח','סקירה והחלטה','הושלם'], ovActive:1
+  })},
+]},
+
+{ id:'bug', label:'באג שמתגלה תוך כדי פיתוח', k:'פיתוח → תכנון', steps:[
+  { tag:'התגלית',
+    note:`<p>משימה חדשה שלא ראיתם עד עכשיו: #8 עוסקת בייצוא לאקסל. תוך כדי העבודה עליה, Claude קורא קוד ישן <b>לא קשור</b> (לצורך שימוש חוזר) ונתקל בו בבעיה — חישוב עיגול שגוי. זו לא משימה שנכשלה; זו תגלית צדדית.</p>
+      <p>השורה התחתונה מסבירה את הכלל שקובע מה קורה עכשיו: זה נבדק מול <b>קביעה קיימת</b> שכבר כתובה במערכת ("מעגל לפי הכלל הרגיל") — לא הכרעה סובייקטיבית של Claude.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#8 · ייצוא אקסל'], title:'ייצוא לאקסל', chip:'משימה', chipCls:'task', key:'task/WI-300-t8-excel',
+    tabs:['סקירה','פעילות'], activeTab:1,
+    main:`<div class="panel"><div class="row"><div class="ic">◐</div><div><div class="title">תוך כדי עבודה</div>
+      <div class="sub">קרא את קוד הייצוא הקיים לשימוש חוזר, ומצא אי-התאמה ב-<span class="mono">Reports/LegacyMonthlyExport.cs</span> (דוח קיים, לא קשור ל-WI-300): עיגול שגוי — <span class="mono">Math.Floor</span> במקום <span class="mono">Math.Round</span>.</div></div></div>
+      <div class="callout crit"><div class="body"><p class="q">באג אמיתי מול פער — איך בודקים?</p><p class="r">בודקים אם יש קביעה שאומרת אחרת. יש — "מעגל לפי הכלל הרגיל". זה באג, לא פרשנות.</p></div></div></div>`
+  })},
+  { tag:'חוזר כמשימה — לא לאפיון',
+    note:`<p>זו ההשלכה הישירה של הצעד הקודם: כשקובעים שזה "באג אמיתי" (לא אי-הבנה של האפיון), זה <b>לא</b> חוזר למסך האפיון בתור שאלה — זה הופך ישר למשימה עצמאית חדשה (#15) בלוח המשימות, בלי לעבור דרך שום קביעה. שימו לב לתווית "לא קשור ל-WI-300" — זו משימת תיקון נפרדת לגמרי, גם אם היא נולדה תוך כדי עבודה על WI-300.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות'], title:'משימות · WI-300', sub:'משימה חדשה נולדה מתגלית, לא מהאפיון',
+    main:`<div class="flow-shell"><div class="flow-shell-header"><div class="title">חדש בגרף</div></div>
+      <div class="flow-body" style="grid-template-columns:1fr">
+        <div><div class="flow-node bug clickable" data-toast="בלחיצה במערכת האמיתית: נפתח מסך המשימה #15 · תיקון עיגול שגוי ב-Reports/LegacyMonthlyExport.cs בפירוט מלא — לא בנוי כאן בדוגמה."><b>#15</b>תיקון עיגול שגוי ב-Reports/LegacyMonthlyExport.cs<span class="flow-badge blocked"><i></i>דחוף · לא קשור ל-WI-300</span></div></div>
+      </div></div>
+    <div class="callout warn"><div class="body"><p class="r">נפתחת כ-Task עצמאי ב-TFS. Claude ממשיך על #8; #15 מחכה למפתח פנוי.</p></div></div>`
+  })},
+]},
+
+{ id:'change', label:'שינוי — לפני / תוך-כדי / אחרי', k:'אפיון · פיתוח · מסירה', steps:[
+  { tag:'לפני שהתחילה',
+    note:`<p>שלושת הצעדים בתרחיש הזה הם <b>שלוש נקודות זמן שונות לגמרי</b> — לא רצף אחד ממשיך, אלא שלוש דוגמאות ל"מתי הגיע השינוי ביחס לעבודה". זה הצעד הראשון: בקשת ביטול על משימה (#13) שעוד <b>לא התחילה בכלל</b>. הטבלה מסבירה בדיוק למה זה "זול" לבטל עכשיו — אין קוד שנכתב, אז אין מה לזרוק.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#13 · SMS'], title:'ביטול משימה #13 · SMS התראות', sub:'רונית · 23.9 — "בואו נוריד את ה-SMS מהשלב הראשון"',
+    main:`<div class="detail-grid"><div><dt>מצב</dt><dd>עוד לא התחילה</dd></div><div><dt>קוד לזרוק</dt><dd class="ok">אין</dd></div><div><dt>ב-TFS</dt><dd>→ Removed</dd></div><div><dt>הערה</dt><dd style="font-size:12px">"ירד מהיקף שלב 1"</dd></div></div>
+    <div class="callout ok"><div class="body"><p class="r">ביטול נקי — <b>DCC לא מוחק פריטים ב-TFS, אף פעם.</b></p></div></div>`
+  })},
+  { tag:'תוך כדי ריצה',
+    note:`<p>נקודת זמן שנייה, על משימה אחרת (#10) שכרגע ממש באמצע עבודה — רואים את זה מהעיגול המסתובב ליד הכותרת. תוך כדי, מגיעה בקשה נוספת מהלקוח. שימו לב: זה <b>לא עוצר</b> את העבודה הקיימת — זה מתווסף אליה תוך כדי תנועה, בניגוד לצעד הקודם שם המשימה כלל לא רצה.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#10 · גרף מגמה'], title:'גרף מגמה היסטורי', chip:'משימה', chipCls:'task', key:'task/WI-300-t10-trend',
+    tabs:['סקירה','פעילות'], activeTab:1,
+    main:`<div class="panel"><div class="row"><div class="ic">◐</div><div><div class="title">רץ עכשיו</div>
+      <div class="sub">בנה רכיב גרף עם ציר זמן. תוך כדי, מגיע מייל: "אפשר גם למנהל אזור לסנן לפי סניף?"</div></div></div>
+      <div class="callout ai"><div class="body"><p class="r">DCC לא עצר את הריצה — שלח הנחיה לאותו סשן. Claude הוסיף פרמטר <span class="mono">branchFilter</span> אופציונלי, בדיקה נוספת נכתבה.</p></div></div></div>`
+  })},
+  { tag:'אחרי מיזוג',
+    note:`<p>נקודת זמן שלישית — ההפך משתי הקודמות: משימה #4 כבר <b>הסתיימה לגמרי ומוזגה</b>. כשמגיעה בקשה לשנות אותה, המערכת לא פותחת אותה מחדש (זה היה שובר קוד שכבר עובד ונבדק) — היא יוצרת משימה חדשה (#18) שתלויה בקודמת, בדיוק כמו שרואים בגרף.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות'], title:'#4 · API לשליפת דוח — כבר מוזגה', sub:'מגיעה בקשה לשדה סינון נוסף',
+    main:`<div class="flow-shell"><div class="flow-body" style="grid-template-columns:1fr">
+      <div><div class="flow-node waiting clickable" data-toast="בלחיצה במערכת האמיתית: נפתח מסך המשימה #18 · הוספת שדה סינון לפי סוג פוליסה בפירוט מלא — לא בנוי כאן בדוגמה."><b>#18</b>הוספת שדה סינון לפי סוג פוליסה<span class="flow-badge waiting"><i></i>אחרי #4 (כבר מוזגה)</span></div></div>
+    </div></div>
+    <div class="callout info"><div class="body"><p class="r">DCC לא פותח את #4 מחדש — היא סגורה. נפתחת <b>משימת המשך</b> נפרדת.</p></div></div>`
+  })},
+]},
+
+{ id:'tfsborn', label:'פריט שנולד ישר ב-TFS', k:'קליטה → תכנון', steps:[
+  { tag:'עידן פותח Task ישר ב-TFS', tpl:'inbox', key:'tfsborn-0',
+    note:`<p>זה מסך "מה שהגיע" האמיתי — אותו מסך בדיוק כמו בתרחיש "תהליך תקין" — אבל הפעם <b>אף אחד לא הדביק שום דבר</b>. עידן פתח פריט עבודה ישירות ב-Azure DevOps (TFS) עצמו, ו-DCC קלט אותו לבד, אוטומטית. שימו לב שהוא כבר מסומן "אושר ✓" מהרגע הראשון — כי מבחינה טכנית הוא <b>כבר</b> משימה לגיטימית ב-TFS, לא הצעה שממתינה לשיוך אנושי כמו הודעת מייל.</p>`,
+    seed:[
+      { icon:'▣', title:'TFS #7219 · Task', sub:'נפתח ע"י עידן · לפני 4 דקות', meta:null,
+        body:'להוסיף גם אפשרות ייצוא ל-CSV — יש לנו סקריפטים ישנים שקוראים CSV.',
+        classification:{ label:'כבר משימה — לא פריט לשיוך', tone:'active', conf:null, note:'הפריט הזה כבר משימה (אחד לאחד עם TFS). מה שנשאר להחליט: לאיזה נושא לקשר אותה.' }, approved:true },
+    ], render: function(){ return inboxScreen(this); } },
+  { tag:'מיני-לולאת אפיון',
+    note:`<p>גם למשימה שנולדה ב-TFS יש "אפיון" משלה — אבל <b>קטן</b>, על המשימה הבודדת הזו בלבד, לא על נושא שלם כמו WI-300. שימו לב לטאב "אפיון" שמופיע גם על מסך <b>משימה</b> (לא רק על מסך דרישה) — זה מראה ששני סוגי המסך חולקים את אותו רעיון, בקנה מידה שונה. כאן יש רק שתי שורות: מה שכבר ברור מהכותרת המקורית, ושאלה אחת שעדיין חסרה.</p>`,
+    tpl:'record', render: () => recordScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#14 · CSV'], title:'ייצוא CSV', chip:'משימה', chipCls:'task', key:'TFS #7219',
+    tabs:['סקירה','אפיון'], activeTab:1,
+    main:`<div class="panel"><div class="claim"><span class="m ok">✓</span><span class="i" data-h="מאושרת: הלקוח או הצוות אישרו את זה בפירוש. אפשר לבנות על זה בלי חשש.">i</span><div><div class="x">מוסיפים ייצוא בפורמט CSV, בנוסף לאקסל ול-PDF.</div><div class="chips"><span class="cp">▣ כותרת הפריט ב-TFS</span></div></div></div>
+      <div class="claim"><span class="m q">?</span><span class="i" data-h="פתוחה: יש שאלה שמחכה לתשובה. מה שנשען עליה לא יכול להסתיים.">i</span><div><div class="x">אותו מבנה עמודות כמו באקסל, או מצומצם?</div></div></div>
+      <div class="callout ok"><div class="body"><p class="r">הלולאה זהה בכל גודל — כאן על שתי קביעות ושאלה אחת. אושר קישור ל-<b>WI-300</b>, גם ב-TFS.</p></div></div></div>`
+  })},
+]},
+
+{ id:'cancel', label:'ביטול משימה', k:'תכנון', steps:[
+  { tag:'מה הביטול משפיע',
+    note:`<p>מסך שמראה מה קורה <b>לפני</b> שמאשרים ביטול — לא הביטול עצמו עדיין. שלוש השורות הן שלוש השלכות נפרדות שהמערכת בודקת אוטומטית ברגע שמישהו לוחץ "בטל" על משימה: מה קורה לקביעה (ק5) שהמשימה הזו מימשה, מה קורה לקוד שכבר נכתב על הענף שלה, ומה קורה לפריט המקביל ב-TFS. שימו לב: זה לא רק "האם למחוק" — יש כאן שלוש שאלות שונות.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות','#6 · קיזוזים'], title:'ביטול #6 · קיזוז עסקאות שבוטלו', sub:'רונית: "הקיזוזים יורדים מאבן דרך 1"',
+    main:`<div class="panel">
+      <div class="alert-row"><span class="adot warn"></span><div class="abody"><p class="at">קביעה נשארת בלי כיסוי</p><p class="as">רק #6/#7 מימשו את ק5. צריך להחליט מה עושים עם <b>הקביעה</b>, לא רק המשימה.</p></div></div>
+      <div class="alert-row"><span class="adot warn"></span><div class="abody"><p class="at">יש קוד על הענף</p><p class="as"><span class="mono">task/WI-300-t6-cancellations</span> · 3 שינויים · לא נדחף.</p></div></div>
+      <div class="alert-row"><span class="adot info"></span><div class="abody"><p class="at">ב-TFS</p><p class="as">#7213 → Removed, עם הערה "בוטל ב-DCC · ירד מהיקף שלב 1".</p></div></div></div>`
+  })},
+  { tag:'איך מבטלים',
+    note:`<p>אחרי שראינו את ההשלכות בצעד הקודם, כאן בוחרים <b>איך בדיוק</b> לבטל. שימו לב שיש כמה אפשרויות עם ברירת מחדל בטוחה, ולא רק כפתור "מחק" אחד — כי מחיקה אמיתית (בלתי הפיכה) היא בכוונה הכי קשה להגיע אליה.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות'], title:'ביטול #6 · #7', sub:'שלוש דרכים, עם ברירת מחדל בטוחה',
+    main:`<div class="detail-grid"><div><dt>ברירת מחדל</dt><dd>בטל — נשאר בהיסטוריה</dd></div><div><dt>ב-TFS</dt><dd class="warn">Removed, לא נמחק</dd></div><div><dt>מי מאשר</dt><dd>ראש צוות (יש קוד על ענף)</dd></div><div><dt>שחזור</dt><dd class="ok">אפשרי בכל שלב</dd></div></div>
+    <div class="callout ok"><div class="body"><p class="r"><b>DCC לא מוחק פריטים ב-TFS, אף פעם.</b> מחיקה אמיתית זמינה רק כשאין קוד, אין בקשת מיזוג, והפריט נוצר ע"י DCC ב-24 השעות האחרונות.</p></div></div>`
+  })},
+]},
+
+{ id:'conflict', label:'התנגשות צפויה', k:'תכנון', steps:[
+  { tag:'שתי משימות, אותו קובץ',
+    note:`<p>שתי משימות נפרדות מ-WI-300, ששייכות לשני מפתחים שונים (נועה ועומר) — #9 ו-#18 — נוגעות באותו קובץ קוד בדיוק. הדבר החשוב כאן: זה נבדק <b>מראש</b>, לפני שהעבודה בכלל מתחילה, לא רק כשמנסים למזג בסוף ומגלים בעיה. זו הסיבה שראיתם "קונפליקט צפוי: 1" בסטטיסטיקה של תרחיש "מיזוג מדורג".</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','דרישות','WI-300','משימות'], title:'#9 ↔ #18 · אותו קובץ', sub:'ייצוא PDF · נועה  ↔  שדה סינון ל-API · עומר',
+    main:`<div class="callout warn"><div class="body"><p class="q">שתיהן נוגעות ב-<span class="mono">Export/ReportExportService.cs</span></p>
+      <p class="r">DCC משווה את הקבצים <b>המתוכננים</b> לפני שהריצות מתחילות, ומציע לתאם סדר — לא ממתין להתנגשות בפועל בזמן המיזוג.</p></div></div>`
+  })},
+]},
+
+{ id:'merge', label:'מיזוג מדורג עד master', k:'מסירה', steps:[
+  { tag:'ברמת משימה',
+    note:`<p>מסך "בקשות מיזוג" הוא <b>כללי</b> — מרכז את כל בקשות המיזוג של המערכת, לא רק של WI-300. כל שורה כאן היא בקשת מיזוג נפרדת של <b>משימה בודדת אחת</b> שרוצה להיכנס לענף המשותף של הנושא (topic/WI-300) — עדיין לא ל-master. שימו לב לתג "קונפליקט צפוי: 1" — זו בדיוק ההתנגשות שראיתם בתרחיש הקודם.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','בקשות מיזוג'], title:'בקשות מיזוג · WI-300', sub:'task/WI-300-* → topic/WI-300',
+    stats:[{l:'בדיקות',v:'עוברות',c:'ok'},{l:'חור פתוח',v:'אין',c:'ok'},{l:'סוקר ≠ מפתח',v:'נאכף',c:'ok'},{l:'קונפליקט צפוי',v:'1',c:'warn'}],
+    main:`<div class="rowlist">
+      <div class="row clickable" data-toast="בלחיצה במערכת האמיתית: נפתח מסך בקשת המיזוג המלא — כמו שראיתם בצעד 'מסירה' של תרחיש 'תהליך תקין'."><div class="spacer"><span class="mono">task/WI-300-t1-sso → topic/WI-300</span><div class="sub">#1 SSO · נועה</div></div><span class="pill healthy">מוזגה</span></div>
+      <div class="row clickable" data-toast="בלחיצה: נפתח מסך בקשת המיזוג של #6, כולל הבדיקות והדיון."><div class="spacer"><span class="mono">task/WI-300-t6-dashboard → topic/WI-300</span><div class="sub">#6 Dashboard · עומר</div></div><span class="pill active">בסקירה</span></div>
+    </div>`
+  })},
+  { tag:'ענף הנושא שלם',
+    note:`<p>השלב האחרון של כל התהליך: אחרי שרוב המשימות (16 מתוך 18, ראו את פס ההתקדמות) הושלמו ומוזגו לענף הנושא, נפתחת בקשת מיזוג אחת ויחידה — מכל ענף הנושא topic/WI-300 אל master. זו ה"מדרגה" השנייה והאחרונה (משימה→נושא→master), ולכן צריך רק אישור אנושי אחד בסוף, לא אישור נפרד לכל אחת מ-18 המשימות.</p>`,
+    tpl:'board', render: () => boardScreen({
+    crumb:['לוח בקרה','בקשות מיזוג'], title:'topic/WI-300 → master', sub:'המדרגה האחרונה',
+    main:`<div class="progress-block"><div class="top"><span>16 מתוך 18 משימות</span><span>89%</span></div><div class="progress-track"><div class="progress-fill" style="width:89%"></div></div></div>
+    <div class="callout ok"><div class="body"><p class="r">DCC פתח את בקשת המיזוג ל-master. את המיזוג עושה אדם בתפקיד המתאים — כאן: ראש צוות, כי יש סיכון פתוח אחד רשום.</p></div></div>`
+  })},
+]},
+];
+
+let sIdx = 0, stIdx = 0;
+const TAGS = { intake:'קליטה', record:'אפיון/משימה', board:'תכנון', inbox:'קליטה' };
+
+function render(){
+  document.getElementById('scenarioBar').innerHTML = SCENARIOS.map((s,i)=>`
+    <button class="scenario-btn ${i===sIdx?'on':''}" data-s="${i}"><span class="k">${s.k}</span><span class="t">${s.label}</span></button>`).join('');
+  document.querySelectorAll('.scenario-btn').forEach(b=>b.addEventListener('click', ()=>{ sIdx=+b.dataset.s; stIdx=0; render(); }));
+
+  const sc = SCENARIOS[sIdx];
+  document.getElementById('stepPills').innerHTML = sc.steps.map((st,i)=>`<button class="simstep ${i===stIdx?'active':''}" data-i="${i}">${i+1} · ${st.tag}</button>`).join('');
+  document.querySelectorAll('.simstep').forEach(b=>b.addEventListener('click', ()=>{ stIdx=+b.dataset.i; render(); }));
+
+  const step = sc.steps[stIdx];
+  document.getElementById('stageBody').innerHTML = step.render();
+  document.getElementById('explainBox').innerHTML = `<div class="eh">💡 מה קורה בצעד הזה</div>${step.note || '<p>(אין עדיין הסבר לצעד הזה)</p>'}`;
+  document.getElementById('screenLabel').setAttribute('data-tag', step.tpl==='inbox'?'מה שהגיע':step.tpl==='board'?'לוח משימות':'כרטיס דרישה/משימה');
+  document.getElementById('stepCnt').textContent = `${sc.label} · שלב ${stIdx+1} מתוך ${sc.steps.length}`;
+  document.getElementById('btnPrev').disabled = stIdx===0;
+  document.getElementById('btnNext').disabled = stIdx===sc.steps.length-1;
+}
+document.getElementById('btnPrev').addEventListener('click', ()=>{ if(stIdx>0){ stIdx--; render(); } });
+document.getElementById('btnNext').addEventListener('click', ()=>{ const sc=SCENARIOS[sIdx]; if(stIdx<sc.steps.length-1){ stIdx++; render(); } });
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowRight') document.getElementById('btnPrev').click();
+  if(e.key==='ArrowLeft') document.getElementById('btnNext').click();
+});
+
+let toastTimer = null;
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=> t.classList.remove('on'), 2600);
+}
+
+/* one delegated listener on document — covers the sidebar, the crumb,
+   and every mocked screen, and survives every innerHTML replacement so
+   nothing needs re-wiring after render() */
+document.addEventListener('click', e => {
+  const actionEl = e.target.closest('[data-action]');
+  if (!actionEl) {
+    const toastEl = e.target.closest('[data-toast]');
+    if (toastEl) showToast(toastEl.dataset.toast);
+    return;
+  }
+  const key = actionEl.dataset.key;
+  const st = inboxState[key];
+  const action = actionEl.dataset.action;
+  if (action === 'composeToggle') { st.composing = !st.composing; render(); }
+  else if (action === 'composeCancel') { st.composing = false; render(); }
+  else if (action === 'composeSubmit') {
+    const ta = document.getElementById('composeText');
+    const text = ta ? ta.value : '';
+    if (!text.trim()) { showToast('כתבו קודם משהו בתיבה'); return; }
+    st.items.push({ icon:'✎', title:'הפריט שהדבקתם עכשיו', sub: text.length>70 ? text.slice(0,70)+'…' : text, meta:'עכשיו',
+      body: text, classification: classify(text), approved:false });
+    st.selected = st.items.length - 1;
+    st.composing = false;
+    render();
+    showToast('נקלט ונותח — ראו את ההצעה מימין');
+  }
+  else if (action === 'selectInbox') { st.selected = +actionEl.dataset.idx; render(); }
+  else if (action === 'approveInbox') {
+    const item = st.items[st.selected];
+    item.approved = true;
+    render();
+    showToast(item.classification && item.classification.label.includes('נושא חדש') ? 'אושר ✓ — נושא חדש נפתח' : 'אושר ✓');
+  }
+});
+
+render();
+</script>
