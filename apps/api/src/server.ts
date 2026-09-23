@@ -133,6 +133,7 @@ import {
   onboardingStageCatalogue,
   authorizeOnboardingTerminal,
   recoverOnboardingRuns,
+  recoverFlowRuns,
   openChat,
   askChat,
   markHelpful,
@@ -1620,6 +1621,11 @@ if (import.meta.main) {
   // marked failed (its button reruns it); a live Claude session is marked
   // disconnected and can be reopened from the same conversation.
   recoverOnboardingRuns().then((n) => { if (n) app.log.warn(`onboarding: ${n} interrupted stage(s)/session(s) recovered after restart`); }).catch((e) => app.log.error(e));
+  // An assess/breakdown/implement run whose process died with the previous
+  // instance (its live buffer and steerable child are gone) is marked
+  // failed here, so its screen shows a real state instead of "מתחיל…"
+  // forever with a stop button that can never reach it.
+  recoverFlowRuns().then((n) => { if (n) app.log.warn(`flow runs: ${n} interrupted run(s) recovered after restart`); }).catch((e) => app.log.error(e));
   // Retention (claude-in-dcc §9.10): expired conversations lose their text
   // once a day, inside this process — never a second process on the database.
   scheduleRetention(app.log);

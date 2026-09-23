@@ -37,7 +37,7 @@ export { syncRequirementToAdo, trySyncNewRequirement, syncAllToAdo, deleteAdoFor
 export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
-  startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
+  startFlowRun, getFlowRunView, getTaskRunView, recoverFlowRuns, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, RepoRequired,
   stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, requirementCostSummary, requirementCostDetail,
   type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,

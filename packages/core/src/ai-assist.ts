@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, recordClaudeCall, usd, withTenant, type CallEntityKind, type CallOutcome, type CallTrigger } from "@dcc/db";
 import { attachment, claudeCall, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
 import { route, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
@@ -162,6 +162,25 @@ export async function getTaskRunView(taskId: string): Promise<FlowRunView | null
   }
   const [row] = await db.select().from(flowRun).where(eq(flowRun.taskId, taskId)).orderBy(desc(flowRun.startedAt)).limit(1);
   return row ? viewOf(row) : null;
+}
+
+/**
+ * A flow's live state (its process, its transcript buffer, `stopFlowRun`'s
+ * ability to reach it) lives only in this process's memory — restarting the
+ * API, for any reason, ends the child process but the `flow_run` row it
+ * wrote stays `running` forever: `getFlowRunView` finds no buffer, falls
+ * back to that row, and the screen is stuck on "מתחיל…" with an empty
+ * transcript and a stop button `stopFlowRun` can never honour (real bug,
+ * live, 2026-09-23 — a run survived several restarts already-marked
+ * "running" with a real, but now-orphaned, git checkout behind it).
+ * Same shape as `recoverOnboardingRuns` — call once, at startup.
+ */
+export async function recoverFlowRuns(): Promise<number> {
+  const rows = await db.update(flowRun)
+    .set({ state: "error", error: "ה-API הופעל מחדש באמצע ההרצה — לא ידוע אם היא הושלמה. הריצו שוב.", finishedAt: new Date() })
+    .where(eq(flowRun.state, "running"))
+    .returning({ id: flowRun.id });
+  return rows.length;
 }
 
 /** Kick off assess/breakdown/implement in the background. Returns at once. */
