@@ -650,6 +650,20 @@ export function existingCheckout(r: { id: string; localPath: string | null }): s
   return existsSync(path.join(dir, ".git")) ? dir : null;
 }
 
+/**
+ * What to say before touching the repo — checked BEFORE the fetch starts, so
+ * a quick update on an already-present copy never reads as a from-scratch
+ * download. "מכין עותק" unconditionally, every run, was confirmed live to
+ * read as re-downloading the whole thing each time, even though an existing
+ * copy only ever gets `reset`/`pull` (seconds, not the minutes a first clone
+ * of a large repository can take here).
+ */
+function checkoutStartLine(r: { id: string; name: string; localPath: string | null }): string {
+  return existingCheckout(r)
+    ? `בודק אם יש עדכונים ל-${r.name}…`
+    : `מוריד עותק של ${r.name} — בפעם הראשונה (או על רשת איטית) זה יכול לקחת כמה דקות…`;
+}
+
 /** One fetch per repository at a time: two callers (a second press, a retry
  *  after a restart) must wait for the copy being made, not start a second
  *  clone into the same directory. */
@@ -894,13 +908,14 @@ const ASSESS_CONTRACT_KEY = "assess.shared.output_contract";
  * modal only; it is never sent to Claude.
  */
 async function buildAssessPrompt(input: {
-  clientId: string; workitemId: string; promptKey: string; customEmphasis?: string; model?: string;
+  clientId: string; workitemId: string; promptKey: string; customEmphasis?: string; model?: string; runId?: string;
 }): Promise<{
   prompt: string; promptHe: string | null; model: string | undefined; cwd: string | null;
   repoName: string | null; staleWarning: string | null; filesRead: number; templateTitle: string; currentTitle: string;
 }> {
   const { wi, notes, files } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
+  if (r) pushLine(input.runId, checkoutStartLine(r));
   const { cwd, repoName, staleWarning } = await requireCheckout(r, wi.requirementType);
   const base = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
   const tmpl = await getPromptByKey(input.promptKey);
@@ -952,10 +967,9 @@ export async function previewAssessPrompt(input: { clientId: string; workitemId:
 }
 
 async function runAssess(input: { clientId: string; workitemId: string; by: Dev; runId?: string; promptKey?: string; customEmphasis?: string; model?: string; trigger?: CallTrigger }): Promise<AssessResult> {
-  pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
   const built = await buildAssessPrompt({
     clientId: input.clientId, workitemId: input.workitemId,
-    promptKey: input.promptKey ?? DEFAULT_ASSESS_PROMPT_KEY, customEmphasis: input.customEmphasis, model: input.model,
+    promptKey: input.promptKey ?? DEFAULT_ASSESS_PROMPT_KEY, customEmphasis: input.customEmphasis, model: input.model, runId: input.runId,
   });
   if (built.staleWarning) pushLine(input.runId, `⚠ ${built.staleWarning}`);
   const filesLine = built.filesRead > 0 ? ` · ${built.filesRead} קבצים מצורפים` : "";
@@ -1055,9 +1069,9 @@ export type BreakdownResult = {
  *  because a preview that lies about whether code context is available
  *  isn't a preview. */
 async function buildBreakdownPrompt(input: { clientId: string; workitemId: string; runId?: string }) {
-  pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
   const { wi, notes, files } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
+  if (r) pushLine(input.runId, checkoutStartLine(r));
   const { cwd, repoName, staleWarning } = await requireCheckout(r, wi.requirementType);
   if (staleWarning) pushLine(input.runId, `⚠ ${staleWarning}`);
   pushLine(input.runId, cwd ? `קורא את ה-repo ${repoName}` : "דרישת מחקר/בדיקות — מפרק מהטקסט");
@@ -1480,9 +1494,10 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
 
   const r = await firstRepo(input.clientId, input.workitemId);
   if (!r) throw new Error("אין repository מקושר לדרישה — אי אפשר לפתח בלי קוד");
-  pushLine(input.runId, `מכין עותק עבודה של ${r.name}…`);
   // Deliberately the CACHE clone, never r.localPath: an autonomous write
-  // run must not touch the user's own working copy.
+  // run must not touch the user's own working copy — so the "already have
+  // it?" check below must ask about that same cache clone, not r.localPath.
+  pushLine(input.runId, checkoutStartLine({ ...r, localPath: null }));
   const dir = await ensureCheckout({ ...r, localPath: null });
   if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
 
