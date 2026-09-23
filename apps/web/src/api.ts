@@ -368,6 +368,13 @@ export const previewAssess = (id: string, promptKey: string, customEmphasis?: st
 export type PromptTemplate = {
   id: string; key: string; title: string; description: string | null; body: string; bodyHe: string | null;
   defaultModel: string | null; sortOrder: number; updatedAt: string; updatedBy: string | null;
+  /** What runs it and what the code needs from it; null = no call uses this row. */
+  use: {
+    capability: string; modelPerRun: boolean; policy: { model: string; tier: string; effort: string };
+    vars: string[]; optional: string[]; keeps: string[]; appendedTo: string | null;
+  } | null;
+  /** Why the body as saved would break its caller — empty when it is fine. */
+  problems: string[];
 };
 export const getPrompts = () => get<{ items: PromptTemplate[] }>("/prompts");
 export const updatePromptTemplate = (id: string, patchBody: Partial<{ title: string; description: string | null; body: string; bodyHe: string | null; defaultModel: string | null }>) =>

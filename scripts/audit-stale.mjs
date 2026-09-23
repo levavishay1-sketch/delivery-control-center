@@ -66,6 +66,9 @@ const RETIRED = [
   "gap-letter", "gapLetter", "gap_letter", "composeGapLetter", "getGapLetters", "letterHistory", "letterPicker", "letterDetail",
   // the "?" hint keyed by screen and entry, retired 2026-09-21 by the "i" over the concept registry (openspec/changes/info-hints)
   "GlossaryHint", "gl-wrap", "gl-hint", "getGlossary(", "export const GLOSSARY",
+  // prompts written as strings in the code, retired 2026-09-23: every instruction is a row of the prompt library,
+  // read at the moment of the call (packages/db/migrations/0040_every_prompt_in_the_library.sql)
+  "GAPS_SYSTEM", "CODE_SYSTEM", "CHANGE_SYSTEM", "RUN_SYSTEM", "INSIGHTS_SYSTEM", "NOTES_SYSTEM", "SYSTEM_HASH", "REPO_CONTEXT",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
 // docs/history/ holds the design records the user asked to keep. Everything else — the replacing

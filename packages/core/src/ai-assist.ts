@@ -13,7 +13,7 @@ import { activeAdoConnection } from "./ado-sync.ts";
 import { materializeTasksToAdo } from "./task-ado-sync.ts";
 import { syncTaskStateAfterCheckChange } from "./tasks.ts";
 import { inheritedChecksForBug } from "./bugs.ts";
-import { getPromptByKey, renderPrompt } from "./prompts.ts";
+import { renderPrompt, requirePrompt } from "./prompts.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
 
@@ -918,46 +918,29 @@ async function buildAssessPrompt(input: {
   if (r) pushLine(input.runId, checkoutStartLine(r));
   const { cwd, repoName, staleWarning } = await requireCheckout(r, wi.requirementType);
   const base = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
-  const tmpl = await getPromptByKey(input.promptKey);
+  const tmpl = await requirePrompt(input.promptKey);
 
-  const varsEn: Record<string, string> = {
-    REPO_CONTEXT: cwd
-      ? `You are in the repository this work would touch (${repoName}). Read whatever code you need to judge feasibility.`
-      : "This is a research/testing requirement with no repository; judge from the text and the attached files.",
-    REQUIREMENT: base + filesSection(files, false),
-  };
-  const varsHe: Record<string, string> = {
-    REPO_CONTEXT: cwd
-      ? `אתה בתוך ה-repository שהעבודה הזו נוגעת בו (${repoName}). קרא כל קוד שדרוש כדי לשפוט ישימות.`
-      : "זו דרישת מחקר/בדיקות בלי repository; שפוט מהטקסט ומהקבצים המצורפים.",
-    REQUIREMENT: base + filesSection(files, true),
-  };
+  const shared = { HAS_REPO: !!cwd, REPO_NAME: repoName ?? "" };
+  const varsEn: Record<string, string | boolean> = { ...shared, REQUIREMENT: base + filesSection(files, false) };
+  const varsHe: Record<string, string | boolean> = { ...shared, REQUIREMENT: base + filesSection(files, true) };
   if (input.promptKey === "assess.readiness.custom") {
-    const emphasis = input.customEmphasis?.trim() || "(none specified)";
-    varsEn.CUSTOM_EMPHASIS = emphasis;
+    varsEn.CUSTOM_EMPHASIS = input.customEmphasis?.trim() || "(none specified)";
     varsHe.CUSTOM_EMPHASIS = input.customEmphasis?.trim() || "(לא צוין)";
   }
 
   // The output SHAPE is authored once, shared by every tier — so fixing
   // how an answer reads fixes it everywhere instead of in five places.
-  const contract = await getPromptByKey(ASSESS_CONTRACT_KEY);
+  const contract = await requirePrompt(ASSESS_CONTRACT_KEY);
   const join = (focus: string, shape: string | null | undefined) => (shape ? `${focus}\n\n${shape}` : focus);
 
-  const prompt = join(
-    tmpl ? renderPrompt(tmpl.body, varsEn) : [
-      // fallback if the template row is somehow missing — never hard-fail the flow over it
-      "You are assessing a software requirement for a delivery team. The requirement text is in Hebrew.",
-      varsEn.REPO_CONTEXT, "", "REQUIREMENT:", varsEn.REQUIREMENT,
-    ].join("\n"),
-    contract?.body,
-  );
-  const promptHe = tmpl?.bodyHe ? join(renderPrompt(tmpl.bodyHe, varsHe), contract?.bodyHe) : null;
-  const model = input.model || tmpl?.defaultModel || undefined;
+  const prompt = join(renderPrompt(tmpl.body, varsEn), contract.body);
+  const promptHe = tmpl.bodyHe ? join(renderPrompt(tmpl.bodyHe, varsHe), contract.bodyHe) : null;
+  const model = input.model || tmpl.defaultModel || undefined;
 
   // Repository knowledge is not prepended here: an onboarded repo carries
   // it in its own CLAUDE.md / skills, which the `claude -p` run loads
   // natively from `cwd`.
-  return { prompt, promptHe, model, cwd, repoName, staleWarning, filesRead: files.length, templateTitle: tmpl?.title ?? input.promptKey, currentTitle: wi.title };
+  return { prompt, promptHe, model, cwd, repoName, staleWarning, filesRead: files.length, templateTitle: tmpl.title, currentTitle: wi.title };
 }
 
 /** Render (never run) the prompt for one tier — powers the preview modal. */
@@ -1077,89 +1060,10 @@ async function buildBreakdownPrompt(input: { clientId: string; workitemId: strin
   pushLine(input.runId, cwd ? `קורא את ה-repo ${repoName}` : "דרישת מחקר/בדיקות — מפרק מהטקסט");
 
   const reqText = [`Title: ${wi.title}`, ...notes.map((n) => n.body)].join("\n\n") + filesSection(files, false);
-  const prompt = [
-    "Break this software requirement into a concrete implementation task list for the team.",
-    cwd ? `You are in the repository (${repoName}) — read the code to make the tasks specific and correctly ordered.` : "No code checkout available.",
-    "",
-    "REQUIREMENT (may be Hebrew):",
-    reqText,
-    "",
-    "Produce a HIERARCHY, not a flat list. `parentSeq` is the seq of the parent node, or null for a top-level node.",
-    "Choose the depth by how much structure the work genuinely has — do not pad it:",
-    "  depth 1 — a handful of sibling tasks, no grouping needed",
-    "  depth 2 — a few deliverables, each with its own tasks",
-    "  depth 3 — several deliverables that group under themes",
-    "  depth 4 — only for very large, multi-theme work",
-    "Leaves are the actual units of work. Max depth 4, 3-20 nodes total.",
-    "",
-    "Rules: each LEAF is one focused, reviewable unit. Give every node an appetite (small | standard | large). On leaves, list the files it will most likely touch (`affectedPaths`). `dependsOnSeq` lists seq numbers that must finish first (ordering between siblings) — it is NOT the hierarchy.",
-    "",
-    "`compiledComponents` — on leaves, the projects that actually need to be",
-    "rebuilt and redeployed because of this change. This is a FUNCTION-LEVEL",
-    "call-graph analysis, NOT a project-reference walk — a project (especially",
-    "a shared BL project) can hold many unrelated functions, so \"the project",
-    "this file lives in\" is almost never the right answer on its own, and",
-    "\"every project that references that project\" is even further wrong —",
-    "it drags in every root caller of every OTHER function in that project too,",
-    "most of which this change never touches.",
-    "Do this instead:",
-    "  1. Identify the SPECIFIC function(s) you expect to change, not just the",
-    "     file.",
-    "  2. Find every function that CALLS the changed function (grep/read, this",
-    "     repo's actual call sites — not a guess).",
-    "  3. Walk UP the call chain from there: callers of callers, repeatedly.",
-    "  4. Stop at ROOT callers / entry points — a plugin's registered execute",
-    "     method, a WebJob's entry point, a controller action, or whatever",
-    "     \"the top of the chain\" means in this repo's architecture.",
-    "  5. `compiledComponents` is the set of projects that CONTAIN those root",
-    "     callers — not the project the changed function itself lives in,",
-    "     unless a root caller happens to live there too.",
-    "There can be multiple independent root callers reaching the same changed",
-    "function — list every project that contains one.",
-    "Worked example: changing function X, where the real call chain is",
-    "  X → function B → function C → function D → EntryPoint",
-    "means the project containing EntryPoint is what belongs in",
-    "`compiledComponents` — not just \"the project X's own file lives in\".",
-    "This is about what COMPILES this change in (build-time impact), not code",
-    "that merely calls the file at runtime in some unrelated way — that's a",
-    "different question, answered separately after implementation. If you",
-    "cannot determine this from the repository (e.g. no checkout), leave it an",
-    "empty array — never guess.",
-    "",
-    "`kind` — classify EVERY node as one of:",
-    '  "task"  — real implementation work. Becomes its own tracked work item.',
-    '  "check" — verification, regression testing, or documentation needed',
-    "            before the PARENT task can be called done — it does not",
-    "            change product code on its own. A check is always a LEAF",
-    "            (never has children of its own) and its parentSeq MUST point",
-    "            at a \"task\" node. Prefer \"check\" whenever a node's job is to",
-    "            confirm/validate/document something the parent task already",
-    "            did, rather than to make its own code change.",
-    "",
-    "`prompt` — the MOST IMPORTANT field. It is the exact instruction another",
-    "Claude will be handed, alone, to carry out this node (implement it, if",
-    "\"task\"; verify/test/document it, if \"check\"). It must stand on its own:",
-    "no reference to this conversation, no \"as discussed\". Name the files,",
-    "functions and symbols involved, say exactly what to do, what must NOT",
-    "change, and how to tell it worked. Write it as a direct instruction,",
-    "3-10 sentences.",
-    "",
-    "IMPORTANT: write each node's \"intent\" and \"prompt\" IN HEBREW (code identifiers and file paths stay English). appetite stays one of small|standard|large.",
-    "",
-    'Respond with ONLY this JSON array, no prose:',
-    '[{"seq": number, "parentSeq": number|null, "kind": "task"|"check", "intent": string, "prompt": string, "appetite": "small"|"standard"|"large", "affectedPaths": string[], "compiledComponents": string[], "dependsOnSeq": number[]}]',
-  ].join("\n");
-  // The instructions Claude gets (format, task/check rules, JSON schema)
-  // always run in English — only the requirement text itself is Hebrew.
-  // promptHe surfaces exactly that content, for reading, never a separate
-  // translation that could drift from what's actually sent.
-  const promptHe = [
-    "Claude יפרק את הדרישה הבאה למשימות עבודה, כולל תלויות והיררכיה:",
-    "",
-    reqText,
-    "",
-    "(ההוראות המדויקות ל-Claude — פורמט, סיווג task/check, כללי כתיבה — תמיד רצות באנגלית; זה תוכן הדרישה עצמו, לנוחות קריאה.)",
-  ].join("\n");
+  const tmpl = await requirePrompt("breakdown.tasks");
+  const vars = { HAS_REPO: !!cwd, REPO_NAME: repoName ?? "", REQUIREMENT: reqText };
+  const prompt = renderPrompt(tmpl.body, vars);
+  const promptHe = tmpl.bodyHe ? renderPrompt(tmpl.bodyHe, vars) : prompt;
   return { prompt, promptHe, cwd, repoName };
 }
 
@@ -1413,69 +1317,20 @@ async function buildImplementPrompt(input: { clientId: string; workitemId: strin
   const instruction = (t.prompt ?? "").trim() || t.intent;
   const isCheck = t.kind === "check";
 
-  const checksBlock = checks.length
-    ? [
-        "",
-        "CHECKS TO ALSO PERFORM once the change above is made — report pass/fail for EACH by its number, do not skip any:",
-        ...checks.map((c) => `#${c.seq}: ${(c.prompt ?? "").trim() || c.intent}`),
-      ].join("\n")
-    : "";
-
-  const prompt = [
-    isCheck
-      ? "You are VERIFYING one thing in this repository. You are read-only: do NOT edit, write, or create any file. You may read code and run commands (tests, a build) to check behavior."
-      : "You are implementing ONE task in this repository. You are on a fresh branch; the working tree is clean.",
-    "",
-    isCheck ? "CHECK — this is what to verify, follow it exactly:" : "TASK — this is the instruction, follow it exactly:",
-    instruction,
-    (t.prompt ?? "").trim() && t.prompt!.trim() !== t.intent ? `\n(short title: ${t.intent})` : "",
-    !isCheck && t.affectedPaths.length ? `\nFiles the breakdown expected to change: ${(t.affectedPaths as string[]).join(", ")}` : "",
-    `Appetite: ${t.appetite}`,
-    checksBlock,
-    "",
-    "CONTEXT — the requirement this task came from (Hebrew):",
-    ctx,
-    "",
-    "Do this:",
-    ...(isCheck ? [
-      "1. Read the relevant code and/or run the relevant tests/build to determine whether the check's condition holds.",
-      "2. Do NOT change anything — no edits, no new files, no commits. If you notice something that genuinely needs a code",
-      "   change, that is NOT this run's job: report it in \"summary\" as a finding, do not act on it.",
-    ] : [
-      "1. Read the relevant code before changing anything. Match the surrounding style exactly.",
-      "2. Make the change. Keep it to THIS task — do not refactor beyond it, do not touch unrelated files.",
-      "3. If the repo has a build or tests you can run cheaply, run them and report what happened. Do not install dependencies.",
-      "4. Do NOT commit, do NOT push, do NOT create branches — that is handled outside.",
-      "5. Blast radius: for EACH file you changed, search the rest of the repository (grep/glob — do not guess) for other files that",
-      "   import, call, extend, instantiate, or register it (e.g. other plugins that call a shared BL class, other webresources that",
-      "   load a shared JS module, other configs that reference it). This tells the user what else must be packaged/retested together",
-      "   with this change. If a changed file has no other consumers, omit it from this list — do not pad it with unrelated files.",
-      ...(checks.length ? [`6. Perform each numbered check listed above and report its own pass/fail honestly — a check that wasn't really run is not a pass.`] : []),
-    ]),
-    "",
-    "IMPORTANT: write `summary`, `followUps` and every `reason` IN HEBREW (code identifiers and paths stay English).",
-    "",
-    "Respond with ONLY this JSON, no prose, no markdown fence:",
-    checks.length
-      ? '{"summary": string, "filesChanged": string[], "testsRun": string|null, "followUps": string[], "affectedConsumers": [{"path": string, "usedBy": string[], "reason": string}], "checks": [{"seq": number, "passed": boolean, "detail": string, "likelyCause": "implementation"|"requirement_ambiguity"|null}]}'
-      : '{"summary": string, "filesChanged": string[], "testsRun": string|null, "followUps": string[], "affectedConsumers": [{"path": string, "usedBy": string[], "reason": string}]}',
-    checks.length ? '"checks" must have exactly one entry per numbered check above, same "seq". "likelyCause" only on a failure: "implementation" if the code is wrong, "requirement_ambiguity" if the expected behavior itself is unclear — that is a signal an earlier stage under-specified this, not something to guess past.' : "",
-  ].filter(Boolean).join("\n");
-
-  // Same reasoning as breakdown's promptHe: the technical instructions to
-  // Claude (git rules, response schema) always run in English — this is
-  // the actual task instruction + context that get embedded, for reading.
-  const promptHe = [
-    isCheck ? "Claude יאמת (read-only, בלי לשנות קוד) את הדבר הבא:" : "Claude יפתח את המשימה הבאה:",
-    "",
-    instruction,
-    ...(checksBlock ? ["", "בדיקות שירוצו גם כן:", ...checks.map((c) => `#${c.seq}: ${(c.prompt ?? "").trim() || c.intent}`)] : []),
-    "",
-    "הקשר מהדרישה:",
-    ctx,
-    "",
-    "(ההוראות הטכניות ל-Claude — מבנה git, פורמט התשובה — תמיד רצות באנגלית; זה התוכן בפועל, לנוחות קריאה.)",
-  ].join("\n");
+  // A task and a check are told different things (a check may not edit),
+  // so each has its own prompt; the task's checks, when it has any, are
+  // listed by their seq so each verdict comes back to the right row.
+  const tmpl = await requirePrompt(isCheck ? "implement.check" : "implement.task");
+  const vars = {
+    INSTRUCTION: instruction,
+    SHORT_TITLE: (t.prompt ?? "").trim() && t.prompt!.trim() !== t.intent ? t.intent : "",
+    AFFECTED_PATHS: (t.affectedPaths as string[]).join(", "),
+    APPETITE: t.appetite,
+    CHECKS: checks.map((c) => `#${c.seq}: ${(c.prompt ?? "").trim() || c.intent}`).join("\n"),
+    CONTEXT: ctx,
+  };
+  const prompt = renderPrompt(tmpl.body, vars);
+  const promptHe = tmpl.bodyHe ? renderPrompt(tmpl.bodyHe, vars) : prompt;
 
   return { prompt, promptHe, instruction, t, wi, hasChecks: checks.length > 0 };
 }

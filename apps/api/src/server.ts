@@ -70,6 +70,7 @@ import {
   attachmentContent,
   AttachmentRefused,
   RepoRequired,
+  PromptRefused,
   startBuilding,
   startFlowRun,
   getFlowRunView,
@@ -188,7 +189,7 @@ app.setErrorHandler((err, _req, reply) => {
   if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
   // The registry refuses with a sentence for the person ("the task is not approved yet") — show it, not a 500.
   if (err instanceof ActionRefused || err instanceof ChatError || err instanceof PolicyError) return reply.code(409).send({ error: err.message });
-  if (err instanceof ReviewRefused || err instanceof RepoRequired || err instanceof AttachmentRefused) return reply.code(409).send({ error: err.message });
+  if (err instanceof ReviewRefused || err instanceof RepoRequired || err instanceof AttachmentRefused || err instanceof PromptRefused) return reply.code(409).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
   if (typeof e.statusCode === "number" && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });

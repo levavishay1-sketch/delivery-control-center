@@ -179,6 +179,39 @@ export function PageHead({ title, sub, crumb, actions, info }: { title: ReactNod
 }
 
 /**
+ * A prompt as a person reads it: the Hebrew translation, and the English
+ * that is actually sent, one click apart, each copyable. Used by the preview
+ * before every run and by the Prompts screen.
+ */
+export function PromptText({ prompt, promptHe, maxHeight = "40vh" }: { prompt: string; promptHe?: string | null; maxHeight?: string }) {
+  const [pick, setLang] = useState<"he" | "en">("he");
+  // Not every prompt has a Hebrew rendering; an empty tab would read as "nothing will be sent".
+  const hasHe = !!promptHe?.trim();
+  const lang = pick === "he" && !hasHe ? "en" : pick;
+  return (
+    <>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
+        {hasHe ? <>
+          <button type="button" className={`btn btn-sm ${lang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("he")}>עברית</button>
+          <CopyBtn text={promptHe!} />
+          <span style={{ width: 1, height: 16, background: "var(--border-hairline)", margin: "0 4px" }} />
+        </> : <span className="ob-sub">לפרומפט הזה אין תצוגה בעברית — זה הפרומפט עצמו, כפי שיישלח</span>}
+        <button type="button" className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("en")}>English</button>
+        <CopyBtn text={prompt} />
+      </div>
+      <pre style={{
+        whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, fontFamily: lang === "en" ? "var(--mono)" : "inherit",
+        direction: lang === "en" ? "ltr" : "rtl", textAlign: lang === "en" ? "left" : "start",
+        background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: "0 0 16px",
+        maxHeight, overflowY: "auto",
+      }}>
+        {lang === "he" ? promptHe : prompt}
+      </pre>
+    </>
+  );
+}
+
+/**
  * The one mandatory checkpoint before anything reaches Claude: the user
  * sees the exact prompt — Hebrew for reading, English because that's what
  * actually runs — and sending only happens from the confirm button here.
@@ -209,10 +242,6 @@ export function PromptPreviewModal({
    *  it's filled. */
   reasonField?: { label: string; value: string; onChange: (v: string) => void };
 }) {
-  const [pick, setLang] = useState<"he" | "en">("he");
-  // Not every prompt has a Hebrew rendering; an empty tab would read as "nothing will be sent".
-  const hasHe = !!data?.promptHe?.trim();
-  const lang = pick === "he" && !hasHe ? "en" : pick;
   return (
     // No dismiss-on-backdrop-click: a real request may be running behind
     // this (a checkout, an approval decision), and a stray click outside
@@ -236,25 +265,7 @@ export function PromptPreviewModal({
         {loading ? (
           <div className="spin">{loadingHint ?? "טוען…"}</div>
         ) : data ? (
-          <>
-            <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-              {hasHe ? <>
-                <button className={`btn btn-sm ${lang === "he" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("he")}>עברית</button>
-                <CopyBtn text={data.promptHe} />
-                <span style={{ width: 1, height: 16, background: "var(--border-hairline)", margin: "0 4px" }} />
-              </> : <span className="ob-sub">לפעולה הזו אין תצוגה בעברית — זה הפרומפט עצמו, כפי שיישלח</span>}
-              <button className={`btn btn-sm ${lang === "en" ? "btn-primary" : "btn-secondary"}`} onClick={() => setLang("en")}>English</button>
-              <CopyBtn text={data.prompt} />
-            </div>
-            <pre style={{
-              whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, fontFamily: lang === "en" ? "var(--mono)" : "inherit",
-              direction: lang === "en" ? "ltr" : "rtl", textAlign: lang === "en" ? "left" : "start",
-              background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: "0 0 16px",
-              maxHeight: "40vh", overflowY: "auto",
-            }}>
-              {lang === "he" ? data.promptHe : data.prompt}
-            </pre>
-          </>
+          <PromptText prompt={data.prompt} promptHe={data.promptHe} />
         ) : null}
         {error && <p style={{ fontSize: 12.5, color: "var(--status-critical)", marginBottom: 12, whiteSpace: "pre-wrap" }}>{error}</p>}
         {disabledReason && <p style={{ fontSize: 12.5, color: "var(--status-warning)", marginBottom: 12 }}>{disabledReason}</p>}

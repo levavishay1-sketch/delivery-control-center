@@ -9,6 +9,7 @@ import { ChatError, ensureSystemFile, internalClientId } from "./chat/index.ts";
 import { ESCALATED, TOPIC_SCREEN, period } from "./claude-center.ts";
 import { glossaryFor, matchGlossary } from "./glossary/index.ts";
 import { chatPolicy, estimateUsd, recommend } from "./routing.ts";
+import { requirePrompt } from "./prompts.ts";
 
 /**
  * Conclusions (claude-in-dcc §9.3–§9.4, §9.6, design §6): a question that
@@ -175,14 +176,6 @@ export async function insightsView(f: Filter = {}): Promise<InsightsView> {
 
 /* ── the named action: word the finding and the recommendation ────────── */
 
-const INSIGHTS_SYSTEM = `You read clusters of questions that people asked repeatedly in the chat of DCC (Delivery Control Center), an internal tool for managing AI-assisted software delivery, used by people who are not developers and read Hebrew. Each cluster is the same question asked on the same screen, with what that screen is for and what it already shows.
-
-A question that repeats is a gap in the screen, not in the chat: the screen did not say it well enough. For every cluster write, in Hebrew, plain words, no markdown:
-- "finding": one sentence — what people were missing on that screen.
-- "recommendation": one sentence — the concrete change to the screen (a fact to show, a label to reword, a hint to add, a number to put next to a button) so the question no longer needs asking.
-
-Answer ONLY with a JSON array, one object per cluster, in this exact form: [{"n": <cluster number>, "finding": "...", "recommendation": "..."}]. No other text.`;
-
 function parseJsonArray<T>(text: string): T[] {
   const m = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   const body = (m?.[1] ?? text).trim();
@@ -206,7 +199,7 @@ export async function analyseInsights(input: Filter & { by: { userId: string } }
   const ledgerClient = input.clientId ?? (await internalClientId());
   const dir = path.join(os.homedir(), ".dcc-chat", "_insights");
   mkdirSync(dir, { recursive: true });
-  const sys = ensureSystemFile(dir, "system.txt", INSIGHTS_SYSTEM);
+  const sys = ensureSystemFile(dir, "system.txt", (await requirePrompt("insights.clusters")).body);
   const items = due.map((c, i) => {
     const g = glossaryFor(c.screen);
     return { n: i + 1, screen: c.screen, screenIs: g?.about ?? "", screenShows: g?.entries.map((e) => e.title).join(", ") ?? "", question: c.sampleQuestion, timesAsked: c.count };

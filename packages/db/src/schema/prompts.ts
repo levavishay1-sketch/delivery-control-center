@@ -7,8 +7,9 @@ import { integer, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-
  * TypeScript, so what Claude is actually told is visible and tunable
  * without a code change.
  *
- * `body` holds `{{PLACEHOLDER}}` tokens the calling code fills in — see
- * `renderPrompt` in packages/core/src/prompts.ts.
+ * `body` holds `{{PLACEHOLDER}}` tokens and `{{#NAME}}…{{/NAME}}` sections
+ * the calling code fills in — see `renderPrompt` and what each caller needs
+ * in packages/core/src/prompt-contract.ts.
  */
 export const promptTemplate = pgTable(
   "prompt_template",

@@ -5,7 +5,8 @@ import type { ChangedFile } from "./types.ts";
  * exists and what it contributes, what an updated file was updated for, why a
  * deleted file is gone. Written by a small model from the diff and from what the
  * person decided in the session, so a person who does not read diffs can tell what
- * they are approving. This module is the prompt and the reading of the answer —
+ * they are approving. The instructions are the `onboarding.file_notes` prompt on
+ * the Prompts screen; this module is the message and the reading of the answer —
  * pure, so it can be tried without a model. `runs.ts` decides when to ask.
  */
 
@@ -13,20 +14,6 @@ export type FileNote = { text: string; sig: string };
 
 /** What a note was written for. When a file's numbers change the note is stale and is written again. */
 export const noteSig = (f: Pick<ChangedFile, "status" | "additions" | "deletions">) => `${f.status}|${f.additions}|${f.deletions}`;
-
-export const NOTES_SYSTEM = `You explain to a person who is not a developer, in Hebrew, what each changed file in an onboarding review is for — one line per file, so that they can tell what they are about to approve. You get the repository's name, the changed files (status A = created, M = updated, D = deleted, with lines added and removed), the diff, and what the person decided in the session: the questions Claude asked them with their answers, and what they typed to Claude.
-
-Answer with ONLY a JSON array, one object per file, in the order given, nothing before or after it: [{"path": "the file's path exactly as given", "note": "the line"}].
-
-The note is Hebrew, one sentence, up to 25 words, in plain words with no jargon; put paths, commands, package names and code in backticks, never translated.
-- Created (A): begin with "נוצר כדי" and say what it contributes to the project day to day — what people or Claude can now do that they could not before.
-- Updated (M): begin with "עודכן בעקבות" and say what prompted it and what changed, in one clause. Prefer a decision the person made in the session when one matches; otherwise what Claude found in the repository.
-- Deleted (D): begin with "נמחק כי" and say why — what replaced it, or why it no longer applies.
-A lock file (package-lock.json and the like) is "עודכן אוטומטית בעקבות התקנת התלויות שנוספו ל-\`package.json\`".
-
-Write natural, correct Hebrew that a non-technical person reads without effort: short everyday words, no word-for-word English phrasing, no invented words. Keep tool and package names as they are, in backticks. When a phrase does not come out naturally, say it more simply.
-
-Say only what the diff or the person's decisions show. Never invent a benefit or a reason. When the reason is not visible, say what changed instead, still beginning with the words above. Do not describe the file's every line: one purpose, one reason.`;
 
 export function notesPrompt(input: { repoName: string; files: ChangedFile[]; diff: string; decisions: string[] }): string {
   return [
