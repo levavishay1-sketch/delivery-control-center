@@ -38,12 +38,13 @@ export { importAdoCsv, parseCsv, type ImportResult } from "./import-ado.ts";
 export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
-  precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt,
+  precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, RepoRequired,
   stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, requirementCostSummary, requirementCostDetail,
   type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";
-export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
+export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, attachmentContent, AttachmentRefused, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
+export { extractText, type Extraction } from "./attachments/extract.ts";
 export {
   updateClient, deleteClient, archiveClient,
   updateRequirement, deleteRequirement,

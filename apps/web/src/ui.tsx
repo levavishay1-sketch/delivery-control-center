@@ -249,7 +249,7 @@ export function PromptPreviewModal({
             </pre>
           </>
         ) : null}
-        {error && <p style={{ fontSize: 12.5, color: "var(--status-critical)", marginBottom: 12 }}>{error}</p>}
+        {error && <p style={{ fontSize: 12.5, color: "var(--status-critical)", marginBottom: 12, whiteSpace: "pre-wrap" }}>{error}</p>}
         {disabledReason && <p style={{ fontSize: 12.5, color: "var(--status-warning)", marginBottom: 12 }}>{disabledReason}</p>}
         {reasonField && (
           <div className="field" style={{ marginBottom: 12 }}>

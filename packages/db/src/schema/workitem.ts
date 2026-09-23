@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  customType,
   foreignKey,
   index,
   integer,
@@ -587,9 +588,11 @@ export const contextBrief = pgTable(
 ).enableRLS();
 
 /**
- * A file attached to a requirement. The bytes live in Azure DevOps
- * (TFS is the mirror); DCC keeps the name + the ADO url + a link back
- * to the work item. `source` = where it was added first.
+ * A file attached to a requirement. DCC holds the bytes itself, so a
+ * client with no Azure DevOps connection can still attach a spec — and
+ * so the assess/breakdown prompt can carry what the file actually says
+ * (`extracted_text`). When there IS a connection the file is mirrored to
+ * TFS as well and `ado_url` points at it. `source` = where it came from.
  */
 export const attachment = pgTable(
   "attachment",
@@ -606,6 +609,12 @@ export const attachment = pgTable(
     adoAttachmentId: text("ado_attachment_id"),
     /** ADO attachment content url (needs auth) — what we link to. */
     adoUrl: text("ado_url"),
+    /** The file itself. NULL for a row pulled from TFS, whose bytes stayed there. */
+    content: customType<{ data: Buffer; driverData: Buffer }>({ dataType: () => "bytea" })("content"),
+    /** What the file says, for the prompt. NULL ⇒ not readable as text. */
+    extractedText: text("extracted_text"),
+    /** Why there is no text (an image, a scanned PDF) — shown, never guessed at. */
+    extractError: text("extract_error"),
     sizeBytes: integer("size_bytes"),
     source: text("source").notNull().default("dcc"), // dcc | ado
     addedBy: uuid("added_by"),

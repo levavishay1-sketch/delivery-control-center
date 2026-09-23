@@ -5,9 +5,11 @@ import { capabilityLabel, fmtUsd } from "../claude/labels.ts";
 import { useClaudeContext } from "../claude/context.ts";
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement,
+  attachmentHref,
   getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, verifyGap,
   type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
+import { errText } from "./onboarding/labels.ts";
 import { CardTitle, Pill, TypeChip } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
@@ -207,9 +209,10 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let bin = "";
       for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-      await uploadAttachment(wi.id, file.name, btoa(bin));
+      const r = await uploadAttachment(wi.id, file.name, btoa(bin));
+      if (r.textChars === 0) alert(`הקובץ נשמר, אבל לא ניתן לקרוא ממנו טקסט:\n${r.extractError}\n\nקלוד לא יוכל להסתמך עליו. הדביקו את התוכן כהערה בדרישה.`);
       reload();
-    } catch (e) { alert(`העלאת הקובץ נכשלה:\n${e}`); }
+    } catch (e) { alert(`העלאת הקובץ נכשלה:\n${errText(e)}`); }
     setUploading(false);
   };
 
@@ -477,16 +480,24 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
             <div className="ov-card" style={{ padding: "14px 16px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות</span>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות<Info k="attachment_read" /></span>
                 <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
                   {uploading ? "מעלה…" : "העלה"}
                   <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
                 </label>
               </div>
               {(d.attachments ?? []).map((a, i) => (
-                <div key={a.id} style={{ padding: "7px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                  {a.adoUrl ? <a href={a.adoUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↗</a> : <span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name}</span>}
-                  <Pill tone={a.source === "ado" ? "ai" : "inactive"}>{a.source === "ado" ? "TFS" : "DCC"}</Pill>
+                <div key={a.id} style={{ padding: "7px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                    <a href={a.stored ? attachmentHref(wi.id, a.id) : (a.adoUrl ?? undefined)} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↓</a>
+                    <Pill tone={a.textChars > 0 ? "healthy" : "warning"}>
+                      {a.textChars > 0 ? `נקרא · ${a.textChars.toLocaleString("he-IL")} תווים` : "לא נקרא"}
+                    </Pill>
+                  </div>
+                  {a.textChars === 0 && a.extractError && (
+                    <div style={{ fontSize: 10.5, color: "var(--ov-label)", marginTop: 3 }}>{a.extractError} — הדביקו את התוכן כהערה כדי שקלוד יראה אותו.</div>
+                  )}
                 </div>
               ))}
               {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
