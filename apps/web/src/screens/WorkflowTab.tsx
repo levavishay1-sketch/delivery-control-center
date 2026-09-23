@@ -390,6 +390,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
         <PromptPreviewModal
           title={pendingKick === "assess" ? "הרצת בחינת בשלות" : "הרצת פירוק למשימות"}
           data={sendData} loading={sendLoading} error={sendErr}
+          loadingHint="מכין עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה זה יכול לקחת כמה דקות…"
           onClose={() => { setPendingKick(null); setSendData(null); setSendErr(null); setRebreakdownReason(""); }}
           onConfirm={confirmKick} confirming={sending}
           confirmLabel={pendingKick === "assess" ? "✦ שלח ל-Claude, הרץ בחינה" : "✦ שלח ל-Claude, פרק למשימות"}
@@ -416,7 +417,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
               זה בדיוק מה שיישלח ל-Claude (הפרומפט האמיתי תמיד רץ באנגלית — התצוגה בעברית היא תרגום לנוחות הקריאה בלבד).
             </p>
             {previewLoading ? (
-              <div className="spin">טוען…</div>
+              <div className="spin">מכין עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה זה יכול לקחת כמה דקות…</div>
             ) : previewData ? (
               <>
                 <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>

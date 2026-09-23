@@ -46,7 +46,7 @@ export {
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, attachmentContent, AttachmentRefused, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export { extractText, type Extraction } from "./attachments/extract.ts";
 export {
-  updateClient, deleteClient, archiveClient,
+  updateClient, deleteClient, ClientRefused,
   updateRequirement, deleteRequirement,
   linkRepoToRequirement, unlinkRepoFromRequirement, reposForRequirement,
   updateRepo, deleteRepo, unlinkClientRepo,

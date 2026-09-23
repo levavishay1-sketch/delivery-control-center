@@ -48,7 +48,7 @@ import {
   verifyGap,
   updateClient,
   deleteClient,
-  archiveClient,
+  ClientRefused,
   updateRequirement,
   deleteRequirement,
   linkRepoToRequirement,
@@ -220,12 +220,9 @@ app.patch("/clients/:id", async (req) => {
   return updateClient({ clientId: id, ...b });
 });
 
-app.delete("/clients/:id", async (req, reply) => {
+app.delete("/clients/:id", async (req) => {
   await actingUser(req);
-  const { id } = req.params as { id: string };
-  const q = req.query as { mode?: string };
-  if (q.mode === "archive") return archiveClient(id, true);
-  return reply.send(await deleteClient(id));
+  return deleteClient((req.params as { id: string }).id);
 });
 
 app.patch("/repos/:id", async (req) => {

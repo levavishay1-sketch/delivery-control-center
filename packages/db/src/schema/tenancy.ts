@@ -10,6 +10,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { connectorType } from "./enums.ts";
@@ -47,9 +48,14 @@ const tenantPolicy = (name: string) =>
     withCheck: sql`client_id = current_setting('app.current_client', true)::uuid`,
   });
 
+/**
+ * `archived_at` set ⇒ the client was deleted but has history the system
+ * must keep (event_log, claude_call are append-only). The row stays,
+ * hidden everywhere, and its name is free for a new client.
+ */
 export const client = pgTable("client", {
   id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull().unique(),
+  name: text("name").notNull(),
   /** How this client's requirements sync outward (was project.connector_type). */
   connectorType: connectorType("connector_type").notNull().default("manual"),
   /** ADO project reference for sync, e.g. "Altshuler Trade". */
@@ -58,7 +64,7 @@ export const client = pgTable("client", {
   chatRetentionDays: integer("chat_retention_days"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   archivedAt: timestamp("archived_at", { withTimezone: true }),
-});
+}, (t) => [uniqueIndex("client_name_active_uq").on(t.name).where(sql`${t.archivedAt} is null`)]);
 // `client` itself is the tenant root. RLS on `client` restricts a
 // tenant-scoped connection to its own row; org-admin tooling connects
 // without the session var set and sees all rows (policy yields false →

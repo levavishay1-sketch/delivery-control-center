@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, getClientAdoTasks, unlinkClientRepo, approveTask, REQ_TYPE_HE, type AdoTasks, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
+import { errText } from "./onboarding/labels.ts";
 import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
 
 const PH: Record<string, { label: string; tone: string }> = {
@@ -53,11 +54,9 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
   // Requirements are DCC-only and never pushed to TFS — the TFS side is
   // the task tree, materialised per requirement from its flow tab.
   const onDeleteClient = async () => {
-    if (!confirm(`למחוק את הלקוח "${d.client.name}"?`)) return;
+    if (!confirm(`למחוק את הלקוח "${d.client.name}"?\n\nיימחקו גם ה-repositories שלו ב-DCC, החיבורים והתקציב. repository שגם לקוח אחר משתמש בו יישאר, כמשותף. הקבצים במחשב וב-GitHub לא נמחקים.\n\nאי אפשר לבטל.`)) return;
     try { await deleteClient(id); nav("#/clients"); }
-    catch (e) {
-      if (confirm(`${e}\n\nלארכב את הלקוח במקום?`)) { await deleteClient(id, true); nav("#/clients"); }
-    }
+    catch (e) { alert(errText(e)); }
   };
 
   return (
@@ -70,7 +69,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
           <>
             <button className="btn btn-secondary" onClick={() => setModal("import")}>ייבוא מ-ADO</button>
             <button className="btn btn-secondary" onClick={() => setModal("editClient")}>עריכה</button>
-            <button className="btn btn-secondary" style={{ color: "var(--status-critical)" }} onClick={onDeleteClient}>מחיקה</button>
+            <button className="btn btn-secondary" style={{ color: "var(--status-critical)" }} onClick={onDeleteClient}>מחיקה</button><Info k="client_delete" />
             <button className="btn btn-primary" onClick={() => setModal("req")}>+ הוסף דרישה</button>
           </>
         }

@@ -339,6 +339,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         <PromptPreviewModal
           title={attempted ? "הרצה חוזרת — פיתוח המשימה" : "תן ל-Claude לפתח את המשימה"}
           data={sendData} loading={sendLoading} error={sendErr}
+          loadingHint="מכין עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה זה יכול לקחת כמה דקות…"
           onClose={() => { setSendOpen(false); setSendData(null); setSendErr(null); }}
           onConfirm={confirmSend} confirming={sending}
           confirmLabel="✦ שלח ל-Claude, תתחיל לפתח"
