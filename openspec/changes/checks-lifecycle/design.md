@@ -1,22 +1,22 @@
 # Checks lifecycle — design notes
 
-## Routing a combined response back to individual checks
+## Routing each verdict back to its check
 
-The prompt already lists the task's own instruction; a new section is
-appended listing each check, labeled by its `seq` — the same ordinal
-already shown to users everywhere ("#3 בדיקה..."), so no new identifier
-is invented:
+The development run writes the code and the tests for it and reports no
+checks. The task's checks then run as calls of their own (`checks.run` on
+the Prompts screen) — the build checks first, and the others only once the
+build passes. Each check is listed by its `seq`, the same ordinal already
+shown to users everywhere ("#3 בדיקה..."), with its kind when DCC added it:
 
 ```
-CHECKS TO ALSO PERFORM — report pass/fail for EACH by its number:
-#3: <check 3's prompt>
-#4: <check 4's prompt>
+#3 [build]: <check 3's instruction>
+#4 [tests]: <check 4's instruction>
 ```
 
-`ImplementResult` gains `checks: [{seq, passed, detail, likelyCause}]`.
+`ImplementResult.checks` is `[{seq, passed, detail, likelyCause, kind}]`.
 Claude echoes back the same numbers it was given, so matching a response
 entry to a DB row is a direct `seq` lookup within the task's own
-`checks[]` — no fuzzy matching, no new schema for correlation.
+checks — no fuzzy matching, no new schema for correlation.
 
 ## Why checks stay read-only
 

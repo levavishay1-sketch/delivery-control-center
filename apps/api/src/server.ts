@@ -107,6 +107,9 @@ import {
   finishResearchWork,
   previewImplementPrompt,
   taskBuiltOn,
+  taskStatusesFor,
+  taskStatusOf,
+  ensureStandardChecks,
   ChecksNotPassed,
   setTaskActive,
   checkAdoRemovedState,
@@ -136,6 +139,7 @@ import {
   authorizeOnboardingTerminal,
   recoverOnboardingRuns,
   recoverFlowRuns,
+  backfillStandardChecks,
   openChat,
   askChat,
   markHelpful,
@@ -1033,7 +1037,9 @@ app.get("/clients/:id/ado-tasks", async (req) => {
 app.get("/workitems/:id/task-flow", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
-  return taskFlowFor(wi.clientId, id);
+  const [flow, statuses] = await Promise.all([taskFlowFor(wi.clientId, id), taskStatusesFor(wi.clientId, id)]);
+  // Each card says the task's status as a person reads it (task-status.ts), and each folded check its own.
+  return { ...flow, nodes: flow.nodes.map((n) => ({ ...n, status: statuses[n.id] ?? null, checks: n.checks.map((c) => ({ ...c, status: statuses[c.id] ?? null })) })) };
 });
 
 // approval done → create the tasks in TFS with their hierarchy + links.
@@ -1056,7 +1062,17 @@ async function taskClient(id: string): Promise<string> {
 app.get("/tasks/:id", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
-  return taskDetail(await taskClient(id), id);
+  const clientId = await taskClient(id);
+  const [detail, status] = await Promise.all([taskDetail(clientId, id), taskStatusOf(clientId, id)]);
+  return { ...detail, status: status.status, checkStatuses: status.checks };
+});
+
+// the optional end-to-end check — added to one task on request, like the three every task gets
+app.post("/tasks/:id/checks/e2e", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const added = await ensureStandardChecks(await taskClient(id), id, ["e2e"], { by: { userId: dev.id } });
+  return { added };
 });
 
 // render (never run) the implementation prompt — same "what will be sent"
@@ -1635,6 +1651,7 @@ if (import.meta.main) {
   // failed here, so its screen shows a real state instead of "מתחיל…"
   // forever with a stop button that can never reach it.
   recoverFlowRuns().then((n) => { if (n) app.log.warn(`flow runs: ${n} interrupted run(s) recovered after restart`); }).catch((e) => app.log.error(e));
+  backfillStandardChecks().then((n) => { if (n) app.log.info(`checks: added the required checks to ${n} task(s) from before they existed`); }).catch((e) => app.log.error(e));
   // Retention (claude-in-dcc §9.10): expired conversations lose their text
   // once a day, inside this process — never a second process on the database.
   scheduleRetention(app.log);

@@ -158,7 +158,7 @@ export type TaskFlowNode = {
   approvedAt: string | null;
   adoSyncedAt: string | null;
   /** check-kind children folded into this node (never their own flow node — see the FLOW screen). */
-  checks: { id: string; seq: number; intent: string; state: string }[];
+  checks: { id: string; seq: number; intent: string; state: string; checkKind: string | null }[];
 };
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 
@@ -174,7 +174,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
         adoType: task.adoType, parentTaskId: task.parentTaskId, approvedAt: task.approvedAt,
         linkedAdoId: task.linkedAdoId, adoUrl: task.adoUrl, affectedPaths: task.affectedPaths,
         compiledComponents: task.compiledComponents, active: task.active,
-        prompt: task.prompt, origin: task.origin, adoSyncedAt: task.adoSyncedAt,
+        prompt: task.prompt, origin: task.origin, adoSyncedAt: task.adoSyncedAt, checkKind: task.checkKind,
       })
       .from(task)
       .where(sql`${task.workitemId} = ${workitemId} and ${task.state} <> 'dropped'`)
@@ -199,7 +199,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
     for (const r of rows) {
       if (r.kind !== "check" || !r.parentTaskId) continue;
       (checksByParent.get(r.parentTaskId) ?? checksByParent.set(r.parentTaskId, []).get(r.parentTaskId)!)
-        .push({ id: r.id, seq: r.seq, intent: r.intent, state: r.state });
+        .push({ id: r.id, seq: r.seq, intent: r.intent, state: r.state, checkKind: r.checkKind });
     }
 
     const nodes: TaskFlowNode[] = rows.filter((r) => r.kind !== "check").map((r) => ({

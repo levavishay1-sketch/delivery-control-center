@@ -330,12 +330,19 @@ export type BreakdownResult = {
     dependsOnSeq: number[]; parentSeq: number | null; level: number; adoType: string | null; prompt: string | null;
   }[];
 };
+/** A task's (or a check's) status as a person reads it — computed on the server from the run, the checks and the dependencies (task-status.ts). */
+export type TaskStatus = {
+  key: string; label: string;
+  tone: "inactive" | "neutral" | "ai" | "active" | "warning" | "critical" | "healthy";
+  reason?: string;
+};
 export type TaskFlowNode = {
   id: string; seq: number; kind: TaskKind; intent: string; appetite: string; state: string;
   adoType: string | null; level: number; parentTaskId: string | null;
   approved: boolean; active: boolean; linkedAdoId: number | null; adoUrl: string | null; affectedPaths: string[]; compiledComponents: string[];
   prompt: string | null; origin: "ai" | "human"; approvedAt: string | null; adoSyncedAt: string | null;
-  checks: { id: string; seq: number; intent: string; state: string }[];
+  checks: { id: string; seq: number; intent: string; state: string; checkKind: string | null; status: TaskStatus | null }[];
+  status: TaskStatus | null;
 };
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] };
@@ -394,6 +401,8 @@ export type FlowRun = {
   state: "running" | "done" | "error" | "idle" | "rolled_back" | "stopped";
   lines: string[]; result: AssessResult | BreakdownResult | ImplementResult | null; error: string | null;
   startedAt?: string | null; finishedAt?: string | null;
+  /** While a development runs: which of its steps it is in. */
+  phase?: "develop" | "build" | "test" | null;
 };
 export const getFlowRun = (id: string) => get<FlowRun>(`/workitems/${id}/flow-run`);
 export const stopFlowRun = (id: string) => post<{ stopped: boolean }>(`/workitems/${id}/flow-run/stop`, {});
@@ -508,7 +517,7 @@ export const checkAdoRecheck = (taskId: string, clientId: string) =>
 /* ── one task ─────────────────────────────────────────────────────── */
 type TaskSlim = {
   id: string; seq: number; intent: string; state: string; kind?: TaskKind; linkedAdoId?: number | null; adoType?: string | null;
-  checkResult?: "passed" | "failed" | "waiting" | null; checkResolvedBy?: string | null; active?: boolean; approvedAt?: string | null;
+  checkResult?: "passed" | "failed" | "waiting" | null; checkResolvedBy?: string | null; checkKind?: string | null; active?: boolean; approvedAt?: string | null;
 };
 export type TaskDetail = {
   task: Task & { workitemId: string; clientId: string; acceptance: { given: string; when: string; then: string }[]; adoSyncedAt: string | null };
@@ -518,8 +527,13 @@ export type TaskDetail = {
   blockedBy: TaskSlim[];
   blocks: TaskSlim[];
   repos: { id: string; name: string; adoRepoRef: string | null }[];
+  status: TaskStatus;
+  /** Each check's own status, by its id. */
+  checkStatuses: Record<string, TaskStatus>;
 };
 export const getTask = (id: string) => get<TaskDetail>(`/tasks/${id}`);
+/** The optional end-to-end check, added to one task — like the build, tests and regression checks every task gets. */
+export const addE2ECheck = (id: string) => post<{ added: string[] }>(`/tasks/${id}/checks/e2e`, {});
 export const implementTask = (id: string) => post<{ runId: string; alreadyRunning: boolean }>(`/tasks/${id}/implement`, {});
 export const getTaskRun = (id: string) => get<FlowRun>(`/tasks/${id}/flow-run`);
 export type ImplementResult = {
@@ -528,7 +542,9 @@ export type ImplementResult = {
   affectedConsumers: { path: string; usedBy: string[]; reason: string }[];
   /** Present when the run's task had checks bundled into its prompt —
    *  the routed-back, per-check verdict. */
-  checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | "dependency_missing" | null }[];
+  checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | "dependency_missing" | "environment" | null; kind?: string | null }[];
+  /** Checks that did not run because the build did not pass. */
+  skipped?: number[];
 };
 
 /* ── Bug ↔ Task links (bug-change-request-lifecycle) ─────────────── */

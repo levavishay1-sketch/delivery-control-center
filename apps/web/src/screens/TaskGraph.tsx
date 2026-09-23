@@ -50,7 +50,11 @@ const STATE_TONE: Record<string, Tone> = {
   ready: { key: "ready", bg: "#fff", border: "#5556e8", label: "מוכן להתחלה" },
   waiting: { key: "waiting", bg: "#fff", border: "#98a2b3", label: "מתוכנן" },
   inactive: { key: "inactive", bg: "#f3f3f5", border: "#b6b8c2", label: "לא פעיל" },
+  review: { key: "review", bg: "#fbf9ff", border: "#7c3aed", label: "ממתינה לסקירה" },
 };
+
+/** The colour of each status tone (task-status.ts) on a card — one status, the same one the task screen shows. */
+const TONE_CLASS: Record<string, string> = { healthy: "done", active: "in_progress", critical: "blocked", warning: "decision", ai: "review", neutral: "ready", inactive: "waiting" };
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "";
@@ -102,6 +106,10 @@ function downstreamCount(id: string, edges: TaskFlow["edges"]): number {
 }
 
 function toneOf(node: TaskFlowNode, isBlocked: boolean): Tone {
+  if (node.status) {
+    const key = !node.active ? "inactive" : TONE_CLASS[node.status.tone] ?? "waiting";
+    return { ...STATE_TONE[key]!, label: node.status.label };
+  }
   // inactive overrides every other reading — a deactivated task is, by
   // design, treated as gone from the Flow (see setTaskActive), which the
   // tone needs to say louder than whatever its last real state was.
@@ -169,10 +177,11 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
         }}
       >
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          {blocked ? (
+          {/* The status, the same one the task screen shows — a dependency is shown, never "cannot progress": a dependent task can be developed. */}
+          {blocked && !node.status ? (
             <span style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13.5, fontWeight: 700, color: tone.border }}>
               <span style={{ width: 8, height: 8, borderRadius: 99, background: tone.border, display: "inline-block" }} />
-              חסום — לא ניתן להתקדם כרגע
+              קיימת תלות
             </span>
           ) : <Badge tone={tone} />}
           <a onClick={onClose} title="סגור" style={{
@@ -181,6 +190,7 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
           }}>✕</a>
         </div>
         <p style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.4, marginBottom: 6 }}>{node.intent}</p>
+        {node.status?.reason && <p style={{ fontSize: 12.5, color: tone.border, marginBottom: 10 }}>{node.status.reason}</p>}
         {!node.active && (
           <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 10 }}>
             ⚪ לא פעילה — לא בFlow ולא בתלויות, ההיסטוריה נשארת.
@@ -429,11 +439,12 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
             {/* five legend items only, per spec — "planned" (waiting) is a
                 real card state but deliberately not part of the legend. */}
             <div className="flow-legend">
-              <span className="done"><i />{STATE_TONE.done!.label}</span>
-              <span className="progress"><i />{STATE_TONE.in_progress!.label}</span>
-              <span className="blocked"><i />{STATE_TONE.blocked!.label}</span>
-              <span className="decision"><i />{STATE_TONE.decision!.label}</span>
-              <span className="ready"><i />{STATE_TONE.ready!.label}</span>
+              <span className="done"><i />הסתיימה</span>
+              <span className="progress"><i />בעבודה</span>
+              <span className="blocked"><i />נפלה / קיימת תלות</span>
+              <span className="decision"><i />ממתינה לתלות</span>
+              <span className="review"><i />ממתינה לסקירה</span>
+              <span className="ready"><i />מוכנה לפיתוח</span>
             </div>
 
             {/* stage flow direction is fixed left→right regardless of the
