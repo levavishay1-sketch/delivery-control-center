@@ -209,7 +209,8 @@ export const getClaudeCall = (id: string) => get<ClaudeCallView>(`/claude/calls/
 export const getWorkitemCalls = (id: string) => get<{ calls: ClaudeCallView[] }>(`/workitems/${id}/calls`);
 
 /* the one chat (claude-in-dcc §4) */
-export type TopicRef = { kind: "wi" | "task" | "pr" | "run" | "app"; id?: string | null };
+/** `gaps` — the conversation about one requirement's open gaps (id = the requirement). */
+export type TopicRef = { kind: "wi" | "task" | "pr" | "run" | "app" | "gaps"; id?: string | null };
 export type ChatContext = { screen?: string | null; facts?: Record<string, unknown>; suggestions?: string[]; actions?: string[]; place?: string | null };
 export type ChatMessage = {
   id: string; conversationId: string; role: string; kind: string; text: string; source: string;
@@ -237,6 +238,8 @@ export type ProposalPayload = {
   key: string; title: string; describe: string; params: Record<string, unknown>; consequential: boolean;
   estimate: { capability: string; model: string; effort: string; usd: number | null } | null;
   status: "proposed" | "running" | "done" | "cancelled" | "failed"; result?: unknown; error?: string; ranAt?: string; recorded?: string;
+  /** The approve button's words, when "אשר והרץ" would say the wrong thing (closing a gap). */
+  approveLabel?: string;
 };
 export type DeclaredCostPayload = {
   reason: string; question: string; estimate: { model: string; effort: string; usdMin: number; usdMax: number };

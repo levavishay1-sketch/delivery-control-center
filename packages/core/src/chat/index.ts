@@ -13,6 +13,9 @@ import { onboardingChatFacts } from "../repo-onboarding/runs.ts";
 import { actionEntityFor, actionsFor, type ActionDef } from "../actions/index.ts";
 import { placesFor, renderPlaces } from "../screens/index.ts";
 import { codeReadEstimate, codeReads } from "./proposals.ts";
+import { parseBlocks, type ParsedAction } from "./blocks.ts";
+import { gapsContext } from "./gaps.ts";
+import { GAPS_SUGGESTIONS, GAPS_SYSTEM, renderTranscript } from "./gaps-prompt.ts";
 
 /**
  * The one chat (claude-in-dcc §4–§7, design §2–§3).
@@ -28,7 +31,8 @@ import { codeReadEstimate, codeReads } from "./proposals.ts";
  * - Every model call is a ledger row (`runClaudeRaw` records it).
  */
 
-export type TopicKind = "wi" | "task" | "pr" | "run" | "app";
+/** `gaps` is the conversation about one requirement's open gaps (id = the requirement): a second opinion on decisions, read against the requirement, its files and its code. */
+export type TopicKind = "wi" | "task" | "pr" | "run" | "app" | "gaps";
 export type TopicRef = { kind: TopicKind; id?: string | null };
 export type ScreenContext = {
   screen?: string | null;
@@ -83,6 +87,12 @@ export async function resolveTopic(t: TopicRef, ctx: ScreenContext = {}): Promis
       const [w] = await db.select({ id: workitem.id, key: workitem.key, title: workitem.title, clientId: workitem.clientId }).from(workitem).where(eq(workitem.id, id)).limit(1);
       if (!w) throw new ChatError("הדרישה לא נמצאה");
       return { key: `wi:${w.id}`, kind: "wi", id: w.id, title: `${w.key ? `${w.key} · ` : ""}${w.title}`, clientId: w.clientId, workitemId: w.id, screen: ctx.screen ?? "requirement" };
+    }
+    case "gaps": {
+      if (!id) throw new ChatError("חסר מזהה דרישה");
+      const [w] = await db.select({ id: workitem.id, title: workitem.title, clientId: workitem.clientId }).from(workitem).where(eq(workitem.id, id)).limit(1);
+      if (!w) throw new ChatError("הדרישה לא נמצאה");
+      return { key: `gaps:${w.id}`, kind: "gaps", id: w.id, title: `הפערים של ${w.title}`, clientId: w.clientId, workitemId: w.id, screen: "requirement" };
     }
     case "task": {
       if (!id) throw new ChatError("חסר מזהה משימה");
@@ -176,7 +186,8 @@ const toMessage = (m: MsgRow, call: typeof claudeCall.$inferSelect | null): Chat
 
 /* ── suggestions: from the screen, never from a model ──────────────── */
 
-function suggestionsFor(screen: string | null, ctx: ScreenContext): string[] {
+function suggestionsFor(screen: string | null, ctx: ScreenContext, kind?: TopicKind): string[] {
+  if (kind === "gaps") return GAPS_SUGGESTIONS;
   const g = glossaryFor(screen);
   const out = ["מה המסך הזה מציג?", ...(ctx.suggestions ?? [])];
   for (const e of (g?.entries ?? []).filter((e) => e.kind === "button").slice(0, 2)) out.push(`מה "${e.title}" עושה?`);
@@ -193,7 +204,7 @@ export async function openChat(t: TopicRef, userId: string, ctx: ScreenContext =
     conversation: conv ? await viewOf(conv) : null,
     messages: conv ? await messagesOf(conv) : [],
     glossary: glossaryFor(topic.screen),
-    suggestions: suggestionsFor(topic.screen, ctx),
+    suggestions: suggestionsFor(topic.screen, ctx, topic.kind),
   };
 }
 
@@ -271,26 +282,6 @@ Rules:
 function renderActions(defs: ActionDef[]): string {
   if (!defs.length) return "";
   return ["פעולות שאפשר להציע מהמסך הזה (רק אלה):", ...defs.map((d) => `- ${d.key} — "${d.title}"${d.params.length ? ` · פרמטרים: ${d.params.map((p) => `${p.name}${p.required ? " (חובה)" : ""}: ${p.explain}`).join("; ")}` : " · בלי פרמטרים"}`)].join("\n");
-}
-
-/** The blocks a model answer may carry, and the text without them. */
-function parseBlocks(raw: string): { text: string; action: { key: string; params: Record<string, unknown> } | null; needsCode: string | null; goto: { key: string; reason: string } | null } {
-  let text = raw;
-  let action: { key: string; params: Record<string, unknown> } | null = null;
-  const a = raw.match(/<action\s+key="([^"]+)"\s*>([\s\S]*?)<\/action>/i);
-  if (a) {
-    let params: Record<string, unknown> = {};
-    try { const j = JSON.parse(a[2]!.trim() || "{}"); if (j && typeof j === "object" && !Array.isArray(j)) params = j as Record<string, unknown>; } catch { /* not JSON: no params */ }
-    action = { key: a[1]!.trim(), params };
-    text = text.replace(a[0], "");
-  }
-  const n = raw.match(/<needs_code\s*\/?>([\s\S]*?)(?:<\/needs_code>|$)/i);
-  const needsCode = n ? n[1]!.trim() || null : null;
-  if (n) text = text.replace(n[0], "");
-  const g = raw.match(/<goto\s+key="([^"]+)"\s*>([\s\S]*?)(?:<\/goto>|$)/i);
-  const goto = g ? { key: g[1]!.trim(), reason: g[2]!.trim() } : null;
-  if (g) text = text.replace(g[0], "");
-  return { text: text.trim(), action, needsCode, goto };
 }
 
 function renderFacts(facts: Record<string, unknown>): string {
@@ -395,6 +386,7 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
   if (busy.has(conv.id)) throw new ChatError("קלוד עדיין עונה על השאלה הקודמת");
   busy.add(conv.id);
   try {
+    if (topic.kind === "gaps") return await askGaps(conv, topic, input.userId, question);
     const facts: Record<string, unknown> = { ...(input.ctx.facts ?? {}) };
     // A run's topic gets what the session did since the previous question — the
     // same digest the onboarding screen's own reading aid used to build.
@@ -464,7 +456,7 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
     // model invented moves nobody, and is counted as a question left open.
     const going = parsed.goto ? places.find((p) => p.def.key === parsed.goto!.key) ?? null : null;
     const stray = !!parsed.goto && !going;
-    const text = parsed.text || (parsed.action ? "הנה מה שאפשר לעשות:" : parsed.needsCode ? "על זה אין תשובה במסך — צריך לקרוא בקוד."
+    const text = parsed.text || (parsed.actions.length ? "הנה מה שאפשר לעשות:" : parsed.needsCode ? "על זה אין תשובה במסך — צריך לקרוא בקוד."
       : going ? "" : stray ? "אין לי את זה במסך הזה, ולא הצלחתי לעבור למסך שבו זה נמצא." : "(אין תשובה)");
     // On a move the card below says everything; an answer bubble would only repeat it.
     const a = text ? await addMessage(conv, { role: "assistant", kind: "answer", source: "model", text, callId: res.callId, payload: unanswered || stray ? { unanswered: true } : {} }) : null;
@@ -483,24 +475,7 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
         payload: { key: going.def.key, title: going.def.title, route: going.route, screen: going.def.screen, question },
       }));
     }
-    if (parsed.action) {
-      const def = defs.find((d) => d.key === parsed.action!.key);
-      // Only the parameters the action declares reach it — whatever else the model put in the block is dropped.
-      if (def) parsed.action.params = Object.fromEntries(Object.entries(parsed.action.params).filter(([k]) => def.params.some((p) => p.name === k)));
-      const entity = def ? await actionEntityFor(topic) : null;
-      const allowed = def && entity ? await def.allowed({ userId: input.userId }, entity, parsed.action.params) : null;
-      if (!def || !entity) {
-        cards.push(await addMessage(conv, { role: "assistant", kind: "refusal", source: "system", text: `לא אפשרי מכאן: הפעולה "${parsed.action.key}" לא קיימת במסך הזה.`, payload: { key: parsed.action.key, reason: `הפעולה "${parsed.action.key}" אינה מהפעולות של המסך הזה. מה שאפשר מכאן: ${defs.map((d) => d.title).join(", ") || "כלום"}.` } }));
-      } else if (allowed && !allowed.ok) {
-        cards.push(await addMessage(conv, { role: "assistant", kind: "refusal", source: "system", text: `לא אפשרי מכאן: ${allowed.reason}`, payload: { key: def.key, reason: allowed.reason } }));
-      } else {
-        const estimate = await def.estimate(parsed.action.params, entity);
-        cards.push(await addMessage(conv, {
-          role: "assistant", kind: "proposal", source: "model", text: def.title,
-          payload: { key: def.key, title: def.title, describe: def.describe(parsed.action.params, entity), params: parsed.action.params, consequential: def.consequential, estimate, status: "proposed" },
-        }));
-      }
-    }
+    cards.push(...(await proposalCards(conv, topic, input.userId, parsed.actions, defs)));
     if (parsed.needsCode) {
       cards.push(await addMessage(conv, {
         role: "assistant", kind: "declared_cost", source: "model", text: parsed.needsCode,
@@ -524,6 +499,73 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
   } finally {
     busy.delete(conv.id);
   }
+}
+
+/**
+ * The cards under an answer: each proposal the model made, validated against
+ * the registry — it exists, belongs to this topic, and is allowed for this
+ * person right now — or a refusal that says why; never a silent button.
+ */
+async function proposalCards(conv: ConvRow, topic: ResolvedTopic, userId: string, actions: ParsedAction[], defs: ActionDef[]): Promise<MsgRow[]> {
+  const cards: MsgRow[] = [];
+  for (const action of actions) {
+    const def = defs.find((d) => d.key === action.key);
+    // Only the parameters the action declares reach it — whatever else the model put in the block is dropped.
+    const params = def ? Object.fromEntries(Object.entries(action.params).filter(([k]) => def.params.some((p) => p.name === k))) : action.params;
+    const entity = def ? await actionEntityFor(topic) : null;
+    const allowed = def && entity ? await def.allowed({ userId }, entity, params) : null;
+    if (!def || !entity) {
+      cards.push(await addMessage(conv, { role: "assistant", kind: "refusal", source: "system", text: `לא אפשרי מכאן: הפעולה "${action.key}" לא קיימת במסך הזה.`, payload: { key: action.key, reason: `הפעולה "${action.key}" אינה מהפעולות של המסך הזה. מה שאפשר מכאן: ${defs.map((d) => d.title).join(", ") || "כלום"}.` } }));
+    } else if (allowed && !allowed.ok) {
+      cards.push(await addMessage(conv, { role: "assistant", kind: "refusal", source: "system", text: `לא אפשרי מכאן: ${allowed.reason}`, payload: { key: def.key, reason: allowed.reason } }));
+    } else {
+      const estimate = await def.estimate(params, entity);
+      cards.push(await addMessage(conv, {
+        role: "assistant", kind: "proposal", source: "model", text: def.title,
+        payload: { key: def.key, title: def.title, describe: await def.describe(params, entity), params, consequential: def.consequential, estimate, status: "proposed", ...(def.approveLabel ? { approveLabel: def.approveLabel } : {}) },
+      }));
+    }
+  }
+  return cards;
+}
+
+/* ── the gaps conversation: a second opinion, read against the code ── */
+
+/**
+ * One turn of the conversation about a requirement's gaps. Stateless on
+ * purpose: the facts are read fresh (a gap closed a moment ago is closed
+ * here), the transcript is sent as text, and the code is read in the
+ * repository's own copy — so a turn that read files does not carry them
+ * into the next one and push the conversation past a roll-over.
+ */
+async function askGaps(conv: ConvRow, topic: ResolvedTopic, userId: string, question: string) {
+  const previous = await messagesOf(conv);
+  const userMsg = await addMessage(conv, { role: "user", kind: "answer", source: "system", text: question });
+  const { text: facts, repoDir } = await gapsContext(topic.clientId, topic.workitemId!);
+  const work = chatDir(conv.id);
+  mkdirSync(work, { recursive: true });
+  const sys = ensureSystemFile(work, "gaps-system.txt", GAPS_SYSTEM);
+  const prompt = [facts, renderTranscript(previous), `ההודעה החדשה של האדם:\n${question}`].join("\n\n");
+  const res = await runClaudeRaw(repoDir ?? work, prompt, {
+    ledger: {
+      clientId: topic.clientId, userId, capability: "chat_code_read", trigger: "chat", entity: { kind: "conversation", id: conv.id },
+      workitemId: topic.workitemId, screen: topic.screen, label: question.slice(0, 80), conversationId: conv.id,
+    },
+    maxTurns: repoDir ? 14 : 2, timeoutMs: 300_000,
+    lean: { systemPromptFile: sys, ...(repoDir ? { tools: "Read,Grep,Glob", addDirs: [repoDir] } : {}) },
+  });
+  const parsed = parseBlocks(res.text);
+  // The final message may be only the blocks when the model wrote its reply
+  // before reading files; then the reply is what it wrote along the way.
+  const text = parsed.text || parseBlocks(res.assistantText).text || (parsed.actions.length ? "הנה מה שאני מציע:" : "(אין תשובה)");
+  const a = await addMessage(conv, { role: "assistant", kind: "answer", source: "model", text, callId: res.callId, payload: { from: repoDir ? "gaps_code" : "gaps" } });
+  const cards = await proposalCards(conv, topic, userId, parsed.actions, actionsFor("gaps"));
+  const call = res.callId ? (await db.select().from(claudeCall).where(eq(claudeCall.id, res.callId)).limit(1))[0] ?? null : null;
+  return {
+    conversation: await viewOf(conv),
+    messages: [toMessage(userMsg, null), toMessage(a, call), ...cards.map((m) => toMessage(m, null))],
+    rolledOver: false, suggestions: GAPS_SUGGESTIONS,
+  };
 }
 
 /* ── "did this help" (§9.7) ────────────────────────────────────────── */
@@ -575,6 +617,6 @@ export async function listConversations(f: { id?: string; clientId?: string; use
 export async function getConversation(id: string): Promise<{ conversation: ConversationView; messages: ChatMessage[]; topic: TopicRef; suggestions: string[]; glossary: ScreenGlossary | null } | null> {
   const [v] = await listConversations({ id, limit: 1 });
   if (!v) return null;
-  const screen = ({ wi: "requirement", task: "task", pr: "pull_request", run: "onboarding", app: "dashboard" } as Record<string, string>)[v.topicKind] ?? "dashboard";
-  return { conversation: v, messages: await messagesOf({ id: v.id, clientId: v.clientId }), topic: { kind: v.topicKind as TopicKind, id: v.topicId }, suggestions: suggestionsFor(screen, {}), glossary: glossaryFor(screen) };
+  const screen = ({ wi: "requirement", gaps: "requirement", task: "task", pr: "pull_request", run: "onboarding", app: "dashboard" } as Record<string, string>)[v.topicKind] ?? "dashboard";
+  return { conversation: v, messages: await messagesOf({ id: v.id, clientId: v.clientId }), topic: { kind: v.topicKind as TopicKind, id: v.topicId }, suggestions: suggestionsFor(screen, {}, v.topicKind as TopicKind), glossary: glossaryFor(screen) };
 }

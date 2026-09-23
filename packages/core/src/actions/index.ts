@@ -5,6 +5,8 @@ import { approveTask, previewAssessPrompt, previewBreakdownPrompt, previewImplem
 import { sendToOnboardingSession } from "../repo-onboarding/runs.ts";
 import { terminalState } from "../repo-onboarding/session.ts";
 import { estimateUsd, recommend, type Capability } from "../routing.ts";
+import { gapByRef, verifyGap } from "../gaps.ts";
+import { isOpenGapState } from "../gap-ref.ts";
 
 /**
  * The action registry (claude-in-dcc §5, design §4): every action a screen
@@ -14,8 +16,8 @@ import { estimateUsd, recommend, type Capability } from "../routing.ts";
  * person's click.
  */
 
-export type ActionKey = "assess" | "breakdown" | "implement" | "approve_task" | "send_to_session";
-export type ActionTopic = "wi" | "task" | "run";
+export type ActionKey = "assess" | "breakdown" | "implement" | "approve_task" | "send_to_session" | "resolve_gap" | "dismiss_gap";
+export type ActionTopic = "wi" | "task" | "run" | "gaps";
 export type Actor = { userId: string };
 export type ActionEntity = { kind: ActionTopic; id: string; clientId: string; workitemId: string | null; repoId?: string | null };
 export type ActionParams = Record<string, unknown>;
@@ -31,7 +33,9 @@ export type ActionDef = {
   topic: ActionTopic;
   params: { name: string; explain: string; required?: boolean }[];
   /** "What is about to happen", in plain Hebrew, with the parameters filled in. */
-  describe: (p: ActionParams, e: ActionEntity) => string;
+  describe: (p: ActionParams, e: ActionEntity) => string | Promise<string>;
+  /** The approve button's words on the card, when "אשר והרץ" would say the wrong thing. */
+  approveLabel?: string;
   allowed: (by: Actor, e: ActionEntity, p: ActionParams) => Promise<Allowed>;
   estimate: (p: ActionParams, e: ActionEntity) => Promise<ActionEstimate>;
   /** The exact prompt — the same "what will be sent" gate every button opens. */
@@ -44,6 +48,17 @@ const typical = (cap: Capability, tokens: { input: number; output: number }): Ac
   return { capability: cap, model: r.model, effort: r.effort, usd: estimateUsd(r.model, tokens) };
 };
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+
+/** The gap a proposal names, still open, on this requirement — or why not. */
+async function openGap(e: ActionEntity, p: ActionParams) {
+  const ref = str(p.gap);
+  if (!ref) return { gap: null, reason: "לא צוין איזה פער" } as const;
+  const found = await gapByRef(e.clientId, e.workitemId ?? e.id, ref);
+  if (!found.gap) return found;
+  if (!isOpenGapState(found.gap.state)) return { gap: null, reason: "הפער הזה כבר נסגר" } as const;
+  return found;
+}
+const gapQuote = (d: string) => `"${d.length > 110 ? `${d.slice(0, 110)}…` : d}"`;
 
 async function taskRow(id: string) {
   const [t] = await db.select({ id: task.id, seq: task.seq, intent: task.intent, approvedAt: task.approvedAt, kind: task.kind }).from(task).where(eq(task.id, id)).limit(1);
@@ -109,6 +124,54 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
     estimate: async () => null,
     run: (p, e, by) => sendToOnboardingSession(e.repoId!, e.id, by, { text: str(p.text)! }),
   },
+  // The conversation about a requirement's gaps settles them one by one, but
+  // only the person closes a gap: each of these is a card they approve.
+  resolve_gap: {
+    key: "resolve_gap", title: "סגירת פער עם הכרעה", consequential: true, topic: "gaps", approveLabel: "אשר וסגור את הפער",
+    params: [
+      { name: "gap", explain: "המזהה הקצר של הפער (8 התווים שבסוגריים בעובדות)", required: true },
+      { name: "answer", explain: "ההכרעה כפי שסוכמה בשיחה, בעברית, שלמה ועומדת בפני עצמה — מי שיקרא אותה בלי השיחה יבין מה הוחלט", required: true },
+    ],
+    describe: async (p, e) => {
+      const g = await openGap(e, p);
+      return `הפער ${g.gap ? gapQuote(g.gap.description) : ""} ייסגר עם ההכרעה:\n"${str(p.answer) ?? ""}"\nההכרעה נשמרת כהערה בדרישה, בשמכם, ונכנסת לפירוק למשימות.`;
+    },
+    allowed: async (_by, e, p) => {
+      const g = await openGap(e, p);
+      if (!g.gap) return { ok: false, reason: g.reason };
+      if (!str(p.answer)) return { ok: false, reason: "אין הכרעה לשמור" };
+      return { ok: true };
+    },
+    estimate: async () => null,
+    run: async (p, e, by) => {
+      const g = await openGap(e, p);
+      if (!g.gap) throw new ActionRefused(g.reason);
+      return verifyGap({ clientId: e.clientId, gapId: g.gap.id, by, outcome: "resolved", answer: str(p.answer) });
+    },
+  },
+  dismiss_gap: {
+    key: "dismiss_gap", title: "סימון כלא-פער", consequential: true, topic: "gaps", approveLabel: "אשר — זה לא פער",
+    params: [
+      { name: "gap", explain: "המזהה הקצר של הפער (8 התווים שבסוגריים בעובדות)", required: true },
+      { name: "reason", explain: "למה זה לא פער אמיתי, כפי שעלה בשיחה — נשמר כדי שהשאלה לא תעלה שוב", required: true },
+    ],
+    describe: async (p, e) => {
+      const g = await openGap(e, p);
+      return `הפער ${g.gap ? gapQuote(g.gap.description) : ""} יסומן כלא-פער, מהסיבה:\n"${str(p.reason) ?? ""}"\nהסיבה נשמרת כדי שבחינת הבשלות הבאה לא תעלה את השאלה שוב.`;
+    },
+    allowed: async (_by, e, p) => {
+      const g = await openGap(e, p);
+      if (!g.gap) return { ok: false, reason: g.reason };
+      if (!str(p.reason)) return { ok: false, reason: "חסרה הסיבה" };
+      return { ok: true };
+    },
+    estimate: async () => null,
+    run: async (p, e, by) => {
+      const g = await openGap(e, p);
+      if (!g.gap) throw new ActionRefused(g.reason);
+      return verifyGap({ clientId: e.clientId, gapId: g.gap.id, by, outcome: "dismissed", answer: str(p.reason) });
+    },
+  },
 };
 
 /** The actions a topic may propose, narrowed to what the screen declared. */
@@ -120,6 +183,7 @@ export function actionEntityFor(topic: { kind: string; id: string | null; client
   return (async () => {
     if (!topic.id) return null;
     if (topic.kind === "wi") return { kind: "wi", id: topic.id, clientId: topic.clientId, workitemId: topic.id };
+    if (topic.kind === "gaps") return { kind: "gaps", id: topic.id, clientId: topic.clientId, workitemId: topic.id };
     if (topic.kind === "task") return { kind: "task", id: topic.id, clientId: topic.clientId, workitemId: topic.workitemId };
     if (topic.kind === "run") {
       const [r] = await db.select({ repoId: repositoryOnboardingRun.repoId }).from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, topic.id)).limit(1);

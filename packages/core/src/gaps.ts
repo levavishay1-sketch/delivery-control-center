@@ -67,6 +67,18 @@ export async function proposeGap(input: {
   return row!;
 }
 
+/** The gap a conversation named by its short reference (`gap-ref.ts`), on this requirement — or why not. */
+export async function gapByRef(clientId: string, workitemId: string, ref: string) {
+  const r = ref.trim().toLowerCase();
+  if (!/^[0-9a-f]{4,36}$/.test(r)) return { gap: null, reason: `"${ref}" אינו מזהה של פער` } as const;
+  const rows = await withTenant(clientId, (tx) =>
+    tx.select().from(gap).where(sql`${gap.workitemId} = ${workitemId} and ${gap.id}::text like ${`${r}%`}`),
+  );
+  if (rows.length === 0) return { gap: null, reason: "הפער לא נמצא בדרישה הזו" } as const;
+  if (rows.length > 1) return { gap: null, reason: "המזהה מתאים ליותר מפער אחד" } as const;
+  return { gap: rows[0]!, reason: null } as const;
+}
+
 export async function verifyGap(input: {
   clientId: string;
   gapId: string;

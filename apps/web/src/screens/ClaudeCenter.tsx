@@ -75,7 +75,7 @@ export function ClaudeCenter({ tab, openId, nav }: { tab: CenterTab; openId?: st
 
 /* ── שיחות ─────────────────────────────────────────────────────────── */
 
-const TOPIC_KIND_HE: Record<string, string> = { wi: "דרישה", task: "משימה", pr: "בקשת מיזוג", run: "הטמעת מאגר", app: "המערכת" };
+const TOPIC_KIND_HE: Record<string, string> = { wi: "דרישה", gaps: "פערים", task: "משימה", pr: "בקשת מיזוג", run: "הטמעת מאגר", app: "המערכת" };
 const dayOf = (iso: string) => {
   const d = new Date(iso), t = new Date();
   const diff = Math.floor((new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 864e5);
