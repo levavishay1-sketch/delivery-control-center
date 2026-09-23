@@ -187,7 +187,7 @@ export function PageHead({ title, sub, crumb, actions, info }: { title: ReactNod
  * 2026-09-12).
  */
 export function PromptPreviewModal({
-  title, data, loading, error, onClose, onConfirm, confirming, confirmLabel, disabledReason, reasonField,
+  title, data, loading, error, onClose, onConfirm, confirming, confirmLabel, disabledReason, reasonField, loadingHint,
 }: {
   title: string;
   data: { prompt: string; promptHe: string } | null;
@@ -199,6 +199,10 @@ export function PromptPreviewModal({
   confirmLabel: string;
   /** set = confirm is disabled and this explains why (e.g. not approved yet) */
   disabledReason?: string | null;
+  /** Shown instead of the bare "טוען…" when building the prompt does real,
+   *  possibly slow work (a git checkout) — otherwise a first-time clone
+   *  reads as the screen being stuck. */
+  loadingHint?: string;
   /** A course-changing action (e.g. re-breakdown) asks for a reason
    *  right here, before confirm — the decision-history capture point
    *  (design notes, `decision-history`). Confirm stays disabled until
@@ -227,7 +231,7 @@ export function PromptPreviewModal({
           זה בדיוק מה שיישלח ל-Claude (הפרומפט האמיתי תמיד רץ באנגלית — התצוגה בעברית היא לנוחות הקריאה בלבד).
         </p>
         {loading ? (
-          <div className="spin">טוען…</div>
+          <div className="spin">{loadingHint ?? "טוען…"}</div>
         ) : data ? (
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
