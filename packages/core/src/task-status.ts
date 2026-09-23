@@ -53,6 +53,7 @@ export type StatusFacts = {
 
 const PHASE_HE: Record<RunPhase, string> = { develop: "בפיתוח", build: "מקמפלת", test: "בבדיקות" };
 const KIND_ORDER: (string | null)[] = ["build", "tests", "regression", "e2e", null];
+const KIND_FAIL_LABEL: Record<string, string> = { build: "נפלה על ה-Build", tests: "נפלה על בדיקות הפיתוח", regression: "נפלה על בדיקות רגרסיה", e2e: "נפלה על בדיקות E2E" };
 const refs = (xs: { seq: number }[]) => xs.map((x) => `#${x.seq}`).join(", ");
 
 function whyFailed(c: StatusCheck, openDeps: StatusDep[]): string {
@@ -92,7 +93,9 @@ function phaseStatus(f: StatusFacts): TaskStatus {
   const checks = f.checks.filter((c) => c.active).sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.seq - b.seq);
   const failed = checks.filter((c) => c.result === "failed");
   if (failed.length) {
-    return { key: "failed", label: "נפלה", tone: "critical", reason: `${whyFailed(failed[0]!, f.openDeps)}${failed.length > 1 ? ` (ועוד ${failed.length - 1})` : ""}` };
+    const first = failed[0]!;
+    const label = (first.kind && KIND_FAIL_LABEL[first.kind]) || "נפלה";
+    return { key: "failed", label, tone: "critical", reason: `${whyFailed(first, f.openDeps)}${failed.length > 1 ? ` (ועוד ${failed.length - 1})` : ""}` };
   }
   if (f.lastRunError) return { key: "failed", label: "נפלה", tone: "critical", reason: `ההרצה לא הסתיימה: ${f.lastRunError.slice(0, 120)}` };
   if (f.state === "blocked") return { key: "blocked", label: "חסומה", tone: "critical", reason: "סומנה כחסומה ידנית" };
