@@ -363,7 +363,7 @@ async function recordCall(l: LedgerContext, d: RoutingDecision, startedAt: Date,
   }
 }
 
-export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts): Promise<{ text: string; meta: RunMeta; callId: string | null }> {
+export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts): Promise<{ text: string; meta: RunMeta; callId: string | null; assistantText: string }> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain.
   // Read-only by default. `write` is only for implementation runs, and those
   // work on an isolated clone — never the user's own checkout.
@@ -534,7 +534,26 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   }
   opts.onMeta?.(meta);
   const callId = await recordCall(opts.ledger, decision, startedAt, { meta, outcome: "ok", text });
-  return { text, meta, callId };
+  return { text, meta, callId, assistantText: assistantTexts(raw) };
+}
+
+/**
+ * Everything the model wrote along the way, not only its last message. In a
+ * run that reads files, `result` is just the text after the final tool call —
+ * an explanation written before reading is not in it (seen live: a reply that
+ * was only an action block, its reasoning lost).
+ */
+function assistantTexts(raw: string): string {
+  const parts: string[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.includes('"type":"assistant"')) continue;
+    try {
+      const ev = JSON.parse(line) as { type?: string; message?: { content?: { type?: string; text?: string }[] } };
+      if (ev.type !== "assistant") continue;
+      for (const c of ev.message?.content ?? []) if (c.type === "text" && c.text?.trim()) parts.push(c.text.trim());
+    } catch { /* not a JSON line */ }
+  }
+  return parts.join("\n\n");
 }
 
 /** Run `claude -p` in `cwd` (prompt via stdin), expect a single JSON object back. */
@@ -748,7 +767,8 @@ export async function resolveCommitIdentity(userId: string): Promise<{ name: str
   return u ? { name: u.displayName, email: u.email } : { name: "DCC", email: "dcc@local" };
 }
 
-async function loadRequirementText(clientId: string, workitemId: string) {
+/** The requirement as every prompt reads it: the row, its notes, its attached files' text. */
+export async function loadRequirementText(clientId: string, workitemId: string) {
   return withTenant(clientId, async (tx) => {
     const [wi] = await tx.select().from(workitem).where(eq(workitem.id, workitemId)).limit(1);
     if (!wi) throw new Error("requirement not found");

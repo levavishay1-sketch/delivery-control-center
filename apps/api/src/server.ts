@@ -415,7 +415,7 @@ app.get("/repos/:id/onboarding/runs/:runId/file", async (req) => {
 
 /* ── the one chat (claude-in-dcc §4–§7): one dock over every screen, a conversation per topic ── */
 
-const topicSchema = z.object({ kind: z.enum(["wi", "task", "pr", "run", "app"]), id: z.string().max(200).nullish() });
+const topicSchema = z.object({ kind: z.enum(["wi", "task", "pr", "run", "app", "gaps"]), id: z.string().max(200).nullish() });
 const contextSchema = z.object({
   screen: z.string().max(60).nullish(),
   facts: z.record(z.unknown()).optional(),

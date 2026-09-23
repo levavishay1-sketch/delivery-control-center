@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { CallsTable } from "../claude/CallsTable.tsx";
 import { CostLine } from "../claude/CostLine.tsx";
 import { capabilityLabel, fmtUsd } from "../claude/labels.ts";
-import { useClaudeContext } from "../claude/context.ts";
+import { chatCommand, onChatChanged, useClaudeContext } from "../claude/context.ts";
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement,
   attachmentHref,
@@ -99,6 +99,8 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     } catch (e) { setErr(String(e)); }
   }, [id]);
   useEffect(() => { reload(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A gap closed from the conversation with Claude must not still look open here.
+  useEffect(() => onChatChanged((key) => { if (key === "resolve_gap" || key === "dismiss_gap") void reload(); }), [reload]);
 
   // The requirement's cumulative Claude cost — every claude.session
   // event ever recorded against it. Refetched whenever a run finishes
@@ -225,10 +227,16 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     <div style={{ marginTop: 4 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <p className="section-lbl" style={{ margin: 0 }}>פערים ואי-בהירויות<Info k="gaps_section" /></p>
-        <div style={{ display: "flex", gap: 12, alignItems: "baseline" }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <a style={{ fontSize: 11.5, cursor: "pointer", color: "var(--color-accent)" }} onClick={() => setGapHelp((v) => !v)}>
             {gapHelp ? "הסתר הסבר" : "מה זה ואיך מתקדמים?"}
           </a>
+          {openGaps.length > 0 && (
+            <span style={{ display: "inline-flex", alignItems: "center" }}>
+              <button className="btn btn-primary btn-sm" onClick={() => chatCommand({ type: "openTopic", topic: { kind: "gaps", id: wi.id } })}>💬 ענו על כמה פערים בשיחה עם קלוד</button>
+              <Info k="gap_conversation" />
+            </span>
+          )}
         </div>
       </div>
 
@@ -239,6 +247,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             <p style={{ marginTop: 6 }}>לכל פער מסומן <b>מי יכול לענות</b>: החלטה שלנו (טכנית — אפשר להכריע כאן) או החלטה של מבקש הדרישה (עסקית — צריך לשאול אותו).</p>
             <ul style={{ margin: "6px 0", paddingInlineStart: 18 }}>
               <li><b>ענה</b> — כותב את ההכרעה, או לוחץ על אחת התשובות המוצעות. נשמרת כהערה ונכנסת אוטומטית לפרומפט של הפירוק.</li>
+              <li><b>💬 דבר עם קלוד</b> — כשרוצים חוות דעת לפני שסוגרים: כותבים מה חושבים על פער אחד או על כמה, וקלוד בודק את זה מול הדרישה, הקבצים והקוד, שואל אם חסר משהו, ומציע לסגור כל פער בכרטיס שאתם מאשרים.</li>
               <li><b>לא פער אמיתי</b> — חובה לכתוב למה. הסיבה נשמרת כדי שהשאלה לא תעלה שוב בהרצה הבאה.</li>
               <li><b>פתח דרישה נפרדת</b> — שאלה אמיתית אבל של סקופ אחר; נפתחת דרישה נפרדת והעבודה כאן ממשיכה.</li>
               <li><b>נסח מכתב ללקוח</b> — לא כפתור כאן: פותחים "שאל את קלוד" (למטה מימין) ולוחצים על הצ'יפ "נסח מכתב ללקוח עם השאלות הפתוחות", או שואלים בעצמכם. קלוד כותב מכל השאלות הפתוחות למבקש הדרישה מייל בשפה עסקית, בלי קוד. DCC לא שולח — אתם מעתיקים ושולחים.</li>
@@ -314,6 +323,10 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                 )}
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <button className="btn btn-primary btn-sm" onClick={() => setAnswering({ id: g.id, text: "" })}>✎ הכרע / ענה</button>
+                  <button className="btn btn-secondary btn-sm" onClick={() => chatCommand({
+                    type: "openTopic", topic: { kind: "gaps", id: wi.id },
+                    draft: `לגבי הפער "${g.description.length > 90 ? `${g.description.slice(0, 90)}…` : g.description}":\n`,
+                  })}>💬 דבר עם קלוד על הפער</button>
                   <button className="btn btn-secondary btn-sm" onClick={() => {
                     const why = prompt("למה זה לא פער אמיתי? (יישמר כדי שהשאלה לא תעלה שוב)");
                     if (why?.trim()) onGap(g, "dismissed", why.trim());

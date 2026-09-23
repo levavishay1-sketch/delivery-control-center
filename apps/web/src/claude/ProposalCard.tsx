@@ -3,6 +3,7 @@ import { cancelCodeQuestion, cancelProposal, getProposalPreview, runCodeQuestion
 import { PromptPreviewModal } from "../ui.tsx";
 import { CostLine } from "./CostLine.tsx";
 import { errText } from "../screens/onboarding/labels.ts";
+import { chatChanged } from "./context.ts";
 import { capabilityLabel, effortLabel, fmtUsd, modelLabel } from "./labels.ts";
 
 /**
@@ -20,7 +21,12 @@ export function ProposalCard({ message, onUpdate }: { message: ChatMessage; onUp
 
   const act = async (fn: () => Promise<{ message: ChatMessage; answer?: ChatMessage }>) => {
     setBusy(true); setErr(null);
-    try { const r = await fn(); onUpdate(r.message, r.answer); } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
+    try {
+      const r = await fn();
+      onUpdate(r.message, r.answer);
+      const next = r.message.payload as { key?: unknown; status?: unknown };
+      if (next.status === "done" && typeof next.key === "string") chatChanged(next.key);
+    } catch (e) { setErr(errText(e)); } finally { setBusy(false); }
   };
 
   if (message.kind === "refusal") {
@@ -81,11 +87,12 @@ export function ProposalCard({ message, onUpdate }: { message: ChatMessage; onUp
         {err && <div className="ob-note crit" style={{ marginTop: 8 }}>{err}</div>}
         <div className="acts">
           {p.status === "proposed" && <>
-            <button className="btn btn-primary btn-sm" type="button" disabled={busy} onClick={() => void act(() => runProposal(message.id))}>{busy ? "מריץ…" : "אשר והרץ"}</button>
-            <button className="btn btn-secondary btn-sm" type="button" disabled={busy || previewLoading} onClick={() => {
+            <button className="btn btn-primary btn-sm" type="button" disabled={busy} onClick={() => void act(() => runProposal(message.id))}>{busy ? "מריץ…" : (p.approveLabel ?? "אשר והרץ")}</button>
+            {/* An action with no model call sends nothing — there is no prompt to show. */}
+            {p.estimate && <button className="btn btn-secondary btn-sm" type="button" disabled={busy || previewLoading} onClick={() => {
               setPreviewOpen(true);
               if (!preview) { setPreviewLoading(true); getProposalPreview(message.id).then(setPreview).catch((e) => setErr(errText(e))).finally(() => setPreviewLoading(false)); }
-            }}>הצג את מה שיישלח</button>
+            }}>הצג את מה שיישלח</button>}
             <button className="btn btn-secondary btn-sm" type="button" disabled={busy} onClick={() => void act(() => cancelProposal(message.id))}>בטל</button>
           </>}
           {p.status === "running" && <span className="ob-sub"><span className="spinner" style={{ width: 12, height: 12, marginInlineEnd: 6, verticalAlign: "middle" }} />רץ…</span>}

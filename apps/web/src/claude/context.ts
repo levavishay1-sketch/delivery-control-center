@@ -8,7 +8,7 @@ import { useEffect, useSyncExternalStore } from "react";
  * `useClaudeContext`; the dock, mounted once in `App.tsx`, reads it.
  */
 
-export type ChatTopic = { kind: "wi" | "task" | "pr" | "run" | "app"; id?: string | null; title?: string };
+export type ChatTopic = { kind: "wi" | "task" | "pr" | "run" | "app" | "gaps"; id?: string | null; title?: string };
 
 export type ClaudeScreenContext = {
   /** The glossary key — `requirement`, `task`, `pull_request`, `onboarding`, `claude`, `dashboard`, `budgets`. */
@@ -79,10 +79,28 @@ export function waitForPlace(place: string, timeoutMs = 8000): Promise<ClaudeScr
 
 /* ── the dock's own commands: open it, open a past conversation ──────── */
 
-type Command = { type: "open" } | { type: "openConversation"; id: string } | { type: "toggle" };
+type Command =
+  | { type: "open" }
+  | { type: "openConversation"; id: string }
+  | { type: "toggle" }
+  /** Open the dock on a topic the screen does not own — the gaps conversation — with text already in the box. */
+  | { type: "openTopic"; topic: { kind: ChatTopic["kind"]; id: string }; draft?: string };
 const commandListeners = new Set<(c: Command) => void>();
 export const chatCommand = (c: Command) => commandListeners.forEach((l) => l(c));
 export function onChatCommand(l: (c: Command) => void) {
   commandListeners.add(l);
   return () => { commandListeners.delete(l); };
+}
+
+/* ── something the chat changed, that a screen shows ──────────────── */
+
+/**
+ * An approved card changed a record (a gap closed from the conversation):
+ * the screen showing it reloads, instead of the person seeing it still open.
+ */
+const changedListeners = new Set<(key: string) => void>();
+export const chatChanged = (key: string) => changedListeners.forEach((l) => l(key));
+export function onChatChanged(l: (key: string) => void) {
+  changedListeners.add(l);
+  return () => { changedListeners.delete(l); };
 }

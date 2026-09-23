@@ -66,6 +66,16 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
         setOverride({ id: c.id, topic: r.topic });
         setConv(r.conversation); setMessages(r.messages); setSuggestions(r.suggestions); setTitle(r.conversation.topicTitle);
       }).catch((e) => setErr(errText(e)));
+    } else if (c.type === "openTopic") {
+      setOpen(true);
+      // The text a gap card hands over goes in the box, not straight to Claude: the person finishes it.
+      if (c.draft) setQuestion(c.draft);
+      openChat({ topic: c.topic, context: { screen: null } }).then((r) => {
+        setOverride({ id: r.conversation?.id ?? "", topic: c.topic });
+        setConv(r.conversation); setMessages(r.messages); setSuggestions(r.suggestions); setTitle(r.topic.title); setErr(null);
+        setFlash(true); setTimeout(() => setFlash(false), 1400);
+        setTimeout(() => { const b = box.current; if (b) { b.focus(); b.setSelectionRange(b.value.length, b.value.length); } }, 0);
+      }).catch((e) => setErr(errText(e)));
     }
   }), []);
   useEffect(() => {
@@ -80,6 +90,7 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
   // The screen decides the topic. Moving to another screen switches the
   // conversation; the one left behind is found again from "כל השיחות".
   const topicKey = ctx ? `${ctx.topic.kind}:${ctx.topic.id ?? ""}` : "app:";
+  const [screenReload, setScreenReload] = useState(0);
   useEffect(() => {
     setOverride(null);
     let live = true;
@@ -90,7 +101,10 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
     }).catch((e) => { if (live) setErr(errText(e)); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [topicKey]);
+  }, [topicKey, screenReload]);
+  /** Leave a conversation opened from elsewhere (a list, the gaps) for the one of the screen. */
+  const backToScreen = () => { setQuestion(""); setScreenReload((n) => n + 1); };
+  const isGaps = (override?.topic.kind ?? ctx?.topic.kind) === "gaps";
 
   useEffect(() => { if (open) end.current?.scrollIntoView({ block: "nearest" }); }, [messages.length, busy, open]);
   useEffect(() => { if (open) box.current?.focus({ preventScroll: true }); }, [open]);
@@ -166,14 +180,23 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
               <span className="t">{title}</span>
               <a onClick={() => nav("#/claude/conversations")}>כל השיחות</a>
             </div>
-            {override && <p className="ob-sub">שיחה שנפתחה מהרשימה. מעבר למסך אחר יחזיר את הצ'אט לנושא של המסך.</p>}
+            {override && (
+              <p className="ob-sub">
+                {isGaps
+                  ? "שיחה על כל הפערים של הדרישה. קלוד בודק כל תשובה מול הדרישה, הקבצים המצורפים והקוד, ולא סוגר פער בלי האישור שלכם."
+                  : "שיחה שנפתחה מהרשימה. מעבר למסך אחר יחזיר את הצ'אט לנושא של המסך."}
+                {" "}<a style={{ cursor: "pointer" }} onClick={backToScreen}>חזרה לשיחה על המסך</a>
+              </p>
+            )}
           </div>
 
           <div className="cc-msgs">
             {messages.length === 0 && !busy && (
               <div className="cc-msg assistant">
                 <div className="src"><span className="ob-chip ai">קלוד</span></div>
-                שאלו על המסך שאתם בו — מה כפתור עושה, מה השלב הבא, כמה עלה — או על המערכת כולה. שאלה שיש לה תשובה ודאית במסך נענית בלי מודל, בחינם.
+                {isGaps
+                  ? "כתבו מה אתם חושבים על פער אחד, על כמה, או על כולם — במשפטים חופשיים. אגיד על איזה פער כל חלק עונה, אבדוק אותו מול הדרישה, הקבצים והקוד, ואשאל אם משהו חסר. כשהכרעה שלמה, אציע לסגור את הפער בכרטיס — והוא נסגר רק כשתאשרו."
+                  : "שאלו על המסך שאתם בו — מה כפתור עושה, מה השלב הבא, כמה עלה — או על המערכת כולה. שאלה שיש לה תשובה ודאית במסך נענית בלי מודל, בחינם."}
               </div>
             )}
             {messages.map((m) => {
@@ -208,7 +231,7 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
               return (
                 <div key={m.id} className="cc-msg assistant">
                   <div className="src">
-                    {system ? <><span className="ob-chip det">נענה מהמערכת</span><span className="ob-sub">בלי מודל · ללא עלות</span></> : <><span className="ob-chip ai">קלוד</span>{m.payload.from === "code" ? <span className="ob-sub">מקריאה בקוד של המאגר, באישורכם</span> : m.payload.unanswered ? <span className="ob-sub">אין לו את זה במסך</span> : <span className="ob-sub">מהעובדות שעל המסך</span>}</>}
+                    {system ? <><span className="ob-chip det">נענה מהמערכת</span><span className="ob-sub">בלי מודל · ללא עלות</span></> : <><span className="ob-chip ai">קלוד</span>{m.payload.from === "code" ? <span className="ob-sub">מקריאה בקוד של המאגר, באישורכם</span> : m.payload.from === "gaps_code" ? <span className="ob-sub">מהדרישה, הקבצים והקוד</span> : m.payload.from === "gaps" ? <span className="ob-sub">מהדרישה והקבצים (אין קוד לקרוא)</span> : m.payload.unanswered ? <span className="ob-sub">אין לו את זה במסך</span> : <span className="ob-sub">מהעובדות שעל המסך</span>}</>}
                   </div>
                   <Text text={m.text} />
                   <div className="foot">
@@ -223,7 +246,7 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
                 </div>
               );
             })}
-            {busy && <div className="cc-msg assistant ob-sub"><span className="spinner" style={{ width: 12, height: 12, marginInlineEnd: 6, verticalAlign: "middle" }} />חושב…</div>}
+            {busy && <div className="cc-msg assistant ob-sub"><span className="spinner" style={{ width: 12, height: 12, marginInlineEnd: 6, verticalAlign: "middle" }} />{isGaps ? "קורא את הדרישה ובודק מול הקוד — יכול לקחת דקה…" : "חושב…"}</div>}
             <div ref={end} />
           </div>
 
@@ -235,13 +258,17 @@ export function ClaudeChat({ nav }: { nav: (h: string) => void }) {
             <textarea
               ref={box}
               value={question}
-              placeholder="שאלו על המסך, או על המערכת"
+              placeholder={isGaps ? "מה אתם חושבים על פער אחד, על כמה, או על כולם?" : "שאלו על המסך, או על המערכת"}
               onChange={(e) => setQuestion(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void ask(question); } }}
             />
             <button className="btn btn-primary btn-sm" type="button" disabled={busy || !question.trim()} onClick={() => void ask(question)}>{busy ? "…" : "שאל"}</button>
           </div>
-          <div className="cc-foot">Enter שולח, Shift+Enter שורה חדשה. קלוד עונה מהעובדות שעל המסך ולא מבצע דבר בעצמו. כל תשובה נשמרת, ועלותה נרשמת במרכז הבקרה.</div>
+          <div className="cc-foot">
+            {isGaps
+              ? "Enter שולח, Shift+Enter שורה חדשה. כל תשובה כאן קוראת את הדרישה והקוד, ולכן עולה יותר משאלה על המסך — היא נשמרת ועלותה נרשמת במרכז הבקרה. פער נסגר רק בכרטיס שאתם מאשרים."
+              : "Enter שולח, Shift+Enter שורה חדשה. קלוד עונה מהעובדות שעל המסך ולא מבצע דבר בעצמו. כל תשובה נשמרת, ועלותה נרשמת במרכז הבקרה."}
+          </div>
         </aside>
       )}
     </>
