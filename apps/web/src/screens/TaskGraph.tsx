@@ -133,12 +133,17 @@ function Card({ node, tone, onClick }: { node: TaskFlowNode; tone: Tone; onClick
   const doneChecks = node.checks.filter((c) => c.state === "done").length;
   return (
     <div className={`flow-node ${tone.key}`} onClick={onClick} style={{ width: LAYER_W, direction: "rtl", opacity: node.active ? 1 : 0.6 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: node.status?.dependency ? 4 : 6, flexWrap: "wrap", gap: 4 }}>
         <Badge tone={tone} />
         {node.adoUrl
           ? <a href={node.adoUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 10.5, fontFamily: "var(--mono)", color: "var(--status-healthy)", direction: "ltr" }}>{idLabel} ↗</a>
           : <span style={{ fontSize: 10.5, fontFamily: "var(--mono)", color: "var(--ink-500)", direction: "ltr" }}>{idLabel}</span>}
       </div>
+      {node.status?.dependency && (
+        <div style={{ marginBottom: 6 }} title={node.status.dependency.reason}>
+          <span className={`flow-badge ${node.status.dependency.tone}`} style={{ fontSize: 10 }}><i />{node.status.dependency.label}</span>
+        </div>
+      )}
       <div style={{
         fontWeight: 650, fontSize: 12.5, lineHeight: 1.4, color: "var(--ink-900)",
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 5,

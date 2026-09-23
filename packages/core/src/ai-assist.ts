@@ -1503,6 +1503,7 @@ export async function taskFlowOf(clientId: string, taskId: string): Promise<Flow
     const after = all.filter((c) => c.kind !== "build");
     return {
       state: r.state as FlowCycle["state"], startedAt: r.startedAt.toISOString(), base: res?.base,
+      buildVerified: all.some((c) => c.kind === "build"),
       buildFailed: all.some((c) => c.kind === "build" && !c.passed) || !!res?.skipped?.length,
       checks: {
         ran: after.length, passed: after.filter((c) => c.passed).length,

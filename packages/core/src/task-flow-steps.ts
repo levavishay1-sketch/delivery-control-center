@@ -20,6 +20,8 @@ export type FlowCycle = {
   startedAt: string;
   /** What the run was built on and without; absent on a run from before that was recorded. */
   base?: FlowBase;
+  /** Whether the run actually verified the build — false on a run from before the build check existed, or whose build check never ran. */
+  buildVerified: boolean;
   buildFailed: boolean;
   /** The checks after the build — tests, regression, E2E. */
   checks: { ran: number; passed: number; failed: number; waiting: number };
@@ -107,6 +109,9 @@ export function flowSteps(cycles: FlowCycle[], now: FlowNow): FlowStep[] {
       : now.running === "test" ? "done"
       : !last || last.state === "rolled_back" ? "current"
       : last.state === "error" || last.buildFailed ? "failed"
+      // A run from before the build check existed, or whose build check never ran, has not
+      // actually shown the build passes — "פיתוח (כולל Build)" stays open, not done, until it has.
+      : !last.buildVerified ? "current"
       : "done";
     const checks: FlowStepState =
       now.running === "test" ? "current"

@@ -3,7 +3,7 @@ import { flowSteps, gainedDeps, type FlowBase, type FlowCycle, type FlowNow } fr
 
 const base = (without: number[] = [], on: number | null = null, sha: string | null = null): FlowBase => ({ on: on == null ? null : { seq: on, sha }, without });
 const run = (over: Partial<FlowCycle> = {}): FlowCycle => ({
-  state: "done", startedAt: "2026-09-20T10:00:00Z", base: base(), buildFailed: false,
+  state: "done", startedAt: "2026-09-20T10:00:00Z", base: base(), buildVerified: true, buildFailed: false,
   checks: { ran: 2, passed: 2, failed: 0, waiting: 0 }, reviewed: false, ...over,
 });
 const now = (over: Partial<FlowNow> = {}): FlowNow => ({ running: null, closed: false, pendingDeps: [], ...over });
@@ -79,6 +79,11 @@ describe("flowSteps", () => {
   it("never marks development done before a run has finished", () => {
     expect(flowSteps([], now())[0]!.state).toBe("current");
     expect(flowSteps([run({ state: "rolled_back" })], now())[0]!.state).toBe("current");
+  });
+
+  it("does not mark development done on a run whose build was never actually verified — a legacy run, or checks added after it ran", () => {
+    const legacy = run({ buildVerified: false, checks: { ran: 0, passed: 0, failed: 0, waiting: 0 } });
+    expect(shape(flowSteps([legacy], now()))).toEqual(["develop:current", "checks:todo", "review:todo"]);
   });
 
   it("is done when the task was closed", () => {

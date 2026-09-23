@@ -24,6 +24,13 @@ describe("taskStatus", () => {
     expect(taskStatus(f({ running: "develop", openDeps: [{ seq: 2, developed: false }] })).key).toBe("running");
   });
 
+  it("says specifically what it fell on, not just 'נפלה'", () => {
+    expect(taskStatus(f({ developed: true, checks: std("failed", null, null) })).label).toBe("נפלה על ה-Build");
+    expect(taskStatus(f({ developed: true, checks: std("passed", "failed", "failed") })).label).toBe("נפלה על בדיקות הפיתוח");
+    expect(taskStatus(f({ developed: true, checks: std("passed", "passed", "failed") })).label).toBe("נפלה על בדיקות רגרסיה");
+    expect(taskStatus(f({ developed: true, checks: [check(10, "build", "failed", "environment")] })).label).toBe("נפלה על ה-Build");
+  });
+
   it("names a dependency with no code as the likely reason for an unclear requirement", () => {
     const s = taskStatus(f({ developed: true, checks: [check(11, "tests", "failed", "requirement_ambiguity")], openDeps: [{ seq: 2, developed: false }] }));
     expect(s.reason).toContain("#2 עוד לא פותחה");

@@ -185,6 +185,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [sendLoading, setSendLoading] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  // when set, the modal's confirm targets this check's own id (e.g. "run the Build again"),
+  // not the task's — reuses the same preview+confirm gate instead of a second copy of it.
+  const [sendTarget, setSendTarget] = useState<{ id: string; label: string } | null>(null);
+  const [checkBusy, setCheckBusy] = useState<string | null>(null);
   // the full prompt, one fold away inside the development step
   const [promptPreview, setPromptPreview] = useState<{ prompt: string; promptHe: string; approved: boolean } | null>(null);
   const [approving, setApproving] = useState(false);
@@ -297,10 +301,11 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
   const copy = (s: string, k: string) => { navigator.clipboard?.writeText(s); setCopied(k); setTimeout(() => setCopied(""), 1500); };
 
-  // Step 1 of the gate: fetch the exact prompt and open the preview.
-  const openSend = async () => {
-    setErr(null); setSendErr(null); setSendData(null); setSendOpen(true); setSendLoading(true);
-    try { setSendData(await previewImplement(id)); }
+  // Step 1 of the gate: fetch the exact prompt and open the preview. Targets the
+  // task itself by default; a specific check (e.g. "run the Build again") when given.
+  const openSend = async (target?: { id: string; label: string }) => {
+    setErr(null); setSendErr(null); setSendData(null); setSendTarget(target ?? null); setSendOpen(true); setSendLoading(true);
+    try { setSendData(await previewImplement(target?.id ?? id)); }
     catch (e) { setSendErr(String(e)); }
     finally { setSendLoading(false); }
   };
@@ -308,8 +313,21 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const confirmSend = async () => {
     if (sending) return;
     setSending(true); setErr(null);
-    try { await implementTask(id); setSendOpen(false); setShowLog(true); setManualStep(null); await refreshRun(); load(); }
-    catch (e) { setErr(String(e)); setSendOpen(false); }
+    const target = sendTarget;
+    try {
+      await implementTask(target?.id ?? id);
+      setSendOpen(false);
+      if (!target) { setShowLog(true); setManualStep(null); await refreshRun(); load(); return; }
+      // A single check's own run — poll it on its own id, then just refresh the task.
+      setCheckBusy(target.id);
+      for (;;) {
+        const r = await getTaskRun(target.id);
+        if (r.state !== "running") break;
+        await new Promise((res) => setTimeout(res, 1500));
+      }
+      setCheckBusy(null);
+      load();
+    } catch (e) { setErr(String(e)); setSendOpen(false); setCheckBusy(null); }
     finally { setSending(false); }
   };
 
@@ -470,7 +488,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         </>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <button className="btn btn-primary" disabled={!canRun} onClick={openSend}>{label}</button>
+          <button className="btn btn-primary" disabled={!canRun} onClick={() => openSend()}>{label}</button>
           <Info k="implement" />
           {!inTfs && t.kind === "task" && t.approvedAt && <span style={{ fontSize: 12, color: "var(--status-warning)" }}>🔒 נפתח אחרי שהמשימה תוקם ב-TFS</span>}
           {!t.active && <span style={{ fontSize: 12, color: "var(--ink-500)" }}>המשימה מושבתת</span>}
@@ -536,9 +554,18 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   );
 
   const buildResult = buildCheck && d.checkStatuses[buildCheck.id] && (buildCheck.checkResult || running) && (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12.5 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12.5, flexWrap: "wrap" }}>
       <span style={{ color: "var(--ink-500)" }}>Build:</span>
       <TaskStatusPill status={d.checkStatuses[buildCheck.id]!} />
+      {hasCode && !running && (
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 2, marginInlineStart: 6 }}>
+          <button className="btn btn-secondary btn-sm" disabled={checkBusy === buildCheck.id}
+            onClick={() => openSend({ id: buildCheck.id, label: "Build" })}>
+            {checkBusy === buildCheck.id ? "מריץ Build…" : "🔁 הרץ Build שוב"}
+          </button>
+          <Info k="task_rebuild_check" />
+        </span>
+      )}
     </div>
   );
 
@@ -548,7 +575,19 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         קלוד כותב את הקוד ואת הבדיקות שלו בעותק מבודד של המאגר, על ענף משלה, ובסוף בונה (Build) את מה שהשינוי מתקמפל אליו. שום דבר לא נדחף ולא מתמזג לבד.
       </p>
       {runControls(attempted ? "✦ הרץ שוב" : "✦ תן ל-Claude לפתח")}
-      {s.state === "failed" && buildCheck?.checkResult === "failed" && <p style={{ fontSize: 12.5, color: "var(--status-critical)", marginTop: 10 }}>ה-Build נכשל — הבדיקות לא רצו. אפשר לתקן את ההוראה ולהריץ שוב.</p>}
+      {s.state === "failed" && buildCheck?.checkResult === "failed" && (() => {
+        const o = outcomeOf(buildCheck.seq);
+        const isEnv = o?.likelyCause === "environment";
+        return (
+          <div className="ob-note crit" style={{ marginTop: 10 }}>
+            <b>{isEnv ? "⚙ ה-Build נכשל מסיבת סביבה — לא באג בקוד" : "ה-Build נכשל — הבדיקות לא רצו"}</b>
+            <div style={{ marginTop: 4, whiteSpace: "pre-wrap" }}>
+              {o?.detail || (isEnv ? "חסר כלי או SDK כאן — לפרטים, פתחו את הבדיקה למטה." : "אפשר לתקן את ההוראה ולהריץ שוב.")}
+            </div>
+            {isEnv && <div style={{ marginTop: 6, fontSize: 11.5 }}>אחרי שמתקינים את מה שחסר: 🔁 הרץ Build שוב, למטה.</div>}
+          </div>
+        );
+      })()}
       {buildResult}
       {instructionBlock}
       {promptFold}
@@ -823,12 +862,12 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     <>
       {sendOpen && (
         <PromptPreviewModal
-          title={attempted ? "הרצה חוזרת — פיתוח המשימה" : "תן ל-Claude לפתח את המשימה"}
+          title={sendTarget ? `הרצה חוזרת — ${sendTarget.label}` : attempted ? "הרצה חוזרת — פיתוח המשימה" : "תן ל-Claude לפתח את המשימה"}
           data={sendData} loading={sendLoading} error={sendErr}
           loadingHint="מביא עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה, או על רשת איטית, זה יכול לקחת כמה דקות…"
-          onClose={() => { setSendOpen(false); setSendData(null); setSendErr(null); }}
+          onClose={() => { setSendOpen(false); setSendData(null); setSendErr(null); setSendTarget(null); }}
           onConfirm={confirmSend} confirming={sending}
-          confirmLabel="✦ שלח ל-Claude, תתחיל לפתח"
+          confirmLabel={sendTarget ? `✦ הרץ ${sendTarget.label} שוב` : "✦ שלח ל-Claude, תתחיל לפתח"}
         />
       )}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>

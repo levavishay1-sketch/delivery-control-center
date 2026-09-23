@@ -389,6 +389,9 @@ a { color: var(--color-accent); }
 .flow-badge.decision { background: #fff6df; color: #ba7208; }
 .flow-badge.waiting { background: #f2f4f7; color: #667085; }
 .flow-badge.review { background: #f5f3ff; color: #7c3aed; }
+/* the dependency tag on a graph node (TaskGraph Card) — same tones task-status.ts's dependencyTag uses */
+.flow-badge.critical { background: #fff0f0; color: #c93b3b; }
+.flow-badge.warning { background: #fff6df; color: #ba7208; }
 
 /* ---------- image-accurate: dashboard grid with right rail ---------- */
 .dash { display: grid; grid-template-columns: minmax(0,1fr) 288px; gap: 22px; align-items: start; }
