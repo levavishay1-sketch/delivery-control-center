@@ -118,6 +118,12 @@ export async function proveKit(name: string) {
     seq = Math.max(seq, ...all.map((x) => x.seq));
   };
   const row = async (id: string) => (await dbm.withTenant(clientId, (tx) => tx.select().from(T).where(eq(T.id, id)).limit(1)))[0]!;
+  /** What creating the task in TFS does: a work item id on it, and on its checks (they are recorded on the task's item). */
+  const inTfs = async (id: string) => {
+    const adoId = 90_000 + (await row(id)).seq;
+    await dbm.withTenant(clientId, (tx) => tx.update(T).set({ linkedAdoId: adoId }).where(eq(T.id, id)));
+    await dbm.withTenant(clientId, (tx) => tx.update(T).set({ linkedAdoId: adoId }).where(eq(T.parentTaskId, id)));
+  };
   const checksOf = async (id: string) => (await dbm.withTenant(clientId, (tx) => tx.select().from(T).where(eq(T.parentTaskId, id)))).sort((a, b) => a.seq - b.seq);
   const develop = async (taskId: string) => {
     const { runId } = await core.startFlowRun({ clientId, workitemId, kind: "implement", taskId, by });
@@ -145,6 +151,6 @@ export async function proveKit(name: string) {
     process.exit(failed ? 1 : 0);
   };
 
-  return { work, cache, clientId, workitemId, by, g, check, addTask, syncSeq, row, checksOf, develop, calls, callCount, branchOf, finish, core, ai, dbm, schema, eq };
+  return { work, cache, clientId, workitemId, by, g, check, addTask, syncSeq, row, inTfs, checksOf, develop, calls, callCount, branchOf, finish, core, ai, dbm, schema, eq };
 }
 

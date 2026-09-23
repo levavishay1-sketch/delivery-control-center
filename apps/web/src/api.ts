@@ -335,6 +335,14 @@ export type TaskStatus = {
   key: string; label: string;
   tone: "inactive" | "neutral" | "ai" | "active" | "warning" | "critical" | "healthy";
   reason?: string;
+  /** A dependency that is not done — shown beside the status, whatever the status is. */
+  dependency?: { label: string; tone: "critical" | "warning"; reason: string };
+};
+/** One step of a task's FLOW (task-flow-steps.ts): development, checks, review — and a dependency step wherever one came in after the task started. */
+export type TaskFlowStep = {
+  kind: "develop" | "dependency" | "checks" | "review";
+  state: "done" | "current" | "todo" | "failed" | "waiting";
+  round: number; past: boolean; deps?: number[]; at?: string; note?: string;
 };
 export type TaskFlowNode = {
   id: string; seq: number; kind: TaskKind; intent: string; appetite: string; state: string;
@@ -530,6 +538,7 @@ export type TaskDetail = {
   status: TaskStatus;
   /** Each check's own status, by its id. */
   checkStatuses: Record<string, TaskStatus>;
+  flow: TaskFlowStep[];
 };
 export const getTask = (id: string) => get<TaskDetail>(`/tasks/${id}`);
 /** The optional end-to-end check, added to one task — like the build, tests and regression checks every task gets. */

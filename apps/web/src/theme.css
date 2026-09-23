@@ -281,6 +281,29 @@ a { color: var(--color-accent); }
 .ov-step .n .ok { color: #1B9E5C; font-weight: 700; }
 .ov-step .lbl { font-size: 12px; font-weight: 700; color: #1B1741; margin-top: 3px; }
 .ov-arrow { color: #C7C4E3; align-self: center; font-size: 14px; }
+/* a task's FLOW (TaskDetail): a dependency step, and the marks of a step that fell, waits, or is going on */
+.ov-step.dep { border-color: #b9b3f7; background: #F5F4FF; }
+.ov-step.dep .lbl, .ov-step.dep .n { color: var(--color-accent); }
+.ov-step.dep.active { border-color: var(--color-accent); background: #EDEBFC; }
+.ov-step.past { opacity: .78; }
+.ov-step .n .bad { color: var(--status-critical); font-weight: 700; }
+.ov-step .n .wait { color: var(--status-warning); font-weight: 700; }
+.ov-step .n .now { color: var(--color-accent); }
+.ov-step .sub { font-size: 10.5px; font-weight: 500; color: var(--ink-500); margin-top: 2px; }
+/* the corner of a task's head: the status, and the dependency tag under it */
+.status-corner { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+/* the status stays in the head's top corner however long the title is — the title wraps instead */
+.page-head:has(.status-corner) { flex-wrap: nowrap; }
+.page-head:has(.status-corner) .titles { flex: 1 1 auto; min-width: 0; }
+.page-head:has(.status-corner) .head-actions { flex-shrink: 0; }
+.dep-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--border-hairline); font-size: 12.5px; }
+.dep-row:first-of-type { border-top: none; }
+.dep-row .dot { width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0; }
+.dep-row.open .dot { background: var(--status-critical); }
+.dep-row.open .w-title { color: var(--status-critical); }
+.dep-row.closed .dot { background: var(--status-active); }
+.dep-row.closed .w-title { color: var(--status-active); }
+.fold-btn { appearance: none; border: 1px solid var(--border-hairline); background: var(--surface-tint-2, #FBFAFE); border-radius: 9px; padding: 8px 12px; width: 100%; text-align: start; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink-700); cursor: pointer; display: flex; align-items: center; gap: 6px; margin-top: 8px; }
 .ov-divider { height: 1px; background: #EDEBFA; margin-top: 14px; }
 .ov-panel { background: #FBFAFE; padding: 18px 20px 22px; border-radius: 0 0 12px 12px; }
 

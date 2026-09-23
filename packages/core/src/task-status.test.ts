@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { dependencyBlockers, taskStatus, type StatusCheck, type StatusFacts } from "./task-status.ts";
+import { dependencyBlockers, dependencyTag, taskStatus, type StatusCheck, type StatusFacts } from "./task-status.ts";
 
 const f = (over: Partial<StatusFacts> = {}): StatusFacts => ({
-  kind: "task", state: "pending", active: true, approved: true, running: null, lastRunError: null, developed: false,
+  kind: "task", state: "pending", active: true, approved: true, inTfs: true, running: null, lastRunError: null, developed: false,
   checks: [], openDeps: [], builtWithout: [], onMoved: null, ...over,
 });
 const check = (seq: number, kind: string | null, result: string | null, cause: string | null = null): StatusCheck => ({ seq, kind, result, cause, active: true });
@@ -13,14 +13,20 @@ describe("taskStatus", () => {
     expect(taskStatus(f({ approved: false })).key).toBe("awaiting_approval");
   });
 
-  it("is red while it depends on something not developed yet, and says it can be developed anyway", () => {
-    const s = taskStatus(f({ openDeps: [{ seq: 2, developed: false }] }));
-    expect(s).toMatchObject({ key: "dependency_open", tone: "critical" });
-    expect(s.reason).toContain("#2");
+  it("cannot start before it exists in TFS — a task developed before that keeps its real status", () => {
+    expect(taskStatus(f({ inTfs: false }))).toMatchObject({ key: "awaiting_tfs", tone: "warning" });
+    expect(taskStatus(f({ inTfs: false, running: "develop" })).key).toBe("running");
+    expect(taskStatus(f({ inTfs: false, developed: true, checks: std("passed", "passed", "passed") })).key).toBe("review");
   });
 
-  it("is ready, built on a dependency that has code", () => {
-    expect(taskStatus(f({ openDeps: [{ seq: 3, developed: true }] }))).toMatchObject({ key: "ready", reason: "תיבנה על גבי #3" });
+  it("keeps its phase when it depends on something — the dependency is a tag beside it, not a status", () => {
+    expect(taskStatus(f({ openDeps: [{ seq: 2, developed: false }] })).key).toBe("ready");
+    expect(taskStatus(f({ running: "develop", openDeps: [{ seq: 2, developed: false }] })).key).toBe("running");
+  });
+
+  it("names a dependency with no code as the likely reason for an unclear requirement", () => {
+    const s = taskStatus(f({ developed: true, checks: [check(11, "tests", "failed", "requirement_ambiguity")], openDeps: [{ seq: 2, developed: false }] }));
+    expect(s.reason).toContain("#2 עוד לא פותחה");
   });
 
   it("names the phase of a run that is going on", () => {
@@ -61,6 +67,24 @@ describe("taskStatus", () => {
     expect(taskStatus(f({ kind: "check", checkResult: "waiting" })).label).toBe("מחכה לתלות");
     expect(taskStatus(f({ kind: "check", checkResult: "failed", checkCause: "environment" })).label).toBe("לא יכלה לרוץ כאן");
     expect(taskStatus(f({ kind: "check", checkResult: null })).key).toBe("check_not_run");
+  });
+});
+
+describe("dependencyTag", () => {
+  it("is there while a dependency is not done, whatever the phase, and gone once they all are", () => {
+    expect(dependencyTag(f())).toBeNull();
+    expect(dependencyTag(f({ openDeps: [{ seq: 2, developed: false }] }))).toMatchObject({ tone: "critical", label: "🔗 קיימת תלות · #2" });
+    expect(dependencyTag(f({ running: "test", openDeps: [{ seq: 2, developed: false }] }))).not.toBeNull();
+  });
+
+  it("is orange once every dependency has code, and red while any one has none", () => {
+    expect(dependencyTag(f({ openDeps: [{ seq: 3, developed: true }] }))!.tone).toBe("warning");
+    expect(dependencyTag(f({ openDeps: [{ seq: 3, developed: true }, { seq: 5, developed: false }] }))).toMatchObject({ tone: "critical", label: "🔗 קיימת תלות · #3, #5" });
+  });
+
+  it("is not drawn on a check, or on a task set aside", () => {
+    expect(dependencyTag(f({ kind: "check", openDeps: [{ seq: 2, developed: false }] }))).toBeNull();
+    expect(dependencyTag(f({ active: false, openDeps: [{ seq: 2, developed: false }] }))).toBeNull();
   });
 });
 

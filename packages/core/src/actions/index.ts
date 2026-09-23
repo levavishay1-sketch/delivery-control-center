@@ -63,7 +63,7 @@ async function openGap(e: ActionEntity, p: ActionParams) {
 const gapQuote = (d: string) => `"${d.length > 110 ? `${d.slice(0, 110)}…` : d}"`;
 
 async function taskRow(id: string) {
-  const [t] = await db.select({ id: task.id, seq: task.seq, intent: task.intent, approvedAt: task.approvedAt, kind: task.kind }).from(task).where(eq(task.id, id)).limit(1);
+  const [t] = await db.select({ id: task.id, seq: task.seq, intent: task.intent, approvedAt: task.approvedAt, kind: task.kind, linkedAdoId: task.linkedAdoId }).from(task).where(eq(task.id, id)).limit(1);
   return t ?? null;
 }
 
@@ -94,6 +94,8 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
       const t = await taskRow(e.id);
       if (!t) return { ok: false, reason: "המשימה לא נמצאה" };
       if (!t.approvedAt) return { ok: false, reason: "המשימה עדיין לא אושרה — קודם מאשרים אותה, ואז מפתחים" };
+      // The TFS item is what the work is tracked on; a check carries its task's.
+      if (t.linkedAdoId == null) return { ok: false, reason: "המשימה עוד לא הוקמה ב-TFS — אי אפשר לפתח לפני שיש לה work item. נסו שוב להקים אותה במסך המשימה" };
       return { ok: true };
     },
     estimate: async () => typical("execution", { input: 60_000, output: 6_000 }),

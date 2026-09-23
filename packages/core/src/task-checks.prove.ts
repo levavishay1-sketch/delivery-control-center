@@ -29,6 +29,10 @@ try {
   check("before approval: waiting for approval and the TFS setup", (await statusOf(A.id)).key === "awaiting_approval");
   await core.approveTask(clientId, A.id, by);
   await k.syncSeq();
+  const entityA = { kind: "task" as const, id: A.id, clientId, workitemId: k.workitemId };
+  check("approved, not in TFS yet: waiting for it, and development is refused", (await statusOf(A.id)).key === "awaiting_tfs" && !(await core.ACTIONS.implement.allowed(by, entityA, {})).ok);
+  await k.inTfs(A.id);
+  check("in TFS: development is allowed", (await core.ACTIONS.implement.allowed(by, entityA, {})).ok);
   let checksA = await k.checksOf(A.id);
   check("approval adds a build, a tests and a regression check, approved with it", JSON.stringify(checksA.map((c) => c.checkKind)) === JSON.stringify(["build", "tests", "regression"]) && checksA.every((c) => !!c.approvedAt), JSON.stringify(checksA.map((c) => [c.checkKind, !!c.approvedAt])));
   check("each carries its own copy of its instruction", checksA[0]!.prompt?.startsWith("Build לשינוי") === true && checksA[2]!.prompt?.startsWith("בדיקות רגרסיה") === true);
@@ -55,21 +59,23 @@ try {
   const B = await k.addTask("B", "write b.txt", { dependsOn: [A.id] });
   await core.approveTask(clientId, B.id, by);
   await k.syncSeq();
+  await k.inTfs(B.id);
   const readyB = await statusOf(B.id);
-  check("a dependent task whose dependency has code is ready, and says what it will be built on", readyB.key === "ready" && readyB.reason === "תיבנה על גבי #1", JSON.stringify(readyB));
+  check("a dependent task whose dependency has code is ready, with an orange dependency tag beside it", readyB.key === "ready" && readyB.dependency?.tone === "warning" && readyB.dependency.label === "🔗 תלויה ב-#1", JSON.stringify(readyB));
   await k.develop(B.id);
   const waitB = await statusOf(B.id);
   check("B passed everything and waits for A: 'finished — waiting for its dependency'", waitB.key === "waiting_dependency" && waitB.tone === "warning", JSON.stringify(waitB));
   const refused = await closeRefusal(B.id);
   check("B cannot be closed while A is not done", !!refused && refused.includes("#1 עוד לא הושלמה"), String(refused));
   check("A can be closed", (await closeRefusal(A.id)) === null);
-  check("once A is done, B is ready for review", (await statusOf(B.id)).key === "review", JSON.stringify(await statusOf(B.id)));
+  check("once A is done, B is ready for review, and the tag is gone", (await statusOf(B.id)).key === "review" && !(await statusOf(B.id)).dependency, JSON.stringify(await statusOf(B.id)));
   check("and can be closed", (await closeRefusal(B.id)) === null);
 
   // 4. A build that fails stops the tests, and the status says why.
   const Cx = await k.addTask("C", "write broken.txt");
   await core.approveTask(clientId, Cx.id, by);
   await k.syncSeq();
+  await k.inTfs(Cx.id);
   from = k.callCount();
   await k.develop(Cx.id);
   check("a failed build stops there: two calls, the tests never ran", k.calls(from).length === 2, String(k.calls(from).length));
@@ -85,7 +91,9 @@ try {
   await k.addTask("D uses E", "D works — needs e.txt", { parent: D.id });
   await core.approveTask(clientId, D.id, by);
   await k.syncSeq();
-  check("D depends on E, which has no code: 'a dependency exists', in red", (await statusOf(D.id)).key === "dependency_open" && (await statusOf(D.id)).tone === "critical");
+  await k.inTfs(D.id);
+  const readyD = await statusOf(D.id);
+  check("D depends on E, which has no code: ready, with a red 'a dependency exists' tag", readyD.key === "ready" && readyD.dependency?.tone === "critical", JSON.stringify(readyD));
   await k.develop(D.id);
   const waitD = await statusOf(D.id);
   check("D developed without E waits for it", waitD.key === "waiting_dependency", JSON.stringify(waitD));
@@ -98,6 +106,7 @@ try {
   await k.addTask("F check", "tamper with base.txt", { parent: F.id });
   await core.approveTask(clientId, F.id, by);
   await k.syncSeq();
+  await k.inTfs(F.id);
   const runF = await k.develop(F.id);
   check("what a check changed is put back, and said", g(cache, "status", "--porcelain", "--untracked-files=no") === "" && g(cache, "show", `${k.branchOf(F)}:base.txt`) === "base" && ((runF.log ?? []) as string[]).some((l) => l.includes("השינוי בוטל")));
 
@@ -109,6 +118,27 @@ try {
   const child = await k.addTask("P child", "write p.txt");
   await k.dbm.withTenant(clientId, (tx) => tx.update(k.schema.task).set({ parentTaskId: P.id }).where(k.eq(k.schema.task.id, child.id)));
   check("a task with sub-tasks gets no checks of its own — its sub-tasks do", (await core.ensureStandardChecks(clientId, P.id)).length === 0);
+
+  // 8. The task's steps: a dependency that arrives after the checks ran is a step of its own, and the checks run again after it.
+  const H = await k.addTask("H", "write h.txt");
+  const G = await k.addTask("G", "write g.txt", { dependsOn: [H.id] });
+  for (const x of [G, H]) { await core.approveTask(clientId, x.id, by); await k.syncSeq(); await k.inTfs(x.id); }
+  const steps = async () => (await core.taskFlowOf(clientId, G.id)).map((s) => `${s.kind}:${s.state}`).join(" ");
+  check("before any run: three steps, development first, nothing marked done", (await steps()) === "develop:current checks:todo review:todo", await steps());
+  await k.develop(G.id);
+  check("developed without H: development and checks done, review next", (await steps()) === "develop:done checks:done review:current", await steps());
+  check("the dependency tag stays on while it runs and after — red, H has no code", (await statusOf(G.id)).dependency?.tone === "critical");
+  await k.develop(H.id);
+  const pending = "develop:done checks:done dependency:current checks:todo review:todo";
+  check("H has code now: a dependency step comes in as the next thing to do", (await steps()) === pending, await steps());
+  check("and the tag turns orange — H has code but is not done", (await statusOf(G.id)).dependency?.tone === "warning");
+  await core.rollbackTask({ clientId, workitemId: k.workitemId, taskId: G.id, by });
+  check("after Rollback the dependency step is still the next thing to do", (await steps()) === pending, await steps());
+  await k.develop(G.id);
+  check("run again on H: the dependency step is done, and the checks ran again after it", (await steps()) === "develop:done checks:done dependency:done checks:done review:current", await steps());
+  const flowG = await core.taskFlowOf(clientId, G.id);
+  check("the first round stays as history, and the dependency step names H", flowG.slice(0, 2).every((s) => s.past) && JSON.stringify(flowG[2]!.deps) === JSON.stringify([(await k.row(H.id)).seq]));
+  check("H closes, then G closes — its review step is done", (await closeRefusal(H.id)) === null && (await closeRefusal(G.id)) === null && (await steps()).endsWith("review:done"), await steps());
 } finally {
   await k.finish();
 }

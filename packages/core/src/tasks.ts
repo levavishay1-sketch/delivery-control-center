@@ -129,7 +129,7 @@ export async function progressTask(input: {
   // Read before the transaction: it reads git and every task of the requirement. (Imported here, not at
   // the top: ai-assist.ts imports this module.)
   const depBlockers = input.to === "done" ? await (await import("./ai-assist.ts")).taskDoneBlockers(input.clientId, input.taskId) : [];
-  return withTenant(input.clientId, async (tx) => {
+  const out = await withTenant(input.clientId, async (tx) => {
     const [t] = await tx.select().from(task).where(sql`${task.id} = ${input.taskId}`).limit(1);
     if (!t) throw new Error("task not found");
     const from = t.state;
@@ -197,6 +197,9 @@ export async function progressTask(input: {
     await regenerateBrief(input.clientId, t.workitemId);
     return { taskId: input.taskId, from, to: input.to };
   });
+  // The run it was closed on went through review — the task's steps draw it that way.
+  if (input.to === "done") await (await import("./ai-assist.ts")).markLatestRun(input.taskId, { closedAt: new Date().toISOString() });
+  return out;
 }
 
 /**

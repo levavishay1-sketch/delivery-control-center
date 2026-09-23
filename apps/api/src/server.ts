@@ -109,6 +109,7 @@ import {
   taskBuiltOn,
   taskStatusesFor,
   taskStatusOf,
+  taskFlowOf,
   ensureStandardChecks,
   ChecksNotPassed,
   setTaskActive,
@@ -1063,8 +1064,8 @@ app.get("/tasks/:id", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
   const clientId = await taskClient(id);
-  const [detail, status] = await Promise.all([taskDetail(clientId, id), taskStatusOf(clientId, id)]);
-  return { ...detail, status: status.status, checkStatuses: status.checks };
+  const [detail, status, flow] = await Promise.all([taskDetail(clientId, id), taskStatusOf(clientId, id), taskFlowOf(clientId, id)]);
+  return { ...detail, status: status.status, checkStatuses: status.checks, flow };
 });
 
 // the optional end-to-end check — added to one task on request, like the three every task gets
