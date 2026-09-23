@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { cancelCodeQuestion, cancelProposal, getProposalPreview, runCodeQuestion, runProposal, type ChatMessage, type DeclaredCostPayload, type ProposalPayload } from "../api.ts";
 import { PromptPreviewModal } from "../ui.tsx";
-import { CostLine } from "./CostLine.tsx";
 import { errText } from "../screens/onboarding/labels.ts";
 import { chatChanged } from "./context.ts";
 import { capabilityLabel, effortLabel, fmtUsd, modelLabel } from "./labels.ts";
@@ -80,7 +79,8 @@ export function ProposalCard({ message, onUpdate }: { message: ChatMessage; onUp
         <div className="kv">
           {p.estimate && <><b>מודל</b><span>{modelLabel(p.estimate.model)} · מאמץ {effortLabel(p.estimate.effort)} (לפי המדיניות)</span></>}
           {p.estimate && <><b>עלות משוערת</b><span>{p.estimate.usd != null ? `כ-${fmtUsd(p.estimate.usd)}` : "לפי אורך ההרצה"} · נרשמת כ{capabilityLabel(p.estimate.capability)}</span></>}
-          {!p.estimate && <><b>עלות</b><span><CostLine costUsd={0} source="system" note="פעולה בלי מודל" /></span></>}
+          {/* Not a "$0" line: under a paid answer it reads as if the answer were free. It says what the approval itself costs. */}
+          {!p.estimate && p.costNote && <><b>עלות האישור</b><span>{p.costNote}</span></>}
           <b>נרשם</b><span>{p.recorded ?? "ביומן, בשם מי שאישר"}</span>
         </div>
         {p.error && <div className="ob-note crit" style={{ marginTop: 8 }}>{p.error}</div>}
