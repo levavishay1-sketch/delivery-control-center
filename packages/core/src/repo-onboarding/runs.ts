@@ -10,7 +10,8 @@ import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { recommend } from "../routing.ts";
 import { buildChangesDiff } from "./change-diff.ts";
 import { changeSummary, changedFiles, fileVersions } from "./changes.ts";
-import { NOTES_SYSTEM, noteSig, notesPrompt, parseNotes } from "./file-notes.ts";
+import { noteSig, notesPrompt, parseNotes } from "./file-notes.ts";
+import { requirePrompt } from "../prompts.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { appendRepoAiEvent } from "./events.ts";
 import { lastInputUser, markDisconnected, startClaudeSession, statusFile, stopClaudeSession, terminalLine, terminalState, writeTerminalInput } from "./session.ts";
@@ -564,7 +565,8 @@ async function ensureReviewNotes(ctx: Ctx, run: RunRow, review: StageRow | undef
     const dir = runtimeDir(ctx.runId);
     mkdirSync(dir, { recursive: true });
     const sys = path.join(dir, "file-notes-system.txt");
-    if (!existsSync(sys) || readFileSync(sys, "utf8") !== NOTES_SYSTEM) writeFileSync(sys, NOTES_SYSTEM, "utf8");
+    const system = (await requirePrompt("onboarding.file_notes")).body;
+    if (!existsSync(sys) || readFileSync(sys, "utf8") !== system) writeFileSync(sys, system, "utf8");
     const res = await runClaudeRaw(dir, notesPrompt({ repoName: ctx.repoName, files: missing, diff: built.text, decisions }), {
       ledger: {
         clientId: ctx.clientId, userId: run.triggeredBy, capability: "onboarding_file_notes", trigger: "session",

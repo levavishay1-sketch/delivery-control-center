@@ -9,6 +9,7 @@ import { writeChangesDiff } from "../repo-onboarding/change-diff.ts";
 import { writePullRequestCode } from "../pull-request-detail.ts";
 import { ACTIONS, ActionRefused, actionEntityFor, runAction, type ActionKey } from "../actions/index.ts";
 import { recommend } from "../routing.ts";
+import { requirePrompt } from "../prompts.ts";
 import { ChatError, chatDir, ensureSystemFile, messageView, resolveTopic, type ChatMessage, type TopicKind } from "./index.ts";
 
 /**
@@ -84,18 +85,6 @@ export async function proposalPreview(messageId: string, userId: string): Promis
 
 /* ── the expensive question: read the code, after the person said yes ── */
 
-const CODE_SYSTEM = `You answer one question about a software repository for a person who is not a developer and reads Hebrew. Answer in Hebrew, plainly, under 150 words, no markdown. You have read-only tools (Read, Grep, Glob) on the repository; read as little as possible — the person pays for every token — and say what you read. Put file paths, commands and code in backticks, never translated. If the repository does not contain the answer, say so.`;
-
-/** A pull request is not a repository: the folder holds the change, and the question is almost always whether it is sound. */
-const CHANGE_SYSTEM = `You answer one question about a change proposed to a software repository — a pull request — for a person who is not a developer and reads Hebrew. Answer in Hebrew, plainly, under 200 words, no markdown. You have read-only tools (Read, Grep, Glob) on a folder holding the change: \`changes.diff\` is the whole change in diff form, \`files/\` holds the changed files as they are after it, and \`pull-request.md\` says what the request is and what was left out. Read as little as you need — the person pays for every token — and say what you read. Put file paths, commands and code in backticks, never translated.
-
-When asked whether the change is good, safe, or worth merging: say in one or two sentences what it does, then name what would concern you — each with the file it is in and why it matters to this person — and if nothing concerns you, say that plainly rather than inventing a reservation. Judge only what is in front of you; if the part that would decide it was not read, say so. You are one reader and not an approval: the decision is the person's, and the review itself is submitted from the request's own screen.`;
-
-/** An onboarding run's files, asked about while the person is about to approve them: the question is almost always whether they are good. */
-const RUN_SYSTEM = `You answer one question about the changes an onboarding run made to a software repository, for a person who is not a developer and reads Hebrew. Answer in Hebrew, plainly, under 220 words, no markdown. The run is DCC's AI onboarding: Claude Code's \`/init\` wrote or changed files in an isolated copy of the repository — instructions for Claude such as CLAUDE.md, skills, hooks, a lint or test setup — and the person is about to approve them, after which DCC commits them and opens a pull request. You have read-only tools (Read, Grep, Glob): the working folder is the repository as it is now, and \`changes.diff\` (its path is in the question) is the whole change against where the run began — lock files are listed without their diff. Read as little as you need — the person pays for every token — and say what you read. Put file paths, commands and code in backticks, never translated.
-
-When asked whether the changes are good, useful, harmless, or safe to approve: say in one or two sentences what the run did overall, then one line per changed file or group — what it is for and whether it fits this repository. Check claims against the repository when that is cheap: a command named in CLAUDE.md exists in package.json, a path exists, a rule matches what the code does. Name what would concern you — something wrong, invented, or risky, or something that changes how the project builds or runs (a new dependency, a changed script, a lint rule that existing code would fail) — each with the file it is in and why it matters to this person. End with one sentence of recommendation: approve; approve after a specific fix (say which — they can ask Claude for it in the terminal while the review is open); or do not approve yet. If nothing concerns you, say so plainly rather than inventing a reservation. Judge only what you read, and say what you did not. You are one reader and not the approval: the decision is the person's.`;
-
 export async function runCodeQuestion(messageId: string, userId: string): Promise<{ message: ChatMessage; answer: ChatMessage }> {
   const { m, c } = await loadCard(messageId, userId, "declared_cost");
   const p = m.payload as unknown as DeclaredCostPayload;
@@ -107,7 +96,8 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
   // fetched from the host into a folder of its own.
   let dir: string | null = null;
   let holds = "";
-  let system = CODE_SYSTEM;
+  // Which of the three code-reading prompts (Prompts screen) answers it.
+  let systemKey = "chat.code_read.repo";
   const extraDirs: string[] = [];
   if (topic.kind === "wi" && topic.workitemId) {
     const r = await firstRepo(topic.clientId, topic.workitemId);
@@ -117,7 +107,7 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
     const [run] = await db.select({ workspacePath: repositoryOnboardingRun.workspacePath, baselineSha: repositoryOnboardingRun.baselineSha }).from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, topic.id)).limit(1);
     dir = run?.workspacePath ?? null;
     if (!dir) throw new ChatError("להרצה הזו אין עותק מבודד עדיין");
-    system = RUN_SYSTEM;
+    systemKey = "chat.code_read.onboarding_run";
     // The reading tools have no `git`, so the change is put on disk first: without
     // it the reader cannot tell which files the run touched, or what they were before.
     if (run?.baselineSha) {
@@ -139,7 +129,7 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
     const [prRepoId, num] = topic.id.split("/");
     if (!prRepoId || !num) throw new ChatError("חסר מזהה בקשת מיזוג");
     dir = path.join(chatDir(c.id), "change");
-    system = CHANGE_SYSTEM;
+    systemKey = "chat.code_read.pull_request";
     // Fetched before the card says "running": when the host refuses, the card
     // stays as it was and the person is told why, instead of a failed reading.
     try { holds = await writePullRequestCode(prRepoId, Number(num), dir); }
@@ -151,7 +141,7 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
   await setPayload(m, { ...p, status: "running" });
   const work = chatDir(c.id);
   mkdirSync(work, { recursive: true });
-  const sys = ensureSystemFile(work, "code-system.txt", system);
+  const sys = ensureSystemFile(work, "code-system.txt", (await requirePrompt(systemKey)).body);
   try {
     const res = await runClaudeRaw(dir, [`השאלה: ${p.question}`, `מה שצריך לבדוק: ${p.reason}`, holds].filter(Boolean).join("\n\n"), {
       ledger: {

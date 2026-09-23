@@ -15,7 +15,8 @@ import { placesFor, renderPlaces } from "../screens/index.ts";
 import { codeReadEstimate, codeReads } from "./proposals.ts";
 import { parseBlocks, type ParsedAction } from "./blocks.ts";
 import { gapsContext } from "./gaps.ts";
-import { GAPS_SUGGESTIONS, GAPS_SYSTEM, renderTranscript } from "./gaps-prompt.ts";
+import { GAPS_SUGGESTIONS, renderTranscript } from "./gaps-prompt.ts";
+import { renderPrompt, requirePrompt } from "../prompts.ts";
 
 /**
  * The one chat (claude-in-dcc §4–§7, design §2–§3).
@@ -271,21 +272,16 @@ export function ensureSystemFile(dir: string, name: string, text: string): strin
   return file;
 }
 
-const SYSTEM = `You are the one chat of DCC (Delivery Control Center), an internal system that manages AI-assisted software delivery around Azure DevOps and Claude Code. The person asking is not a developer and reads Hebrew. You answer in Hebrew.
-
-Before each question you may receive "הקשר המסך": which screen the person is on, what it is for, its glossary (every button and term, with what happens when it is pressed), and the facts currently shown on it. When nothing new is given, the screen is unchanged since the previous question.
-
-Rules:
-- Answer FROM the facts and the glossary. Never invent a fact, a number, a name or a state. If the facts do not contain what is asked, start your answer with the exact marker ${UNANSWERED_MARK} and then say briefly what you can say and where the answer would be found.
-- Short and plain, usually under 120 words. Plain text only: no headings, no bold or other markdown (short lines starting with "-" are fine). Explain consequences in everyday words ("if you press it, the tasks are proposed but not created").
-- Put commands, file paths, code and keyboard keys in backticks, exactly as written, never translated.
-- You never perform anything yourself, and you cannot read files, run code or browse.
-- SCREENS. The context may list "מסכים שאפשר לעבור אליהם מכאן". When the answer is not in the facts but one of those screens holds it, do NOT use the marker and do NOT tell the person to press a tab themselves: add ONE block, exactly in this form and with a listed key only: <goto key="KEY">one short sentence: what you are going to look at there</goto>. DCC takes the person to that screen and asks them your question again with its facts, and you answer it from those facts. Write nothing else in an answer that carries the block. Never the screen you are already on, never a key that is not listed, and never more than one block.
-- ACTIONS. The context may list "פעולות שאפשר להציע". If the person asks you to DO something that one of them does, answer in one or two sentences what will happen and add ONE block, exactly in this form, with only the listed parameters as JSON: <action key="KEY">{"param":"value"}</action>. The block becomes a card under your answer with an approve button; say that you are proposing it and that it runs only after their approval there. Never say or imply that you did it, and do not send them to a button on the screen instead. If no listed action does what is asked, say so and name the screen or button that does. Never invent an action.
-- CODE. If the answer lies in the repository's code (what a piece of code does, why something fails, where a thing is handled), do NOT use the marker: answer what the facts allow and add ONE block: <needs_code>one sentence: what would have to be read and why</needs_code>. Reading code is a separate, costlier call the person approves under your answer. On a pull request this covers the change itself — whether it is sound, what it might break, whether it is worth merging, what a particular file in it does — which is answered by reading the change and never from the screen's facts. The same holds on an onboarding run: whether the files it changed are good, useful, harmless or safe to approve is answered by reading them (the facts list only their names and sizes), so add the block even when the person is about to approve and asks "is it good?". The marker is for what none of these would answer — not the screen, not another screen of DCC, and not the code.
-- When a person's question is about a button or a term that the glossary covers, answer with the glossary's meaning and consequence.
-- LETTER. When asked to draft a message or letter to the client / the requester (מכתב ללקוח), write the whole message from the open gaps in the facts: a short greeting, the open questions numbered in plain business Hebrew (no code, no jargon), a closing line. It may be longer than the usual limit. DCC never sends it — the person copies it; say that in one sentence after the message. If the facts list no open gaps, say there is nothing to ask yet.
-- RECOMMENDATIONS. When asked what could be done better or more cheaply on this item (המלצות לייעול), answer from the facts only — the phase, the gaps, the tasks, the cost and the calls — as three to five short, specific points tied to those facts; never generic advice.`;
+/**
+ * The chat's standing rules — read from the prompt library for every call, so
+ * an edit on the Prompts screen reaches the next question. `hash` names the
+ * version a conversation's model session was started under (see
+ * `rolloverReason`).
+ */
+async function chatSystem(): Promise<{ text: string; hash: string }> {
+  const text = renderPrompt((await requirePrompt("chat.system")).body, { UNANSWERED_MARK });
+  return { text, hash: hash(text) };
+}
 
 function renderActions(defs: ActionDef[]): string {
   if (!defs.length) return "";
@@ -308,13 +304,11 @@ function renderGlossary(g: ScreenGlossary | null): string {
 }
 
 const hash = (s: string) => createHash("sha1").update(s).digest("hex");
-/** Which rules a conversation's model session was started under (kept in its baseline): when the rules change, the session must not continue — its history holds answers given under the old ones. */
-const SYSTEM_HASH = hash(SYSTEM);
 
-async function callModel(c: ConvRow, topic: ResolvedTopic, userId: string, prompt: { next: string; full: string }, question: string, opts: { expectedInput?: number; baselineUsd?: number }) {
+async function callModel(c: ConvRow, topic: ResolvedTopic, userId: string, system: string, prompt: { next: string; full: string }, question: string, opts: { expectedInput?: number; baselineUsd?: number }) {
   const dir = chatDir(c.id);
   mkdirSync(dir, { recursive: true });
-  const sys = ensureSystemFile(dir, "system.txt", SYSTEM);
+  const sys = ensureSystemFile(dir, "system.txt", system);
   const b = baselineOf(c);
   const run = (sessionId: string, resume: boolean, p: string) =>
     runClaudeRaw(dir, p, {
@@ -341,14 +335,15 @@ async function callModel(c: ConvRow, topic: ResolvedTopic, userId: string, promp
 
 /* ── roll-over (§6.5): a long or cold conversation continues in a new one ── */
 
-async function rollOver(c: ConvRow, topic: ResolvedTopic, userId: string, why: string): Promise<ConvRow> {
+async function rollOver(c: ConvRow, topic: ResolvedTopic, userId: string, why: string, system: string): Promise<ConvRow> {
   const b = baselineOf(c);
   let summary = "";
   if (b.started) {
     const dir = chatDir(c.id);
-    const sys = ensureSystemFile(dir, "system.txt", SYSTEM);
+    const sys = ensureSystemFile(dir, "system.txt", system);
     try {
-      const { text } = await runClaudeRaw(dir, "סכם את השיחה הזו עבור ההמשך שלה, בעברית, עד 120 מילים: מה נשאל, מה נענה והוחלט, ומה עדיין פתוח. טקסט פשוט בלבד.", {
+      const ask = (await requirePrompt("chat.rollover_summary")).body;
+      const { text } = await runClaudeRaw(dir, ask, {
         ledger: {
           clientId: c.clientId, userId, capability: "conversation_summary", trigger: "rollover", entity: { kind: "conversation", id: c.id },
           workitemId: topic.workitemId, screen: topic.screen, label: `סיכום לגלגול · ${why}`, conversationId: c.id, baseline: { costUsd: b.costUsd ?? 0 },
@@ -369,7 +364,8 @@ async function rollOver(c: ConvRow, topic: ResolvedTopic, userId: string, why: s
   return (await activeConversation(topic.clientId, topic.key, userId))!;
 }
 
-function rolloverReason(c: ConvRow): string | null {
+/** Why this conversation must continue in a new one, or null. `systemHash` is the chat's rules as they are now. */
+function rolloverReason(c: ConvRow, systemHash: string): string | null {
   const pol = chatPolicy();
   const b = baselineOf(c);
   if ((b.lastInputTokens ?? 0) >= pol.rolloverInputTokens) return `השיחה התארכה מעבר ל-${pol.rolloverInputTokens.toLocaleString("en-US")} טוקנים`;
@@ -377,7 +373,7 @@ function rolloverReason(c: ConvRow): string | null {
   if (b.started && cold > pol.rolloverColdDays * 864e5) return `שקט של יותר מ-${pol.rolloverColdDays} ימים`;
   // The chat's rules were updated since this session began: what the model
   // said under the old rules would otherwise steer every later answer.
-  if (b.started && b.systemHash !== SYSTEM_HASH) return "כללי הצ'אט התעדכנו";
+  if (b.started && b.systemHash !== systemHash) return "כללי הצ'אט התעדכנו";
   return null;
 }
 
@@ -431,9 +427,10 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
     }
 
     let rolledOver = false;
-    const why = rolloverReason(conv);
+    const system = await chatSystem();
+    const why = rolloverReason(conv, system.hash);
     if (why) {
-      conv = await rollOver(conv, topic, input.userId, why);
+      conv = await rollOver(conv, topic, input.userId, why, system.text);
       rolledOver = true;
       // the question moves with the person into the continuation
       if (userMsg) await withTenant(conv.clientId, (tx) => tx.update(conversationMessage).set({ conversationId: conv.id }).where(eq(conversationMessage.id, userMsg.id)));
@@ -457,7 +454,7 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
     const full = [...opening, contextPart, ask].filter(Boolean).join("\n\n");
     const next = [contextHash !== conv.contextHash ? contextPart : "", ask].filter(Boolean).join("\n\n");
 
-    const { res, fresh } = await callModel(conv, topic, input.userId, { next, full }, question, { expectedInput: b.lastInputTokens, baselineUsd: b.costUsd });
+    const { res, fresh } = await callModel(conv, topic, input.userId, system.text, { next, full }, question, { expectedInput: b.lastInputTokens, baselineUsd: b.costUsd });
     const unanswered = res.text.includes(UNANSWERED_MARK);
     const parsed = parseBlocks(res.text.replace(UNANSWERED_MARK, ""));
     // A move is made only to a place that was offered a moment ago; a key the
@@ -496,7 +493,7 @@ export async function askChat(input: { topic: TopicRef; userId: string; question
     const contextSize = res.meta.inputTokens == null ? b.lastInputTokens : (res.meta.inputTokens ?? 0) + (res.meta.cacheReadTokens ?? 0) + (res.meta.cacheWriteTokens ?? 0);
     await patchConversation(conv, {
       contextHash,
-      cliBaseline: { ...(fresh ? {} : b), costUsd: res.meta.costUsd ?? (fresh ? 0 : b.costUsd), lastInputTokens: contextSize, started: true, systemHash: SYSTEM_HASH, transcriptCursor },
+      cliBaseline: { ...(fresh ? {} : b), costUsd: res.meta.costUsd ?? (fresh ? 0 : b.costUsd), lastInputTokens: contextSize, started: true, systemHash: system.hash, transcriptCursor },
     });
     const call = res.callId ? (await db.select().from(claudeCall).where(eq(claudeCall.id, res.callId)).limit(1))[0] ?? null : null;
     return {
@@ -552,7 +549,7 @@ async function askGaps(conv: ConvRow, topic: ResolvedTopic, userId: string, ques
   const { text: facts, repoDir } = await gapsContext(topic.clientId, topic.workitemId!);
   const work = chatDir(conv.id);
   mkdirSync(work, { recursive: true });
-  const sys = ensureSystemFile(work, "gaps-system.txt", GAPS_SYSTEM);
+  const sys = ensureSystemFile(work, "gaps-system.txt", (await requirePrompt("gaps.conversation")).body);
   const prompt = [facts, renderTranscript(previous), `ההודעה החדשה של האדם:\n${question}`].join("\n\n");
   const res = await runClaudeRaw(repoDir ?? work, prompt, {
     ledger: {
