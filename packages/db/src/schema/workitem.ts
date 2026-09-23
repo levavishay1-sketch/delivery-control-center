@@ -277,6 +277,20 @@ export const task = pgTable(
      *  `done` on its own instead of sitting in `failed_checks` forever. */
     wasDone: boolean("was_done").notNull().default(false),
     /**
+     * What this task's branch was created from, recorded when it is created
+     * (see `task-base.ts`). `baseTaskId` is the dependency whose branch it
+     * starts from when that work is not in the default branch yet — null
+     * when it starts from the default branch. `baseSha` is the commit it
+     * starts from: the task's own work is `baseSha..branch`, and rolling it
+     * back returns there. `builtWithout` lists the dependencies whose work
+     * was not in that base, so the screen can say when it is worth
+     * developing again. All cleared on rollback — the next run decides anew.
+     */
+    baseTaskId: uuid("base_task_id").references((): AnyPgColumn => task.id, { onDelete: "set null" }),
+    baseBranch: text("base_branch"),
+    baseSha: text("base_sha"),
+    builtWithout: jsonb("built_without").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    /**
      * Task hierarchy. The DEPTH of this tree picks the TFS work-item type
      * off the Agile ladder Epic > Feature > User Story > Task, anchored at
      * the bottom: a 1-deep breakdown is all Tasks, 2-deep is User Story +

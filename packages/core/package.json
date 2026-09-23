@@ -10,6 +10,7 @@
   "scripts": {
     "demo": "tsx src/demo.ts",
     "prove:routing": "tsx src/routing.prove.ts",
+    "prove:built-on": "tsx src/task-base.prove.ts",
     "prove:retention": "tsx src/chat/retention.prove.ts"
   },
   "dependencies": {

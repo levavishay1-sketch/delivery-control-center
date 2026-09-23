@@ -16,6 +16,7 @@ import { inheritedChecksForBug } from "./bugs.ts";
 import { renderPrompt, requirePrompt } from "./prompts.ts";
 import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
+import { chooseBase, depLabel, type BasePlan, type DependencyFacts } from "./task-base.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -56,7 +57,9 @@ const REPO_CACHE = path.join(os.homedir(), ".dcc-repos");
 
 type FlowKind = "assess" | "breakdown" | "implement";
 
-const buffers = new Map<string, { lines: string[]; kind: FlowKind; workitemId: string; taskId?: string }>();
+/** A run's live transcript. `finished` — its row is written; the buffer stays a little while only so a
+ *  screen polling it gets the last lines, and must not be taken for a run still going. */
+const buffers = new Map<string, { lines: string[]; kind: FlowKind; workitemId: string; taskId?: string; finished?: boolean }>();
 
 function pushLine(runId: string | undefined, line: string) {
   if (!runId) return;
@@ -143,7 +146,7 @@ function viewOf(row: typeof flowRun.$inferSelect): FlowRunView {
  *  active (no DB hit during the spawn), otherwise the persisted row. */
 export async function getFlowRunView(workitemId: string): Promise<FlowRunView | null> {
   for (const [id, b] of buffers) {
-    if (b.workitemId === workitemId && !b.taskId) {
+    if (b.workitemId === workitemId && !b.taskId && !b.finished) {
       return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
     }
   }
@@ -156,7 +159,7 @@ export async function getFlowRunView(workitemId: string): Promise<FlowRunView | 
 /** The latest implementation run for one task. */
 export async function getTaskRunView(taskId: string): Promise<FlowRunView | null> {
   for (const [id, b] of buffers) {
-    if (b.taskId === taskId) {
+    if (b.taskId === taskId && !b.finished) {
       return { id, kind: b.kind, state: "running", lines: b.lines, result: null, error: null, startedAt: null, finishedAt: null };
     }
   }
@@ -192,7 +195,8 @@ export async function startFlowRun(input: {
   trigger?: CallTrigger;
 }): Promise<{ runId: string; alreadyRunning: boolean }> {
   for (const [id, b] of buffers) {
-    if (input.taskId ? b.taskId === input.taskId : b.workitemId === input.workitemId && !b.taskId) {
+    // A run that already finished is not "already running" — "run again" right after one (after a rollback, say) starts a new one.
+    if (!b.finished && (input.taskId ? b.taskId === input.taskId : b.workitemId === input.workitemId && !b.taskId)) {
       return { runId: id, alreadyRunning: true };
     }
   }
@@ -223,6 +227,8 @@ export async function startFlowRun(input: {
         log: buffers.get(runId)?.lines ?? [], finishedAt: new Date(),
       }).where(eq(flowRun.id, runId)).catch(() => {});
     } finally {
+      const done = buffers.get(runId);
+      if (done) done.finished = true;
       setTimeout(() => buffers.delete(runId), 20_000);
     }
   })();
@@ -1212,7 +1218,7 @@ export type ImplementResult = {
   affectedConsumers: { path: string; usedBy: string[]; reason: string }[];
   /** One entry per check bundled into this run, keyed by the same `seq`
    *  Claude was given — absent (not just empty) when the task had none. */
-  checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | null }[];
+  checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | "dependency_missing" | null }[];
 };
 
 /** Run a git command in `cwd`; resolves { code, out }.
@@ -1266,17 +1272,125 @@ const slug = (s: string) =>
 export const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
   `task/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
 
-/** How many commits a task's branch has beyond the repo's default branch —
- *  0 means "never implemented" or "implemented but produced no changes". */
-async function taskCommitCount(dir: string, branch: string): Promise<number> {
+/** The repository's default branch in a clone, e.g. "main". */
+async function defaultBranch(dir: string): Promise<string> {
+  return (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
+}
+
+/** Where a task's own work starts: the commit recorded when its branch was
+ *  created (it may be another task's branch, not the default one) — or, for
+ *  a branch made before that was recorded, where it leaves the default branch. */
+async function taskBaseSha(dir: string, branch: string, t: { baseSha: string | null }): Promise<string | null> {
+  if (t.baseSha && (await git(["merge-base", "--is-ancestor", t.baseSha, branch], dir)).code === 0) return t.baseSha;
+  return (await git(["merge-base", branch, `origin/${await defaultBranch(dir)}`], dir)).out || null;
+}
+
+/** How many commits of its own a task's branch has — beyond what it was built
+ *  on, never counting a dependency's work it started from. 0 means "never
+ *  implemented" or "implemented but produced no changes". */
+async function taskCommitCount(dir: string, branch: string, t: { baseSha: string | null }): Promise<number> {
   const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
   if (exists.code !== 0) return 0;
-  const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
-  const mergeBase = (await git(["merge-base", branch, `origin/${base}`], dir)).out;
-  if (!mergeBase) return 0;
-  const count = await git(["rev-list", "--count", `${mergeBase}..${branch}`], dir);
+  const from = await taskBaseSha(dir, branch, t);
+  if (!from) return 0;
+  const count = await git(["rev-list", "--count", `${from}..${branch}`], dir);
   return Number(count.out) || 0;
 }
+
+/* ── what a task's branch is built on (task-base.ts decides) ──────── */
+
+type TaskRow = typeof task.$inferSelect;
+
+/** The open tasks this one depends on, with what git knows about each. No clone = nothing developed yet. */
+async function dependencyFacts(clientId: string, t: Pick<TaskRow, "id">, reqKey: string | null | undefined, dir: string | null): Promise<(DependencyFacts & { baseSha: string | null })[]> {
+  const deps = await withTenant(clientId, (tx) => tx.select().from(task)
+    .where(sql`${task.id} in (select depends_on_task_id from task_dependency where task_id = ${t.id}) and ${task.state} <> 'dropped' and ${task.active} = true and ${task.kind} = 'task'`)
+    .orderBy(task.seq));
+  const def = dir ? await defaultBranch(dir) : null;
+  const out: (DependencyFacts & { baseSha: string | null })[] = [];
+  for (const d of deps) {
+    const branch = taskBranchName(reqKey, d);
+    const own = dir ? await taskCommitCount(dir, branch, d) : 0;
+    const merged = own > 0 && !!dir && (await git(["merge-base", "--is-ancestor", branch, `origin/${def}`], dir)).code === 0;
+    out.push({ id: d.id, seq: d.seq, intent: d.intent, state: d.state, branch: own > 0 ? branch : null, merged, baseSha: d.baseSha });
+  }
+  return out;
+}
+
+/** What a branch created now would start from. */
+async function planTaskBase(clientId: string, t: Pick<TaskRow, "id">, reqKey: string | null | undefined, dir: string | null): Promise<BasePlan> {
+  const deps = await dependencyFacts(clientId, t, reqKey, dir);
+  const holds = new Set<string>();
+  const open = deps.filter((d) => d.branch && !d.merged);
+  for (const a of open) for (const b of open) {
+    if (a !== b && dir && (await git(["merge-base", "--is-ancestor", b.branch!, a.branch!], dir)).code === 0) holds.add(`${a.id}|${b.id}`);
+  }
+  return chooseBase(deps, (a, b) => holds.has(`${a.id}|${b.id}`));
+}
+
+export type TaskBuiltOn = {
+  /** "built" — the branch exists with work of its own, and this is what it was built on; "planned" — what a first run would build on. */
+  state: "built" | "planned";
+  on: { id: string; seq: number; intent: string; branch: string } | null;
+  missing: { id: string; seq: number; intent: string; state: string; why: "not_developed" | "parallel" | "not_in_base" }[];
+  /** Built only: the task it is built on has gained commits since, which this branch does not have. */
+  onMoved: boolean;
+  /** Built only: of what it was built without, those whose work exists now — worth developing again. */
+  nowAvailable: { id: string; seq: number; intent: string }[];
+};
+
+/**
+ * What a task's branch is (or would be) built on — for the prompt, the task
+ * screen and the preview, from the same facts the run decides by. Reads git in
+ * the cache clone only; never clones and never checks anything out.
+ */
+export async function taskBuiltOn(clientId: string, taskId: string, dirHint?: string | null): Promise<TaskBuiltOn> {
+  const [t] = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.id, taskId)).limit(1));
+  if (!t) throw new Error("משימה לא נמצאה");
+  const [wi] = await withTenant(clientId, (tx) => tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, t.workitemId)).limit(1));
+  const r = await firstRepo(clientId, t.workitemId);
+  const dir = dirHint !== undefined ? dirHint : r ? existingCheckout({ ...r, localPath: null }) : null;
+  const branch = taskBranchName(wi?.key, t);
+  const own = dir ? await taskCommitCount(dir, branch, t) : 0;
+
+  if (own === 0) {
+    const plan = await planTaskBase(clientId, t, wi?.key, dir);
+    return {
+      state: "planned",
+      on: plan.on ? { id: plan.on.id, seq: plan.on.seq, intent: plan.on.intent, branch: plan.on.branch! } : null,
+      missing: plan.missing.map((m) => ({ id: m.dep.id, seq: m.dep.seq, intent: m.dep.intent, state: m.dep.state, why: m.why })),
+      onMoved: false, nowAvailable: [],
+    };
+  }
+
+  const ids = [...(t.baseTaskId ? [t.baseTaskId] : []), ...(t.builtWithout as string[])];
+  const rows = ids.length ? await withTenant(clientId, (tx) => tx.select().from(task).where(inArray(task.id, ids))) : [];
+  const byId = new Map(rows.map((x) => [x.id, x]));
+  const base = t.baseTaskId ? byId.get(t.baseTaskId) ?? null : null;
+  let onMoved = false;
+  if (base && dir && t.baseBranch && t.baseSha) {
+    const tip = (await git(["rev-parse", "--verify", "--quiet", t.baseBranch], dir)).out;
+    onMoved = !!tip && tip !== t.baseSha && (await git(["merge-base", "--is-ancestor", t.baseSha, tip], dir)).code === 0;
+  }
+  const without = (t.builtWithout as string[]).map((id) => byId.get(id)).filter((x): x is TaskRow => !!x && x.state !== "dropped");
+  const nowAvailable: TaskBuiltOn["nowAvailable"] = [];
+  for (const d of without) {
+    const has = dir ? (await taskCommitCount(dir, taskBranchName(wi?.key, d), d)) > 0 : false;
+    if (has || d.state === "done") nowAvailable.push({ id: d.id, seq: d.seq, intent: d.intent });
+  }
+  return {
+    state: "built",
+    on: base ? { id: base.id, seq: base.seq, intent: base.intent, branch: t.baseBranch ?? taskBranchName(wi?.key, base) } : null,
+    missing: without.map((d) => ({ id: d.id, seq: d.seq, intent: d.intent, state: d.state, why: "not_in_base" as const })),
+    onMoved, nowAvailable,
+  };
+}
+
+/** The two prompt values that say what the branch holds and what it does not. */
+const builtOnVars = (b: TaskBuiltOn) => ({
+  BUILT_ON: b.on ? depLabel(b.on) : "",
+  MISSING: b.missing.map(depLabel).join(", "),
+});
 
 /** DB reads only, no git — the prompt's TEXT never depends on whether the
  *  checkout succeeds, so the preview doesn't need to touch a clone. Shared
@@ -1289,7 +1403,7 @@ async function taskCommitCount(dir: string, branch: string): Promise<number> {
  *  independent of its parent's run) gets read-only framing instead: it
  *  is never told it may change code, because it never gets Edit/Write
  *  tools to do so (see `runClaudeJson`'s `write` flag in `runImplement`). */
-async function buildImplementPrompt(input: { clientId: string; workitemId: string; taskId: string }) {
+async function buildImplementPrompt(input: { clientId: string; workitemId: string; taskId: string }, built?: TaskBuiltOn | null) {
   const { t, wi, notes, checks } = await withTenant(input.clientId, async (tx) => {
     const [t] = await tx.select().from(task).where(eq(task.id, input.taskId)).limit(1);
     if (!t) throw new Error("task not found");
@@ -1328,6 +1442,8 @@ async function buildImplementPrompt(input: { clientId: string; workitemId: strin
     APPETITE: t.appetite,
     CHECKS: checks.map((c) => `#${c.seq}: ${(c.prompt ?? "").trim() || c.intent}`).join("\n"),
     CONTEXT: ctx,
+    // What the branch already holds of the work this task depends on, and what it does not.
+    ...(built && !isCheck ? builtOnVars(built) : {}),
   };
   const prompt = renderPrompt(tmpl.body, vars);
   const promptHe = tmpl.bodyHe ? renderPrompt(tmpl.bodyHe, vars) : prompt;
@@ -1336,15 +1452,20 @@ async function buildImplementPrompt(input: { clientId: string; workitemId: strin
 }
 
 export async function previewImplementPrompt(input: { clientId: string; workitemId: string; taskId: string }): Promise<{ prompt: string; promptHe: string; approved: boolean }> {
-  const { prompt, promptHe, t } = await buildImplementPrompt(input);
+  // The same facts a run would decide by, read from the clone as it is now — so the preview says what will be sent.
+  const built = await taskBuiltOn(input.clientId, input.taskId).catch(() => null);
+  const { prompt, promptHe, t } = await buildImplementPrompt(input, built);
   return { prompt, promptHe, approved: t.approvedAt != null };
 }
 
 async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<ImplementResult> {
-  const { prompt, instruction, t, wi, hasChecks } = await buildImplementPrompt(input);
+  const [t0] = await withTenant(input.clientId, (tx) => tx.select().from(task).where(eq(task.id, input.taskId)).limit(1));
+  if (!t0) throw new Error("task not found");
   // Defense in depth — the API route already refuses this before a run is
   // even queued, but a run only ever does what this function lets it do.
-  if (!t.approvedAt) throw new Error("המשימה טרם אושרה — אי אפשר לפתח לפני אישור.");
+  if (!t0.approvedAt) throw new Error("המשימה טרם אושרה — אי אפשר לפתח לפני אישור.");
+  const [wi] = await withTenant(input.clientId, (tx) => tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, input.workitemId)).limit(1));
+  const t = t0;
   const isCheck = t.kind === "check";
 
   const r = await firstRepo(input.clientId, input.workitemId);
@@ -1369,19 +1490,37 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
 
   await git(["reset", "--hard"], dir);
   await git(["clean", "-fd"], dir);
+  let built: TaskBuiltOn | null = null;
   if (isCheck) {
     const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
     if (exists.code !== 0) throw new Error(`אין branch בשם ${branch} — המשימה שהבדיקה הזו שייכת לה עוד לא פותחה, אין מה לאמת`);
     await git(["checkout", branch], dir);
+  } else if ((await taskCommitCount(dir, branch, t)) > 0) {
+    // Work of its own already there: continue on it, on what it was built on.
+    await git(["checkout", branch], dir);
+    built = await taskBuiltOn(input.clientId, input.taskId, dir);
   } else {
-    // start from a clean, up-to-date base
-    const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
-    await git(["checkout", base], dir);
-    await git(["pull", "--ff-only"], dir);
-    const made = await git(["checkout", "-b", branch], dir);
-    if (made.code !== 0) await git(["checkout", branch], dir);
+    // A first run, or one after a rollback: decide now what the branch starts
+    // from — the one dependency whose work exists but is not in the default
+    // branch yet, or the default branch (task-base.ts) — and record it.
+    const def = await defaultBranch(dir);
+    const plan = await planTaskBase(input.clientId, t, wi?.key, dir);
+    const from = plan.on?.branch ?? def;
+    const baseSha = (await git(["rev-parse", from], dir)).out;
+    await git(["checkout", "-B", branch, from], dir);
+    await withTenant(input.clientId, (tx) => tx.update(task).set({
+      baseTaskId: plan.on?.id ?? null, baseBranch: from, baseSha, builtWithout: plan.missing.map((m) => m.dep.id), updatedAt: new Date(),
+    }).where(eq(task.id, t.id)));
+    built = {
+      state: "built", onMoved: false, nowAvailable: [],
+      on: plan.on ? { id: plan.on.id, seq: plan.on.seq, intent: plan.on.intent, branch: from } : null,
+      missing: plan.missing.map((m) => ({ id: m.dep.id, seq: m.dep.seq, intent: m.dep.intent, state: m.dep.state, why: m.why })),
+    };
+    if (plan.on) pushLine(input.runId, `בונה על גבי הענף של משימה #${plan.on.seq} — העבודה שלה עוד לא בענף הראשי, וקלוד יראה אותה`);
+    if (plan.missing.length) pushLine(input.runId, `⚠ מפתח בלי ${plan.missing.map((m) => `#${m.dep.seq}`).join(", ")} — העבודה שלהן עוד לא קיימת בקוד. בדיקות שצריכות אותה יסומנו "מחכות לתלות"`);
   }
 
+  const { prompt, instruction, hasChecks } = await buildImplementPrompt(input, built);
   pushLine(input.runId, `הפרומט של המשימה:\n${instruction}`);
 
   const res = await runClaudeJson<{
@@ -1431,8 +1570,10 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
         const [row] = await tx.select({ id: task.id }).from(task)
           .where(and(eq(task.parentTaskId, t.id), eq(task.kind, "check"), eq(task.seq, cr.seq))).limit(1);
         if (!row) continue;
+        // A check that needs work this branch does not have yet waits for it — it did not fail.
+        const waiting = !cr.passed && cr.likelyCause === "dependency_missing";
         await tx.update(task).set({
-          checkResult: cr.passed ? "passed" : "failed",
+          checkResult: cr.passed ? "passed" : waiting ? "waiting" : "failed",
           ...(cr.passed ? { state: "done" as const } : {}),
           updatedAt: new Date(),
         }).where(eq(task.id, row.id));
@@ -1441,7 +1582,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
             clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
             actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:implement" },
             links: [{ rel: "task", ref: row.id }],
-            payload: { body: `${cr.passed ? "✓" : "✕"} בדיקה #${cr.seq}: ${cr.detail}${cr.likelyCause === "requirement_ambiguity" ? "\n(נראה כמו עמימות בדרישה, לא באג — כדאי לבדוק שלבים מוקדמים)" : ""}` },
+            payload: { body: `${cr.passed ? "✓" : waiting ? "⏸" : "✕"} בדיקה #${cr.seq}${waiting ? " מחכה לתלות" : ""}: ${cr.detail}${cr.likelyCause === "requirement_ambiguity" ? "\n(נראה כמו עמימות בדרישה, לא באג — כדאי לבדוק שלבים מוקדמים)" : ""}` },
           });
         }
       }
@@ -1473,7 +1614,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     payload: {
       body: isCheck
         ? `🔍 Claude אימת בדיקה #${t.seq}: ${t.intent.slice(0, 70)}\n\n${res.summary}`
-        : `🛠 Claude פיתח משימה #${t.seq}: ${t.intent.slice(0, 70)}\nbranch ${branch}${commit ? ` · commit ${commit}` : " · ללא שינויים"}${hasChecks ? ` · ${checkResults.filter((c) => c.passed).length}/${checkResults.length} בדיקות עברו` : ""}\n\n${res.summary}`,
+        : `🛠 Claude פיתח משימה #${t.seq}: ${t.intent.slice(0, 70)}\nbranch ${branch}${commit ? ` · commit ${commit}` : " · ללא שינויים"}${hasChecks ? ` · ${checkResults.filter((c) => c.passed).length}/${checkResults.length} בדיקות עברו${checkResults.some((c) => !c.passed && c.likelyCause === "dependency_missing") ? `, ${checkResults.filter((c) => !c.passed && c.likelyCause === "dependency_missing").length} מחכות לתלות` : ""}` : ""}\n\n${res.summary}`,
     },
   });
   await regenerateBrief(input.clientId, input.workitemId);
@@ -1483,7 +1624,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     filesChanged: changed.length ? changed : res.filesChanged ?? [],
     commit, testsRun: res.testsRun ?? null, followUps: res.followUps ?? [],
     affectedConsumers: (res.affectedConsumers ?? []).map((c) => ({ path: c.path, usedBy: c.usedBy ?? [], reason: c.reason })),
-    ...(checkResults.length ? { checks: checkResults.map((c) => ({ seq: c.seq, passed: c.passed, detail: c.detail ?? "", likelyCause: (c.likelyCause === "implementation" || c.likelyCause === "requirement_ambiguity") ? c.likelyCause : null })) } : {}),
+    ...(checkResults.length ? { checks: checkResults.map((c) => ({ seq: c.seq, passed: c.passed, detail: c.detail ?? "", likelyCause: (c.likelyCause === "implementation" || c.likelyCause === "requirement_ambiguity" || c.likelyCause === "dependency_missing") ? c.likelyCause : null })) } : {}),
   };
 }
 
@@ -1519,14 +1660,22 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
   if (exists.code !== 0) return { rolledBack: false, reason: "המשימה עדיין לא פותחה — אין מה לבטל" };
 
   await git(["checkout", branch], dir);
-  const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
-  await git(["fetch", "origin", base], dir);
-  const mergeBase = (await git(["merge-base", "HEAD", `origin/${base}`], dir)).out;
-  if (mergeBase) await git(["reset", "--hard", mergeBase], dir);
+  await git(["fetch", "origin", await defaultBranch(dir)], dir);
+  // Back to where the task's own work starts — which is the branch of the
+  // task it was built on, when it was built on one, never further.
+  const from = await taskBaseSha(dir, branch, t);
+  if (from) await git(["reset", "--hard", from], dir);
   await git(["clean", "-fd"], dir);
 
+  // What it was built on is forgotten too: the next run decides again, from
+  // what exists by then — this is how a task developed before its dependency
+  // comes to build on it once that dependency has been developed.
   await withTenant(input.clientId, (tx) =>
-    tx.update(task).set({ state: t.state === "in_progress" ? "pending" : t.state, updatedAt: new Date() }).where(eq(task.id, input.taskId)),
+    tx.update(task).set({
+      state: t.state === "in_progress" ? "pending" : t.state,
+      baseTaskId: null, baseBranch: null, baseSha: null, builtWithout: [],
+      updatedAt: new Date(),
+    }).where(eq(task.id, input.taskId)),
   );
 
   // The task is meant to look exactly like it never ran — no live "here's
@@ -1560,7 +1709,13 @@ export function httpsRepoUrl(remote: string): string | null {
   return null;
 }
 
-export type PushResult = { pushed: boolean; reason?: string; branch?: string; branchUrl?: string; compareUrl?: string };
+export type PushResult = {
+  pushed: boolean; reason?: string; branch?: string; branchUrl?: string; compareUrl?: string;
+  /** The branch a pull request for it should target: the default branch, or the branch of the task it is built on. */
+  base?: string;
+  /** Something the person must know before opening the request — said in words. */
+  note?: string;
+};
 
 /**
  * Push a task's branch to the repo's real remote — the one and only step
@@ -1587,7 +1742,7 @@ export async function pushTask(input: { clientId: string; workitemId: string; ta
   if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
 
   const branch = taskBranchName(wi?.key, t);
-  const commits = await taskCommitCount(dir, branch);
+  const commits = await taskCommitCount(dir, branch, t);
   if (commits === 0) return { pushed: false, reason: "אין קוד מומש על המשימה הזו — אין מה לדחוף" };
 
   await git(["checkout", branch], dir);
@@ -1595,7 +1750,21 @@ export async function pushTask(input: { clientId: string; workitemId: string; ta
   if (res.code !== 0) return { pushed: false, reason: `push נכשל: ${res.out.slice(0, 400)}` };
 
   const remote = (await git(["remote", "get-url", "origin"], dir)).out;
-  const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
+  const def = await defaultBranch(dir);
+  // A task built on another task's branch is reviewed against that branch —
+  // against the default one its request would carry the other task's work too.
+  // Once that work is in the default branch, the default branch is right again.
+  let base = def;
+  let note: string | undefined;
+  if (t.baseTaskId && t.baseBranch && t.baseBranch !== def) {
+    await git(["fetch", "origin", def], dir, { timeoutMs: 25_000 });
+    const merged = (await git(["merge-base", "--is-ancestor", t.baseBranch, `origin/${def}`], dir)).code === 0;
+    const onHost = (await git(["ls-remote", "--exit-code", "--heads", "origin", t.baseBranch], dir, { timeoutMs: 25_000 })).code === 0;
+    const [on] = await withTenant(input.clientId, (tx) => tx.select({ seq: task.seq }).from(task).where(eq(task.id, t.baseTaskId!)).limit(1));
+    const label = on ? `#${on.seq}` : "המשימה שהיא בנויה עליה";
+    if (!merged && onHost) base = t.baseBranch;
+    else if (!merged) note = `המשימה בנויה על גבי הענף של ${label}, והענף הזה לא נמצא ב-GitHub. אם ${label} עוד לא נדחפה — דחפו אותה קודם, ואז פתחו את בקשת המיזוג של המשימה הזו מול הענף שלה (${t.baseBranch}); בקשה מול ${def} תכלול גם את העבודה של ${label}. אם ${label} כבר מוזגה — פתחו מול ${def}.`;
+  }
   const httpsBase = httpsRepoUrl(remote);
   const branchUrl = httpsBase ? `${httpsBase}/tree/${encodeURIComponent(branch)}` : undefined;
   const compareUrl = httpsBase ? `${httpsBase}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}?expand=1` : undefined;
@@ -1608,7 +1777,7 @@ export async function pushTask(input: { clientId: string; workitemId: string; ta
   });
   await regenerateBrief(input.clientId, input.workitemId);
 
-  return { pushed: true, branch, branchUrl, compareUrl };
+  return { pushed: true, branch, branchUrl, compareUrl, base, ...(note ? { note } : {}) };
 }
 
 /* ── deleting a task: surgical, never a silent cascade ───────────────
@@ -1697,7 +1866,7 @@ export async function precheckTaskDelete(clientId: string, workitemId: string, t
   const commitCounts = new Map<string, number>();
   if (dir) {
     for (const t of subtreeRows) {
-      commitCounts.set(t.id, await taskCommitCount(dir, taskBranchName(wi?.key, t)));
+      commitCounts.set(t.id, await taskCommitCount(dir, taskBranchName(wi?.key, t), t));
     }
   }
 

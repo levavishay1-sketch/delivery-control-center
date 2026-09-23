@@ -106,6 +106,7 @@ import {
   startResearchWork,
   finishResearchWork,
   previewImplementPrompt,
+  taskBuiltOn,
   ChecksNotPassed,
   setTaskActive,
   checkAdoRemovedState,
@@ -1061,6 +1062,13 @@ app.get("/tasks/:id", async (req) => {
 // render (never run) the implementation prompt — same "what will be sent"
 // preview pattern as assess/breakdown. Also reports whether the task is
 // approved yet, so the UI can gate the send action on it.
+// what the task's branch is (or would be) built on, and what it is developed without — read-only git
+app.get("/tasks/:id/built-on", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  return taskBuiltOn(await taskClient(id), id);
+});
+
 app.get("/tasks/:id/implement-preview", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
