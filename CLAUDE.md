@@ -129,6 +129,18 @@ two subjects, ask. At the start of each request, say in one line which branch it
 goes onto and why. Before the first edit on a branch behind `master`, run
 `git merge origin/master`; if that conflicts, stop and tell the user.
 
+**Every branch always tracks current `master` — not only at the moment it was
+created.** The only reason to build on something other than current `master` is
+the documented hierarchy above (a `task/` branch off its `project/` branch); there
+is no other excuse. In one long session it is normal to have several `fix/`
+branches open at once, all sharing the one dev server the user has open — the
+moment ANY of them merges (yours or not), `git merge origin/master` into every
+other branch you are still working on before its next edit or restart, not only
+when it was first cut. A branch that falls behind its own already-merged sibling
+silently resurrects bugs that sibling already fixed — confirmed live 2026-09-23,
+where a stale `fix/` branch made an already-merged, already-verified fix look
+broken again.
+
 **Branch names:** `<type>/<short-description>`, lowercase English with hyphens.
 
 | prefix | opened by | example |
