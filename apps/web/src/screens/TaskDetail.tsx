@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getTask, getTaskRun, implementTask, previewImplement, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
+  getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
-  type FlowRun, type ImplementResult, type TaskDetail as TD, type TaskDeletePrecheck,
+  type FlowRun, type ImplementResult, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
 import { CardTitle, PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
@@ -44,6 +44,60 @@ const Transcript = ({ lines }: { lines: string[] }) => {
   );
 };
 
+const depName = (x: { seq: number; intent: string }) => `#${x.seq} — ${x.intent.slice(0, 70)}`;
+
+/**
+ * What the task's branch is built on, when it depends on work that is not in
+ * the main branch yet. Before the first run: what it will be built on and what
+ * it will be developed without. After: what it was built on, and when it is
+ * worth developing again (the task it is built on moved, or what was missing
+ * exists now) — the one way to take that in is Rollback and run again.
+ */
+function BuiltOnCard({ b, nav }: { b: TaskBuiltOn; nav: (h: string) => void }) {
+  const link = (x: { id: string; seq: number; intent: string }) => <span key={x.id} className="w-title" onClick={() => nav(`#/task/${x.id}`)}>{depName(x)}</span>;
+  const planned = b.state === "planned";
+  return (
+    <Card>
+      <CardTitle info="task_built_on" style={{ marginBottom: 8 }}>{planned ? "על מה המשימה תיבנה" : "על מה המשימה נבנתה"}</CardTitle>
+      {b.on && (
+        <p style={{ fontSize: 13, marginBottom: 8 }}>
+          {planned ? "כשתפתחו אותה, היא תיבנה על גבי הענף של " : "נבנתה על גבי הענף של "}{link(b.on)}
+          {planned ? `. העבודה של #${b.on.seq} עוד לא בענף הראשי — קלוד יראה אותה ויבנה עליה.` : "."}
+        </p>
+      )}
+      {b.onMoved && b.on && (
+        <p style={{ fontSize: 12.5, color: "var(--status-warning)", marginBottom: 8 }}>
+          ⚠ ל-#{b.on.seq} נוספו שינויים אחרי שהמשימה הזו נבנתה, והם לא בענף שלה. כדי לכלול אותם: "↩ Rollback" ואז להריץ שוב.
+        </p>
+      )}
+      {b.missing.length > 0 && (
+        <>
+          <p style={{ fontSize: 13, marginBottom: 4 }}>{planned ? "תפותח בלי העבודה של:" : "פותחה בלי העבודה של:"}</p>
+          <ul style={{ margin: "0 0 8px", paddingInlineStart: 18, fontSize: 12.5 }}>
+            {b.missing.map((m) => (
+              <li key={m.id} style={{ marginBottom: 3 }}>
+                {link(m)}
+                <span style={{ color: "var(--ink-400)" }}> — {m.why === "parallel" ? "פותחה בנפרד מהענף שהמשימה נבנית עליו; אי אפשר לבנות על שתיהן בלי למזג אותן קודם" : m.why === "not_developed" ? "עוד לא פותחה" : "לא הייתה בענף כשהמשימה נבנתה"}</span>
+              </li>
+            ))}
+          </ul>
+          {planned ? (
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)" }}>
+              אפשר לפתח בכל זאת: קלוד יכתוב מול הצורה שהעבודה החסרה כנראה תקבל ויפרט את ההנחות שלו. בדיקה שצריכה את העבודה הזו תסומן "מחכה לתלות", לא "נכשלה". כשהתלות תפותח — "↩ Rollback" ולהריץ שוב, והמשימה תיבנה עליה.
+            </p>
+          ) : b.nowAvailable.length > 0 ? (
+            <p style={{ fontSize: 12.5, color: "var(--status-warning)" }}>
+              ⚠ {b.nowAvailable.map((x) => `#${x.seq}`).join(", ")} פותחה מאז. כדי שהמשימה תיבנה עליה: "↩ Rollback" ואז להריץ שוב.
+            </p>
+          ) : (
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)" }}>כשהן יפותחו, "↩ Rollback" והרצה חוזרת יבנו את המשימה עליהן.</p>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 const Card = ({ children, tone }: { children: React.ReactNode; tone?: "crit" | "ok" }) => (
   <div style={{
     border: `1px solid ${tone === "crit" ? "var(--status-critical)" : tone === "ok" ? "var(--status-healthy)" : "var(--border-hairline)"}`,
@@ -66,7 +120,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [rollingBack, setRollingBack] = useState(false);
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
-  const [pushResult, setPushResult] = useState<{ pushed: boolean; reason?: string; branchUrl?: string; compareUrl?: string } | null>(null);
+  const [pushResult, setPushResult] = useState<{ pushed: boolean; reason?: string; branchUrl?: string; compareUrl?: string; base?: string; note?: string } | null>(null);
+  const [builtOn, setBuiltOn] = useState<TaskBuiltOn | null>(null);
   // The same picture the onboarding stages draw, for this task's branch.
   const [codeMap, setCodeMap] = useState<{ codeMap: CodeMap | null; branch: string | null; reason?: string } | null>(null);
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
@@ -104,7 +159,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [adoRecheckMsg, setAdoRecheckMsg] = useState<string | null>(null);
   const adoCheckedOnLoad = useRef(false);
 
-  const load = useCallback(() => { getTask(id).then(setD).catch((e) => setErr(String(e))); }, [id]);
+  const load = useCallback(() => {
+    getTask(id).then(setD).catch((e) => setErr(String(e)));
+    getTaskBuiltOn(id).then(setBuiltOn).catch(() => setBuiltOn(null));
+  }, [id]);
   const loadPrompt = useCallback(() => { previewImplement(id).then(setPromptPreview).catch(() => setPromptPreview(null)); }, [id]);
   const loadCodeMap = useCallback(() => { getTaskCodeMap(id).then(setCodeMap).catch(() => setCodeMap(null)); }, [id]);
   const refreshRun = useCallback(async () => {
@@ -152,6 +210,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       "המשימה": d.task.intent, "מספר": d.task.seq, "סוג": d.task.kind === "check" ? "בדיקה" : "משימה", "מצב": d.task.state, "גודל": d.task.appetite,
       "אושרה": d.task.approvedAt ? "כן" : "עדיין לא", "הדרישה": d.requirement.title, "משימת אב": d.parent ? `#${d.parent.seq}: ${d.parent.intent}` : "(אין)",
       "חסומה על ידי": d.blockedBy.map((t) => `#${t.seq}: ${t.intent}`), "מאגרים": d.repos.map((r) => r.name),
+      ...(builtOn && (builtOn.on || builtOn.missing.length) ? {
+        [builtOn.state === "built" ? "נבנתה על גבי" : "תיבנה על גבי"]: builtOn.on ? `הענף של #${builtOn.on.seq}: ${builtOn.on.intent}` : "הענף הראשי",
+        [builtOn.state === "built" ? "פותחה בלי" : "תפותח בלי"]: builtOn.missing.map((m) => `#${m.seq}: ${m.intent}`),
+      } : {}),
       "הרצה אחרונה": run ? `${run.kind} — ${run.state}` : "(אין)",
       status: d.task.state, nextStep: !d.task.approvedAt ? "לאשר את המשימה, ואז להריץ את הפיתוח" : d.task.state === "done" ? "המשימה הושלמה" : d.task.state === "failed_checks" ? "בדיקות נכשלו — להחליט אם לתקן או לאשר בכל זאת" : "להריץ את הפיתוח, ואז לדחוף את הענף",
     },
@@ -609,7 +671,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         </Card>
       )}
 
-      {blockedOpen.length > 0 && (
+      {builtOn && (builtOn.on || builtOn.missing.length > 0) && t.kind !== "check" && <BuiltOnCard b={builtOn} nav={nav} />}
+      {!builtOn && blockedOpen.length > 0 && (
         <Card tone="crit">
           <p style={{ fontSize: 13, marginBottom: 8 }}>המשימה תלויה ב-{blockedOpen.length} משימות שטרם הושלמו:</p>
           <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5 }}>
@@ -681,12 +744,12 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
                   {impl.checks && impl.checks.length > 0 && (
                     <div className="field" style={{ marginBottom: 12 }}>
-                      <label>תוצאות הבדיקות ({impl.checks.filter((c) => c.passed).length}/{impl.checks.length} עברו)<Info k="check_results" /></label>
+                      <label>תוצאות הבדיקות ({impl.checks.filter((c) => c.passed).length}/{impl.checks.length} עברו{impl.checks.some((c) => !c.passed && c.likelyCause === "dependency_missing") ? `, ${impl.checks.filter((c) => !c.passed && c.likelyCause === "dependency_missing").length} מחכות לתלות` : ""})<Info k="check_results" /></label>
                       <div className="rowlist" style={{ marginTop: 4 }}>
                         {impl.checks.map((c) => (
                           <div key={c.seq} className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4, paddingBlock: 8 }}>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <Pill tone={c.passed ? "healthy" : "critical"}>{c.passed ? "✓ עברה" : "✕ נכשלה"}</Pill>
+                              <Pill tone={c.passed ? "healthy" : c.likelyCause === "dependency_missing" ? "warning" : "critical"}>{c.passed ? "✓ עברה" : c.likelyCause === "dependency_missing" ? "⏸ מחכה לתלות" : "✕ נכשלה"}</Pill>
                               <span style={{ fontSize: 12, color: "var(--ink-500)" }}>בדיקה #{c.seq}</span>
                             </div>
                             <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{c.detail}</p>
@@ -694,7 +757,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                               <p style={{ fontSize: 11.5, color: "var(--status-warning)" }}>
                                 {c.likelyCause === "requirement_ambiguity"
                                   ? "⚠ יתכן שהסיבה היא עמימות בדרישה או בשלבים המקדימים, לא תקלה במימוש — כדאי לבדוק את הדרישה לפני שמנסים שוב."
-                                  : "⚠ כנראה תקלת מימוש — כדאי לבדוק את הקוד שנכתב."}
+                                  : c.likelyCause === "dependency_missing"
+                                    ? "אי אפשר היה לבדוק: הבדיקה צריכה עבודה של משימה שהמשימה הזו תלויה בה, ושעוד לא בענף. זו לא תקלה — כשהתלות תפותח, \"↩ Rollback\" והרצה חוזרת יבדקו אותה."
+                                    : "⚠ כנראה תקלת מימוש — כדאי לבדוק את הקוד שנכתב."}
                               </p>
                             )}
                           </div>
@@ -785,8 +850,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                             <p className="r">✓ נדחף ל-GitHub.</p>
                             <p style={{ display: "flex", gap: 14, marginTop: 4 }}>
                               {pushResult.branchUrl && <a href={pushResult.branchUrl} target="_blank" rel="noreferrer">צפה ב-branch ↗</a>}
-                              {pushResult.compareUrl && <a href={pushResult.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request ↗</a>}
+                              {pushResult.compareUrl && <a href={pushResult.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request{pushResult.base ? ` מול ${pushResult.base}` : ""} ↗</a>}
                             </p>
+                            {pushResult.note && <p className="r" style={{ color: "var(--status-warning)", marginTop: 6 }}>⚠ {pushResult.note}</p>}
                           </>
                         ) : (
                           <p className="r" style={{ color: "var(--status-critical)" }}>{pushResult.reason ?? "ה-push נכשל."}</p>
@@ -882,7 +948,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                     <div className="callout" style={{ borderColor: "var(--status-critical)", marginBottom: 12 }}>
                       <div className="body">
                         <p className="r" style={{ color: "var(--status-critical)" }}>
-                          יש בדיקות שלא עברו — אי אפשר לסמן כהושלם בלי לטפל בהן קודם, אלא אם מאשרים ידנית למרות הכישלון.
+                          יש בדיקות שלא עברו או שמחכות לתלות — אי אפשר לסמן כהושלם בלי לטפל בהן קודם, אלא אם מאשרים ידנית בכל זאת.
                         </p>
                         <ul style={{ margin: "6px 0 0", paddingInlineStart: 18, fontSize: 12.5 }}>
                           {d.children.filter((c) => c.kind === "check" && c.checkResult !== "passed").map((c) => (
@@ -982,6 +1048,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                           ? <Pill tone="healthy">עברה</Pill>
                           : c.checkResult === "failed"
                             ? <Pill tone="critical">נכשלה</Pill>
+                            : c.checkResult === "waiting"
+                              ? <Pill tone="warning">מחכה לתלות</Pill>
                             : c.linkedAdoId ? <Pill tone="healthy">תועד ב-Discussion</Pill> : <Pill tone="inactive">{STATE_HE[c.state] ?? c.state}</Pill>}
                       {!c.approvedAt && (
                         <button

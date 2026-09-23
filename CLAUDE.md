@@ -68,6 +68,7 @@ npm run -w @dcc/db dev:prove   # 9 checks: RLS wall + append-only + validation
 npm run -w @dcc/api smoke      # 8 end-to-end checks against the API
 npm run -w @dcc/core prove:routing    # routing proofs
 npm run -w @dcc/core prove:retention  # chat-retention proofs
+npm run -w @dcc/core prove:built-on   # a task developed before its dependency (own DB + git, safe with the API up)
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run -w @dcc/web build      # production build of the web app

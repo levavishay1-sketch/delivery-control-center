@@ -139,11 +139,16 @@ export async function progressTask(input: {
     }
 
     if (input.to === "done") {
-      const unresolved = await tx.select({ id: task.id, seq: task.seq, intent: task.intent }).from(task)
+      const unresolved = await tx.select({ id: task.id, seq: task.seq, intent: task.intent, checkResult: task.checkResult }).from(task)
         .where(and(eq(task.parentTaskId, input.taskId), eq(task.kind, "check"), eq(task.active, true), sql`${task.state} <> 'dropped'`, sql`${task.checkResult} is distinct from 'passed'`));
       if (unresolved.length > 0 && !input.overrideChecks) {
+        const waiting = unresolved.filter((u) => u.checkResult === "waiting");
+        const notPassed = unresolved.filter((u) => u.checkResult !== "waiting");
         throw new ChecksNotPassed(
-          `אי אפשר לסמן כהושלם — ${unresolved.length} בדיקות לא עברו: ${unresolved.map((u) => `#${u.seq}`).join(", ")}`,
+          `אי אפשר לסמן כהושלם — ${[
+            notPassed.length ? `${notPassed.length} בדיקות לא עברו: ${notPassed.map((u) => `#${u.seq}`).join(", ")}` : "",
+            waiting.length ? `${waiting.length} בדיקות מחכות לתלות שעוד לא פותחה: ${waiting.map((u) => `#${u.seq}`).join(", ")}` : "",
+          ].filter(Boolean).join("; ")}`,
           unresolved,
         );
       }
@@ -208,8 +213,10 @@ export async function syncTaskStateAfterCheckChange(clientId: string, parentTask
     const [parent] = await tx.select().from(task).where(sql`${task.id} = ${parentTaskId}`).limit(1);
     if (!parent || parent.kind === "check") return;
 
+    // A check waiting for a dependency's work did not fail: it does not move
+    // the task to failed_checks. It still keeps it from being done (progressTask).
     const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(task).where(
-      and(eq(task.parentTaskId, parentTaskId), eq(task.kind, "check"), eq(task.active, true), sql`${task.state} <> 'dropped'`, sql`${task.checkResult} is distinct from 'passed'`),
+      and(eq(task.parentTaskId, parentTaskId), eq(task.kind, "check"), eq(task.active, true), sql`${task.state} <> 'dropped'`, sql`${task.checkResult} is distinct from 'passed'`, sql`${task.checkResult} is distinct from 'waiting'`),
     );
     const unresolved = row?.n ?? 0;
     const now = new Date();

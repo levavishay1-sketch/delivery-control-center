@@ -394,7 +394,7 @@ export async function codeMapForWorkspace(dir: string, input: { branch?: string 
  *  inspected by name, without checking it out, so nothing about the shared
  *  clone changes just because a screen was opened. */
 export async function codeMapForTask(input: { clientId: string; workitemId: string; taskId: string }): Promise<{ codeMap: CodeMap | null; branch: string | null; reason?: string }> {
-  const [t] = await withTenant(input.clientId, (tx) => tx.select({ seq: task.seq, intent: task.intent }).from(task).where(eq(task.id, input.taskId)).limit(1));
+  const [t] = await withTenant(input.clientId, (tx) => tx.select({ seq: task.seq, intent: task.intent, baseSha: task.baseSha }).from(task).where(eq(task.id, input.taskId)).limit(1));
   if (!t) return { codeMap: null, branch: null, reason: "משימה לא נמצאה" };
   const [wi] = await withTenant(input.clientId, (tx) => tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, input.workitemId)).limit(1));
   const r = await firstRepo(input.clientId, input.workitemId);
@@ -405,6 +405,7 @@ export async function codeMapForTask(input: { clientId: string; workitemId: stri
   const branch = taskBranchName(wi?.key, t);
   const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
   if (exists.code !== 0) return { codeMap: null, branch, reason: "עוד לא נוצר ענף למשימה הזו" };
-  const codeMap = await codeMapForWorkspace(dir, { branch, ref: branch }).catch(() => null);
+  // A task built on another task's branch shows only its own commits, from where it started — not the other task's work under it.
+  const codeMap = await codeMapForWorkspace(dir, { branch, ref: branch, ...(t.baseSha ? { baselineSha: t.baseSha } : {}) }).catch(() => null);
   return { codeMap, branch };
 }

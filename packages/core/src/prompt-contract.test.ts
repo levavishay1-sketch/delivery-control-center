@@ -81,6 +81,26 @@ describe("the seeded library", () => {
     for (const t of [withChecks, without, check]) expect(t).not.toMatch(/\{\{/);
   });
 
+  it("takes the later edits to the development prompt, each landing on text that is there", () => {
+    // 0041 edits implement.task in place with replace(); an anchor that is not there would silently change nothing.
+    const later = readFileSync(new URL("../../db/migrations/0041_task_built_on.sql", import.meta.url), "utf8");
+    const edits = [...later.matchAll(/\$a\$([\s\S]*?)\$a\$,\s*\$b\$([\s\S]*?)\$b\$/g)].map((m) => [m[1]!, m[2]!] as const);
+    expect(edits.length).toBe(6);
+    let body = seeded["implement.task"]!.body, he = seeded["implement.task"]!.he!;
+    for (const [from, to] of edits) {
+      const inEn = body.includes(from), inHe = he.includes(from);
+      expect(inEn || inHe, from.slice(0, 60)).toBe(true);
+      if (inEn) body = body.replace(from, to); else he = he.replace(from, to);
+    }
+    expect(contractProblems("implement.task", body)).toEqual([]);
+    const vars = { INSTRUCTION: "do it", APPETITE: "small", CONTEXT: "ctx", CHECKS: "" };
+    expect(renderPrompt(body, { ...vars, BUILT_ON: "#2 (base)" })).toContain("BUILT ON — this branch starts from the branch of a task this one depends on, which is not in the default branch yet: #2 (base).");
+    expect(renderPrompt(body, { ...vars, MISSING: "#3 (later)" })).toContain("NOT HERE YET — this task depends on work that is not in this branch: #3 (later).");
+    expect(renderPrompt(body, { ...vars, CHECKS: "#4: x" })).toContain('"dependency_missing"');
+    // Nothing about dependencies when there are none — the prompt reads as it did before.
+    expect(renderPrompt(body, vars)).toBe(renderPrompt(seeded["implement.task"]!.body, vars));
+  });
+
   it("tells the breakdown whether it has the code", () => {
     const b = seeded["breakdown.tasks"]!.body;
     expect(renderPrompt(b, { HAS_REPO: true, REPO_NAME: "trade", REQUIREMENT: "r" })).toContain("You are in the repository (trade)");

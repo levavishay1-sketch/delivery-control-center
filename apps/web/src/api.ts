@@ -49,7 +49,8 @@ export type Task = {
   id: string; seq: number; kind: TaskKind; intent: string; appetite: string;
   state: "pending" | "in_progress" | "blocked" | "failed_checks" | "done" | "dropped";
   /** Check-kind rows only — the FACTUAL result Claude reported. */
-  checkResult: "passed" | "failed" | null;
+  /** "waiting" — it could not be verified yet: it needs work from a task this one depends on, which is not in the branch. */
+  checkResult: "passed" | "failed" | "waiting" | null;
   /** Set only when a human overrode/decided on the result directly — a
    *  null here with a checkResult present means "Claude's report, as-is". */
   checkResolvedBy: string | null;
@@ -429,7 +430,16 @@ export const updateTask = (id: string, body: { clientId: string; intent?: string
 export const editTask = (id: string, body: { clientId: string; intent?: string; appetite?: "small" | "standard" | "large"; prompt?: string; scopeChanged: boolean }) =>
   patch<{ updated: boolean; adoSynced: boolean }>(`/tasks/${id}`, body);
 export const rollbackTask = (id: string) => post<{ rolledBack: boolean; reason?: string; branch?: string; dir?: string; invalidatedRuns?: number }>(`/tasks/${id}/rollback`, {});
-export const pushTask = (id: string) => post<{ pushed: boolean; reason?: string; branch?: string; branchUrl?: string; compareUrl?: string }>(`/tasks/${id}/push`, {});
+export const pushTask = (id: string) => post<{ pushed: boolean; reason?: string; branch?: string; branchUrl?: string; compareUrl?: string; base?: string; note?: string }>(`/tasks/${id}/push`, {});
+/** What a task's branch is (or would be) built on, and what it is developed without. */
+export type TaskBuiltOn = {
+  state: "built" | "planned";
+  on: { id: string; seq: number; intent: string; branch: string } | null;
+  missing: { id: string; seq: number; intent: string; state: string; why: "not_developed" | "parallel" | "not_in_base" }[];
+  onMoved: boolean;
+  nowAvailable: { id: string; seq: number; intent: string }[];
+};
+export const getTaskBuiltOn = (id: string) => get<TaskBuiltOn>(`/tasks/${id}/built-on`);
 
 /* ── deleting a task: never a silent cascade ─────────────────────────
  * The backend refuses (409, with a precheck report) unless every risk
@@ -498,7 +508,7 @@ export const checkAdoRecheck = (taskId: string, clientId: string) =>
 /* ── one task ─────────────────────────────────────────────────────── */
 type TaskSlim = {
   id: string; seq: number; intent: string; state: string; kind?: TaskKind; linkedAdoId?: number | null; adoType?: string | null;
-  checkResult?: "passed" | "failed" | null; checkResolvedBy?: string | null; active?: boolean; approvedAt?: string | null;
+  checkResult?: "passed" | "failed" | "waiting" | null; checkResolvedBy?: string | null; active?: boolean; approvedAt?: string | null;
 };
 export type TaskDetail = {
   task: Task & { workitemId: string; clientId: string; acceptance: { given: string; when: string; then: string }[]; adoSyncedAt: string | null };
@@ -518,7 +528,7 @@ export type ImplementResult = {
   affectedConsumers: { path: string; usedBy: string[]; reason: string }[];
   /** Present when the run's task had checks bundled into its prompt —
    *  the routed-back, per-check verdict. */
-  checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | null }[];
+  checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | "dependency_missing" | null }[];
 };
 
 /* ── Bug ↔ Task links (bug-change-request-lifecycle) ─────────────── */

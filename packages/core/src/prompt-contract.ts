@@ -47,7 +47,7 @@ export const PROMPT_USES: Record<string, PromptUse> = {
     keeps: ['"seq"', '"parentSeq"', '"kind"', '"intent"', '"prompt"', '"appetite"', '"affectedPaths"', '"compiledComponents"', '"dependsOnSeq"'],
   },
   "implement.task": {
-    capability: "execution", vars: ["INSTRUCTION", "APPETITE", "CONTEXT"], optional: ["SHORT_TITLE", "AFFECTED_PATHS", "CHECKS"],
+    capability: "execution", vars: ["INSTRUCTION", "APPETITE", "CONTEXT"], optional: ["SHORT_TITLE", "AFFECTED_PATHS", "BUILT_ON", "MISSING", "CHECKS"],
     keeps: ['"summary"', '"filesChanged"', '"testsRun"', '"followUps"', '"affectedConsumers"', '"checks"', '"passed"', '"likelyCause"'],
   },
   "implement.check": {
