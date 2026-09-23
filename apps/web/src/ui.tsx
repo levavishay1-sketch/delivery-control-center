@@ -148,6 +148,20 @@ export function TaskStatusPill({ status, withReason = false }: { status: { label
   );
 }
 
+/**
+ * The dependency beside a task's status — while a task it depends on is not
+ * done, whatever the status is. One way everywhere a task is shown; decided on
+ * the server (task-status.ts `dependencyTag`).
+ */
+export function DependencyTagPill({ tag, withReason = false }: { tag: { label: string; tone: "critical" | "warning"; reason: string }; withReason?: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+      <Pill tone={tag.tone}>{tag.label}</Pill>
+      {withReason && <span style={{ fontSize: 11.5, color: tag.tone === "critical" ? "var(--status-critical)" : "var(--status-warning)" }}>{tag.reason}</span>}
+    </span>
+  );
+}
+
 export function Pill({ tone, children }: { tone: "warning" | "critical" | "active" | "healthy" | "ai" | "inactive" | "neutral"; children: ReactNode }) {
   return <span className={`pill ${tone}`}><span className="dot" />{children}</span>;
 }
@@ -182,13 +196,14 @@ export function StatusPill({ status }: { status: string }) {
  * screen is for (openspec/changes/info-hints) — required, so a screen without
  * one is a written decision (`null`), not an oversight.
  */
-export function PageHead({ title, sub, crumb, actions, info }: { title: ReactNode; sub?: string; crumb?: ReactNode; actions?: ReactNode; info: string | null }) {
+export function PageHead({ title, sub, crumb, actions, info, below }: { title: ReactNode; sub?: string; crumb?: ReactNode; actions?: ReactNode; info: string | null; below?: ReactNode }) {
   return (
     <div className="page-head">
       <div className="titles">
         {crumb && <p className="crumb">{crumb}</p>}
         <h1>{title}{info && <Info k={info} />}</h1>
         {sub && <p>{sub}</p>}
+        {below}
       </div>
       {actions && <div className="head-actions">{actions}</div>}
     </div>

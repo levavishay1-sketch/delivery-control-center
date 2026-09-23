@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { BaseEdge, Controls, MarkerType, Position, ReactFlow, type Edge, type EdgeProps, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { TaskFlow, TaskFlowNode } from "../api.ts";
-import { CopyBtn } from "../ui.tsx";
+import { CopyBtn, DependencyTagPill } from "../ui.tsx";
+import { Info } from "../claude/Info.tsx";
 
 /** The one permitted connector shape (spec, 2026-09-12): a symmetric cubic
  *  Bézier meeting at the horizontal midpoint — `C m y1, m y2, x2 y2`. Never
@@ -183,24 +184,34 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
               <span style={{ width: 8, height: 8, borderRadius: 99, background: tone.border, display: "inline-block" }} />
               קיימת תלות
             </span>
-          ) : <Badge tone={tone} />}
+          ) : (
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <Badge tone={tone} />
+              {node.status?.dependency && <><DependencyTagPill tag={node.status.dependency} /><Info k="task_dependency_tag" /></>}
+            </span>
+          )}
           <a onClick={onClose} title="סגור" style={{
             fontSize: 15, color: "var(--ink-500)", cursor: "pointer", width: 30, height: 30, display: "flex",
             alignItems: "center", justifyContent: "center", borderRadius: 99, background: "var(--surface)",
           }}>✕</a>
         </div>
-        <p style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.4, marginBottom: 6 }}>{node.intent}</p>
-        {node.status?.reason && <p style={{ fontSize: 12.5, color: tone.border, marginBottom: 10 }}>{node.status.reason}</p>}
+        <p style={{ fontWeight: 700, fontSize: 18, lineHeight: 1.4, marginBottom: 4 }}>{node.intent}</p>
+        {node.linkedAdoId && node.kind !== "check" && (
+          <p style={{ marginBottom: 8 }}>
+            {node.adoUrl
+              ? <a href={node.adoUrl} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 650, color: "var(--color-accent)", textDecoration: "underline" }}>🔗 TFS #{node.linkedAdoId} ↗</a>
+              : <span style={{ fontSize: 13, fontWeight: 650, color: "var(--color-accent)" }}>🔗 TFS #{node.linkedAdoId}</span>}
+          </p>
+        )}
+        {node.status?.reason && <p style={{ fontSize: 12.5, color: tone.border, marginBottom: 6 }}>{node.status.reason}</p>}
+        {node.status?.dependency && <p style={{ fontSize: 12.5, color: node.status.dependency.tone === "critical" ? "var(--status-critical)" : "var(--status-warning)", marginBottom: 10 }}>{node.status.dependency.reason}</p>}
         {!node.active && (
           <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 10 }}>
             ⚪ לא פעילה — לא בFlow ולא בתלויות, ההיסטוריה נשארת.
           </p>
         )}
         <p style={{ fontSize: 13, color: "var(--ink-500)", marginBottom: 18 }}>
-          {node.adoType ?? "Task"} · {node.appetite} ·{" "}
-          {node.linkedAdoId
-            ? (node.adoUrl ? <a href={node.adoUrl} target="_blank" rel="noreferrer" style={{ color: "var(--status-healthy)" }}>TFS #{node.linkedAdoId} ↗</a> : `TFS #${node.linkedAdoId}`)
-            : "טרם הוקם ב-TFS"}
+          {node.adoType ?? "Task"} · {node.appetite}{node.linkedAdoId ? "" : " · טרם הוקם ב-TFS"}
         </p>
 
         {blocked && (

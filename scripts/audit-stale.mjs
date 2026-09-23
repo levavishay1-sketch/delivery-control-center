@@ -71,6 +71,8 @@ const RETIRED = [
   // checks reported inside the development prompt, retired 2026-09-23: they run after it, as their own steps (checks.run)
   "implement.check", "CHECKS TO ALSO PERFORM",
   "GAPS_SYSTEM", "CODE_SYSTEM", "CHANGE_SYSTEM", "RUN_SYSTEM", "INSIGHTS_SYSTEM", "NOTES_SYSTEM", "SYSTEM_HASH", "REPO_CONTEXT",
+  // "a dependency exists" as a task's status, retired 2026-09-23: the status is always the stage; the dependency is a tag beside it
+  "dependency_open",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
 // docs/history/ holds the design records the user asked to keep. Everything else — the replacing

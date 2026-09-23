@@ -1,34 +1,27 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, addE2ECheck, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
-  type FlowRun, type ImplementResult, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck,
+  type FlowRun, type ImplementResult, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck, type TaskFlowStep,
 } from "../api.ts";
-import { CardTitle, PageHead, Pill, PromptPreviewModal, CopyBtn, TaskStatusPill, CHECK_KIND_HE } from "../ui.tsx";
+import { CardTitle, PageHead, Pill, PromptPreviewModal, PromptText, TaskStatusPill, DependencyTagPill, CHECK_KIND_HE } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { useClaudeContext } from "../claude/context.ts";
-import { StepRail } from "./WorkflowTab.tsx";
 
 /**
- * One task — the unit that actually reaches TFS and gets built. Its own
- * gated FLOW, same pattern as the requirement's: פיתוח → סקירה והחלטה →
- * הושלם. "תן ל-Claude לפתח" runs the local CLI with write tools on an
- * ISOLATED clone (never the user's own checkout), on a task branch, and
- * commits locally. It never pushes on its own — "⬆ Push ל-GitHub" is the
- * deliberate, explicit action inside the review step, once the user has
- * decided to keep what changed.
+ * One task — the unit that actually reaches TFS and gets built. Its status in
+ * the head's corner, with the dependency tag under it; its FLOW (task-flow-steps.ts):
+ * development with the build, checks, review — and a dependency step wherever
+ * a dependency's work came in after the task started. "תן ל-Claude לפתח" runs
+ * the local CLI with write tools on an ISOLATED clone, on a task branch, and
+ * commits locally; it never pushes on its own — "⬆ Push ל-GitHub" is the
+ * deliberate action in the review step.
  */
 
 const STATE_HE: Record<string, string> = {
   pending: "ממתין", in_progress: "בעבודה", blocked: "חסום", failed_checks: "נפל בבדיקות", done: "הושלם", dropped: "נדחה",
 };
-
-const TASK_STEPS = [
-  { key: "implement", label: "פיתוח" },
-  { key: "review", label: "סקירה והחלטה" },
-  { key: "done", label: "הושלם" },
-] as const;
 
 const Transcript = ({ lines }: { lines: string[] }) => {
   const box = useRef<HTMLDivElement>(null);
@@ -45,35 +38,36 @@ const Transcript = ({ lines }: { lines: string[] }) => {
 };
 
 const depName = (x: { seq: number; intent: string }) => `#${x.seq} — ${x.intent.slice(0, 70)}`;
+const refs = (xs: number[] = []) => xs.map((s) => `#${s}`).join(", ");
+const fmtDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }) : "");
 
 /**
  * What the task's branch is built on, when it depends on work that is not in
  * the main branch yet. Before the first run: what it will be built on and what
  * it will be developed without. After: what it was built on, and when it is
- * worth developing again (the task it is built on moved, or what was missing
- * exists now) — the one way to take that in is Rollback and run again.
+ * worth developing again — the one way to take that in is Rollback and run again.
  */
 function BuiltOnCard({ b, nav }: { b: TaskBuiltOn; nav: (h: string) => void }) {
   const link = (x: { id: string; seq: number; intent: string }) => <span key={x.id} className="w-title" onClick={() => nav(`#/task/${x.id}`)}>{depName(x)}</span>;
   const planned = b.state === "planned";
   return (
-    <Card>
-      <CardTitle info="task_built_on" style={{ marginBottom: 8 }}>{planned ? "על מה המשימה תיבנה" : "על מה המשימה נבנתה"}</CardTitle>
+    <div style={{ borderTop: "1px solid var(--border-hairline)", marginTop: 10, paddingTop: 10 }}>
+      <CardTitle info="task_built_on" style={{ fontSize: 12.5, marginBottom: 6 }}>{planned ? "על מה המשימה תיבנה" : "על מה המשימה נבנתה"}</CardTitle>
       {b.on && (
-        <p style={{ fontSize: 13, marginBottom: 8 }}>
+        <p style={{ fontSize: 12.5, marginBottom: 6 }}>
           {planned ? "כשתפתחו אותה, היא תיבנה על גבי הענף של " : "נבנתה על גבי הענף של "}{link(b.on)}
           {planned ? `. העבודה של #${b.on.seq} עוד לא בענף הראשי — קלוד יראה אותה ויבנה עליה.` : "."}
         </p>
       )}
       {b.onMoved && b.on && (
-        <p style={{ fontSize: 12.5, color: "var(--status-warning)", marginBottom: 8 }}>
-          ⚠ ל-#{b.on.seq} נוספו שינויים אחרי שהמשימה הזו נבנתה, והם לא בענף שלה. כדי לכלול אותם: "↩ Rollback" ואז להריץ שוב.
+        <p style={{ fontSize: 12.5, color: "var(--status-warning)", marginBottom: 6 }}>
+          ⚠ ל-#{b.on.seq} נוספו שינויים אחרי שהמשימה הזו נבנתה, והם לא בענף שלה. כדי לכלול אותם: שלב "תלות" למטה.
         </p>
       )}
       {b.missing.length > 0 && (
         <>
-          <p style={{ fontSize: 13, marginBottom: 4 }}>{planned ? "תפותח בלי העבודה של:" : "פותחה בלי העבודה של:"}</p>
-          <ul style={{ margin: "0 0 8px", paddingInlineStart: 18, fontSize: 12.5 }}>
+          <p style={{ fontSize: 12.5, marginBottom: 4 }}>{planned ? "תפותח בלי העבודה של:" : "פותחה בלי העבודה של:"}</p>
+          <ul style={{ margin: "0 0 6px", paddingInlineStart: 18, fontSize: 12.5 }}>
             {b.missing.map((m) => (
               <li key={m.id} style={{ marginBottom: 3 }}>
                 {link(m)}
@@ -81,20 +75,14 @@ function BuiltOnCard({ b, nav }: { b: TaskBuiltOn; nav: (h: string) => void }) {
               </li>
             ))}
           </ul>
-          {planned ? (
+          {planned && (
             <p style={{ fontSize: 11.5, color: "var(--ink-500)" }}>
-              אפשר לפתח בכל זאת: קלוד יכתוב מול הצורה שהעבודה החסרה כנראה תקבל ויפרט את ההנחות שלו. בדיקה שצריכה את העבודה הזו תסומן "מחכה לתלות", לא "נכשלה". כשהתלות תפותח — "↩ Rollback" ולהריץ שוב, והמשימה תיבנה עליה.
+              אפשר לפתח בכל זאת: קלוד יכתוב מול הצורה שהעבודה החסרה כנראה תקבל ויפרט את ההנחות שלו. בדיקה שצריכה אותה תסומן "מחכה לתלות", לא "נכשלה". כשהתלות תפותח, ייכנס שלב "תלות" שבונה את המשימה עליה.
             </p>
-          ) : b.nowAvailable.length > 0 ? (
-            <p style={{ fontSize: 12.5, color: "var(--status-warning)" }}>
-              ⚠ {b.nowAvailable.map((x) => `#${x.seq}`).join(", ")} פותחה מאז. כדי שהמשימה תיבנה עליה: "↩ Rollback" ואז להריץ שוב.
-            </p>
-          ) : (
-            <p style={{ fontSize: 11.5, color: "var(--ink-500)" }}>כשהן יפותחו, "↩ Rollback" והרצה חוזרת יבנו את המשימה עליהן.</p>
           )}
         </>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -104,6 +92,61 @@ const Card = ({ children, tone }: { children: React.ReactNode; tone?: "crit" | "
     borderRadius: 12, padding: "14px 16px", marginBottom: 14, background: "var(--surface)",
   }}>{children}</div>
 );
+
+/** A folded part of a step: its title always there, its content one click away. */
+function Fold({ title, info, children, open: startOpen = false }: { title: string; info: string; children: React.ReactNode; open?: boolean }) {
+  const [open, setOpen] = useState(startOpen);
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 8 }}>
+        <button type="button" className="fold-btn" style={{ marginTop: 0, flex: 1 }} onClick={() => setOpen((v) => !v)}>
+          <span>{open ? "▾" : "▸"}</span>{title}
+        </button>
+        <Info k={info} />
+      </div>
+      {open && <div style={{ padding: "10px 4px 2px" }}>{children}</div>}
+    </>
+  );
+}
+
+const STEP_NUM: Record<TaskFlowStep["kind"], string> = { develop: "שלב 1", dependency: "תלות", checks: "שלב 2", review: "שלב 3" };
+function stepLabel(steps: TaskFlowStep[], i: number): string {
+  const s = steps[i]!;
+  const again = steps.slice(0, i).some((p) => p.kind === s.kind);
+  if (s.kind === "develop") return "פיתוח (כולל Build)";
+  if (s.kind === "dependency") return s.state === "current" ? `${refs(s.deps)} פותחה` : `נבנתה על ${refs(s.deps)}`;
+  if (s.kind === "checks") return again ? "בדיקות שוב" : "בדיקות";
+  return again ? "סקירה שוב" : "סקירה והחלטה";
+}
+
+/** The task's FLOW — the real StepRail look (.ov-steps), with steps that repeat after a dependency came in. */
+function TaskFlowRail({ steps, active, onPick }: { steps: TaskFlowStep[]; active: number; onPick: (i: number) => void }) {
+  return (
+    <div className="ov-steps" style={{ paddingBottom: 2 }}>
+      <span className="ov-steps-info"><Info k="task_flow_steps" /></span>
+      {steps.map((s, i) => {
+        const mark = s.state === "done" ? <span className="ok">✓</span>
+          : s.state === "failed" ? <span className="bad">✕</span>
+          : s.state === "waiting" ? <span className="wait">⏸</span>
+          : s.state === "current" ? <span className="now">●</span> : null;
+        return (
+          <Fragment key={`${s.kind}-${s.round}-${i}`}>
+            {i > 0 && <span className="ov-arrow">←</span>}
+            <button
+              className={`ov-step${s.kind === "dependency" ? " dep" : ""}${s.past ? " past" : ""}${i === active ? " active" : ""}`}
+              disabled={s.state === "todo"} onClick={() => onPick(i)}
+              title={s.state === "todo" ? "נפתח כשהשלב שלפניו יסתיים" : s.note}
+            >
+              <div className="n">{mark}<span>{STEP_NUM[s.kind]}</span></div>
+              <div className="lbl">{stepLabel(steps, i)}</div>
+              {s.past && s.at && <div className="sub">סבב {s.round} · {fmtDay(s.at)}</div>}
+            </button>
+          </Fragment>
+        );
+      })}
+    </div>
+  );
+}
 
 export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [d, setD] = useState<TD | null>(null);
@@ -117,6 +160,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [editAppetite, setEditAppetite] = useState<"small" | "standard" | "large">("standard");
   const [editScope, setEditScope] = useState<"text" | "scope">("text");
   const [saving, setSaving] = useState(false);
+  // the task's instruction, edited in place inside the development step
+  const [instrEditing, setInstrEditing] = useState(false);
+  const [instrDraft, setInstrDraft] = useState("");
   const [rollingBack, setRollingBack] = useState(false);
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null);
   const [pushing, setPushing] = useState(false);
@@ -139,12 +185,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [sendLoading, setSendLoading] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  // the permanent prompt section — always visible on the page, not only
-  // inside the pre-send modal. Same content, fetched independently so it
-  // doesn't depend on the modal ever having been opened.
+  // the full prompt, one fold away inside the development step
   const [promptPreview, setPromptPreview] = useState<{ prompt: string; promptHe: string; approved: boolean } | null>(null);
-  const [promptLang, setPromptLang] = useState<"he" | "en">("he");
   const [approving, setApproving] = useState(false);
+  const [tfsErr, setTfsErr] = useState<string | null>(null);
   const [expandedCheck, setExpandedCheck] = useState<string | null>(null);
   const [completing, setCompleting] = useState(false);
   const [doneErr, setDoneErr] = useState<string | null>(null);
@@ -169,7 +213,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const refreshRun = useCallback(async () => {
     try {
       const r = await getTaskRun(id);
-      setRun((prev) => { if (prev?.state === "running" && r.state === "done") load(); return r; });
+      setRun((prev) => { if (prev?.state === "running" && r.state !== "running") load(); return r; });
     } catch { /* ignore */ }
   }, [id, load]);
 
@@ -177,9 +221,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const running = run?.state === "running";
   useEffect(() => {
     if (!running) return;
-    const iv = setInterval(refreshRun, 1500);
+    // While it runs, the steps follow it too (development → build → checks).
+    const iv = setInterval(() => { refreshRun(); getTask(id).then(setD).catch(() => {}); }, 1500);
     return () => clearInterval(iv);
-  }, [running, refreshRun]);
+  }, [running, refreshRun, id]);
+  // A step that came in or went away moves every index after it — go back to following the task.
+  const stepCount = d?.flow.length ?? 0;
+  useEffect(() => { setManualStep(null); }, [stepCount]);
 
   // On-demand TFS → DCC pull: is the real work item now "Removed"? DCC
   // has no poller/webhook — this is the only way it finds out, short of
@@ -208,45 +256,44 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     screen: "task",
     topic: { kind: "task", id: d.task.id, title: `משימה #${d.task.seq}: ${d.task.intent.slice(0, 60)}` },
     facts: {
-      "המשימה": d.task.intent, "מספר": d.task.seq, "סוג": d.task.kind === "check" ? "בדיקה" : "משימה", "מצב": d.task.state, "גודל": d.task.appetite,
-      "אושרה": d.task.approvedAt ? "כן" : "עדיין לא", "הדרישה": d.requirement.title, "משימת אב": d.parent ? `#${d.parent.seq}: ${d.parent.intent}` : "(אין)",
-      "חסומה על ידי": d.blockedBy.map((t) => `#${t.seq}: ${t.intent}`), "מאגרים": d.repos.map((r) => r.name),
+      "המשימה": d.task.intent, "מספר": d.task.seq, "סוג": d.task.kind === "check" ? "בדיקה" : "משימה", "סטטוס": d.status.label, "גודל": d.task.appetite,
+      "אושרה": d.task.approvedAt ? "כן" : "עדיין לא", "ב-TFS": d.task.linkedAdoId ? `#${d.task.linkedAdoId}` : "עוד לא הוקמה", "הדרישה": d.requirement.title,
+      "משימת אב": d.parent ? `#${d.parent.seq}: ${d.parent.intent}` : "(אין)",
+      "תלויה ב": d.blockedBy.map((t) => `#${t.seq}: ${t.intent} (${t.state === "done" ? "הושלמה" : "לא הושלמה"})`), "מאגרים": d.repos.map((r) => r.name),
+      ...(d.status.dependency ? { "תג התלות": `${d.status.dependency.label} — ${d.status.dependency.reason}` } : {}),
       ...(builtOn && (builtOn.on || builtOn.missing.length) ? {
         [builtOn.state === "built" ? "נבנתה על גבי" : "תיבנה על גבי"]: builtOn.on ? `הענף של #${builtOn.on.seq}: ${builtOn.on.intent}` : "הענף הראשי",
         [builtOn.state === "built" ? "פותחה בלי" : "תפותח בלי"]: builtOn.missing.map((m) => `#${m.seq}: ${m.intent}`),
       } : {}),
+      "השלבים": d.flow.map((s) => `${s.kind}${s.deps?.length ? ` ${refs(s.deps)}` : ""}: ${s.state}${s.past ? " (סבב קודם)" : ""}`),
       "הרצה אחרונה": run ? `${run.kind} — ${run.state}` : "(אין)",
-      status: d.task.state, nextStep: !d.task.approvedAt ? "לאשר את המשימה, ואז להריץ את הפיתוח" : d.task.state === "done" ? "המשימה הושלמה" : d.task.state === "failed_checks" ? "בדיקות נכשלו — להחליט אם לתקן או לאשר בכל זאת" : "להריץ את הפיתוח, ואז לדחוף את הענף",
+      nextStep: !d.task.approvedAt ? "לאשר את המשימה" : !d.task.linkedAdoId && d.task.kind === "task" ? "להקים את המשימה ב-TFS" : d.task.state === "done" ? "המשימה הושלמה" : d.status.reason ?? d.status.label,
     },
-    suggestions: ["מה זה בדיקה?", "מה יקרה אם אלחץ על פיתוח?", "מה השלב הבא?"],
+    suggestions: ["מה זה שלב תלות?", "מה יקרה אם אלחץ על פיתוח?", "מה השלב הבא?"],
     actions: ["implement", "approve_task"],
   } : null);
 
-  if (err) return <div className="empty">{err}</div>;
+  if (err && !d) return <div className="empty">{err}</div>;
   if (!d) return <div className="spin">טוען…</div>;
   const t = d.task;
-  const blockedOpen = d.blockedBy.filter((b) => b.state !== "done");
-  // While a run is going on the status follows it step by step; the rest of the time it is the server's.
-  const runningStatus = run?.state === "running" && run.kind === "implement" && t.kind === "task"
-    ? { label: `בעבודה · ${run.phase === "build" ? "מקמפלת" : run.phase === "test" ? "בבדיקות" : "בפיתוח"}`, tone: "active" as const }
-    : null;
-  const addE2E = async () => {
-    setAddingE2E(true);
-    try { await addE2ECheck(t.id); load(); } catch (e) { setErr(String(e)); } finally { setAddingE2E(false); }
-  };
+  const inTfs = t.linkedAdoId != null;
   const impl = run?.state === "done" && run.kind === "implement" ? (run.result as unknown as ImplementResult | null) : null;
-
-  // the task's own FLOW: פיתוח → סקירה והחלטה → הושלם. Step 1 unlocks once
-  // an implement run has concluded (something to review); step 2 unlocks
-  // the same moment — marking done doesn't require having pushed, since
-  // not every task ends in a push (some get reviewed and rolled back on
-  // purpose, some are finished by other means).
+  const hasCode = run?.state === "done" && run.kind === "implement";
   const attempted = run !== null && run.kind === "implement" && run.state !== "running" && run.state !== "idle";
-  const stepDone = [attempted, t.state === "done", t.state === "done"];
-  const stepUnlocked = [true, attempted, attempted];
-  const defaultStep = !attempted ? 0 : t.state === "done" ? 2 : 1;
-  const activeStep = manualStep ?? defaultStep;
-  const goStep = (i: number) => setManualStep(i);
+  // While a run is going on the status follows it step by step; the rest of the time it is the server's.
+  const status = running && run?.kind === "implement" && t.kind === "task"
+    ? { ...d.status, label: `בעבודה · ${run.phase === "build" ? "מקמפלת" : run.phase === "test" ? "בבדיקות" : "בפיתוח"}`, tone: "active" as const, reason: undefined }
+    : d.status;
+
+  const steps = d.flow;
+  const liveIdx = (() => {
+    const i = steps.findIndex((s) => !s.past && (s.state === "current" || s.state === "failed" || s.state === "waiting"));
+    if (i >= 0) return i;
+    const last = steps.map((s) => s.state !== "todo").lastIndexOf(true);
+    return last >= 0 ? last : 0;
+  })();
+  const activeIdx = manualStep != null && manualStep < steps.length ? manualStep : liveIdx;
+  const sel = steps[activeIdx];
 
   const copy = (s: string, k: string) => { navigator.clipboard?.writeText(s); setCopied(k); setTimeout(() => setCopied(""), 1500); };
 
@@ -261,31 +308,24 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const confirmSend = async () => {
     if (sending) return;
     setSending(true); setErr(null);
-    try { await implementTask(id); setSendOpen(false); setShowLog(true); await refreshRun(); }
-    catch (e) { setErr(String(e)); }
+    try { await implementTask(id); setSendOpen(false); setShowLog(true); setManualStep(null); await refreshRun(); load(); }
+    catch (e) { setErr(String(e)); setSendOpen(false); }
     finally { setSending(false); }
   };
 
-  // "אישור הקמת משימה" — the one gate before anything reaches TFS or
-  // Claude gets write access. Cascades to child checks and immediately
-  // tries to materialize server-side; a failed materialize (e.g. no ADO
-  // connection yet) still leaves the approval itself in place.
+  // Approving is the one gate before anything reaches TFS; it tries to create
+  // the TFS item at once. A failed attempt (e.g. no ADO connection yet) keeps
+  // the approval, and says why here — the same button tries again.
   const doApprove = async () => {
-    setApproving(true); setErr(null);
+    setApproving(true); setErr(null); setTfsErr(null);
     try {
       const r = await approveTask(id, { clientId: t.clientId });
-      if (r.materializeError) setErr(r.materializeError);
+      if (r.materializeError) setTfsErr(r.materializeError);
       load(); loadPrompt();
-    } catch (e) { setErr(String(e)); }
+    } catch (e) { setTfsErr(String(e)); }
     finally { setApproving(false); }
   };
 
-  // Deactivating drops a check from its parent's next prompt/preview and
-  // from the completion gate, without losing its history; reactivating
-  // clears any stale prior result — it needs fresh verification. Either
-  // way the parent's own status is re-evaluated server-side (may flip
-  // in/out of "נפל בבדיקות", or restore a "done" that a reopened check
-  // had bumped out of it).
   const toggleCheck = async (checkId: string, active: boolean) => {
     setTogglingCheck(checkId); setErr(null);
     try { await setTaskActive(checkId, active, t.clientId); load(); loadPrompt(); }
@@ -293,10 +333,6 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     finally { setTogglingCheck(null); }
   };
 
-  // Same toggle, on the task page's OWN task/check — deactivating drops
-  // it from the Flow graph and dependency computation everywhere, and
-  // cascades to every child under it; a linked TFS item gets mirrored to
-  // "Removed" (best-effort). Reactivating restores just this row.
   const toggleSelf = async () => {
     setTogglingSelf(true); setErr(null);
     try { await setTaskActive(t.id, !t.active, t.clientId); load(); }
@@ -304,16 +340,16 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     finally { setTogglingSelf(false); }
   };
 
-  // Approving one check directly from the parent's checklist row — same
-  // action as "אישור הקמת משימה" on the check's own page, just without
-  // leaving this screen. Approving a task normally cascades to its
-  // checks, but a check added after that cascade already ran needs its
-  // own approval, and this is the faster of the two places to give it.
   const approveCheckRow = async (checkId: string) => {
     setApprovingCheck(checkId); setErr(null);
     try { await approveTask(checkId, { clientId: t.clientId }); load(); }
     catch (e) { setErr(String(e)); }
     finally { setApprovingCheck(null); }
+  };
+
+  const addE2E = async () => {
+    setAddingE2E(true);
+    try { await addE2ECheck(t.id); load(); } catch (e) { setErr(String(e)); } finally { setAddingE2E(false); }
   };
 
   const markDone = async (override: boolean) => {
@@ -344,7 +380,16 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         scopeChanged: editScope === "scope",
       });
       setEditing(false);
-      load();
+      load(); loadPrompt();
+    } catch (e) { setErr(String(e)); }
+    finally { setSaving(false); }
+  };
+  const saveInstruction = async () => {
+    setSaving(true); setErr(null);
+    try {
+      await editTask(id, { clientId: t.clientId, intent: t.intent, appetite: t.appetite as "small" | "standard" | "large", prompt: instrDraft, scopeChanged: false });
+      setInstrEditing(false);
+      load(); loadPrompt();
     } catch (e) { setErr(String(e)); }
     finally { setSaving(false); }
   };
@@ -355,7 +400,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     try {
       const r = await rollbackTask(id);
       loadCodeMap();
-      setRollbackMsg(r.rolledBack ? "✓ שינויי הקוד בוטלו — ה-branch אופס לבסיס. המשימה נקייה כמו לפני שפותחה." : (r.reason ?? "אין מה לבטל."));
+      setRollbackMsg(r.rolledBack ? "✓ שינויי הקוד בוטלו — ה-branch אופס לבסיס. עכשיו אפשר להריץ שוב." : (r.reason ?? "אין מה לבטל."));
       load();
       await refreshRun();
     } catch (e) { setErr(String(e)); }
@@ -404,6 +449,376 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     (!delReport.hasCoTouch || delAckCoTouch)
   );
 
+  const checks = d.children.filter((c) => c.kind === "check");
+  const subtasks = d.children.filter((c) => c.kind !== "check");
+  const buildCheck = checks.find((c) => c.checkKind === "build");
+  const canRun = !!t.approvedAt && (inTfs || t.kind === "check") && t.active;
+  const outcomeOf = (seq: number) => impl?.checks?.find((c) => c.seq === seq);
+
+  /* ── the panes, one per kind of step ─────────────────────────────── */
+
+  const runControls = (label: string) => (
+    <>
+      {running ? (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+            <div className="spinner" style={{ width: 16, height: 16 }} />
+            <p style={{ fontSize: 13, color: "var(--ink-600)", margin: 0 }}>{t.kind === "check" ? "Claude מריץ את הבדיקה — בלי הרשאה לשנות קבצים…" : run?.phase === "build" ? "Build: בונה את מה שהשינוי מתקמפל אליו…" : run?.phase === "test" ? "בדיקות: מריץ את הבדיקות, בלי הרשאה לשנות קבצים…" : "פיתוח: Claude קורא, כותב את הקוד ואת הבדיקות שלו…"}</p>
+          </div>
+          <Transcript lines={run?.lines ?? []} />
+          <p style={{ marginTop: 6, fontSize: 11, color: "var(--ink-400)" }}>רץ ברקע על קלון מבודד, על branch נפרד. אפשר לצאת מהמסך. לא נדחף כלום.</p>
+        </>
+      ) : (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <button className="btn btn-primary" disabled={!canRun} onClick={openSend}>{label}</button>
+          <Info k="implement" />
+          {!inTfs && t.kind === "task" && t.approvedAt && <span style={{ fontSize: 12, color: "var(--status-warning)" }}>🔒 נפתח אחרי שהמשימה תוקם ב-TFS</span>}
+          {!t.active && <span style={{ fontSize: 12, color: "var(--ink-500)" }}>המשימה מושבתת</span>}
+        </div>
+      )}
+      {!running && run?.state === "error" && (
+        <div className="ob-note crit" style={{ marginTop: 12 }}>
+          <b>ההרצה האחרונה לא הסתיימה.</b>
+          <div style={{ whiteSpace: "pre-wrap", marginTop: 4 }}>{run.error}</div>
+        </div>
+      )}
+      {run && run.lines.length > 0 && !running && (
+        <div style={{ marginTop: 12 }}>
+          <a className="link" style={{ fontSize: 12 }} onClick={() => setShowLog((v) => !v)}>{showLog ? "▲ הסתר" : "▼ הצג"} את התמלול המלא של ההרצה</a>
+          {showLog && <div style={{ marginTop: 8 }}><Transcript lines={run.lines} /></div>}
+        </div>
+      )}
+    </>
+  );
+
+  const instructionBlock = (
+    <div className="field" style={{ marginTop: 14 }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        ההוראה למשימה<Info k="task_instruction" />
+        {!instrEditing && !running && <a className="link" style={{ fontSize: 11.5, fontWeight: 600 }} onClick={() => { setInstrDraft(t.prompt ?? t.intent); setInstrEditing(true); }}>✎ ערוך</a>}
+      </label>
+      {instrEditing ? (
+        <>
+          <textarea value={instrDraft} onChange={(e) => setInstrDraft(e.target.value)} rows={5} style={{ width: "100%", marginTop: 4 }} />
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button className="btn btn-primary btn-sm" disabled={saving || !instrDraft.trim()} onClick={saveInstruction}>{saving ? "שומר…" : "שמור"}</button>
+            <button className="btn btn-secondary btn-sm" onClick={() => setInstrEditing(false)}>ביטול</button>
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap", background: "var(--surface-muted)", borderRadius: 8, padding: "10px 12px", marginTop: 4 }}>{t.prompt || t.intent}</div>
+      )}
+    </div>
+  );
+
+  const promptFold = (
+    <Fold title="הפרומפט המלא שיישלח לקלוד" info="stage_prompt">
+      {promptPreview ? <PromptText prompt={promptPreview.prompt} promptHe={promptPreview.promptHe} maxHeight="36vh" /> : <p className="ob-sub">טוען…</p>}
+      <a className="link" style={{ fontSize: 12 }} onClick={() => nav("#/prompts")}>לעריכת התבנית עצמה — מסך פרומפטים ←</a>
+    </Fold>
+  );
+
+  const scopeFold = (t.affectedPaths.length > 0 || t.compiledComponents.length > 0) && (
+    <Fold title={`קבצים צפויים ורכיבים (${t.affectedPaths.length + t.compiledComponents.length})`} info="expected_files">
+      {t.affectedPaths.length > 0 && (
+        <div className="field" style={{ marginBottom: 8 }}>
+          <label>קבצים צפויים<Info k="expected_files" /></label>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{t.affectedPaths.join(", ")}</div>
+        </div>
+      )}
+      {t.compiledComponents.length > 0 && (
+        <div className="field">
+          <label>רכיבים מתקמפלים<Info k="compiled_components" /></label>
+          <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{t.compiledComponents.join(", ")}</div>
+        </div>
+      )}
+    </Fold>
+  );
+
+  const buildResult = buildCheck && d.checkStatuses[buildCheck.id] && (buildCheck.checkResult || running) && (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12.5 }}>
+      <span style={{ color: "var(--ink-500)" }}>Build:</span>
+      <TaskStatusPill status={d.checkStatuses[buildCheck.id]!} />
+    </div>
+  );
+
+  const developPane = (s: TaskFlowStep) => (
+    <>
+      <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
+        קלוד כותב את הקוד ואת הבדיקות שלו בעותק מבודד של המאגר, על ענף משלה, ובסוף בונה (Build) את מה שהשינוי מתקמפל אליו. שום דבר לא נדחף ולא מתמזג לבד.
+      </p>
+      {runControls(attempted ? "✦ הרץ שוב" : "✦ תן ל-Claude לפתח")}
+      {s.state === "failed" && buildCheck?.checkResult === "failed" && <p style={{ fontSize: 12.5, color: "var(--status-critical)", marginTop: 10 }}>ה-Build נכשל — הבדיקות לא רצו. אפשר לתקן את ההוראה ולהריץ שוב.</p>}
+      {buildResult}
+      {instructionBlock}
+      {promptFold}
+      {scopeFold}
+    </>
+  );
+
+  const dependencyPane = (s: TaskFlowStep) => (
+    <>
+      <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
+        {refs(s.deps)} פותחה מאז שהמשימה נבנתה, והעבודה שלה לא בענף של המשימה. כדי שהמשימה תיבנה עליה והבדיקות ירוצו על הגרסה המלאה — שני צעדים, בסדר הזה:
+      </p>
+      <ol style={{ margin: "0 0 12px", paddingInlineStart: 20, fontSize: 12.5, lineHeight: 1.8 }}>
+        <li><b>↩ Rollback</b> — מוחק את מה שנבנה בלי {refs(s.deps)}. {hasCode ? "" : <span style={{ color: "var(--status-healthy)" }}>✓ בוצע</span>}</li>
+        <li><b>✦ הרץ שוב</b> — בונה את המשימה על {refs(s.deps)}, ומריץ שוב את ה-Build ואת הבדיקות.</li>
+      </ol>
+      {!running && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+          <button className="btn btn-secondary" disabled={!hasCode || rollingBack} onClick={rollback} style={{ color: "var(--status-critical)" }}>{rollingBack ? "מבטל…" : "↩ Rollback"}</button>
+          <Info k="rollback" />
+        </div>
+      )}
+      {rollbackMsg && <p style={{ fontSize: 12, color: "var(--ink-500)", margin: "6px 0" }}>{rollbackMsg}</p>}
+      <div style={{ marginTop: 8, ...(hasCode && !running ? { opacity: 0.55, pointerEvents: "none" as const } : {}) }}>{runControls("✦ הרץ שוב")}</div>
+      {instructionBlock}
+      {promptFold}
+    </>
+  );
+
+  const checksPane = (s: TaskFlowStep) => (
+    <>
+      <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 10, lineHeight: 1.6 }}>
+        אחרי שה-Build עובר רצות בדיקות הפיתוח והרגרסיה — בלי הרשאה לשנות קבצים. בדיקה שצריכה עבודה של תלות שעוד לא קיימת מסומנת "מחכה לתלות", לא "נכשלה".
+      </p>
+      {running && run?.phase === "test" && <div style={{ marginBottom: 10 }}>{runControls("")}</div>}
+      {s.note && <p style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>תוצאות: {s.note}<Info k="check_results" /></p>}
+      {impl?.skipped && impl.skipped.length > 0 && (
+        <p style={{ fontSize: 12, color: "var(--status-critical)", marginBottom: 8 }}>
+          {impl.skipped.length} בדיקות לא רצו — ה-Build לא עבר, ובדיקות של קוד שלא נבנה לא אומרות כלום.
+        </p>
+      )}
+      <div className="rowlist">
+        {checks.map((c) => {
+          const isOpen = expandedCheck === c.id;
+          const isActive = c.active !== false;
+          const o = outcomeOf(c.seq);
+          return (
+            <div key={c.id}>
+              <div className="row" style={{ cursor: "pointer", opacity: isActive ? 1 : 0.55 }}>
+                <a
+                  title={isActive ? "השבת בדיקה — תוצא מההרצות ומשער הסגירה, ההיסטוריה נשארת" : "הפעל בדיקה מחדש — תרוץ בהרצה הבאה"}
+                  onClick={(e) => { e.stopPropagation(); toggleCheck(c.id, !isActive); }}
+                  style={{ marginInlineEnd: 8, cursor: "pointer", color: "var(--ink-500)" }}
+                >
+                  {togglingCheck === c.id ? "…" : isActive ? (c.state === "done" ? "☑" : "☐") : "◻"}
+                </a>
+                <span onClick={() => setExpandedCheck(isOpen ? null : c.id)} className="title">{isOpen ? "▾" : "▸"} #{c.seq} {c.intent.slice(0, 90)}</span>
+                {c.checkKind && <Pill tone="neutral">{CHECK_KIND_HE[c.checkKind] ?? c.checkKind}</Pill>}
+                <span className="spacer" />
+                {d.checkStatuses[c.id] ? <TaskStatusPill status={d.checkStatuses[c.id]!} /> : <Pill tone="inactive">{STATE_HE[c.state] ?? c.state}</Pill>}
+                {!c.approvedAt && (
+                  <button className="btn btn-secondary btn-sm" disabled={approvingCheck === c.id} onClick={(e) => { e.stopPropagation(); approveCheckRow(c.id); }} style={{ marginInlineStart: 8 }}>
+                    {approvingCheck === c.id ? "מאשר…" : "✓ אישור"}
+                  </button>
+                )}
+              </div>
+              {isOpen && (
+                <div style={{ background: "var(--surface-muted)", borderRadius: 8, padding: "10px 12px", margin: "4px 0 8px", fontSize: 12.5, lineHeight: 1.6 }}>
+                  <p style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 2 }}>מה הבדיקה מוודאת (ההוראה שלה):</p>
+                  <p style={{ whiteSpace: "pre-wrap", marginBottom: 6 }}>{c.intent}</p>
+                  {o && (
+                    <>
+                      <p style={{ fontSize: 11, color: "var(--ink-500)", marginBottom: 2 }}>מה יצא בהרצה האחרונה:</p>
+                      <p style={{ whiteSpace: "pre-wrap", marginBottom: 4 }}>{o.detail}</p>
+                      {!o.passed && o.likelyCause && (
+                        <p style={{ fontSize: 11.5, color: "var(--status-warning)", marginBottom: 4 }}>
+                          {o.likelyCause === "requirement_ambiguity"
+                            ? `⚠ יתכן שהסיבה היא עמימות בדרישה, לא תקלה במימוש${d.blockedBy.some((b) => b.state !== "done") ? ` — אולי כי ${d.blockedBy.filter((b) => b.state !== "done").map((b) => `#${b.seq}`).join(", ")} עוד לא הושלמה` : ""}. כדאי לבדוק את הדרישה לפני שמנסים שוב.`
+                            : o.likelyCause === "dependency_missing"
+                              ? "אי אפשר היה לבדוק: הבדיקה צריכה עבודה של משימה שהמשימה הזו תלויה בה, ושעוד לא בענף. זו לא תקלה — כשהתלות תפותח ייכנס שלב \"תלות\"."
+                              : o.likelyCause === "environment"
+                                ? "⚠ הבדיקה לא יכלה לרוץ במחשב של DCC — חסר כלי, SDK או שירות. זו לא תקלה בקוד, אבל גם לא אישור שהוא עובד."
+                                : "⚠ כנראה תקלת מימוש — כדאי לבדוק את הקוד שנכתב."}
+                        </p>
+                      )}
+                    </>
+                  )}
+                  {c.checkResolvedBy && <p style={{ color: "var(--status-warning)", marginBottom: 4 }}>✓ אושרה ידנית ע"י אדם — לא (רק) תוצאת הבדיקה של Claude.</p>}
+                  <a onClick={() => nav(`#/task/${c.id}`)} style={{ fontSize: 11.5, color: "var(--color-accent)", fontWeight: 600, cursor: "pointer" }}>לעריכת ההוראה של הבדיקה ולפרטים המלאים ←</a>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {t.kind === "task" && !checks.some((c) => c.checkKind === "e2e") && checks.some((c) => c.checkKind) && (
+        <p style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10 }}>
+          <button className="btn btn-secondary btn-sm" disabled={addingE2E} onClick={addE2E}>{addingE2E ? "מוסיף…" : "+ הוסף בדיקות E2E"}</button>
+          <Info k="add_e2e_check" />
+        </p>
+      )}
+    </>
+  );
+
+  const reviewPane = (
+    <>
+      {impl ? (
+        <>
+          <CardTitle as="h3" info="task_result" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</CardTitle>
+          <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
+
+          {impl.filesChanged.length > 0 && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label>קבצים שהשתנו ({impl.filesChanged.length})<Info k="files_changed" /></label>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
+                {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
+              </div>
+            </div>
+          )}
+          {impl.affectedConsumers?.length > 0 && (
+            <div className="field" style={{ marginBottom: 10 }}>
+              {/* no-info: the sentence under it is the explanation */}
+              <label>מי עוד נוגע בקבצים האלה ({impl.affectedConsumers.length})</label>
+              <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: -2, marginBottom: 6 }}>קוד אחר שמפנה/משתמש בקבצים ששונו — יש לשקול לאסוף ולעדכן אותם יחד לפריסת טסט.</p>
+              <div className="rowlist">
+                {impl.affectedConsumers.map((c, i) => (
+                  <div className="row" key={i} style={{ alignItems: "flex-start", flexDirection: "column", gap: 3, paddingBlock: 8 }}>
+                    <span style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{c.path}</span>
+                    <span style={{ fontSize: 12, color: "var(--ink-700)" }}>{c.reason}</span>
+                    {c.usedBy.length > 0 && <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>← {c.usedBy.join(", ")}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {impl.followUps.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר<Info k="remaining_work" /></p>
+              <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5, lineHeight: 1.7 }}>{impl.followUps.map((f, i) => <li key={i}>{f}</li>)}</ul>
+            </div>
+          )}
+          <Fold title="איפה זה יושב ואיך לבדוק מקומית" info="where_it_sits">
+            <div className="field" style={{ marginBottom: 10 }}>
+              <label>איפה זה יושב<Info k="where_it_sits" /></label>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", whiteSpace: "pre-wrap" }}>
+                {`${impl.dir}\n${impl.branch}${impl.commit ? `  (commit ${impl.commit})` : "  — ללא שינויים"}`}
+              </div>
+            </div>
+            <div className="field">
+              <label>לבדיקה מקומית<Info k="local_check" /></label>
+              <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                <span style={{ whiteSpace: "pre-wrap" }}>{`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`}</span>
+                <a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`, "cmd")}>{copied === "cmd" ? "✓" : "העתק"}</a>
+              </div>
+            </div>
+          </Fold>
+          {codeMap?.codeMap
+            ? <div style={{ marginTop: 14 }}><CodeMapPanel map={codeMap.codeMap} title={`מצב הקוד · ${codeMap.branch ?? ""}`} /></div>
+            : codeMap?.reason ? <p className="ob-sub" style={{ marginTop: 14, fontSize: 12, color: "var(--ink-500)" }}>{codeMap.reason}</p> : null}
+
+          {t.state !== "done" && (
+            <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, marginTop: 14, display: "flex", gap: 8, alignItems: "center" }}>
+              <button className="btn btn-primary" disabled={pushing || rollingBack} onClick={push}>{pushing ? "דוחף…" : "⬆ Push ל-GitHub"}</button>
+              <Info k="push" />
+              <button className="btn btn-secondary" disabled={pushing || rollingBack} onClick={rollback}>{rollingBack ? "מבטל…" : "↩ Rollback"}</button>
+              <Info k="rollback" />
+            </div>
+          )}
+          {pushResult && (
+            <div className="callout" style={{ marginTop: 12 }}>
+              <div className="body">
+                {pushResult.pushed ? (
+                  <>
+                    <p className="r">✓ נדחף ל-GitHub.</p>
+                    <p style={{ display: "flex", gap: 14, marginTop: 4 }}>
+                      {pushResult.branchUrl && <a href={pushResult.branchUrl} target="_blank" rel="noreferrer">צפה ב-branch ↗</a>}
+                      {pushResult.compareUrl && <a href={pushResult.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request{pushResult.base ? ` מול ${pushResult.base}` : ""} ↗</a>}
+                    </p>
+                    {pushResult.note && <p className="r" style={{ color: "var(--status-warning)", marginTop: 6 }}>⚠ {pushResult.note}</p>}
+                  </>
+                ) : <p className="r" style={{ color: "var(--status-critical)" }}>{pushResult.reason ?? "ה-push נכשל."}</p>}
+              </div>
+            </div>
+          )}
+          {rollbackMsg && <div className="callout" style={{ marginTop: 12 }}><div className="body"><p className="r">{rollbackMsg}</p></div></div>}
+        </>
+      ) : run?.state === "rolled_back" ? (
+        <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 12 }}>↩ הקוד של ההרצה הקודמת בוטל — אין כרגע מה לסקור. אפשר להריץ שוב משלב הפיתוח.</p>
+      ) : (
+        <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 12 }}>אין עדיין הרצה שהסתיימה — אין מה לסקור.</p>
+      )}
+
+      <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, marginTop: 16 }}>
+        {t.state === "done" ? (
+          <>
+            <p style={{ fontSize: 13.5, color: "var(--status-healthy)", marginBottom: reopenOpen ? 10 : 0 }}>✓ המשימה סומנה כהושלמה.</p>
+            {!reopenOpen ? (
+              <a onClick={() => setReopenOpen(true)} style={{ fontSize: 12, color: "var(--ink-500)", cursor: "pointer" }}>↩ פתח מחדש</a>
+            ) : (
+              <div className="field">
+                {/* no-info: the label says what is being asked and where the answer is kept */}
+                <label>למה לפתוח מחדש? (יישמר בהיסטוריית הדרישה)</label>
+                <textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2} placeholder="למשל: נמצא באג, נדרש שינוי נוסף, וכו׳"
+                  style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button className="btn btn-secondary" disabled={reopening || !reopenReason.trim()}
+                    onClick={async () => {
+                      setReopening(true);
+                      try { await progressTask(t.id, { to: "in_progress", clientId: t.clientId, reopenReason }); setReopenOpen(false); setReopenReason(""); load(); }
+                      catch (e) { setErr(String(e)); }
+                      finally { setReopening(false); }
+                    }}>
+                    {reopening ? "פותח…" : "↩ פתח מחדש עם הסיבה הזו"}
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => { setReopenOpen(false); setReopenReason(""); }}>ביטול</button>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 10 }}>
+              לסמן שהעבודה של DCC על המשימה הזו נגמרה. אפשר גם בלי push — לא כל משימה מסתיימת בקוד. משימה תלויה נסגרת רק אחרי שהתלות שלה הושלמה.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="btn btn-primary" disabled={completing} onClick={() => markDone(false)}>{completing ? "מסמן…" : "סמן כהושלם"}</button>
+              {doneErr && !overrideReasonOpen && (
+                <button className="btn btn-secondary" disabled={completing} onClick={() => setOverrideReasonOpen(true)} style={{ color: "var(--status-critical)" }}>אשר ידנית למרות זאת</button>
+              )}
+            </div>
+            {overrideReasonOpen && (
+              <div className="field" style={{ marginTop: 10 }}>
+                {/* no-info: the label says what is being asked and where the answer is kept */}
+                <label>למה לאשר בכל זאת? (יישמר בהיסטוריית הדרישה)</label>
+                <textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2} placeholder="למשל: הבדיקה החסומה כבר לא רלוונטית, הוחלט לוותר עליה, וכו׳"
+                  style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }} />
+                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                  <button className="btn btn-secondary" disabled={completing || !overrideReason.trim()} onClick={() => markDone(true)} style={{ color: "var(--status-critical)" }}>{completing ? "מאשר…" : "✓ אשר עם הסיבה הזו"}</button>
+                  <button className="btn btn-secondary" onClick={() => { setOverrideReasonOpen(false); setOverrideReason(""); }}>ביטול</button>
+                </div>
+              </div>
+            )}
+            {doneErr && <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 8, whiteSpace: "pre-wrap" }}>{doneErr}</p>}
+          </>
+        )}
+      </div>
+    </>
+  );
+
+  const pastPane = (s: TaskFlowStep) => (
+    <>
+      <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>סבב {s.round}{s.at ? ` · התחיל ב-${fmtDay(s.at)}` : ""} — היסטוריה. מה שקרה כאן נשאר לתיעוד; העבודה עצמה ממשיכה בשלבים שאחריו.</p>
+      <p style={{ fontSize: 13, color: "var(--ink-700)" }}>
+        {s.kind === "develop" ? `פיתוח${s.note ? ` — ${s.note}` : ""}.`
+          : s.kind === "dependency" ? `המשימה נבנתה מחדש על ${refs(s.deps)} (Rollback והרצה חוזרת)${s.note ? ` — ${s.note}` : ""}.`
+          : s.kind === "checks" ? `הבדיקות רצו: ${s.note ?? ""}.`
+          : "המשימה הגיעה לסקירה (נדחפה או נסגרה)."}
+      </p>
+    </>
+  );
+
+  const paneFor = (s: TaskFlowStep | undefined) => {
+    if (!s) return null;
+    if (s.past) return pastPane(s);
+    if (s.kind === "develop") return developPane(s);
+    if (s.kind === "dependency") return dependencyPane(s);
+    if (s.kind === "checks") return checksPane(s);
+    return reviewPane;
+  };
+
   return (
     <>
       {sendOpen && (
@@ -416,136 +831,89 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
           confirmLabel="✦ שלח ל-Claude, תתחיל לפתח"
         />
       )}
-      {/* נאב עליון — תמיד בצד שמאל-למעלה, לא מעורבב עם שאר הכפתורים */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
-        {t.kind === "check" && d.parent && (
-          <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/task/${d.parent!.id}`)}>⬅ למשימה #{d.parent.seq}</button>
-        )}
+        {t.kind === "check" && d.parent && <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/task/${d.parent!.id}`)}>⬅ למשימה #{d.parent.seq}</button>}
         <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/wi/${d.requirement.id}`)}>⬅ לדרישה {d.requirement.key ?? ""}</button>
       </div>
 
       <PageHead info="page_task"
         title={t.intent}
-        sub={`${t.kind === "check" ? "בדיקה" : "משימה"} #${t.seq} · ${t.kind === "check" ? "לא ב-TFS בנפרד" : t.adoType ?? "Task"} · ${t.appetite}`}
+        sub={`${t.kind === "check" ? "בדיקה" : "משימה"} #${t.seq} · ${t.kind === "check" ? "לא ב-TFS בנפרד" : t.adoType ?? "Task"} · ${t.appetite}${t.origin === "ai" ? " · הוצעה ע\"י AI" : ""}`}
+        below={t.linkedAdoId ? (
+          <p style={{ margin: "5px 0 0" }}>
+            <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 13, fontWeight: 650, color: "var(--color-accent)", textDecoration: "underline" }}>
+              🔗 {t.kind === "check" ? "תועד ב-Discussion של המשימה ההורה" : `TFS #${t.linkedAdoId}`} ↗
+            </a>
+          </p>
+        ) : null}
         actions={
-          <>
-            <button className="btn btn-secondary" disabled={running} onClick={openEdit}>✎ ערוך משימה</button>
-            <button className="btn btn-secondary" disabled={running || delLoading} onClick={openDelete} style={{ color: "var(--status-critical)" }}>
-              {delLoading && !delReport ? "בודק…" : "🗑 מחק משימה"}
-            </button>
-          </>
+          <div className="status-corner">
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}><TaskStatusPill status={status} /><Info k="task_status" /></span>
+            {status.dependency && <span style={{ display: "inline-flex", alignItems: "center", gap: 2 }}><DependencyTagPill tag={status.dependency} /><Info k="task_dependency_tag" /></span>}
+            {status.reason && <span style={{ fontSize: 11.5, maxWidth: 280, textAlign: "end", color: status.tone === "critical" ? "var(--status-critical)" : status.tone === "warning" ? "var(--status-warning)" : "var(--ink-500)" }}>{status.reason}</span>}
+          </div>
         }
       />
 
-      {/* אישור הקמת משימה/בדיקה — הפעולה הכי חשובה בדף, מיד מתחת לכותרת. */}
-      <div style={{ marginBottom: 10 }}>
-        {!t.approvedAt ? (
-          <button className="btn btn-primary" disabled={approving} onClick={doApprove}>
-            {approving ? "מאשר…" : t.kind === "check" ? "✓ אישור הקמת בדיקה" : "✓ אישור הקמת משימה ב-TFS"}
-          </button>
-        ) : t.kind === "check" ? (
-          <Pill tone="healthy">✓ מאושרת — אושרה יחד עם המשימה ההורה</Pill>
-        ) : !t.linkedAdoId ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <Pill tone="warning">מאושר — ממתין להקמה ב-TFS</Pill>
-            <button className="btn btn-secondary btn-sm" disabled={approving} onClick={doApprove}>{approving ? "מנסה…" : "נסה להקים שוב"}</button>
-          </div>
-        ) : (
-          <Pill tone="healthy">✓ מאושר ומוקם ב-TFS</Pill>
-        )}
-      </div>
-
-      {!t.active && (
-        <div className="callout" style={{ marginBottom: 10, borderColor: "var(--ink-300)" }}>
-          <div className="body">
-            <p className="r" style={{ color: "var(--ink-500)" }}>
-              ⚪ {t.kind === "check" ? "בדיקה" : "משימה"} לא פעילה — לא מופיעה ב-Flow ובתלויות, ולא בפרומפט/שער ההשלמה. ההיסטוריה נשארת.
-              {t.kind === "task" && t.linkedAdoId ? " עודכן ב-TFS ל-Removed." : ""}
-            </p>
-          </div>
-        </div>
-      )}
-      <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <button className="btn btn-secondary btn-sm" disabled={togglingSelf} onClick={toggleSelf}>
-          {togglingSelf ? "מעדכן…" : t.active ? "◻ השבת" : "☐ הפעל מחדש"}
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        <button className="btn btn-secondary btn-sm" disabled={running} onClick={openEdit}>✎ ערוך משימה</button>
+        <button className="btn btn-secondary btn-sm" disabled={running || delLoading} onClick={openDelete} style={{ color: "var(--status-critical)" }}>{delLoading && !delReport ? "בודק…" : "🗑 מחק משימה"}</button>
+        <span style={{ display: "inline-flex", alignItems: "center" }}>
+          <button className="btn btn-secondary btn-sm" disabled={togglingSelf} onClick={toggleSelf}>{togglingSelf ? "מעדכן…" : t.active ? "◻ השבת משימה" : "☐ הפעל מחדש"}</button>
+          <Info k="task_deactivate" />
+        </span>
         {t.kind === "task" && t.linkedAdoId && (
-          <button className="btn btn-secondary btn-sm" disabled={adoRechecking} onClick={doAdoRecheck}>
-            {adoRechecking ? "בודק…" : "🔄 בדוק סטטוס מול TFS"}
-          </button>
+          <span style={{ display: "inline-flex", alignItems: "center" }}>
+            <button className="btn btn-secondary btn-sm" disabled={adoRechecking} onClick={doAdoRecheck}>{adoRechecking ? "בודק…" : "🔄 בדוק סטטוס מול TFS"}</button>
+            <Info k="task_ado_recheck" />
+          </span>
         )}
         {adoRecheckMsg && <span style={{ fontSize: 11.5, color: "var(--ink-500)" }}>{adoRecheckMsg}</span>}
       </div>
 
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-        {/* The status as computed from the run, the checks and the dependencies — the same one the flow graph shows. */}
-        <TaskStatusPill status={runningStatus ?? d.status} withReason />
-        <Info k="task_status" />
-        {t.kind === "check"
-          ? <Pill tone="neutral">✓ בדיקה — לא work item בפני עצמה</Pill>
-          : <Pill tone={t.adoType && t.adoType !== "Task" ? "ai" : "inactive"}>{t.adoType ?? "Task"}</Pill>}
-        {t.linkedAdoId && (t.kind === "check"
-          ? <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--status-healthy)" }}>תועד ב-Discussion של המשימה ההורה ↗</a>
-          : <a href={t.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "var(--status-healthy)" }}>TFS #{t.linkedAdoId} ↗</a>)}
-        {t.origin === "ai" && <Pill tone="ai">הוצע ע"י AI</Pill>}
-      </div>
+      {err && <div className="ob-note crit" style={{ marginBottom: 12 }}>{err}</div>}
 
-      <Card>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-          <CardTitle as="h3" info="prompt_preview" style={{ fontSize: 14.5, fontWeight: 650, margin: 0 }}>הפרומט שיישלח ל-Claude</CardTitle>
-          {promptPreview && (
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <a onClick={() => setPromptLang("he")} style={{ fontSize: 11.5, fontWeight: promptLang === "he" ? 700 : 400, cursor: "pointer", color: promptLang === "he" ? "var(--color-accent)" : "var(--ink-500)" }}>עברית</a>
-              <CopyBtn text={promptPreview.promptHe} />
-              <span style={{ color: "var(--ink-300)" }}>·</span>
-              <a onClick={() => setPromptLang("en")} style={{ fontSize: 11.5, fontWeight: promptLang === "en" ? 700 : 400, cursor: "pointer", color: promptLang === "en" ? "var(--color-accent)" : "var(--ink-500)" }}>English</a>
-              <CopyBtn text={promptPreview.prompt} />
-            </div>
-          )}
+      {!t.active && (
+        <div className="ob-note" style={{ marginBottom: 12, background: "var(--status-inactive-bg)", color: "var(--ink-500)" }}>
+          ⚪ {t.kind === "check" ? "בדיקה" : "משימה"} לא פעילה — לא מופיעה ב-Flow ובתלויות, ולא בשער הסגירה. ההיסטוריה נשארת.
+          {t.kind === "task" && t.linkedAdoId ? " עודכן ב-TFS ל-Removed." : ""}
         </div>
-        <div style={{
-          fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap", background: "var(--surface-muted)", borderRadius: 8,
-          padding: "10px 12px", maxHeight: 280, overflowY: "auto",
-          direction: promptLang === "en" ? "ltr" : "rtl", textAlign: promptLang === "en" ? "left" : "right",
-        }}>
-          {promptPreview ? (promptLang === "he" ? promptPreview.promptHe : promptPreview.prompt) : (t.prompt || t.intent)}
+      )}
+
+      {/* the first gate: approval (which also creates the TFS item) */}
+      {!t.approvedAt && (
+        <div style={{ marginBottom: 14, display: "flex", alignItems: "center", gap: 6 }}>
+          <button className="btn btn-primary" disabled={approving} onClick={doApprove}>
+            {approving ? "מאשר…" : t.kind === "check" ? "✓ אישור הקמת בדיקה" : "✓ אישור הקמת משימה ב-TFS"}
+          </button>
+          <Info k="approve" />
         </div>
-        {t.affectedPaths.length > 0 && (
-          <div className="field" style={{ marginTop: 10 }}>
-            <label>קבצים צפויים<Info k="expected_files" /></label>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{t.affectedPaths.join(", ")}</div>
+      )}
+      {/* the second: no work before there is a TFS item to track it on */}
+      {t.approvedAt && t.kind === "task" && !inTfs && (
+        <div className="ob-note warn" style={{ marginBottom: 14 }}>
+          <b>🔒 המשימה אושרה, אבל עוד לא הוקמה ב-TFS</b><Info k="task_tfs_gate" />
+          <div style={{ marginTop: 2 }}>אי אפשר להתחיל לפתח לפני שיש לה work item — עליו העבודה נעקבת.</div>
+          {tfsErr && <div style={{ marginTop: 6, fontSize: 11.5 }}>הניסיון האחרון נכשל: {tfsErr}</div>}
+          <div style={{ marginTop: 10, display: "flex", alignItems: "center" }}>
+            <button className="btn btn-secondary btn-sm" disabled={approving} onClick={doApprove}>{approving ? "מנסה…" : "נסה שוב להקים ב-TFS"}</button>
+            <Info k="task_retry_tfs" />
           </div>
-        )}
-        {t.compiledComponents.length > 0 && (
-          <div className="field" style={{ marginTop: 10 }}>
-            <label>רכיבים מתקמפלים<Info k="compiled_components" /></label>
-            <p style={{ fontSize: 10.5, color: "var(--ink-500)", marginTop: -2, marginBottom: 3 }}>
-              הפרוייקטים שצריך לבנות ולפרוס יחד עם השינוי הזה.
-            </p>
-            <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{t.compiledComponents.join(", ")}</div>
-          </div>
-        )}
-      </Card>
+        </div>
+      )}
 
       {delReport && (
         <Card tone={delReport.safe ? undefined : "crit"}>
           <CardTitle as="h3" info="task_delete" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 4 }}>מחיקת משימה #{t.seq}</CardTitle>
           {delReport.safe ? (
-            <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
-              אין תת-פריטים, אין קישור ל-TFS, אין קוד שמומש, ואין משימות אחרות שנגעו באותם קבצים — מחיקה בטוחה.
-            </p>
+            <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>אין תת-פריטים, אין קישור ל-TFS, אין קוד שמומש, ואין משימות אחרות שנגעו באותם קבצים — מחיקה בטוחה.</p>
           ) : (
-            <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 12 }}>
-              נמצאו {delReport.subtree.length} פריטים שיימחקו. יש לאשר כל נקודה רגישה בנפרד לפני שהמחיקה תתבצע.
-            </p>
+            <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 12 }}>נמצאו {delReport.subtree.length} פריטים שיימחקו. יש לאשר כל נקודה רגישה בנפרד לפני שהמחיקה תתבצע.</p>
           )}
-
           {delReport.hasChildren && (
             <div className="field" style={{ marginBottom: 10 }}>
               {/* no-info: a warning written as a full sentence, with the detail under it */}
-              <label style={{ color: "var(--status-critical)" }}>
-                {delReport.subtree.length - 1} תת-פריטים יימחקו יחד עם המשימה
-              </label>
+              <label style={{ color: "var(--status-critical)" }}>{delReport.subtree.length - 1} תת-פריטים יימחקו יחד עם המשימה</label>
               <div className="rowlist" style={{ marginTop: 4 }}>
                 {delReport.subtree.filter((n) => n.id !== t.id).map((n) => (
                   <div className="row" key={n.id} style={{ fontSize: 12 }}>
@@ -565,16 +933,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
               </label>
             </div>
           )}
-
           {delReport.hasAdoLinks && (
             <div className="field" style={{ marginBottom: 10 }}>
               {/* no-info: a warning written as a full sentence, with the detail under it */}
               <label style={{ color: "var(--status-critical)" }}>חלק כבר קיים ב-TFS</label>
               <p style={{ fontSize: 12, color: "var(--ink-600)", marginTop: 2 }}>
                 פריטי TFS <b>לא</b> יימחקו — רק יתועד עליהם ב-Discussion שהוסרו מ-DCC:{" "}
-                {delReport.subtree.filter((n) => n.linkedAdoId).map((n) => (
-                  <a key={n.id} href={n.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ marginInlineEnd: 6 }}>#{n.linkedAdoId}</a>
-                ))}
+                {delReport.subtree.filter((n) => n.linkedAdoId).map((n) => <a key={n.id} href={n.adoUrl ?? "#"} target="_blank" rel="noreferrer" style={{ marginInlineEnd: 6 }}>#{n.linkedAdoId}</a>)}
               </p>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, marginTop: 6 }}>
                 <input type="checkbox" style={{ minWidth: 0 }} checked={delAckAdo} onChange={(e) => setDelAckAdo(e.target.checked)} />
@@ -582,7 +947,6 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
               </label>
             </div>
           )}
-
           {delReport.hasImplementedCode && (
             <div className="field" style={{ marginBottom: 10 }}>
               {/* no-info: a warning written as a full sentence, with the detail under it */}
@@ -599,13 +963,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
               </div>
             </div>
           )}
-
           {delReport.hasCoTouch && (
             <div className="field" style={{ marginBottom: 10 }}>
               {/* no-info: a warning written as a full sentence, with the detail under it */}
-              <label style={{ color: "var(--status-critical)" }}>
-                {delReport.coTouchedBy.length} משימות אחרות כבר נגעו באותם קבצים
-              </label>
+              <label style={{ color: "var(--status-critical)" }}>{delReport.coTouchedBy.length} משימות אחרות כבר נגעו באותם קבצים</label>
               <div className="rowlist" style={{ marginTop: 4 }}>
                 {delReport.coTouchedBy.map((c) => (
                   <div className="row" key={c.id} style={{ flexDirection: "column", alignItems: "flex-start", gap: 3, paddingBlock: 6 }}>
@@ -614,22 +975,16 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                   </div>
                 ))}
               </div>
-              <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 6 }}>
-                מחיקת המשימה לא תשנה את ה-branch של המשימות האלה — אבל ייתכן שהן תלויות בשינוי הזה או כופלות אותו.
-              </p>
+              <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 6 }}>מחיקת המשימה לא תשנה את ה-branch של המשימות האלה — אבל ייתכן שהן תלויות בשינוי הזה או כופלות אותו.</p>
               <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, marginTop: 6 }}>
                 <input type="checkbox" style={{ minWidth: 0 }} checked={delAckCoTouch} onChange={(e) => setDelAckCoTouch(e.target.checked)} />
                 בדקתי את המשימות האלה ורוצה להמשיך במחיקה
               </label>
             </div>
           )}
-
           {delErr && <p style={{ fontSize: 12, color: "var(--status-critical)", marginBottom: 8 }}>{delErr}</p>}
-
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-primary" disabled={!readyToDelete || delLoading} onClick={confirmDelete} style={{ background: "var(--status-critical)", borderColor: "var(--status-critical)" }}>
-              {delLoading ? "מוחק…" : "אשר מחיקה"}
-            </button>
+            <button className="btn btn-primary" disabled={!readyToDelete || delLoading} onClick={confirmDelete} style={{ background: "var(--status-critical)", borderColor: "var(--status-critical)" }}>{delLoading ? "מוחק…" : "אשר מחיקה"}</button>
             <button className="btn btn-secondary" onClick={() => setDelReport(null)}>ביטול</button>
           </div>
         </Card>
@@ -644,7 +999,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
             <textarea value={editIntent} onChange={(e) => setEditIntent(e.target.value)} rows={2} />
           </div>
           <div className="field" style={{ marginBottom: 10 }}>
-            <label>הפרומט המדוייק שיורץ ל-Claude<Info k="prompt_preview" /></label>
+            <label>ההוראה למשימה<Info k="task_instruction" /></label>
             <textarea value={editPrompt} onChange={(e) => setEditPrompt(e.target.value)} rows={5} placeholder="ריק = ישתמש ב-intent" />
           </div>
           <div className="field" style={{ marginBottom: 12 }}>
@@ -667,11 +1022,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                 היקף העבודה השתנה — צריך לבדוק תלויות/בדיקות מחדש
               </label>
             </div>
-            {editScope === "scope" && (
-              <p style={{ fontSize: 11.5, color: "var(--status-warning)", marginTop: 6 }}>
-                יתועד כך גם ב-DCC וגם ב-Discussion של TFS (אם קיים). מומלץ לעבור על הפירוק/הבדיקות של המשימה מול השינוי.
-              </p>
-            )}
+            {editScope === "scope" && <p style={{ fontSize: 11.5, color: "var(--status-warning)", marginTop: 6 }}>יתועד כך גם ב-DCC וגם ב-Discussion של TFS (אם קיים). מומלץ לעבור על הפירוק/הבדיקות של המשימה מול השינוי.</p>}
           </div>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-primary" disabled={saving} onClick={saveEdit}>{saving ? "שומר…" : "שמור"}</button>
@@ -680,427 +1031,68 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         </Card>
       )}
 
-      {builtOn && (builtOn.on || builtOn.missing.length > 0) && t.kind !== "check" && <BuiltOnCard b={builtOn} nav={nav} />}
-      {!builtOn && blockedOpen.length > 0 && (
-        <Card tone="crit">
-          <p style={{ fontSize: 13, marginBottom: 8 }}>המשימה תלויה ב-{blockedOpen.length} משימות שטרם הושלמו:</p>
-          <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5 }}>
-            {blockedOpen.map((b) => (
-              <li key={b.id} style={{ marginBottom: 3 }}>
-                <span className="w-title" onClick={() => nav(`#/task/${b.id}`)}>#{b.seq} {b.intent.slice(0, 70)}</span>
-                <span style={{ color: "var(--ink-400)" }}> — {STATE_HE[b.state] ?? b.state}</span>
-              </li>
-            ))}
-          </ul>
-          <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 8 }}>אפשר לפתח בכל זאת, אבל ייתכן שהבסיס עוד לא קיים.</p>
+      {t.kind === "task" && d.blockedBy.length > 0 && (
+        <Card tone={d.blockedBy.some((b) => b.state !== "done") ? "crit" : undefined}>
+          <CardTitle as="h3" info="task_dependencies" style={{ fontSize: 14, fontWeight: 650, marginBottom: 6 }}>תלויות ({d.blockedBy.length})</CardTitle>
+          {d.blockedBy.map((b) => (
+            <div key={b.id} className={`dep-row ${b.state === "done" ? "closed" : "open"}`}>
+              <span className="dot" />
+              <span className="w-title" onClick={() => nav(`#/task/${b.id}`)}>#{b.seq} — {b.intent.slice(0, 90)}</span>
+              <span className="spacer" style={{ flex: 1 }} />
+              <span style={{ fontSize: 11.5, color: b.state === "done" ? "var(--status-active)" : "var(--status-critical)", whiteSpace: "nowrap" }}>{b.state === "done" ? "הושלמה" : STATE_HE[b.state] ?? b.state}</span>
+            </div>
+          ))}
+          {d.blockedBy.some((b) => b.state !== "done") && (
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 8 }}>אפשר לפתח בכל זאת — המשימה נסגרת רק אחרי שכל התלויות הושלמו.</p>
+          )}
+          {builtOn && (builtOn.on || builtOn.missing.length > 0) && <BuiltOnCard b={builtOn} nav={nav} />}
         </Card>
       )}
 
-      {/* the entire dev-steps rail is gated on approval — an unapproved
-          task shows only the approve card above, not a disabled-looking
-          preview of steps it can't reach yet. */}
-      {t.approvedAt && (
-      <div className="panel" style={{ padding: 0, marginBottom: 16 }}>
-        <StepRail steps={TASK_STEPS} done={stepDone} unlocked={stepUnlocked} active={activeStep} onPick={goStep} busy={running} />
-        <div style={{ padding: 16 }}>
-
-          {activeStep === 0 && (
-            <>
-              {running ? (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <div className="spinner" style={{ width: 16, height: 16 }} />
-                    <p style={{ fontSize: 13, color: "var(--ink-600)", margin: 0 }}>{t.kind === "check" ? "Claude מריץ את הבדיקה — בלי הרשאה לשנות קבצים…" : run?.phase === "build" ? "שלב 2 מתוך 3 — Build: בונה את מה שהשינוי מתקמפל אליו…" : run?.phase === "test" ? "שלב 3 מתוך 3 — בדיקות: מריץ את הבדיקות, בלי הרשאה לשנות קבצים…" : "שלב 1 מתוך 3 — פיתוח: Claude קורא, כותב את הקוד ואת הבדיקות שלו…"}</p>
-                  </div>
-                  <Transcript lines={run?.lines ?? []} />
-                  <p style={{ marginTop: 6, fontSize: 11, color: "var(--ink-400)" }}>
-                    רץ ברקע על קלון מבודד, על branch נפרד. אפשר לצאת מהמסך. לא נדחף כלום.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
-                    {attempted ? "אפשר להריץ שוב — למשל אחרי עריכת הפרומט, או כדי לנסות גישה אחרת." : "Claude יקרא, יערוך ויריץ מה שאפשר על קלון מבודד — עוד לא נוגע בקוד שלך ולא בשום remote."}
-                  </p>
-                  <button className="btn btn-primary" onClick={openSend}>
-                    {attempted ? "✦ הרץ שוב" : "✦ תן ל-Claude לפתח"}
-                  </button>
-                  {run?.state === "error" && (
-                    <div style={{ marginTop: 14 }}>
-                      <p style={{ fontSize: 13, marginBottom: 6, color: "var(--status-critical)" }}>ההרצה האחרונה נכשלה.</p>
-                      <p style={{ fontSize: 12, color: "var(--status-critical)", whiteSpace: "pre-wrap" }}>{run.error}</p>
-                    </div>
-                  )}
-                </>
-              )}
-              {run && run.lines.length > 0 && !running && (
-                <div style={{ marginTop: 14 }}>
-                  <a className="link" style={{ fontSize: 12 }} onClick={() => setShowLog((v) => !v)}>
-                    {showLog ? "▲ הסתר" : "▼ הצג"} את התמלול המלא של ההרצה
-                  </a>
-                  {showLog && <div style={{ marginTop: 8 }}><Transcript lines={run.lines} /></div>}
-                </div>
-              )}
-            </>
-          )}
-
-          {activeStep === 1 && (
-            <>
-              {impl && (
-                <>
-                  <CardTitle as="h3" info="task_result" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</CardTitle>
-                  <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
-
-                  {impl.checks && impl.checks.length > 0 && (
-                    <div className="field" style={{ marginBottom: 12 }}>
-                      <label>תוצאות הבדיקות ({impl.checks.filter((c) => c.passed).length}/{impl.checks.length} עברו{impl.checks.some((c) => !c.passed && c.likelyCause === "dependency_missing") ? `, ${impl.checks.filter((c) => !c.passed && c.likelyCause === "dependency_missing").length} מחכות לתלות` : ""})<Info k="check_results" /></label>
-                      <div className="rowlist" style={{ marginTop: 4 }}>
-                        {impl.checks.map((c) => (
-                          <div key={c.seq} className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4, paddingBlock: 8 }}>
-                            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <Pill tone={c.passed ? "healthy" : c.likelyCause === "dependency_missing" ? "warning" : "critical"}>{c.passed ? "✓ עברה" : c.likelyCause === "dependency_missing" ? "⏸ מחכה לתלות" : c.likelyCause === "environment" ? "✕ לא יכלה לרוץ כאן" : "✕ נכשלה"}</Pill>
-                              <span style={{ fontSize: 12, color: "var(--ink-500)" }}>בדיקה #{c.seq}{c.kind ? ` · ${CHECK_KIND_HE[c.kind] ?? c.kind}` : ""}</span>
-                            </div>
-                            <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{c.detail}</p>
-                            {!c.passed && c.likelyCause && (
-                              <p style={{ fontSize: 11.5, color: "var(--status-warning)" }}>
-                                {c.likelyCause === "requirement_ambiguity"
-                                  ? "⚠ יתכן שהסיבה היא עמימות בדרישה או בשלבים המקדימים, לא תקלה במימוש — כדאי לבדוק את הדרישה לפני שמנסים שוב."
-                                  : c.likelyCause === "dependency_missing"
-                                    ? "אי אפשר היה לבדוק: הבדיקה צריכה עבודה של משימה שהמשימה הזו תלויה בה, ושעוד לא בענף. זו לא תקלה — כשהתלות תפותח, \"↩ Rollback\" והרצה חוזרת יבדקו אותה."
-                                    : c.likelyCause === "environment"
-                                      ? "⚠ הבדיקה לא יכלה לרוץ במחשב של DCC — חסר כלי, SDK או שירות (הפרטים למעלה). זו לא תקלה בקוד, אבל גם לא אישור שהוא עובד."
-                                      : "⚠ כנראה תקלת מימוש — כדאי לבדוק את הקוד שנכתב."}
-                              </p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      {impl.skipped && impl.skipped.length > 0 && (
-                        <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 6 }}>
-                          {impl.skipped.length} בדיקות לא רצו ({impl.skipped.map((n) => `#${n}`).join(", ")}) — ה-Build לא עבר, ובדיקות של קוד שלא נבנה לא אומרות כלום. הן ירוצו בהרצה הבאה, אחרי שה-Build יעבור.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {impl.filesChanged.length > 0 && (
-                    <div className="field" style={{ marginBottom: 10 }}>
-                      <label>קבצים שהשתנו ({impl.filesChanged.length})<Info k="files_changed" /></label>
-                      <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
-                        {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
-                      </div>
-                    </div>
-                  )}
-                  {impl.affectedConsumers?.length > 0 && (
-                    <div className="field" style={{ marginBottom: 10 }}>
-                      {/* no-info: the sentence under it is the explanation */}
-                      <label>מי עוד נוגע בקבצים האלה ({impl.affectedConsumers.length})</label>
-                      <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: -2, marginBottom: 6 }}>
-                        קוד אחר שמפנה/משתמש בקבצים ששונו — יש לשקול לאסוף ולעדכן אותם יחד לפריסת טסט.
-                      </p>
-                      <div className="rowlist">
-                        {impl.affectedConsumers.map((c, i) => (
-                          <div className="row" key={i} style={{ alignItems: "flex-start", flexDirection: "column", gap: 3, paddingBlock: 8 }}>
-                            <span style={{ fontFamily: "var(--mono)", fontSize: 11.5, direction: "ltr", textAlign: "left" }}>{c.path}</span>
-                            <span style={{ fontSize: 12, color: "var(--ink-700)" }}>{c.reason}</span>
-                            {c.usedBy.length > 0 && (
-                              <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
-                                ← {c.usedBy.join(", ")}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {impl.testsRun && (
-                    <div className="field" style={{ marginBottom: 10 }}>
-                      <label>בדיקות<Info k="check" /></label>
-                      <p style={{ fontSize: 12.5 }}>{impl.testsRun}</p>
-                    </div>
-                  )}
-                  <div className="field" style={{ marginBottom: 10 }}>
-                    <label>איפה זה יושב<Info k="where_it_sits" /></label>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", whiteSpace: "pre-wrap" }}>
-                      {`${impl.dir}\n${impl.branch}${impl.commit ? `  (commit ${impl.commit})` : "  — ללא שינויים"}`}
-                    </div>
-                  </div>
-                  <div className="field" style={{ marginBottom: 14 }}>
-                    <label>לבדיקה מקומית<Info k="local_check" /></label>
-                    <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left", display: "flex", justifyContent: "space-between", gap: 8 }}>
-                      <span style={{ whiteSpace: "pre-wrap" }}>{`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`}</span>
-                      <a style={{ cursor: "pointer", color: "var(--color-accent)" }} onClick={() => copy(`cd ${impl.dir}\ngit show ${impl.commit ?? "HEAD"}`, "cmd")}>{copied === "cmd" ? "✓" : "העתק"}</a>
-                    </div>
-                  </div>
-
-                  {impl.followUps.length > 0 && (
-                    <div style={{ marginBottom: 14 }}>
-                      <p className="section-lbl" style={{ marginBottom: 6 }}>המשך שנשאר<Info k="remaining_work" /></p>
-                      <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5, lineHeight: 1.7 }}>
-                        {impl.followUps.map((f, i) => <li key={i}>{f}</li>)}
-                      </ul>
-                    </div>
-                  )}
-
-                  {codeMap?.codeMap
-                    ? <div style={{ marginTop: 14 }}><CodeMapPanel map={codeMap.codeMap} title={`מצב הקוד · ${codeMap.branch ?? ""}`} /></div>
-                    : codeMap?.reason
-                      ? <p className="ob-sub" style={{ marginTop: 14, fontSize: 12, color: "var(--ink-500)" }}>{codeMap.reason}</p>
-                      : null}
-
-                  <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, marginTop: 14, display: "flex", gap: 8 }}>
-                    <button className="btn btn-primary" disabled={pushing || rollingBack} onClick={push}>
-                      {pushing ? "דוחף…" : "⬆ Push ל-GitHub"}
-                    </button>
-                    <button className="btn btn-secondary" disabled={pushing || rollingBack} onClick={rollback}>
-                      {rollingBack ? "מבטל…" : "↩ Rollback"}
-                    </button>
-                  </div>
-
-                  {pushResult && (
-                    <div className="callout" style={{ marginTop: 12 }}>
-                      <div className="body">
-                        {pushResult.pushed ? (
-                          <>
-                            <p className="r">✓ נדחף ל-GitHub.</p>
-                            <p style={{ display: "flex", gap: 14, marginTop: 4 }}>
-                              {pushResult.branchUrl && <a href={pushResult.branchUrl} target="_blank" rel="noreferrer">צפה ב-branch ↗</a>}
-                              {pushResult.compareUrl && <a href={pushResult.compareUrl} target="_blank" rel="noreferrer">פתח Pull Request{pushResult.base ? ` מול ${pushResult.base}` : ""} ↗</a>}
-                            </p>
-                            {pushResult.note && <p className="r" style={{ color: "var(--status-warning)", marginTop: 6 }}>⚠ {pushResult.note}</p>}
-                          </>
-                        ) : (
-                          <p className="r" style={{ color: "var(--status-critical)" }}>{pushResult.reason ?? "ה-push נכשל."}</p>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {rollbackMsg && (
-                    <div className="callout" style={{ marginTop: 12 }}>
-                      <div className="body"><p className="r">{rollbackMsg}</p></div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {!impl && run?.state === "rolled_back" && (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                    <Pill tone="inactive">↩ בוטל</Pill>
-                    <CardTitle as="h3" info="task_previous_run" style={{ fontSize: 13.5, fontWeight: 650, margin: 0, color: "var(--ink-600)" }}>הרצה קודמת — הקוד בוטל, המשימה נקייה כרגע</CardTitle>
-                  </div>
-                  {(() => {
-                    const old = run.result as unknown as ImplementResult | null;
-                    if (!old) return null;
-                    return (
-                      <>
-                        <p style={{ fontSize: 12.5, color: "var(--ink-500)", whiteSpace: "pre-wrap", lineHeight: 1.6, marginBottom: 8 }}>{old.summary}</p>
-                        {old.filesChanged.length > 0 && (
-                          <div className="field">
-                            {/* no-info: a list of file names from the run that was cancelled */}
-                            <label>קבצים שהשתנו אז (כבר לא קיימים ב-branch)</label>
-                            <div style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-500)", direction: "ltr", textAlign: "left" }}>
-                              {old.filesChanged.join(", ")}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                  <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 8 }}>
-                    אפשר לחזור לשלב הפיתוח ולהריץ מחדש בכל רגע.
-                  </p>
-                </>
-              )}
-
-              {!impl && run?.state === "error" && (
-                <div>
-                  <p style={{ fontSize: 13, marginBottom: 6, color: "var(--status-critical)" }}>ההרצה נכשלה — אין מה לסקור.</p>
-                  <p style={{ fontSize: 12, color: "var(--status-critical)", whiteSpace: "pre-wrap" }}>{run.error}</p>
-                </div>
-              )}
-            </>
-          )}
-
-          {activeStep === 2 && (
-            <>
-              {t.state === "done" ? (
-                <>
-                  <p style={{ fontSize: 13.5, color: "var(--status-healthy)", marginBottom: reopenOpen ? 10 : 0 }}>✓ המשימה סומנה כהושלמה.</p>
-                  {!reopenOpen ? (
-                    <a onClick={() => setReopenOpen(true)} style={{ fontSize: 12, color: "var(--ink-500)", cursor: "pointer" }}>↩ פתח מחדש</a>
-                  ) : (
-                    <div className="field">
-                      {/* no-info: the label says what is being asked and where the answer is kept */}
-                      <label>למה לפתוח מחדש? (יישמר בהיסטוריית הדרישה)</label>
-                      <textarea
-                        value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2}
-                        placeholder="למשל: נמצא באג, נדרש שינוי נוסף, וכו׳"
-                        style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }}
-                      />
-                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                        <button
-                          className="btn btn-secondary" disabled={reopening || !reopenReason.trim()}
-                          onClick={async () => {
-                            setReopening(true);
-                            try {
-                              await progressTask(t.id, { to: "in_progress", clientId: t.clientId, reopenReason });
-                              setReopenOpen(false); setReopenReason(""); load();
-                            } catch (e) { setErr(String(e)); }
-                            finally { setReopening(false); }
-                          }}
-                        >
-                          {reopening ? "פותח…" : "↩ פתח מחדש עם הסיבה הזו"}
-                        </button>
-                        <button className="btn btn-secondary" onClick={() => { setReopenOpen(false); setReopenReason(""); }}>ביטול</button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {t.state === "failed_checks" && (
-                    <div className="callout" style={{ borderColor: "var(--status-critical)", marginBottom: 12 }}>
-                      <div className="body">
-                        <p className="r" style={{ color: "var(--status-critical)" }}>
-                          יש בדיקות שלא עברו או שמחכות לתלות — אי אפשר לסמן כהושלם בלי לטפל בהן קודם, אלא אם מאשרים ידנית בכל זאת.
-                        </p>
-                        <ul style={{ margin: "6px 0 0", paddingInlineStart: 18, fontSize: 12.5 }}>
-                          {d.children.filter((c) => c.kind === "check" && c.checkResult !== "passed").map((c) => (
-                            <li key={c.id}>
-                              <span className="w-title" onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent.slice(0, 60)}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-                  <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
-                    לסמן שהעבודה של DCC על המשימה הזו נגמרה. אפשר לעשות זאת גם בלי push — לא כל משימה מסתיימת בקוד.
-                  </p>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="btn btn-primary" disabled={completing} onClick={() => markDone(false)}>
-                      {completing ? "מסמן…" : "סמן כהושלם"}
-                    </button>
-                    {(t.state === "failed_checks" || doneErr) && !overrideReasonOpen && (
-                      <button className="btn btn-secondary" disabled={completing} onClick={() => setOverrideReasonOpen(true)} style={{ color: "var(--status-critical)" }}>
-                        אשר ידנית למרות הכישלון
-                      </button>
-                    )}
-                  </div>
-                  {overrideReasonOpen && (
-                    <div className="field" style={{ marginTop: 10 }}>
-                      {/* no-info: the label says what is being asked and where the answer is kept */}
-                      <label>למה לאשר בכל זאת? (יישמר בהיסטוריית הדרישה)</label>
-                      <textarea
-                        value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2}
-                        placeholder="למשל: הבדיקה החסומה כבר לא רלוונטית, הוחלט לוותר עליה, וכו׳"
-                        style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }}
-                      />
-                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                        <button className="btn btn-secondary" disabled={completing || !overrideReason.trim()} onClick={() => markDone(true)} style={{ color: "var(--status-critical)" }}>
-                          {completing ? "מאשר…" : "✓ אשר עם הסיבה הזו"}
-                        </button>
-                        <button className="btn btn-secondary" onClick={() => { setOverrideReasonOpen(false); setOverrideReason(""); }}>ביטול</button>
-                      </div>
-                    </div>
-                  )}
-                  {doneErr && <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 8, whiteSpace: "pre-wrap" }}>{doneErr}</p>}
-                </>
-              )}
-            </>
-          )}
-
-        </div>
-      </div>
-      )}
-
-      {(d.children.length > 0 || d.blocks.length > 0) && (
-      <Card>
-        {d.children.filter((c) => c.kind !== "check").length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({d.children.filter((c) => c.kind !== "check").length})<Info k="subtasks" /></p>
-            <div className="rowlist">
-              {d.children.filter((c) => c.kind !== "check").map((c) => (
-                <div className="row" key={c.id}>
-                  <span className="title w-title" onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent}</span>
-                  <span className="spacer" />
-                  <Pill tone={c.state === "done" ? "healthy" : "inactive"}>{STATE_HE[c.state] ?? c.state}</Pill>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-        {d.children.filter((c) => c.kind === "check").length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <p className="section-lbl" style={{ marginBottom: 6 }}>
-              רשימת בדיקה להשלמת המשימה ({d.children.filter((c) => c.kind === "check").length})<Info k="check" />
-            </p>
-            <p style={{ fontSize: 11, color: "var(--ov-label)", marginTop: -4, marginBottom: 6 }}>
-              לא work items נפרדים ב-TFS — מתועדות ב-Discussion של המשימה הזו כשהיא מוקמת. Build, בדיקות לפיתוח ורגרסיה נוספות לכל משימה אוטומטית.
-            </p>
-            {t.kind === "task" && !d.children.some((c) => c.checkKind === "e2e") && d.children.some((c) => c.checkKind) && (
-              <p style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                <button className="btn btn-secondary btn-sm" disabled={addingE2E} onClick={addE2E}>{addingE2E ? "מוסיף…" : "+ הוסף בדיקות E2E"}</button>
-                <Info k="add_e2e_check" />
+      {t.approvedAt && t.kind === "task" && steps.length > 0 && (
+        <div className="panel" style={{ padding: 0, marginBottom: 16 }}>
+          <TaskFlowRail steps={steps} active={activeIdx} onPick={setManualStep} />
+          <div style={{ padding: 16 }}>
+            {sel && (
+              <p className="section-lbl" style={{ marginBottom: 8 }}>
+                {sel.kind === "dependency" ? "תלות" : STEP_NUM[sel.kind]} — {stepLabel(steps, activeIdx)}<Info k="task_flow_steps" />
               </p>
             )}
-            <div className="rowlist">
-              {d.children.filter((c) => c.kind === "check").map((c) => {
-                const isOpen = expandedCheck === c.id;
-                const isActive = c.active !== false;
-                return (
-                  <div key={c.id}>
-                    <div className="row" style={{ cursor: "pointer", opacity: isActive ? 1 : 0.55 }}>
-                      <a
-                        title={isActive ? "השבת בדיקה — תוצא מהפרומט ומשער ההשלמה, ההיסטוריה נשארת" : "הפעל בדיקה מחדש — תיכנס לפרומט הבא, תזדקק לאימות חדש"}
-                        onClick={(e) => { e.stopPropagation(); toggleCheck(c.id, !isActive); }}
-                        style={{ marginInlineEnd: 8, cursor: "pointer", color: "var(--ink-500)" }}
-                      >
-                        {togglingCheck === c.id ? "…" : isActive ? (c.state === "done" ? "☑" : "☐") : "◻"}
-                      </a>
-                      <span onClick={() => setExpandedCheck(isOpen ? null : c.id)} className="title" style={{ textDecoration: c.state === "done" ? "line-through" : "none", color: c.state === "done" ? "var(--ink-400)" : undefined }}>
-                        {isOpen ? "▾" : "▸"} #{c.seq} {c.intent}
-                      </span>
-                      {c.checkKind && <Pill tone="neutral">{CHECK_KIND_HE[c.checkKind] ?? c.checkKind}</Pill>}
-                      <span className="spacer" />
-                      {d.checkStatuses[c.id] ? <TaskStatusPill status={d.checkStatuses[c.id]!} /> : <Pill tone="inactive">{STATE_HE[c.state] ?? c.state}</Pill>}
-                      {!c.approvedAt && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          disabled={approvingCheck === c.id}
-                          onClick={(e) => { e.stopPropagation(); approveCheckRow(c.id); }}
-                          style={{ marginInlineStart: 8 }}
-                        >
-                          {approvingCheck === c.id ? "מאשר…" : "✓ אישור"}
-                        </button>
-                      )}
-                      <a onClick={(e) => { e.stopPropagation(); nav(`#/task/${c.id}`); }} style={{ fontSize: 11, marginInlineStart: 10, color: "var(--color-accent)", fontWeight: 600 }}>
-                        פתח ↗
-                      </a>
-                    </div>
-                    {isOpen && (
-                      <div style={{ background: "var(--surface-muted)", borderRadius: 8, padding: "8px 12px", margin: "4px 0 8px", fontSize: 12.5 }}>
-                        <p style={{ marginBottom: 4 }}>סטטוס: {STATE_HE[c.state] ?? c.state}{!isActive ? " · לא פעילה" : ""}{!c.approvedAt ? " · ממתין לאישור הקמה" : ""}</p>
-                        {c.checkResolvedBy && (
-                          <p style={{ color: "var(--status-warning)", marginBottom: 4 }}>✓ אושרה ידנית ע"י אדם — לא (רק) תוצאת הבדיקה של Claude.</p>
-                        )}
-                        <a onClick={() => nav(`#/task/${c.id}`)} style={{ fontSize: 11.5, color: "var(--color-accent)", fontWeight: 600, cursor: "pointer" }}>לפרטים המלאים והפרומט של הבדיקה ←</a>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            {paneFor(sel)}
           </div>
-        )}
-        {d.blocks.length > 0 && (
-          <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 10 }}>
-            {d.blocks.length} משימות מחכות לזו: {d.blocks.map((b) => `#${b.seq}`).join(", ")}
-          </p>
-        )}
-      </Card>
+        </div>
+      )}
+
+      {t.approvedAt && t.kind === "check" && (
+        <div className="panel" style={{ padding: 16, marginBottom: 16 }}>
+          <p className="section-lbl" style={{ marginBottom: 8 }}>הרצת הבדיקה<Info k="check" /></p>
+          <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>קלוד מריץ את הבדיקה על הענף של המשימה שהיא שייכת לה, בלי הרשאה לשנות קבצים.</p>
+          {runControls(attempted ? "✦ הרץ את הבדיקה שוב" : "✦ הרץ את הבדיקה")}
+          {impl && <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", marginTop: 12 }}>{impl.summary}</p>}
+          {instructionBlock}
+        </div>
+      )}
+
+      {(subtasks.length > 0 || d.blocks.length > 0) && (
+        <Card>
+          {subtasks.length > 0 && (
+            <>
+              <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({subtasks.length})<Info k="subtasks" /></p>
+              <div className="rowlist">
+                {subtasks.map((c) => (
+                  <div className="row" key={c.id}>
+                    <span className="title w-title" onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent}</span>
+                    <span className="spacer" />
+                    <Pill tone={c.state === "done" ? "healthy" : "inactive"}>{STATE_HE[c.state] ?? c.state}</Pill>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+          {d.blocks.length > 0 && (
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 10 }}>{d.blocks.length} משימות מחכות לזו: {d.blocks.map((b) => `#${b.seq}`).join(", ")}</p>
+          )}
+        </Card>
       )}
     </>
   );

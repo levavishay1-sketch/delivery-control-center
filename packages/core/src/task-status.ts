@@ -13,12 +13,15 @@ export type StatusTone = "inactive" | "neutral" | "ai" | "active" | "warning" | 
 export type RunPhase = "develop" | "build" | "test";
 
 export type TaskStatusKey =
-  | "inactive" | "dropped" | "awaiting_approval" | "dependency_open" | "ready" | "blocked"
+  | "inactive" | "dropped" | "awaiting_approval" | "awaiting_tfs" | "ready" | "blocked"
   | "running" | "failed" | "checks_pending" | "waiting_dependency" | "review" | "done"
   // a check row's own status
   | "check_passed" | "check_failed" | "check_waiting" | "check_not_run";
 
-export type TaskStatus = { key: TaskStatusKey; label: string; tone: StatusTone; reason?: string };
+/** Whether a task has a dependency that is not done — shown beside the status, whatever the status is. Never a gate. */
+export type DependencyTag = { label: string; tone: "critical" | "warning"; reason: string };
+
+export type TaskStatus = { key: TaskStatusKey; label: string; tone: StatusTone; reason?: string; dependency?: DependencyTag };
 
 export type StatusCheck = { seq: number; kind: string | null; result: string | null; cause: string | null; active: boolean };
 export type StatusDep = { seq: number; developed: boolean };
@@ -28,6 +31,8 @@ export type StatusFacts = {
   state: string;
   active: boolean;
   approved: boolean;
+  /** It has a work item in TFS — nothing is developed before it does. */
+  inTfs: boolean;
   /** A run of it is going on now, in this phase. */
   running: RunPhase | null;
   /** Its last development run ended in an error (and nothing ran after it). */
@@ -50,9 +55,15 @@ const PHASE_HE: Record<RunPhase, string> = { develop: "בפיתוח", build: "מ
 const KIND_ORDER: (string | null)[] = ["build", "tests", "regression", "e2e", null];
 const refs = (xs: { seq: number }[]) => xs.map((x) => `#${x.seq}`).join(", ");
 
-function whyFailed(c: StatusCheck): string {
+function whyFailed(c: StatusCheck, openDeps: StatusDep[]): string {
   if (c.cause === "environment") return c.kind === "build" ? "אי אפשר לבנות כאן — חסר כלי או SDK" : `בדיקה #${c.seq} לא יכלה לרוץ כאן`;
-  if (c.cause === "requirement_ambiguity") return `בדיקה #${c.seq} נכשלה — כנראה עמימות בדרישה`;
+  if (c.cause === "requirement_ambiguity") {
+    // What is unclear is often the work of a dependency that does not exist yet — say which one.
+    const missing = openDeps.filter((d) => !d.developed);
+    return missing.length
+      ? `בדיקה #${c.seq} נכשלה — כנראה עמימות בדרישה, אולי כי ${refs(missing)} עוד לא פותחה`
+      : `בדיקה #${c.seq} נכשלה — כנראה עמימות בדרישה`;
+  }
   switch (c.kind) {
     case "build": return "ה-Build נכשל";
     case "tests": return "בדיקות הפיתוח נכשלו";
@@ -63,26 +74,31 @@ function whyFailed(c: StatusCheck): string {
 }
 
 export function taskStatus(f: StatusFacts): TaskStatus {
+  const s = phaseStatus(f);
+  const dependency = dependencyTag(f);
+  return dependency ? { ...s, dependency } : s;
+}
+
+function phaseStatus(f: StatusFacts): TaskStatus {
   if (f.kind === "check") return checkStatus(f);
   if (!f.active) return { key: "inactive", label: "לא פעילה", tone: "inactive" };
   if (f.state === "dropped") return { key: "dropped", label: "נדחתה", tone: "inactive" };
   if (f.state === "done") return { key: "done", label: "הסתיימה", tone: "healthy" };
   if (!f.approved) return { key: "awaiting_approval", label: "ממתינה לאישור והקמה ב-TFS", tone: "inactive" };
   if (f.running) return { key: "running", label: `בעבודה · ${PHASE_HE[f.running]}`, tone: "active" };
+  // A task that has not started cannot start before it has a work item: the TFS item is what the work is tracked on.
+  if (!f.inTfs && !f.developed) return { key: "awaiting_tfs", label: "ממתינה להקמה ב-TFS", tone: "warning", reason: "אי אפשר להתחיל לפתח לפני שהמשימה קיימת ב-TFS" };
 
   const checks = f.checks.filter((c) => c.active).sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.seq - b.seq);
   const failed = checks.filter((c) => c.result === "failed");
   if (failed.length) {
-    return { key: "failed", label: "נפלה", tone: "critical", reason: `${whyFailed(failed[0]!)}${failed.length > 1 ? ` (ועוד ${failed.length - 1})` : ""}` };
+    return { key: "failed", label: "נפלה", tone: "critical", reason: `${whyFailed(failed[0]!, f.openDeps)}${failed.length > 1 ? ` (ועוד ${failed.length - 1})` : ""}` };
   }
   if (f.lastRunError) return { key: "failed", label: "נפלה", tone: "critical", reason: `ההרצה לא הסתיימה: ${f.lastRunError.slice(0, 120)}` };
   if (f.state === "blocked") return { key: "blocked", label: "חסומה", tone: "critical", reason: "סומנה כחסומה ידנית" };
 
-  if (!f.developed) {
-    const notDeveloped = f.openDeps.filter((d) => !d.developed);
-    if (notDeveloped.length) return { key: "dependency_open", label: "קיימת תלות", tone: "critical", reason: `${refs(notDeveloped)} עוד לא פותחה — אפשר לפתח בכל זאת, ולחזור אליה אחר כך` };
-    return { key: "ready", label: "מוכנה לפיתוח", tone: "neutral", ...(f.openDeps.length ? { reason: `תיבנה על גבי ${refs(f.openDeps)}` } : {}) };
-  }
+  // Not started: ready. An open dependency does not change that — it is shown beside the status (dependencyTag).
+  if (!f.developed) return { key: "ready", label: "מוכנה לפיתוח", tone: "neutral" };
 
   // Developed: what is left before it can be closed. Checks that never ran come first —
   // nothing can be said to wait for a dependency before the checks have said anything.
@@ -113,6 +129,21 @@ function checkStatus(f: StatusFacts): TaskStatus {
       : { key: "check_failed", label: "נכשלה", tone: "critical" };
   }
   return { key: "check_not_run", label: "לא רצה עדיין", tone: "inactive" };
+}
+
+/**
+ * The dependency beside the status. Shown while any task it depends on is not
+ * done — before a run, during one and after it — and gone the moment they all
+ * are. Red while one of them has no code at all (anything built now guesses at
+ * its shape); orange once they all have code.
+ */
+export function dependencyTag(f: Pick<StatusFacts, "kind" | "active" | "state" | "openDeps">): DependencyTag | null {
+  if (f.kind === "check" || !f.active || f.state === "dropped" || !f.openDeps.length) return null;
+  const noCode = f.openDeps.filter((d) => !d.developed);
+  if (noCode.length) {
+    return { label: `🔗 קיימת תלות · ${refs(f.openDeps)}`, tone: "critical", reason: `${refs(noCode)} עוד לא פותחה — אפשר לפתח בכל זאת, אבל בלי העבודה שלה` };
+  }
+  return { label: `🔗 תלויה ב-${refs(f.openDeps)}`, tone: "warning", reason: `${refs(f.openDeps)} פותחה, אבל עוד לא הושלמה — המשימה נסגרת רק אחריה` };
 }
 
 /** What stops a task from being closed — the dependency side of it (the checks are counted apart). Empty = nothing. */

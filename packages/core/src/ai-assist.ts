@@ -18,6 +18,7 @@ import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
 import { chooseBase, depLabel, type BasePlan, type DependencyFacts } from "./task-base.ts";
 import { dependencyBlockers, taskStatus, type CheckKind, type RunPhase, type StatusFacts, type TaskStatus } from "./task-status.ts";
+import { flowSteps, gainedDeps, type FlowBase, type FlowCycle, type FlowStep } from "./task-flow-steps.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -1244,6 +1245,11 @@ export type ImplementResult = {
   checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | "dependency_missing" | "environment" | null; kind?: string | null }[];
   /** Checks that did not run because the build did not pass. */
   skipped?: number[];
+  /** What the run was built on and without — how the task's steps tell a dependency coming in from a plain run again. */
+  base?: FlowBase;
+  /** Set later, on the run the task's branch was pushed from / the task was closed on. */
+  pushedAt?: string;
+  closedAt?: string;
 };
 
 /** Run a git command in `cwd`; resolves { code, out }.
@@ -1449,7 +1455,7 @@ async function statusFactsFor(clientId: string, workitemId: string): Promise<{ f
       if (d && tip && tip !== t.baseSha && (await git(["merge-base", "--is-ancestor", t.baseSha, tip], d)).code === 0) onMoved = { seq: byId.get(t.baseTaskId)?.seq ?? 0 };
     }
     facts.set(t.id, {
-      kind: t.kind, state: t.state, active: t.active, approved: !!t.approvedAt, running,
+      kind: t.kind, state: t.state, active: t.active, approved: !!t.approvedAt, inTfs: t.linkedAdoId != null, running,
       lastRunError: last?.state === "error" ? (last.error ?? "שגיאה") : null,
       developed: developed.has(t.id),
       checks: rows.filter((c) => c.parentTaskId === t.id && c.kind === "check" && c.state !== "dropped")
@@ -1478,6 +1484,48 @@ export async function taskStatusOf(clientId: string, taskId: string): Promise<{ 
   const { facts, rows } = await statusFactsFor(clientId, t.workitemId);
   const checks = rows.filter((c) => c.parentTaskId === taskId && c.kind === "check");
   return { status: taskStatus(facts.get(taskId)!), checks: Object.fromEntries(checks.map((c) => [c.id, taskStatus(facts.get(c.id)!)])) };
+}
+
+/**
+ * The steps a task went through and the one it is at, from its development
+ * runs (task-flow-steps.ts decides). A dependency waiting to come in is read
+ * from the task's branch while it has code, and from what a run now would be
+ * built on once that code was rolled back.
+ */
+export async function taskFlowOf(clientId: string, taskId: string): Promise<FlowStep[]> {
+  const [t] = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.id, taskId)).limit(1));
+  if (!t || t.kind === "check") return [];
+  const runs = await db.select({ state: flowRun.state, result: flowRun.result, startedAt: flowRun.startedAt }).from(flowRun)
+    .where(and(eq(flowRun.taskId, taskId), eq(flowRun.kind, "implement"))).orderBy(flowRun.startedAt);
+  const cycles: FlowCycle[] = runs.filter((r) => r.state !== "stopped").map((r) => {
+    const res = r.result as Partial<ImplementResult> | null;
+    const all = res?.checks ?? [];
+    const after = all.filter((c) => c.kind !== "build");
+    return {
+      state: r.state as FlowCycle["state"], startedAt: r.startedAt.toISOString(), base: res?.base,
+      buildFailed: all.some((c) => c.kind === "build" && !c.passed) || !!res?.skipped?.length,
+      checks: {
+        ran: after.length, passed: after.filter((c) => c.passed).length,
+        failed: after.filter((c) => !c.passed && c.likelyCause !== "dependency_missing").length,
+        waiting: after.filter((c) => !c.passed && c.likelyCause === "dependency_missing").length,
+      },
+      reviewed: !!(res?.pushedAt || res?.closedAt),
+    };
+  });
+
+  let pendingDeps: number[] = [];
+  const last = cycles.at(-1);
+  if (last?.state === "done") {
+    const f = (await statusFactsFor(clientId, t.workitemId)).facts.get(taskId);
+    pendingDeps = [...(f?.builtWithout.filter((d) => d.available).map((d) => d.seq) ?? []), ...(f?.onMoved ? [f.onMoved.seq] : [])];
+  } else if (last?.state === "rolled_back") {
+    const lastBase = cycles.findLast((c) => c.base)?.base;
+    if (lastBase) {
+      const plan = await taskBuiltOn(clientId, taskId).catch(() => null);
+      if (plan) pendingDeps = gainedDeps(lastBase, { on: plan.on ? { seq: plan.on.seq, sha: null } : null, without: plan.missing.map((m) => m.seq) });
+    }
+  }
+  return flowSteps(cycles, { running: liveTaskPhase(taskId), closed: t.state === "done", pendingDeps: [...new Set(pendingDeps)] });
 }
 
 /** What keeps a task from being closed on the dependency side: its dependencies not done, work it was developed without, a base that moved. */
@@ -1737,6 +1785,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   await git(["reset", "--hard"], dir);
   await git(["clean", "-fd"], dir);
   let built: TaskBuiltOn | null = null;
+  let baseSha: string | null = t.baseSha;
   if (isCheck) {
     const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
     if (exists.code !== 0) throw new Error(`אין branch בשם ${branch} — המשימה שהבדיקה הזו שייכת לה עוד לא פותחה, אין מה לאמת`);
@@ -1752,7 +1801,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     const def = await defaultBranch(dir);
     const plan = await planTaskBase(input.clientId, t, wi?.key, dir);
     const from = plan.on?.branch ?? def;
-    const baseSha = (await git(["rev-parse", from], dir)).out;
+    baseSha = (await git(["rev-parse", from], dir)).out;
     await git(["checkout", "-B", branch, from], dir);
     await withTenant(input.clientId, (tx) => tx.update(task).set({
       baseTaskId: plan.on?.id ?? null, baseBranch: from, baseSha, builtWithout: plan.missing.map((m) => m.dep.id), updatedAt: new Date(),
@@ -1781,6 +1830,12 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     await regenerateBrief(input.clientId, input.workitemId);
     return { branch, dir, repoName: r.name, summary: step.summary, filesChanged: [], commit: null, testsRun: null, followUps: [], affectedConsumers: [], checks: step.checks };
   }
+
+  // Kept on the run from the start, so a run that fails still says what it was built on.
+  const base: FlowBase | undefined = built
+    ? { on: built.on ? { seq: built.on.seq, sha: baseSha } : null, without: built.missing.map((m) => m.seq) }
+    : undefined;
+  if (base && input.runId) await db.update(flowRun).set({ result: { base } }).where(eq(flowRun.id, input.runId));
 
   // Every task is verified the same way — the checks DCC requires are there
   // before it runs; a task from before they existed gets them now.
@@ -1868,7 +1923,16 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     affectedConsumers: (res.affectedConsumers ?? []).map((c) => ({ path: c.path, usedBy: c.usedBy ?? [], reason: c.reason })),
     ...(outcomes.length ? { checks: outcomes } : {}),
     ...(skipped.length ? { skipped } : {}),
+    ...(base ? { base } : {}),
   };
+}
+
+/** Adds to the result of a task's latest development run that finished — it was pushed, or the task was closed on it. */
+export async function markLatestRun(taskId: string, patch: Pick<ImplementResult, "pushedAt" | "closedAt">): Promise<void> {
+  const [r] = await db.select({ id: flowRun.id, result: flowRun.result }).from(flowRun)
+    .where(and(eq(flowRun.taskId, taskId), eq(flowRun.kind, "implement"), eq(flowRun.state, "done")))
+    .orderBy(desc(flowRun.startedAt)).limit(1);
+  if (r) await db.update(flowRun).set({ result: { ...(r.result as Record<string, unknown> | null ?? {}), ...patch } }).where(eq(flowRun.id, r.id));
 }
 
 export type RollbackResult = { rolledBack: boolean; reason?: string; branch?: string; dir?: string; invalidatedRuns?: number };
@@ -2012,6 +2076,7 @@ export async function pushTask(input: { clientId: string; workitemId: string; ta
   const branchUrl = httpsBase ? `${httpsBase}/tree/${encodeURIComponent(branch)}` : undefined;
   const compareUrl = httpsBase ? `${httpsBase}/compare/${encodeURIComponent(base)}...${encodeURIComponent(branch)}?expand=1` : undefined;
 
+  await markLatestRun(input.taskId, { pushedAt: new Date().toISOString() });
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "git", type: "note.added",
     actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
