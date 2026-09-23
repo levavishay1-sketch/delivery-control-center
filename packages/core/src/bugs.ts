@@ -55,7 +55,7 @@ export async function inheritedChecksForBug(clientId: string, bugId: string): Pr
   // always small (a Bug links to a handful of tasks at most).
   const linkedIds = new Set(linked.map((l) => l.id));
   const parented = await withTenant(clientId, (tx) =>
-    tx.select({ intent: task.intent, prompt: task.prompt, parentTaskId: task.parentTaskId })
+    tx.select({ intent: task.intent, prompt: task.prompt, parentTaskId: task.parentTaskId, checkKind: task.checkKind })
       .from(task)
       .where(and(eq(task.kind, "check"), eq(task.active, true))),
   );
@@ -63,6 +63,8 @@ export async function inheritedChecksForBug(clientId: string, bugId: string): Pr
   const out: { intent: string; prompt: string | null }[] = [];
   for (const c of parented) {
     if (!c.parentTaskId || !linkedIds.has(c.parentTaskId)) continue;
+    // The build, tests and regression checks every task gets are not inherited — the bug's own task gets its own.
+    if (c.checkKind) continue;
     if (seen.has(c.intent)) continue;
     seen.add(c.intent);
     out.push({ intent: c.intent, prompt: c.prompt });

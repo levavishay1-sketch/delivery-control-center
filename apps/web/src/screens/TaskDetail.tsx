@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
+  getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, addE2ECheck, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
   type FlowRun, type ImplementResult, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck,
 } from "../api.ts";
-import { CardTitle, PageHead, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
+import { CardTitle, PageHead, Pill, PromptPreviewModal, CopyBtn, TaskStatusPill, CHECK_KIND_HE } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { useClaudeContext } from "../claude/context.ts";
@@ -122,6 +122,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [pushing, setPushing] = useState(false);
   const [pushResult, setPushResult] = useState<{ pushed: boolean; reason?: string; branchUrl?: string; compareUrl?: string; base?: string; note?: string } | null>(null);
   const [builtOn, setBuiltOn] = useState<TaskBuiltOn | null>(null);
+  const [addingE2E, setAddingE2E] = useState(false);
   // The same picture the onboarding stages draw, for this task's branch.
   const [codeMap, setCodeMap] = useState<{ codeMap: CodeMap | null; branch: string | null; reason?: string } | null>(null);
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
@@ -225,6 +226,14 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   if (!d) return <div className="spin">טוען…</div>;
   const t = d.task;
   const blockedOpen = d.blockedBy.filter((b) => b.state !== "done");
+  // While a run is going on the status follows it step by step; the rest of the time it is the server's.
+  const runningStatus = run?.state === "running" && run.kind === "implement" && t.kind === "task"
+    ? { label: `בעבודה · ${run.phase === "build" ? "מקמפלת" : run.phase === "test" ? "בבדיקות" : "בפיתוח"}`, tone: "active" as const }
+    : null;
+  const addE2E = async () => {
+    setAddingE2E(true);
+    try { await addE2ECheck(t.id); load(); } catch (e) { setErr(String(e)); } finally { setAddingE2E(false); }
+  };
   const impl = run?.state === "done" && run.kind === "implement" ? (run.result as unknown as ImplementResult | null) : null;
 
   // the task's own FLOW: פיתוח → סקירה והחלטה → הושלם. Step 1 unlocks once
@@ -469,9 +478,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       </div>
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
-        <Pill tone={t.state === "done" ? "healthy" : t.state === "in_progress" ? "active" : (t.state === "blocked" || t.state === "failed_checks") ? "critical" : "inactive"}>
-          {STATE_HE[t.state] ?? t.state}
-        </Pill>
+        {/* The status as computed from the run, the checks and the dependencies — the same one the flow graph shows. */}
+        <TaskStatusPill status={runningStatus ?? d.status} withReason />
+        <Info k="task_status" />
         {t.kind === "check"
           ? <Pill tone="neutral">✓ בדיקה — לא work item בפני עצמה</Pill>
           : <Pill tone={t.adoType && t.adoType !== "Task" ? "ai" : "inactive"}>{t.adoType ?? "Task"}</Pill>}
@@ -701,7 +710,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                 <>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                     <div className="spinner" style={{ width: 16, height: 16 }} />
-                    <p style={{ fontSize: 13, color: "var(--ink-600)", margin: 0 }}>Claude מפתח את המשימה — קורא, עורך, ומריץ מה שאפשר…</p>
+                    <p style={{ fontSize: 13, color: "var(--ink-600)", margin: 0 }}>{t.kind === "check" ? "Claude מריץ את הבדיקה — בלי הרשאה לשנות קבצים…" : run?.phase === "build" ? "שלב 2 מתוך 3 — Build: בונה את מה שהשינוי מתקמפל אליו…" : run?.phase === "test" ? "שלב 3 מתוך 3 — בדיקות: מריץ את הבדיקות, בלי הרשאה לשנות קבצים…" : "שלב 1 מתוך 3 — פיתוח: Claude קורא, כותב את הקוד ואת הבדיקות שלו…"}</p>
                   </div>
                   <Transcript lines={run?.lines ?? []} />
                   <p style={{ marginTop: 6, fontSize: 11, color: "var(--ink-400)" }}>
@@ -749,8 +758,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                         {impl.checks.map((c) => (
                           <div key={c.seq} className="row" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4, paddingBlock: 8 }}>
                             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                              <Pill tone={c.passed ? "healthy" : c.likelyCause === "dependency_missing" ? "warning" : "critical"}>{c.passed ? "✓ עברה" : c.likelyCause === "dependency_missing" ? "⏸ מחכה לתלות" : "✕ נכשלה"}</Pill>
-                              <span style={{ fontSize: 12, color: "var(--ink-500)" }}>בדיקה #{c.seq}</span>
+                              <Pill tone={c.passed ? "healthy" : c.likelyCause === "dependency_missing" ? "warning" : "critical"}>{c.passed ? "✓ עברה" : c.likelyCause === "dependency_missing" ? "⏸ מחכה לתלות" : c.likelyCause === "environment" ? "✕ לא יכלה לרוץ כאן" : "✕ נכשלה"}</Pill>
+                              <span style={{ fontSize: 12, color: "var(--ink-500)" }}>בדיקה #{c.seq}{c.kind ? ` · ${CHECK_KIND_HE[c.kind] ?? c.kind}` : ""}</span>
                             </div>
                             <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.6 }}>{c.detail}</p>
                             {!c.passed && c.likelyCause && (
@@ -759,12 +768,19 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                                   ? "⚠ יתכן שהסיבה היא עמימות בדרישה או בשלבים המקדימים, לא תקלה במימוש — כדאי לבדוק את הדרישה לפני שמנסים שוב."
                                   : c.likelyCause === "dependency_missing"
                                     ? "אי אפשר היה לבדוק: הבדיקה צריכה עבודה של משימה שהמשימה הזו תלויה בה, ושעוד לא בענף. זו לא תקלה — כשהתלות תפותח, \"↩ Rollback\" והרצה חוזרת יבדקו אותה."
-                                    : "⚠ כנראה תקלת מימוש — כדאי לבדוק את הקוד שנכתב."}
+                                    : c.likelyCause === "environment"
+                                      ? "⚠ הבדיקה לא יכלה לרוץ במחשב של DCC — חסר כלי, SDK או שירות (הפרטים למעלה). זו לא תקלה בקוד, אבל גם לא אישור שהוא עובד."
+                                      : "⚠ כנראה תקלת מימוש — כדאי לבדוק את הקוד שנכתב."}
                               </p>
                             )}
                           </div>
                         ))}
                       </div>
+                      {impl.skipped && impl.skipped.length > 0 && (
+                        <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 6 }}>
+                          {impl.skipped.length} בדיקות לא רצו ({impl.skipped.map((n) => `#${n}`).join(", ")}) — ה-Build לא עבר, ובדיקות של קוד שלא נבנה לא אומרות כלום. הן ירוצו בהרצה הבאה, אחרי שה-Build יעבור.
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -1022,8 +1038,14 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
               רשימת בדיקה להשלמת המשימה ({d.children.filter((c) => c.kind === "check").length})<Info k="check" />
             </p>
             <p style={{ fontSize: 11, color: "var(--ov-label)", marginTop: -4, marginBottom: 6 }}>
-              לא work items נפרדים ב-TFS — מתועדות ב-Discussion של המשימה הזו כשהיא מוקמת.
+              לא work items נפרדים ב-TFS — מתועדות ב-Discussion של המשימה הזו כשהיא מוקמת. Build, בדיקות לפיתוח ורגרסיה נוספות לכל משימה אוטומטית.
             </p>
+            {t.kind === "task" && !d.children.some((c) => c.checkKind === "e2e") && d.children.some((c) => c.checkKind) && (
+              <p style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <button className="btn btn-secondary btn-sm" disabled={addingE2E} onClick={addE2E}>{addingE2E ? "מוסיף…" : "+ הוסף בדיקות E2E"}</button>
+                <Info k="add_e2e_check" />
+              </p>
+            )}
             <div className="rowlist">
               {d.children.filter((c) => c.kind === "check").map((c) => {
                 const isOpen = expandedCheck === c.id;
@@ -1041,16 +1063,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                       <span onClick={() => setExpandedCheck(isOpen ? null : c.id)} className="title" style={{ textDecoration: c.state === "done" ? "line-through" : "none", color: c.state === "done" ? "var(--ink-400)" : undefined }}>
                         {isOpen ? "▾" : "▸"} #{c.seq} {c.intent}
                       </span>
+                      {c.checkKind && <Pill tone="neutral">{CHECK_KIND_HE[c.checkKind] ?? c.checkKind}</Pill>}
                       <span className="spacer" />
-                      {!isActive
-                        ? <Pill tone="inactive">לא פעילה</Pill>
-                        : c.checkResult === "passed"
-                          ? <Pill tone="healthy">עברה</Pill>
-                          : c.checkResult === "failed"
-                            ? <Pill tone="critical">נכשלה</Pill>
-                            : c.checkResult === "waiting"
-                              ? <Pill tone="warning">מחכה לתלות</Pill>
-                            : c.linkedAdoId ? <Pill tone="healthy">תועד ב-Discussion</Pill> : <Pill tone="inactive">{STATE_HE[c.state] ?? c.state}</Pill>}
+                      {d.checkStatuses[c.id] ? <TaskStatusPill status={d.checkStatuses[c.id]!} /> : <Pill tone="inactive">{STATE_HE[c.state] ?? c.state}</Pill>}
                       {!c.approvedAt && (
                         <button
                           className="btn btn-secondary btn-sm"

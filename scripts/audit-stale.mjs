@@ -68,6 +68,8 @@ const RETIRED = [
   "GlossaryHint", "gl-wrap", "gl-hint", "getGlossary(", "export const GLOSSARY",
   // prompts written as strings in the code, retired 2026-09-23: every instruction is a row of the prompt library,
   // read at the moment of the call (packages/db/migrations/0040_every_prompt_in_the_library.sql)
+  // checks reported inside the development prompt, retired 2026-09-23: they run after it, as their own steps (checks.run)
+  "implement.check", "CHECKS TO ALSO PERFORM",
   "GAPS_SYSTEM", "CODE_SYSTEM", "CHANGE_SYSTEM", "RUN_SYSTEM", "INSIGHTS_SYSTEM", "NOTES_SYSTEM", "SYSTEM_HASH", "REPO_CONTEXT",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;

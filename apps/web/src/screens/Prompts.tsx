@@ -28,6 +28,8 @@ const CATEGORIES: [prefix: string, title: string][] = [
   ["gaps", "פערים (Gaps)"],
   ["breakdown", "פירוק לעבודה (Breakdown)"],
   ["implement", "מימוש (Implement)"],
+  ["checks", "בדיקות של משימה (Checks)"],
+  ["check", "בדיקות של משימה (Checks)"],
   ["chat", "הצ'אט — שאל את קלוד"],
   ["onboarding", "קליטת מאגר (Onboarding)"],
   ["insights", "ניתוח שאלות (Insights)"],

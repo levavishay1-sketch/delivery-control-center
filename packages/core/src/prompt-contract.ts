@@ -47,13 +47,19 @@ export const PROMPT_USES: Record<string, PromptUse> = {
     keeps: ['"seq"', '"parentSeq"', '"kind"', '"intent"', '"prompt"', '"appetite"', '"affectedPaths"', '"compiledComponents"', '"dependsOnSeq"'],
   },
   "implement.task": {
-    capability: "execution", vars: ["INSTRUCTION", "APPETITE", "CONTEXT"], optional: ["SHORT_TITLE", "AFFECTED_PATHS", "BUILT_ON", "MISSING", "CHECKS"],
-    keeps: ['"summary"', '"filesChanged"', '"testsRun"', '"followUps"', '"affectedConsumers"', '"checks"', '"passed"', '"likelyCause"'],
-  },
-  "implement.check": {
-    capability: "execution", vars: ["INSTRUCTION", "APPETITE", "CONTEXT"], optional: ["SHORT_TITLE"],
+    capability: "execution", vars: ["INSTRUCTION", "APPETITE", "CONTEXT"], optional: ["SHORT_TITLE", "AFFECTED_PATHS", "BUILT_ON", "MISSING"],
     keeps: ['"summary"', '"filesChanged"', '"testsRun"', '"followUps"', '"affectedConsumers"'],
   },
+  // After the development: the build checks, then all the others — no write access.
+  "checks.run": {
+    capability: "execution", vars: ["INTENT", "CHANGED_FILES", "CONTEXT", "CHECKS"], optional: ["BUILT_ON", "MISSING"],
+    keeps: ['"summary"', '"checks"', '"seq"', '"passed"', '"detail"', '"likelyCause"'],
+  },
+  // The instruction of each check DCC adds to a task — copied onto the check when it is created.
+  "check.build": { capability: "execution", vars: [], optional: ["COMPILED", "PATHS", "INTENT"], keeps: [] },
+  "check.tests": { capability: "execution", vars: [], optional: ["COMPILED", "PATHS", "INTENT"], keeps: [] },
+  "check.regression": { capability: "execution", vars: [], optional: ["COMPILED", "PATHS", "INTENT"], keeps: [] },
+  "check.e2e": { capability: "execution", vars: [], optional: ["COMPILED", "PATHS", "INTENT"], keeps: [] },
   "chat.system": {
     capability: "chat", vars: ["UNANSWERED_MARK"],
     keeps: ['<goto key="', '<action key="', "<needs_code>"],

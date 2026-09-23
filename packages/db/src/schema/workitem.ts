@@ -241,6 +241,16 @@ export const task = pgTable(
      * Claude reported, unmodified.
      */
     checkResult: text("check_result"),
+    /**
+     * Check-kind rows only. Which of the checks DCC adds to every task this
+     * is — "build" | "tests" | "regression" | "e2e" — or null for one the
+     * breakdown or a person wrote. See `standard-checks` in ai-assist.ts.
+     */
+    checkKind: text("check_kind"),
+    /** Check-kind rows only: why its last result was not a pass — "implementation" |
+     *  "requirement_ambiguity" | "dependency_missing" | "environment" — so the task's
+     *  status can say why it fell. Null when it passed or never ran. */
+    checkCause: text("check_cause"),
     checkResolvedBy: uuid("check_resolved_by").references(() => users.id),
     checkResolvedAt: timestamp("check_resolved_at", { withTimezone: true }),
     /** How this task was created: 'ai' (a breakdown proposal) or 'human'. */

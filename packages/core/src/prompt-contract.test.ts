@@ -1,15 +1,47 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { PROMPT_USES, contractProblems, renderPrompt } from "./prompt-contract.ts";
 
-/** The rows the library migration seeds, read from the SQL itself — the same text the database gets. */
-const seeded: Record<string, { body: string; he: string | undefined }> = {};
-const sql = readFileSync(new URL("../../db/migrations/0040_every_prompt_in_the_library.sql", import.meta.url), "utf8");
-for (const chunk of sql.split("--> statement-breakpoint")) {
-  const key = chunk.match(/VALUES \(\s*'([^']+)'/)?.[1];
-  if (!key) continue;
-  const [body, he] = [...chunk.matchAll(/\$p\$([\s\S]*?)\$p\$/g)].map((m) => m[1]!);
-  seeded[key] = { body: body!, he };
+/**
+ * The library as the database ends up with it: the migrations that seed and
+ * edit it, replayed in order from the SQL itself — the same text the database
+ * gets. Understands the forms those migrations use: INSERT … VALUES ('key', …,
+ * $p$body$p$, $p$he$p$|NULL); UPDATE … replace("body", $a$from$a$, $b$to$b$) …
+ * WHERE "key" = 'k' (in place — every anchor must be there); UPDATE … "body" =
+ * $p$…$p$, "body_he" = $p$…$p$ WHERE "key" = 'k' (whole); DELETE … WHERE "key" = 'k'.
+ */
+const dir = new URL("../../db/migrations/", import.meta.url);
+const files = readdirSync(dir).filter((f) => f.endsWith(".sql") && f >= "0040").sort();
+const rows: Record<string, { body: string; he: string | null }> = {};
+const missedAnchors: string[] = [];
+const edited: string[] = [];
+for (const f of files) {
+  for (const stmt of readFileSync(new URL(f, dir), "utf8").split("--> statement-breakpoint")) {
+    const where = stmt.match(/WHERE "key" (?:=|LIKE) '([^']+)'/)?.[1];
+    if (/^\s*(--.*\n\s*)*INSERT INTO "prompt_template"/.test(stmt)) {
+      const key = stmt.match(/VALUES \(\s*'([^']+)'/)![1]!;
+      const [body, he] = [...stmt.matchAll(/\$p\$([\s\S]*?)\$p\$/g)].map((m) => m[1]!);
+      rows[key] = { body: body!, he: he ?? null };
+    } else if (/^\s*(--.*\n\s*)*DELETE FROM "prompt_template"/.test(stmt) && where) {
+      delete rows[where];
+    } else if (/^\s*(--.*\n\s*)*UPDATE "prompt_template"/.test(stmt) && where && !where.includes("%")) {
+      const row = rows[where];
+      if (!row) continue;
+      const [bodyPart, hePart = ""] = stmt.split(/"body_he" =/);
+      const whole = [...stmt.matchAll(/\$p\$([\s\S]*?)\$p\$/g)].map((m) => m[1]!);
+      if (whole.length) { row.body = whole[0]!; row.he = whole[1] ?? row.he; edited.push(`${f}:${where}`); continue; }
+      const apply = (part: string, field: "body" | "he") => {
+        for (const m of part.matchAll(/\$a\$([\s\S]*?)\$a\$,\s*\$b\$([\s\S]*?)\$b\$/g)) {
+          const text = row[field] ?? "";
+          if (!text.includes(m[1]!)) missedAnchors.push(`${f}:${where}:${field}: ${m[1]!.slice(0, 50)}`);
+          row[field] = text.split(m[1]!).join(m[2]!);
+        }
+      };
+      apply(bodyPart!, "body");
+      apply(hePart, "he");
+      edited.push(`${f}:${where}`);
+    }
+  }
 }
 
 describe("renderPrompt", () => {
@@ -48,61 +80,57 @@ describe("contractProblems", () => {
   });
 });
 
-describe("the seeded library", () => {
-  it("seeds every prompt the code uses, apart from the readiness rows that came before it", () => {
-    const earlier = Object.keys(PROMPT_USES).filter((k) => k.startsWith("assess."));
-    expect(Object.keys(seeded).sort()).toEqual(Object.keys(PROMPT_USES).filter((k) => !earlier.includes(k)).sort());
+describe("the library as the migrations leave it", () => {
+  it("has every edit land on text that is there", () => {
+    expect(missedAnchors).toEqual([]);
+    expect(edited.length).toBeGreaterThan(0);
   });
 
-  it("seeds each one, and its Hebrew version, whole — nothing its caller needs is missing", () => {
-    for (const [key, row] of Object.entries(seeded)) {
+  it("holds every prompt the code uses, apart from the readiness rows that came before it — and nothing the code no longer uses", () => {
+    const earlier = Object.keys(PROMPT_USES).filter((k) => k.startsWith("assess."));
+    expect(Object.keys(rows).sort()).toEqual(Object.keys(PROMPT_USES).filter((k) => !earlier.includes(k)).sort());
+  });
+
+  it("leaves each one, and its Hebrew version, whole — nothing its caller needs is missing", () => {
+    for (const [key, row] of Object.entries(rows)) {
       expect(contractProblems(key, row.body), key).toEqual([]);
       if (row.he) {
         // The Hebrew version is only read, never parsed: it must carry the same values, not the English answer fields.
-        const he = contractProblems(key, row.he).filter((p) => p.includes("{{"));
-        expect(he, `${key} (Hebrew)`).toEqual([]);
+        expect(contractProblems(key, row.he).filter((p) => p.includes("{{")), `${key} (Hebrew)`).toEqual([]);
       }
     }
   });
 
-  it("renders a task with checks, a task without, and a check — each whole and with no leftover markers", () => {
+  it("develops without reporting checks, and says what the branch holds of what it depends on", () => {
+    const body = rows["implement.task"]!.body;
     const vars = { INSTRUCTION: "do it", APPETITE: "small", CONTEXT: "ctx", SHORT_TITLE: "", AFFECTED_PATHS: "" };
-    const withChecks = renderPrompt(seeded["implement.task"]!.body, { ...vars, CHECKS: "#3: verify" });
-    expect(withChecks).toContain("CHECKS TO ALSO PERFORM");
-    expect(withChecks).toContain("#3: verify");
-    expect(withChecks).toContain("6. Perform each numbered check");
-    expect(withChecks).toContain('"checks": [{"seq"');
-    const without = renderPrompt(seeded["implement.task"]!.body, { ...vars, CHECKS: "" });
-    expect(without).not.toContain("CHECKS TO ALSO PERFORM");
-    expect(without).not.toContain('"checks"');
-    expect(without).toContain("Appetite: small\n\nCONTEXT");
-    const check = renderPrompt(seeded["implement.check"]!.body, vars);
-    expect(check).toContain("You are VERIFYING one thing");
-    for (const t of [withChecks, without, check]) expect(t).not.toMatch(/\{\{/);
-  });
-
-  it("takes the later edits to the development prompt, each landing on text that is there", () => {
-    // 0041 edits implement.task in place with replace(); an anchor that is not there would silently change nothing.
-    const later = readFileSync(new URL("../../db/migrations/0041_task_built_on.sql", import.meta.url), "utf8");
-    const edits = [...later.matchAll(/\$a\$([\s\S]*?)\$a\$,\s*\$b\$([\s\S]*?)\$b\$/g)].map((m) => [m[1]!, m[2]!] as const);
-    expect(edits.length).toBe(6);
-    let body = seeded["implement.task"]!.body, he = seeded["implement.task"]!.he!;
-    for (const [from, to] of edits) {
-      const inEn = body.includes(from), inHe = he.includes(from);
-      expect(inEn || inHe, from.slice(0, 60)).toBe(true);
-      if (inEn) body = body.replace(from, to); else he = he.replace(from, to);
-    }
-    expect(contractProblems("implement.task", body)).toEqual([]);
-    const vars = { INSTRUCTION: "do it", APPETITE: "small", CONTEXT: "ctx", CHECKS: "" };
+    const plain = renderPrompt(body, vars);
+    expect(plain).not.toContain('"checks"');
+    expect(plain).toContain("3. Tests: add tests for the logic you added or changed");
+    expect(plain).toContain("Appetite: small\n\nCONTEXT");
     expect(renderPrompt(body, { ...vars, BUILT_ON: "#2 (base)" })).toContain("BUILT ON — this branch starts from the branch of a task this one depends on, which is not in the default branch yet: #2 (base).");
     expect(renderPrompt(body, { ...vars, MISSING: "#3 (later)" })).toContain("NOT HERE YET — this task depends on work that is not in this branch: #3 (later).");
-    expect(renderPrompt(body, { ...vars, CHECKS: "#4: x" })).toContain('"dependency_missing"');
-    // Nothing about dependencies when there are none — the prompt reads as it did before.
-    expect(renderPrompt(body, vars)).toBe(renderPrompt(seeded["implement.task"]!.body, vars));
+    for (const t of [plain]) expect(t).not.toMatch(/\{\{/);
   });
 
-  it("tells the breakdown whether it has the code", () => {
-    const b = seeded["breakdown.tasks"]!.body;
+  it("runs the checks with no write access, and asks why each one that failed did", () => {
+    const run = renderPrompt(rows["checks.run"]!.body, { INTENT: "B", CHANGED_FILES: "b.txt", CONTEXT: "ctx", CHECKS: "#3 [build]: build it", MISSING: "#1 (A)" });
+    expect(run).toContain("You must NOT change, create or delete any file");
+    expect(run).toContain("#3 [build]: build it");
+    expect(run).toContain("It was developed WITHOUT work it depends on, which is not in this branch: #1 (A).");
+    expect(run).toContain('"environment"');
+    expect(run).not.toMatch(/\{\{/);
+  });
+
+  it("gives each check DCC adds its own instruction, with or without compiled projects", () => {
+    expect(renderPrompt(rows["check.build"]!.body, { COMPILED: "Alt.Crm.Plugins" })).toContain("הפרויקטים לבנייה: Alt.Crm.Plugins.");
+    expect(renderPrompt(rows["check.build"]!.body, { COMPILED: "" })).toContain("לא פורטו פרויקטים מתקמפלים");
+    for (const k of ["check.tests", "check.regression", "check.e2e"]) expect(renderPrompt(rows[k]!.body, { PATHS: "a.cs" })).not.toMatch(/\{\{/);
+  });
+
+  it("tells the breakdown what DCC adds by itself, and whether it has the code", () => {
+    const b = rows["breakdown.tasks"]!.body;
+    expect(b).toContain("DCC itself adds a build check, a tests check and a regression check under every leaf task");
     expect(renderPrompt(b, { HAS_REPO: true, REPO_NAME: "trade", REQUIREMENT: "r" })).toContain("You are in the repository (trade)");
     expect(renderPrompt(b, { HAS_REPO: false, REPO_NAME: "", REQUIREMENT: "r" })).toContain("No code checkout available.");
   });

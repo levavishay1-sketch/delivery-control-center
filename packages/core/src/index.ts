@@ -39,7 +39,7 @@ export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, recoverFlowRuns, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, RepoRequired,
-  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, requirementCostSummary, requirementCostDetail,
+  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, taskStatusesFor, taskStatusOf, taskDoneBlockers, ensureStandardChecks, backfillStandardChecks, STANDARD_CHECK_INTENT, requirementCostSummary, requirementCostDetail,
   type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";
@@ -53,4 +53,4 @@ export {
   updateGap, deleteGap, updateBlocker, deleteBlocker, updateTask, deleteDependency,
   updateConnection,
 } from "./crud.ts";
-export * from "./repo-onboarding/index.ts";
+export * from "./repo-onboarding/index.ts";export { taskStatus, type TaskStatus, type TaskStatusKey, type StatusTone, type CheckKind } from "./task-status.ts";

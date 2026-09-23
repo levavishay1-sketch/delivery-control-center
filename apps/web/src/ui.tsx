@@ -131,6 +131,23 @@ export const ICONS = {
   spark: <><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" /><path d="M19 17l.8 2.2L22 20l-2.2.8L19 23l-.8-2.2L16 20l2.2-.8z" /></>,
 };
 
+/** What each check DCC adds to a task is, in a word — the rest are checks the breakdown or a person wrote. */
+export const CHECK_KIND_HE: Record<string, string> = { build: "Build", tests: "בדיקות לפיתוח", regression: "רגרסיה", e2e: "E2E" };
+
+/**
+ * A task's status, one way everywhere a task is shown: the label in its colour
+ * and, when there is one, the reason under it (why it fell, what it waits for).
+ * Computed on the server (task-status.ts) — never worked out again here.
+ */
+export function TaskStatusPill({ status, withReason = false }: { status: { label: string; tone: "inactive" | "neutral" | "ai" | "active" | "warning" | "critical" | "healthy"; reason?: string }; withReason?: boolean }) {
+  return (
+    <span style={{ display: "inline-flex", flexDirection: "column", alignItems: "flex-start", gap: 3 }}>
+      <Pill tone={status.tone}>{status.label}</Pill>
+      {withReason && status.reason && <span style={{ fontSize: 11.5, color: status.tone === "critical" ? "var(--status-critical)" : status.tone === "warning" ? "var(--status-warning)" : "var(--ink-500)" }}>{status.reason}</span>}
+    </span>
+  );
+}
+
 export function Pill({ tone, children }: { tone: "warning" | "critical" | "active" | "healthy" | "ai" | "inactive" | "neutral"; children: ReactNode }) {
   return <span className={`pill ${tone}`}><span className="dot" />{children}</span>;
 }

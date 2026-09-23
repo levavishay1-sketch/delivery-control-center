@@ -125,6 +125,10 @@ export async function progressTask(input: {
    *  capture pattern as `overrideReason`. */
   reopenReason?: string;
 }) {
+  // A dependent task is closed only after what it depends on is done and its checks ran on top of it.
+  // Read before the transaction: it reads git and every task of the requirement. (Imported here, not at
+  // the top: ai-assist.ts imports this module.)
+  const depBlockers = input.to === "done" ? await (await import("./ai-assist.ts")).taskDoneBlockers(input.clientId, input.taskId) : [];
   return withTenant(input.clientId, async (tx) => {
     const [t] = await tx.select().from(task).where(sql`${task.id} = ${input.taskId}`).limit(1);
     if (!t) throw new Error("task not found");
@@ -141,16 +145,25 @@ export async function progressTask(input: {
     if (input.to === "done") {
       const unresolved = await tx.select({ id: task.id, seq: task.seq, intent: task.intent, checkResult: task.checkResult }).from(task)
         .where(and(eq(task.parentTaskId, input.taskId), eq(task.kind, "check"), eq(task.active, true), sql`${task.state} <> 'dropped'`, sql`${task.checkResult} is distinct from 'passed'`));
-      if (unresolved.length > 0 && !input.overrideChecks) {
+      if ((unresolved.length > 0 || depBlockers.length > 0) && !input.overrideChecks) {
         const waiting = unresolved.filter((u) => u.checkResult === "waiting");
         const notPassed = unresolved.filter((u) => u.checkResult !== "waiting");
         throw new ChecksNotPassed(
           `אי אפשר לסמן כהושלם — ${[
             notPassed.length ? `${notPassed.length} בדיקות לא עברו: ${notPassed.map((u) => `#${u.seq}`).join(", ")}` : "",
             waiting.length ? `${waiting.length} בדיקות מחכות לתלות שעוד לא פותחה: ${waiting.map((u) => `#${u.seq}`).join(", ")}` : "",
+            ...depBlockers,
           ].filter(Boolean).join("; ")}`,
           unresolved,
         );
+      }
+      if (depBlockers.length > 0 && input.overrideChecks && unresolved.length === 0 && input.overrideReason?.trim()) {
+        // Closed before its dependency was done — a decision, recorded with its reason.
+        await recordDecision({
+          clientId: input.clientId, workitemId: t.workitemId, by: input.by,
+          trigger: "task_closed_override", reason: `${input.overrideReason} (נסגרה למרות: ${depBlockers.join("; ")})`,
+          links: [{ rel: "task", ref: input.taskId }],
+        });
       }
       if (unresolved.length > 0 && input.overrideChecks) {
         const now = new Date();
@@ -190,7 +203,7 @@ export async function progressTask(input: {
  * Re-evaluates a task's own `state` from its active checks, after
  * anything that could have changed which checks count or what they
  * reported: a check's active/inactive toggle, or a check finishing on
- * its own (bundled with the parent's run, or re-verified independently
+ * its own (in the steps after the parent's development, or re-verified independently
  * — `runImplement`'s per-check write only ever touches the check's own
  * row, never its parent, so without this call an independently re-run
  * check can leave its parent's status stale in either direction).
@@ -230,7 +243,7 @@ export async function syncTaskStateAfterCheckChange(clientId: string, parentTask
         await tx.update(task).set({ state: "failed_checks", updatedAt: now }).where(eq(task.id, parentTaskId));
       }
       // still 'pending' and no run just happened — nothing to revert;
-      // the check just waits for the next bundled run.
+      // the check just waits for the next run.
     } else if (parent.state === "failed_checks") {
       await tx.update(task).set({
         state: parent.wasDone ? "done" : "in_progress",
@@ -369,7 +382,7 @@ export type TaskDetail = {
   task: typeof task.$inferSelect;
   requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
   parent: { id: string; seq: number; intent: string; adoType: string | null } | null;
-  children: { id: string; seq: number; intent: string; adoType: string | null; kind: string; state: string; linkedAdoId: number | null; checkResult: string | null; checkResolvedBy: string | null; active: boolean }[];
+  children: { id: string; seq: number; intent: string; adoType: string | null; kind: string; state: string; linkedAdoId: number | null; checkResult: string | null; checkResolvedBy: string | null; active: boolean; checkKind: string | null }[];
   /** tasks that must finish before this one */
   blockedBy: { id: string; seq: number; intent: string; state: string; linkedAdoId: number | null }[];
   /** tasks waiting on this one */
@@ -385,7 +398,7 @@ export async function taskDetail(clientId: string, taskId: string): Promise<Task
       .select({ id: workitem.id, key: workitem.key, title: workitem.title, phase: workitem.phase, clientId: workitem.clientId })
       .from(workitem).where(sql`${workitem.id} = ${t.workitemId}`).limit(1);
 
-    const slim = { id: task.id, seq: task.seq, intent: task.intent, adoType: task.adoType, kind: task.kind, state: task.state, linkedAdoId: task.linkedAdoId, checkResult: task.checkResult, checkResolvedBy: task.checkResolvedBy, active: task.active, approvedAt: task.approvedAt };
+    const slim = { id: task.id, seq: task.seq, intent: task.intent, adoType: task.adoType, kind: task.kind, state: task.state, linkedAdoId: task.linkedAdoId, checkResult: task.checkResult, checkResolvedBy: task.checkResolvedBy, active: task.active, approvedAt: task.approvedAt, checkKind: task.checkKind };
     const parent = t.parentTaskId
       ? (await tx.select(slim).from(task).where(sql`${task.id} = ${t.parentTaskId}`).limit(1))[0] ?? null
       : null;
