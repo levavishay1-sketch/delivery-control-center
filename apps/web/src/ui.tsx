@@ -214,8 +214,11 @@ export function PromptPreviewModal({
   const hasHe = !!data?.promptHe?.trim();
   const lang = pick === "he" && !hasHe ? "en" : pick;
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} style={{
+    // No dismiss-on-backdrop-click: a real request may be running behind
+    // this (a checkout, an approval decision), and a stray click outside
+    // must never look like it silently discarded that in progress.
+    <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+      <div style={{
         width: "min(760px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
         border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl", textAlign: "start",
         boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",

@@ -1,9 +1,19 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   getAdoProjects, getBugLinks, getClients, getConnections, getRepos, importAdoCsv, linkBugTask, linkRepoToClient, linkRepoToReq,
-  searchClientTasks, unlinkBugTask, updateClient, updateRepo, updateRequirement,
+  searchClientTasks, unlinkBugTask, updateClient, updateRepo, updateRequirement, uploadAttachment,
   type ImportResult, type LinkedTaskRow, type ReqType, type RequirementType, type WorkItem,
 } from "./api.ts";
+
+/** base64, the way `FileReader`/`btoa` need it — chunked so a large file
+ *  does not blow the call-stack `String.fromCharCode(...bytes)` would. */
+async function fileToBase64(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let bin = "";
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  return btoa(bin);
+}
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
 const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
@@ -137,7 +147,7 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
 }) {
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [f, setF] = useState({ clientId: fixedClientId ?? "", title: "", type: "story", requirementType: "development" as RequirementType, priority: "medium", body: "" });
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -145,17 +155,6 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
     if (fixedClientId || fixedParentId) return;
     getClients().then((r) => { setClients(r.clients); if (r.clients[0]) setF((s) => ({ ...s, clientId: r.clients[0]!.id })); }).catch(() => {});
   }, []);
-
-  const onFile = async (file: File | undefined) => {
-    if (!file) return;
-    setFileName(file.name);
-    if (/^(text\/|application\/json)/.test(file.type) || /\.(txt|md|csv|json|log)$/i.test(file.name)) {
-      const text = await file.text();
-      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n\n" : ""}— מצורף (${file.name}) —\n${text.slice(0, 8000)}` }));
-    } else {
-      setF((s) => ({ ...s, body: `${s.body}${s.body ? "\n" : ""}[צורף קובץ: ${file.name}]` }));
-    }
-  };
 
   const submit = async () => {
     if (!fixedParentId && !f.clientId) return setErr("בחר לקוח");
@@ -167,6 +166,18 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
       else body.clientId = f.clientId;
       const wi = await api("/workitems", body);
       if (f.body.trim()) await api("/events", { workitemId: wi.id, kind: "note", note: { body: f.body.trim(), source: "manual" } });
+      // The file's actual content is what makes it worth attaching — the
+      // same upload the requirement's own screen uses, so the text it reads
+      // out of the file reaches Claude the same way either way.
+      if (file) {
+        const r = await uploadAttachment(wi.id, file.name, await fileToBase64(file));
+        if (r.textChars === 0) {
+          setErr(`הדרישה נוצרה, והקובץ נשמר — אבל לא ניתן לקרוא ממנו טקסט:\n${r.extractError}\n\nקלוד לא יוכל להסתמך עליו. אפשר להדביק את התוכן כהערה בדרישה עצמה.`);
+          setBusy(false);
+          setTimeout(() => onDone(wi.id), 3500);
+          return;
+        }
+      }
       if (wi.ado && wi.ado.synced === false && wi.ado.error) {
         setErr(`הדרישה נוצרה, אבל הסנכרון ל-Azure DevOps נכשל: ${wi.ado.error}. אפשר לנסות שוב מעמוד הדרישה.`);
         setBusy(false);
@@ -217,9 +228,12 @@ export function NewRequirement({ onClose, onDone, fixedClientId, fixedParentId, 
         <span className="hint" style={{ fontSize: 11, color: "var(--ink-400)" }}>אופציונלי — אפשר להוסיף אחר כך</span>
       </div>
       <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-        {fileName ? `📎 ${fileName}` : "📎 צירוף קובץ"}
-        <input type="file" hidden onChange={(e) => onFile(e.target.files?.[0])} />
+        {file ? `📎 ${file.name}` : "📎 צירוף קובץ"}
+        <input type="file" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
       </label>
+      <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 4 }}>
+        נשמר עם הדרישה, ותוכנו נקרא (Word, PDF, טקסט) — קלוד רואה אותו כחלק ממנה.
+      </p>
       <Err e={err} />
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "יוצר…" : "צור דרישה"}</button>

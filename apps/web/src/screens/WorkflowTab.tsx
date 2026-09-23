@@ -390,7 +390,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
         <PromptPreviewModal
           title={pendingKick === "assess" ? "הרצת בחינת בשלות" : "הרצת פירוק למשימות"}
           data={sendData} loading={sendLoading} error={sendErr}
-          loadingHint="מכין עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה זה יכול לקחת כמה דקות…"
+          loadingHint="מביא עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה, או על רשת איטית, זה יכול לקחת כמה דקות…"
           onClose={() => { setPendingKick(null); setSendData(null); setSendErr(null); setRebreakdownReason(""); }}
           onConfirm={confirmKick} confirming={sending}
           confirmLabel={pendingKick === "assess" ? "✦ שלח ל-Claude, הרץ בחינה" : "✦ שלח ל-Claude, פרק למשימות"}
@@ -400,8 +400,9 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
         />
       )}
       {previewKey && (
-        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }} onClick={() => setPreviewKey(null)}>
-          <div onClick={(e) => e.stopPropagation()} style={{
+        // No dismiss-on-backdrop-click — same reason as PromptPreviewModal.
+        <div style={{ position: "fixed", inset: 0, background: "rgb(27 23 65 / 0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
+          <div style={{
             width: "min(760px, 92vw)", maxHeight: "88vh", overflowY: "auto", background: "var(--surface)",
             border: "1.5px solid var(--border-hairline)", borderRadius: 16, padding: "24px 28px", direction: "rtl", textAlign: "start",
             boxShadow: "0 8px 24px rgb(27 23 65 / 0.15), 0 24px 64px rgb(27 23 65 / 0.25)",
@@ -417,7 +418,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
               זה בדיוק מה שיישלח ל-Claude (הפרומפט האמיתי תמיד רץ באנגלית — התצוגה בעברית היא תרגום לנוחות הקריאה בלבד).
             </p>
             {previewLoading ? (
-              <div className="spin">מכין עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה זה יכול לקחת כמה דקות…</div>
+              <div className="spin">מביא עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה, או על רשת איטית, זה יכול לקחת כמה דקות…</div>
             ) : previewData ? (
               <>
                 <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
