@@ -588,7 +588,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 {openGaps > 0 ? (
                   <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>
                     <b>{openGaps} שאלות פתוחות</b>{openBlockingGaps > 0 ? ` (${openBlockingGaps} מהן דחופות)` : ""} — צריך לסגור את כולן לפני פירוק למשימות.
-                    {clientGaps > 0 && <> מתוכן <b>{clientGaps}</b> דורשות תשובה ממבקש הדרישה — אפשר לנסח לו אותן בכפתור למטה.</>}
+                    {clientGaps > 0 && <> מתוכן <b>{clientGaps}</b> דורשות תשובה ממבקש הדרישה — אפשר לבקש מ"שאל את קלוד" לנסח לו מכתב איתן.</>}
                   </p>
                 ) : (
                   <p style={{ fontSize: 13, marginBottom: 14, color: "#1B1741", fontWeight: 500 }}>כל השאלות נסגרו — אפשר להתקדם.</p>
