@@ -392,7 +392,7 @@ export const deleteRequirement = (id: string) => del<{ deleted: boolean; ado?: {
 
 // entity edit/delete
 export const updateClient = (id: string, body: Partial<{ name: string; connectorType: string; adoProjectRef: string | null }>) => patch<{ updated: boolean }>(`/clients/${id}`, body);
-export const deleteClient = (id: string, archive = false) => del<{ deleted?: boolean; archived?: boolean }>(`/clients/${id}${archive ? "?mode=archive" : ""}`);
+export const deleteClient = (id: string) => del<{ deleted: boolean }>(`/clients/${id}`);
 export const updateRepo = (id: string, body: Partial<{ name: string; adoRepoRef: string | null; defaultBranch: string }>) => patch<{ updated: boolean }>(`/repos/${id}`, body);
 export const deleteRepo = (id: string) => del<{ deleted: boolean }>(`/repos/${id}`);
 export const unlinkClientRepo = (clientId: string, repoId: string) => del<{ unlinked: boolean }>(`/clients/${clientId}/repos/${repoId}`);

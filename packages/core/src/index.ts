@@ -45,7 +45,7 @@ export {
 } from "./ai-assist.ts";
 export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export {
-  updateClient, deleteClient, archiveClient,
+  updateClient, deleteClient, ClientRefused,
   updateRequirement, deleteRequirement,
   linkRepoToRequirement, unlinkRepoFromRequirement, reposForRequirement,
   updateRepo, deleteRepo, unlinkClientRepo,

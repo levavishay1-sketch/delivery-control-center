@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db, usd, withTenant } from "@dcc/db";
 import { claudeCall, client, conversation, conversationMessage, repo, repositoryOnboardingRun, task, users, workitem } from "@dcc/db/schema";
 import { runClaudeRaw } from "../ai-assist.ts";
@@ -59,7 +59,7 @@ export type ConversationView = {
 let internal: string | null = null;
 export async function internalClientId(): Promise<string> {
   if (internal) return internal;
-  const [byName] = await db.select({ id: client.id }).from(client).where(eq(client.name, "DCC Internal")).limit(1);
+  const [byName] = await db.select({ id: client.id }).from(client).where(and(eq(client.name, "DCC Internal"), isNull(client.archivedAt))).limit(1);
   if (byName) return (internal = byName.id);
   try {
     const cfg = JSON.parse(readFileSync(fileURLToPath(new URL("../../../../.dcc.json", import.meta.url)), "utf8")) as { clientId?: string };
@@ -68,7 +68,7 @@ export async function internalClientId(): Promise<string> {
       if (c) return (internal = c.id);
     }
   } catch { /* no .dcc.json, or not readable */ }
-  const [any] = await db.select({ id: client.id }).from(client).orderBy(client.createdAt).limit(1);
+  const [any] = await db.select({ id: client.id }).from(client).where(isNull(client.archivedAt)).orderBy(client.createdAt).limit(1);
   if (!any) throw new Error("אין לקוח במערכת — השיחה על המערכת צריכה לקוח פנימי");
   return (internal = any.id);
 }
