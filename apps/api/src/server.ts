@@ -67,6 +67,9 @@ import {
   importAdoCsv,
   attachmentsFor,
   addAttachment,
+  attachmentContent,
+  AttachmentRefused,
+  RepoRequired,
   startBuilding,
   startFlowRun,
   getFlowRunView,
@@ -184,7 +187,7 @@ app.setErrorHandler((err, _req, reply) => {
   if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
   // The registry refuses with a sentence for the person ("the task is not approved yet") — show it, not a 500.
   if (err instanceof ActionRefused || err instanceof ChatError || err instanceof PolicyError) return reply.code(409).send({ error: err.message });
-  if (err instanceof ReviewRefused || err instanceof ClientRefused) return reply.code(409).send({ error: err.message });
+  if (err instanceof ReviewRefused || err instanceof RepoRequired || err instanceof AttachmentRefused) return reply.code(409).send({ error: err.message });
   if (err instanceof z.ZodError) return reply.code(400).send({ error: err.issues });
   const e = err as { statusCode?: number; message?: string };
   if (typeof e.statusCode === "number" && e.statusCode >= 400 && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
@@ -1135,9 +1138,27 @@ app.post("/workitems/:id/attachments", async (req, reply) => {
   const b = z.object({ name: z.string().min(1), contentBase64: z.string().min(1) }).parse(req.body);
   const wi = await locateWorkItem({ id });
   const bytes = Buffer.from(b.contentBase64, "base64");
-  if (bytes.length > 25 * 1024 * 1024) return reply.code(413).send({ error: "file too large (max 25MB)" });
   const out = await addAttachment({ clientId: wi.clientId, workitemId: id, name: b.name, bytes, by: { userId: dev.id } });
   return reply.code(201).send(out);
+});
+
+// DCC holds the bytes now, so it also hands them back — a file attached to a
+// client with no Azure DevOps connection has nowhere else to be opened from.
+app.get("/workitems/:id/attachments/:attId/content", async (req, reply) => {
+  await actingUser(req);
+  const { id, attId } = req.params as { id: string; attId: string };
+  const wi = await locateWorkItem({ id });
+  const row = await attachmentContent(wi.clientId, attId);
+  if (!row) return reply.code(404).send({ error: "לא נמצאה צרופה" });
+  if (!row.content) {
+    return row.adoUrl
+      ? reply.redirect(row.adoUrl)
+      : reply.code(404).send({ error: "הקובץ עצמו לא נשמר ב-DCC (הצרופה נמשכה מ-TFS)" });
+  }
+  return reply
+    .header("content-type", "application/octet-stream")
+    .header("content-disposition", `attachment; filename*=UTF-8''${encodeURIComponent(row.name)}`)
+    .send(row.content);
 });
 
 app.delete("/workitems/:id/depends-on/:depId", async (req) => {

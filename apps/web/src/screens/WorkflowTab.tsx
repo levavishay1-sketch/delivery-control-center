@@ -7,6 +7,7 @@ import {
 } from "../api.ts";
 import { CardTitle, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
+import { errText } from "./onboarding/labels.ts";
 import { TaskGraph } from "./TaskGraph.tsx";
 import { AddNote } from "../forms.tsx";
 
@@ -240,7 +241,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
     return () => clearInterval(iv);
   }, [running, refreshRun]);
   useEffect(() => { if (assignOpen && users.length === 0) getUsers().then((r) => setUsers(r.users)).catch(() => {}); }, [assignOpen, users.length]);
-  useEffect(() => { if (active === 4 && !build) startBuilding(wi.id).then(setBuild).catch((e) => setErr(String(e))); }, [active, build, wi.id]);
+  useEffect(() => { if (active === 4 && !build) startBuilding(wi.id).then(setBuild).catch((e) => setErr(errText(e))); }, [active, build, wi.id]);
   useEffect(() => { getPrompts().then((r) => setAssessPrompts(r.items.filter((p) => p.key.startsWith("assess.readiness.")).sort((a, b) => a.sortOrder - b.sortOrder))).catch(() => {}); }, []);
 
   const copy = (t: string, k: string) => { navigator.clipboard?.writeText(t); setCopied(k); setTimeout(() => setCopied(""), 1500); };
@@ -255,7 +256,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
         ? await previewAssess(wi.id, assessPromptKey, isCustom ? assessCustomEmphasis : undefined)
         : await previewBreakdown(wi.id);
       setSendData({ prompt: r.prompt, promptHe: r.promptHe ?? "" });
-    } catch (e) { setSendErr(String(e)); }
+    } catch (e) { setSendErr(errText(e)); }
     finally { setSendLoading(false); }
   };
   // Step 2: only reachable from the modal's confirm button.
@@ -270,7 +271,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
           })
         : startBreakdown(wi.id, nodes.length > 0 ? rebreakdownReason : undefined));
       setPendingKick(null); setShowRerunOptions(false); setShowLog(true); setRebreakdownReason(""); await refreshRun();
-    } catch (e) { setErr(String(e)); }
+    } catch (e) { setErr(errText(e)); }
     finally { setSending(false); }
   };
 
@@ -278,7 +279,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
     if (stopping) return;
     setStopping(true);
     try { await stopFlowRun(wi.id); await refreshRun(); }
-    catch (e) { setErr(String(e)); }
+    catch (e) { setErr(errText(e)); }
     finally { setStopping(false); }
   };
   const doSteer = async () => {
@@ -286,14 +287,14 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
     if (!text || steerBusy) return;
     setSteerBusy(true);
     try { await sendRunMessage(wi.id, text); setSteerText(""); await refreshRun(); }
-    catch (e) { setErr(String(e)); }
+    catch (e) { setErr(errText(e)); }
     finally { setSteerBusy(false); }
   };
 
   const openPreview = async (key: string) => {
     setPreviewKey(key); setPreviewData(null); setPreviewLoading(true); setPreviewLang("he");
     try { setPreviewData(await previewAssess(wi.id, key, isCustom && key === assessPromptKey ? assessCustomEmphasis : undefined)); }
-    catch (e) { setErr(String(e)); }
+    catch (e) { setErr(errText(e)); }
     finally { setPreviewLoading(false); }
   };
   const doAssign = async () => {
@@ -301,7 +302,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
     try {
       await assignRequirement(wi.id, assignTo ? { ownerId: assignTo } : { email: assignEmail.trim() });
       setAssignOpen(false); reload();
-    } catch (e) { setErr(String(e)); }
+    } catch (e) { setErr(errText(e)); }
   };
   const approve = async (id: string) => {
     const n = nodes.find((x) => x.id === id);
@@ -325,13 +326,13 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
   const toggleActive = async (id: string, active: boolean) => {
     setTogglingActiveId(id); setErr(null);
     try { await setTaskActive(id, active, clientId); await refreshTasks(); reload(); }
-    catch (e) { setErr(String(e)); }
+    catch (e) { setErr(errText(e)); }
     finally { setTogglingActiveId(null); }
   };
   const doMaterialize = async () => {
     setErr(null); setMaterializing(true);
     try { setMaterialized(await materializeTasks(wi.id)); await refreshTasks(); reload(); }
-    catch (e) { setErr(String(e)); }
+    catch (e) { setErr(errText(e)); }
     setMaterializing(false);
   };
 

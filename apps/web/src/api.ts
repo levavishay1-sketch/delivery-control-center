@@ -74,7 +74,14 @@ export type WorkItem = {
   progressPct: number; linkedAdoId: number | null; adoAreaPath: string | null; startedWithOpenBlocker: boolean;
 };
 export type LinkedRepo = { id: string; name: string; adoRepoRef: string | null; linkKind: "declared" | "auto"; addedAt: string };
-export type Attachment = { id: string; name: string; adoUrl: string | null; sizeBytes: number | null; source: "dcc" | "ado"; createdAt: string };
+export type Attachment = {
+  id: string; name: string; adoUrl: string | null; sizeBytes: number | null; source: "dcc" | "ado"; createdAt: string;
+  /** DCC holds the bytes (so the file can be opened and read into a prompt). */
+  stored: boolean;
+  /** How much text was read out of it — 0 ⇒ none, and `extractError` says why. */
+  textChars: number;
+  extractError: string | null;
+};
 export type WorkItemDetail = {
   workitem: WorkItem; attachments: Attachment[]; repos: LinkedRepo[]; gaps: Gap[]; blockers: Blocker[]; tasks: Task[];
   taskDependencies: { taskId: string; dependsOnTaskId: string; reason: string | null }[];
@@ -450,7 +457,11 @@ export const correctNote = (workitemId: string, corrects: string, body: string) 
 export type ImportResult = { total: number; created: number; skipped: number; items: { adoId: number; title: string; status: "created" | "skipped-exists" | "skipped-bad" }[] };
 export const importAdoCsv = (clientId: string, csv: string) => post<ImportResult>(`/clients/${clientId}/import/ado-csv`, { csv });
 export const uploadAttachment = (workitemId: string, name: string, contentBase64: string) =>
-  post<{ id: string; name: string; adoUrl: string | null }>(`/workitems/${workitemId}/attachments`, { name, contentBase64 });
+  post<{ id: string; name: string; adoUrl: string | null; textChars: number; extractError: string | null }>(
+    `/workitems/${workitemId}/attachments`, { name, contentBase64 },
+  );
+export const attachmentHref = (workitemId: string, attachmentId: string) =>
+  `/api/workitems/${workitemId}/attachments/${attachmentId}/content`;
 
 export const verifyGap = (gapId: string, body: { outcome: GapState; clientId: string; spunOffTitle?: string; answer?: string }) =>
   post(`/gaps/${gapId}/verify`, body);

@@ -1,10 +1,14 @@
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { appendEvent, withTenant } from "@dcc/db";
 import { attachment, workitem } from "@dcc/db/schema";
 import { adoGet, adoSend, adoUpload } from "./ado-http.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
 import { htmlToText, mapAdoState, mapAdoType } from "./ado-map.ts";
 import { regenerateBrief } from "./brief/generate.ts";
+import { extractText } from "./attachments/extract.ts";
+
+/** A refusal meant for the person — the API shows its message, not a 500. */
+export class AttachmentRefused extends Error {}
 
 /**
  * Azure DevOps / TFS is the mirror. This pulls the connected project's
@@ -228,57 +232,90 @@ export async function adoWorkItemExists(clientId: string, adoId: number): Promis
 
 /* ── attachments: DCC → TFS ─────────────────────────────────────────── */
 
+/** The list for a screen — never the bytes, which only the download route wants. */
 export async function attachmentsFor(clientId: string, workitemId: string) {
   return withTenant(clientId, (tx) =>
-    tx.select().from(attachment).where(eq(attachment.workitemId, workitemId)).orderBy(attachment.createdAt),
+    tx
+      .select({
+        id: attachment.id, name: attachment.name, adoUrl: attachment.adoUrl,
+        sizeBytes: attachment.sizeBytes, source: attachment.source, createdAt: attachment.createdAt,
+        stored: sql<boolean>`${attachment.content} is not null`,
+        textChars: sql<number>`coalesce(length(${attachment.extractedText}), 0)::int`,
+        extractError: attachment.extractError,
+      })
+      .from(attachment)
+      .where(eq(attachment.workitemId, workitemId))
+      .orderBy(attachment.createdAt),
   );
 }
 
+/** The file itself, for the download route. */
+export async function attachmentContent(clientId: string, attachmentId: string) {
+  const [row] = await withTenant(clientId, (tx) =>
+    tx
+      .select({ name: attachment.name, content: attachment.content, adoUrl: attachment.adoUrl })
+      .from(attachment)
+      .where(eq(attachment.id, attachmentId))
+      .limit(1),
+  );
+  return row ?? null;
+}
+
+/** Above this a spec stops being a spec and starts being a problem. */
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
+
 /**
- * Add a file to a requirement: upload the bytes to ADO, attach them to
- * the linked work item, and record it in DCC with a link back. The file
- * ends up visible in TFS (the mirror) and listed in DCC.
+ * Add a file to a requirement. DCC stores the bytes and reads the text out
+ * of them — that text is what assess and breakdown send to Claude, so an
+ * attached spec is a spec that was read. Mirroring to TFS happens too when
+ * the client has a live connection, and its failure does not lose the file.
  */
 export async function addAttachment(input: {
   clientId: string; workitemId: string; name: string; bytes: Buffer; by: { userId: string };
-}): Promise<{ id: string; name: string; adoUrl: string | null }> {
-  const conn = await activeAdoConnection(input.clientId);
+}): Promise<{ id: string; name: string; adoUrl: string | null; textChars: number; extractError: string | null }> {
+  if (input.bytes.length === 0) throw new AttachmentRefused("הקובץ ריק");
+  if (input.bytes.length > MAX_ATTACHMENT_BYTES) {
+    throw new AttachmentRefused(`הקובץ גדול מ-${Math.round(MAX_ATTACHMENT_BYTES / 1024 / 1024)}MB. צרפו קובץ קטן יותר, או הדביקו את התוכן כהערה.`);
+  }
   const [wi] = await withTenant(input.clientId, (tx) =>
     tx.select({ ado: workitem.linkedAdoId }).from(workitem).where(eq(workitem.id, input.workitemId)).limit(1),
   );
   if (!wi) throw new Error("requirement not found");
 
-  // A requirement is DCC-only, so there is usually no work item to hang
-  // the file on. The bytes still go to the TFS attachment store (that
-  // endpoint stands alone) so the link works; when the requirement
-  // happens to carry a legacy ADO link we also attach the relation.
+  const { text, reason } = await extractText(input.name, input.bytes);
+
+  // TFS is the mirror, not the store: a client with no connection (or a
+  // connection having a bad day) still gets to attach a file.
   let adoUrl: string | null = null;
   let adoAttId: string | null = null;
-  if (!conn) throw new Error("צריך חיבור Azure DevOps פעיל כדי לאחסן צרופות");
-  {
+  const conn = await activeAdoConnection(input.clientId);
+  if (conn) {
     const orgUrl = (conn.config.orgUrl ?? "").replace(/\/+$/, "");
     const project = conn.config.project ?? "";
     const projBase = project ? `${orgUrl}/${encodeURIComponent(project)}` : orgUrl;
-    const up = await adoUpload({ base: projBase, fileName: input.name, bytes: input.bytes, pat: conn.secretRef });
-    if (!up.ok) throw new Error(`העלאת הקובץ נכשלה: ${up.detail}`);
-    adoUrl = up.url; adoAttId = up.id;
-    if (wi.ado) {
-      const patch = [{ op: "add", path: "/relations/-", value: { rel: "AttachedFile", url: up.url, attributes: { name: input.name, comment: "הועלה דרך DCC" } } }];
-      await adoSend({ base: projBase, apiPath: `wit/workitems/${wi.ado}`, method: "PATCH", body: patch, pat: conn.secretRef }).catch(() => {});
+    const up = await adoUpload({ base: projBase, fileName: input.name, bytes: input.bytes, pat: conn.secretRef }).catch(() => null);
+    if (up?.ok) {
+      adoUrl = up.url; adoAttId = up.id;
+      if (wi.ado) {
+        const patch = [{ op: "add", path: "/relations/-", value: { rel: "AttachedFile", url: up.url, attributes: { name: input.name, comment: "הועלה דרך DCC" } } }];
+        await adoSend({ base: projBase, apiPath: `wit/workitems/${wi.ado}`, method: "PATCH", body: patch, pat: conn.secretRef }).catch(() => {});
+      }
     }
   }
 
   const [row] = await withTenant(input.clientId, (tx) =>
     tx.insert(attachment).values({
       clientId: input.clientId, workitemId: input.workitemId, name: input.name,
-      adoAttachmentId: adoAttId, adoUrl, sizeBytes: input.bytes.length, source: "dcc", addedBy: input.by.userId,
+      adoAttachmentId: adoAttId, adoUrl, content: input.bytes,
+      extractedText: text, extractError: reason,
+      sizeBytes: input.bytes.length, source: "dcc", addedBy: input.by.userId,
     }).returning(),
   );
   await appendEvent({
     clientId: input.clientId, workitemId: input.workitemId, source: "manual", type: "note.added",
     actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
-    payload: { body: `📎 צורף קובץ: ${input.name}` },
+    payload: { body: `📎 צורף קובץ: ${input.name}${text ? ` (נקרא — ${text.length.toLocaleString("he-IL")} תווים)` : ` (לא נקרא כטקסט: ${reason})`}` },
   });
   await regenerateBrief(input.clientId, input.workitemId);
-  return { id: row!.id, name: row!.name, adoUrl: row!.adoUrl };
+  return { id: row!.id, name: row!.name, adoUrl: row!.adoUrl, textChars: text?.length ?? 0, extractError: reason };
 }

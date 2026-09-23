@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, recordClaudeCall, usd, withTenant, type CallEntityKind, type CallOutcome, type CallTrigger } from "@dcc/db";
-import { claudeCall, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
+import { attachment, claudeCall, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
 import { route, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
 import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
 import { adoSend } from "./ado-http.ts";
@@ -615,8 +615,12 @@ export function existingCheckout(r: { id: string; localPath: string | null }): s
 /** One fetch per repository at a time: two callers (a second press, a retry
  *  after a restart) must wait for the copy being made, not start a second
  *  clone into the same directory. */
-const checkouts = new Map<string, Promise<string | null>>();
-export function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+const checkouts = new Map<string, Promise<Checkout>>();
+
+/** Why there is no working copy — a sentence for the person, never a silent null. */
+export type Checkout = { dir: string | null; reason: string | null };
+
+export function checkoutRepo(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<Checkout> {
   const running = checkouts.get(r.id);
   if (running) return running;
   const p = doCheckout(r).finally(() => checkouts.delete(r.id));
@@ -624,10 +628,29 @@ export function ensureCheckout(r: { id: string; name: string; localPath: string 
   return p;
 }
 
-async function doCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
-  if (r.localPath && existsSync(r.localPath)) return r.localPath;
+export function ensureCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<string | null> {
+  return checkoutRepo(r).then((c) => c.dir);
+}
+
+/** A first clone of a big repo on a slow link is minutes, not seconds; an
+ *  incremental update of one already here is not. Both are bounded — a git
+ *  that never returns used to hang the request that asked for it. */
+const CLONE_TIMEOUT_MS = 600_000;
+const UPDATE_TIMEOUT_MS = 180_000;
+
+async function doCheckout(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<Checkout> {
+  if (r.localPath && existsSync(r.localPath)) return { dir: r.localPath, reason: null };
   const gitUrl = r.adoRepoRef && /^(https?:\/\/|git@)/.test(r.adoRepoRef) ? r.adoRepoRef : null;
-  if (!gitUrl) return r.localPath ?? null;
+  if (!gitUrl) {
+    // A localPath that is not on disk is not a working copy. Saying so beats
+    // handing a run a cwd that does not exist.
+    return {
+      dir: null,
+      reason: r.localPath
+        ? `התיקייה המקומית של ${r.name} לא נמצאה (${r.localPath}), ואין כתובת git להביא ממנה עותק.`
+        : `ל-${r.name} אין כתובת git תקינה (${r.adoRepoRef ?? "ריק"}) ואין עותק מקומי.`,
+    };
+  }
   mkdirSync(REPO_CACHE, { recursive: true });
   const dir = path.join(REPO_CACHE, r.id);
   // A clone that was interrupted (the API restarted while it ran) leaves a
@@ -637,30 +660,27 @@ async function doCheckout(r: { id: string; name: string; localPath: string | nul
     rmSync(dir, { recursive: true, force: true });
   }
   if (existsSync(path.join(dir, ".git"))) {
-    await git(["reset", "--hard"], dir);
-    await git(["clean", "-fd"], dir);
+    await git(["reset", "--hard"], dir, { timeoutMs: UPDATE_TIMEOUT_MS });
+    await git(["clean", "-fd"], dir, { timeoutMs: UPDATE_TIMEOUT_MS });
     const base = (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
-    await git(["checkout", base], dir);
-    await git(["pull", "--ff-only"], dir);
-  } else {
-    const run = (args: string[], c?: string) =>
-      new Promise<number>((res) => {
-        const p = spawn("git", args, { cwd: c, windowsHide: true, shell: process.platform === "win32" });
-        p.on("close", (code) => res(code ?? 1));
-        p.on("error", () => res(1));
-      });
-    // Clone beside the target and move it into place only once it succeeded,
-    // so a killed clone can never be mistaken for a usable copy.
-    const tmp = `${dir}.partial-${randomUUID().slice(0, 8)}`;
-    const code = await run(["clone", "--depth", "80", gitUrl, tmp]);
-    if (code !== 0 || (await git(["rev-parse", "--verify", "--quiet", "HEAD"], tmp)).code !== 0) {
-      rmSync(tmp, { recursive: true, force: true });
-      return null;
-    }
-    rmSync(dir, { recursive: true, force: true });
-    renameSync(tmp, dir);
+    await git(["checkout", base], dir, { timeoutMs: UPDATE_TIMEOUT_MS });
+    // An update that fails still leaves a usable (if older) copy — say so
+    // rather than throwing the copy away over a flaky network.
+    const pull = await git(["pull", "--ff-only"], dir, { timeoutMs: UPDATE_TIMEOUT_MS });
+    return { dir, reason: pull.code === 0 ? null : `העותק המקומי של ${r.name} לא עודכן (${pull.out.trim().split("\n").pop() ?? "שגיאת רשת"}) — נקרא כפי שהוא.` };
   }
-  return dir;
+  // Clone beside the target and move it into place only once it succeeded,
+  // so a killed clone can never be mistaken for a usable copy.
+  const tmp = `${dir}.partial-${randomUUID().slice(0, 8)}`;
+  const cloned = await git(["clone", "--depth", "80", gitUrl, tmp], REPO_CACHE, { timeoutMs: CLONE_TIMEOUT_MS });
+  if (cloned.code !== 0 || (await git(["rev-parse", "--verify", "--quiet", "HEAD"], tmp)).code !== 0) {
+    rmSync(tmp, { recursive: true, force: true });
+    const detail = cloned.out.trim().split("\n").filter(Boolean).pop() ?? "ללא פירוט";
+    return { dir: null, reason: `הבאת ${r.name} מ-git נכשלה: ${detail}` };
+  }
+  rmSync(dir, { recursive: true, force: true });
+  renameSync(tmp, dir);
+  return { dir, reason: null };
 }
 
 type Dev = { userId: string };
@@ -686,8 +706,65 @@ async function loadRequirementText(clientId: string, workitemId: string) {
           where workitem_id = ${workitemId} and type = 'note.added' and supersedes is null
           order by occurred_at asc limit 40`,
     );
-    return { wi, notes: ((notes.rows ?? notes) as { body: string; source: string }[]).filter((n) => n.body) };
+    // The requirement is often mostly IN the attached spec. Sending the note
+    // without it is what made Claude ask to be allowed to read a file that
+    // was already attached.
+    const files = await tx
+      .select({ name: attachment.name, text: attachment.extractedText, err: attachment.extractError })
+      .from(attachment)
+      .where(eq(attachment.workitemId, workitemId))
+      .orderBy(attachment.createdAt);
+    return { wi, notes: ((notes.rows ?? notes) as { body: string; source: string }[]).filter((n) => n.body), files };
   });
+}
+
+/** The attached files, as the prompt carries them. */
+function filesSection(files: { name: string; text: string | null; err: string | null }[], he: boolean): string {
+  if (files.length === 0) return "";
+  const parts = files.map((f) =>
+    f.text
+      ? `--- ${he ? "קובץ מצורף" : "ATTACHED FILE"}: ${f.name} ---\n${f.text}`
+      : `--- ${he ? "קובץ מצורף" : "ATTACHED FILE"}: ${f.name} — ${he ? "לא ניתן לקרוא כטקסט" : "NOT READABLE AS TEXT"} (${f.err ?? "unknown"}) ---`,
+  );
+  return `\n\n${he ? "קבצים מצורפים לדרישה — הם חלק מהדרישה, לא רקע:" : "FILES ATTACHED TO THE REQUIREMENT — they are part of the requirement, not background:"}\n\n${parts.join("\n\n")}`;
+}
+
+/** A refusal meant for the person — the API shows its message, not a 500. */
+export class RepoRequired extends Error {}
+
+/**
+ * The working copy, or a refusal — never a quiet downgrade.
+ *
+ * An assessment that never opened the code is a guess with a confident
+ * voice. A development requirement therefore needs a repository, and a
+ * repository that is linked must actually arrive; "אין עותק repo — מעריך
+ * מהטקסט בלבד" used to hide a failed fetch behind an answer that read like
+ * a real one. Research and testing requirements have no code to check
+ * against, so they may still run on the text.
+ */
+async function requireCheckout(
+  r: Awaited<ReturnType<typeof firstRepo>>,
+  requirementType: string,
+): Promise<{ cwd: string | null; repoName: string | null; staleWarning: string | null }> {
+  if (!r) {
+    if (requirementType !== "development") return { cwd: null, repoName: null, staleWarning: null };
+    throw new RepoRequired(
+      "לדרישת פיתוח אין repository מקושר, ובחינת בשלות בודקת את הקוד עצמו. קשרו repository לדרישה (או ללקוח) והריצו שוב.",
+    );
+  }
+  const { dir, reason } = await checkoutRepo(r);
+  if (!dir) {
+    // A fetch that failed is worth retrying; a repo with no git address is not.
+    const fetchFailed = !!r.adoRepoRef?.trim();
+    throw new RepoRequired(
+      `${reason ?? `לא הצלחנו להביא עותק של ${r.name}.`}\n\nבחינת בשלות חייבת לקרוא את הקוד, ולכן היא נעצרה כאן במקום לענות מהטקסט בלבד. ${
+        fetchFailed
+          ? "נסו שוב — הורדה ראשונה של repository גדול יכולה לקחת כמה דקות."
+          : "הוסיפו ל-repository כתובת git במסך Repositories, והריצו שוב."
+      }`,
+    );
+  }
+  return { cwd: dir, repoName: r.name, staleWarning: reason };
 }
 
 export async function firstRepo(clientId: string, workitemId: string) {
@@ -747,24 +824,27 @@ const ASSESS_CONTRACT_KEY = "assess.shared.output_contract";
  */
 async function buildAssessPrompt(input: {
   clientId: string; workitemId: string; promptKey: string; customEmphasis?: string; model?: string;
-}): Promise<{ prompt: string; promptHe: string | null; model: string | undefined; cwd: string | null; repoName: string | null; templateTitle: string }> {
-  const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
+}): Promise<{
+  prompt: string; promptHe: string | null; model: string | undefined; cwd: string | null;
+  repoName: string | null; staleWarning: string | null; filesRead: number; templateTitle: string;
+}> {
+  const { wi, notes, files } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
-  const cwd = r ? await ensureCheckout(r) : null;
-  const reqText = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
+  const { cwd, repoName, staleWarning } = await requireCheckout(r, wi.requirementType);
+  const base = [`Title: ${wi.title}`, ...notes.map((n) => `[${n.source}] ${n.body}`)].join("\n\n");
   const tmpl = await getPromptByKey(input.promptKey);
 
   const varsEn: Record<string, string> = {
     REPO_CONTEXT: cwd
-      ? `You are in the repository this work would touch (${r?.name}). Read whatever code you need to judge feasibility.`
-      : "There is no code checkout available; judge from the text alone.",
-    REQUIREMENT: reqText,
+      ? `You are in the repository this work would touch (${repoName}). Read whatever code you need to judge feasibility.`
+      : "This is a research/testing requirement with no repository; judge from the text and the attached files.",
+    REQUIREMENT: base + filesSection(files, false),
   };
   const varsHe: Record<string, string> = {
     REPO_CONTEXT: cwd
-      ? `אתה בתוך ה-repository שהעבודה הזו נוגעת בו (${r?.name}). קרא כל קוד שדרוש כדי לשפוט ישימות.`
-      : "אין עותק קוד זמין; שפוט מהטקסט בלבד.",
-    REQUIREMENT: reqText,
+      ? `אתה בתוך ה-repository שהעבודה הזו נוגעת בו (${repoName}). קרא כל קוד שדרוש כדי לשפוט ישימות.`
+      : "זו דרישת מחקר/בדיקות בלי repository; שפוט מהטקסט ומהקבצים המצורפים.",
+    REQUIREMENT: base + filesSection(files, true),
   };
   if (input.promptKey === "assess.readiness.custom") {
     const emphasis = input.customEmphasis?.trim() || "(none specified)";
@@ -791,7 +871,7 @@ async function buildAssessPrompt(input: {
   // Repository knowledge is not prepended here: an onboarded repo carries
   // it in its own CLAUDE.md / skills, which the `claude -p` run loads
   // natively from `cwd`.
-  return { prompt, promptHe, model, cwd, repoName: r?.name ?? null, templateTitle: tmpl?.title ?? input.promptKey };
+  return { prompt, promptHe, model, cwd, repoName, staleWarning, filesRead: files.length, templateTitle: tmpl?.title ?? input.promptKey };
 }
 
 /** Render (never run) the prompt for one tier — powers the preview modal. */
@@ -806,7 +886,11 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
     clientId: input.clientId, workitemId: input.workitemId,
     promptKey: input.promptKey ?? DEFAULT_ASSESS_PROMPT_KEY, customEmphasis: input.customEmphasis, model: input.model,
   });
-  pushLine(input.runId, built.cwd ? `קורא את ה-repo ${built.repoName} · ${built.templateTitle}` : `אין עותק repo — מעריך מהטקסט בלבד · ${built.templateTitle}`);
+  if (built.staleWarning) pushLine(input.runId, `⚠ ${built.staleWarning}`);
+  const filesLine = built.filesRead > 0 ? ` · ${built.filesRead} קבצים מצורפים` : "";
+  pushLine(input.runId, built.cwd
+    ? `קורא את ה-repo ${built.repoName}${filesLine} · ${built.templateTitle}`
+    : `דרישת מחקר/בדיקות — מעריך מהטקסט${filesLine} · ${built.templateTitle}`);
 
   const raw = await runClaudeJson<Partial<AssessResult> & { rationale?: string | string[]; whatChanges?: string | string[] }>(
     built.cwd ?? process.cwd(), built.prompt, {
@@ -895,15 +979,16 @@ export type BreakdownResult = {
  *  isn't a preview. */
 async function buildBreakdownPrompt(input: { clientId: string; workitemId: string; runId?: string }) {
   pushLine(input.runId, "מכין עותק עבודה של ה-repo…");
-  const { wi, notes } = await loadRequirementText(input.clientId, input.workitemId);
+  const { wi, notes, files } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
-  const cwd = r ? await ensureCheckout(r) : null;
-  pushLine(input.runId, cwd ? `קורא את ה-repo ${r?.name}` : "אין עותק repo");
+  const { cwd, repoName, staleWarning } = await requireCheckout(r, wi.requirementType);
+  if (staleWarning) pushLine(input.runId, `⚠ ${staleWarning}`);
+  pushLine(input.runId, cwd ? `קורא את ה-repo ${repoName}` : "דרישת מחקר/בדיקות — מפרק מהטקסט");
 
-  const reqText = [`Title: ${wi.title}`, ...notes.map((n) => n.body)].join("\n\n");
+  const reqText = [`Title: ${wi.title}`, ...notes.map((n) => n.body)].join("\n\n") + filesSection(files, false);
   const prompt = [
     "Break this software requirement into a concrete implementation task list for the team.",
-    cwd ? `You are in the repository (${r?.name}) — read the code to make the tasks specific and correctly ordered.` : "No code checkout available.",
+    cwd ? `You are in the repository (${repoName}) — read the code to make the tasks specific and correctly ordered.` : "No code checkout available.",
     "",
     "REQUIREMENT (may be Hebrew):",
     reqText,
@@ -984,7 +1069,7 @@ async function buildBreakdownPrompt(input: { clientId: string; workitemId: strin
     "",
     "(ההוראות המדויקות ל-Claude — פורמט, סיווג task/check, כללי כתיבה — תמיד רצות באנגלית; זה תוכן הדרישה עצמו, לנוחות קריאה.)",
   ].join("\n");
-  return { prompt, promptHe, cwd, repoName: r?.name ?? null };
+  return { prompt, promptHe, cwd, repoName };
 }
 
 export async function previewBreakdownPrompt(input: { clientId: string; workitemId: string }): Promise<{ prompt: string; promptHe: string; repoName: string | null }> {
