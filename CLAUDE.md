@@ -92,9 +92,15 @@ same conversation (`--resume`).
 
 ## Git flow — one project branch, task branches under it
 
-`master` is main; it changes only through a reviewed pull request. Claude never
-pushes to or merges into `master`, never merges or closes a pull request, and
-does not create a `project/` branch on its own.
+`master` is main; it changes only through a pull request — DCC is a solo repo
+with no CI, so "reviewed" here means Claude's own checks, not a second human.
+The user has given Claude standing permission to do everything a maintainer
+would on GitHub in **this repo specifically** — commit, push, open, merge and
+close a PR — a permission that does **not** extend to other repositories
+without the same explicit statement there. Claude still opens every PR with
+what was checked, the same as before: merging it is one more step in the same
+already-checked task, not a separate approval. Claude still does not create a
+`project/` branch on its own.
 
 ```
 master
@@ -104,30 +110,44 @@ master
 ```
 
 - A task's PR goes **into the project branch**, not `master` (`master` only for a
-  `fix/` branch). After every merge, update the project branch and check the
-  whole thing together (`npm run typecheck`, `npm run audit:stale`, the affected
-  screens). Keep the project branch current with `master`. The final
-  `project/<name>` → `master` PR is a human action.
+  `fix/` branch). Merge it in once checked, then update the project branch and
+  check the whole thing together (`npm run typecheck`, `npm run audit:stale`,
+  the affected screens). Keep the project branch current with `master`. The
+  final `project/<name>` → `master` PR ships a whole subject at once — say
+  plainly what it ships and merge it the same way, unless the user asked to
+  review that one specifically.
 - A big subject the user asked a project branch for takes commits directly, with
   a single PR to `master` at the end; split into task branches only when asked.
 
-**A finished task is committed, pushed, and its PR is opened** — once it is
-done, checked (`typecheck`, `audit:stale`, the affected screens) and Claude
-stands behind it. The standing permission covers the commit, the push and
-opening the PR, saying in the PR what was checked; merging stays a human
-action. If something was not checked or does not hold, say so and do none of it.
+**A finished task is committed, pushed, its PR opened, and — once Claude stands
+behind it — merged**, all one step: done, checked (`typecheck`, `audit:stale`,
+the affected screens), described in the PR, merged. If something was not
+checked or does not hold, say so and do none of it — including the merge.
 Add only the task's own files by name, never `git add -A`.
 
-**A subject's branch stays open until the user merges it.** The user merges in
-batches, typically at the end of the day, so a subject's branch and its one PR
-stay open for days. Every later request on that subject, in any session, goes
-onto that same branch (`npm run sync` lists open requests with their branches):
-switch to it and add commits; open the PR once, not once per commit. A request
-on another subject — including an unrelated one later in the same session — gets
-its own branch before its first edit and ends in its own PR. If a request touches
-two subjects, ask. At the start of each request, say in one line which branch it
-goes onto and why. Before the first edit on a branch behind `master`, run
-`git merge origin/master`; if that conflicts, stop and tell the user.
+**A subject's branch stays open only while it is still being worked on.**
+Every later request on that same subject, in the same session or a later one,
+goes onto its branch if the PR has not merged yet (`npm run sync` lists open
+requests with their branches): switch to it and add commits, still one PR, not
+one per commit — merge once that subject's work is actually done, not after
+every small addition to it. A request on another subject — including an
+unrelated one later in the same session — gets its own branch before its first
+edit and ends in its own PR. If a request touches two subjects, ask. At the
+start of each request, say in one line which branch it goes onto and why.
+Before the first edit on a branch behind `master`, run `git merge
+origin/master`; if that conflicts, stop and tell the user.
+
+**Every branch always tracks current `master` — not only at the moment it was
+created.** The only reason to build on something other than current `master` is
+the documented hierarchy above (a `task/` branch off its `project/` branch); there
+is no other excuse. In one long session it is normal to have several `fix/`
+branches open at once, all sharing the one dev server the user has open — the
+moment ANY of them merges (yours or not), `git merge origin/master` into every
+other branch you are still working on before its next edit or restart, not only
+when it was first cut. A branch that falls behind its own already-merged sibling
+silently resurrects bugs that sibling already fixed — confirmed live 2026-09-23,
+where a stale `fix/` branch made an already-merged, already-verified fix look
+broken again.
 
 **Branch names:** `<type>/<short-description>`, lowercase English with hyphens.
 
