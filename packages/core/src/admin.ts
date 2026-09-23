@@ -1,4 +1,4 @@
-import { sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db, withTenant, withoutTenant } from "@dcc/db";
 import { client, clientBudget, clientRepo, repo, users, workitem } from "@dcc/db/schema";
 
@@ -35,10 +35,8 @@ export async function setupClient(input: {
   const [actor] = await db.select({ id: users.id }).from(users).where(sql`lower(${users.email}) = ${input.actorEmail.toLowerCase()}`).limit(1);
   if (!actor) throw new Error(`no user for ${input.actorEmail}`);
 
-  const [c] =
-    (await db.select().from(client).where(sql`${client.name} = ${input.clientName}`).limit(1)).length > 0
-      ? await db.select().from(client).where(sql`${client.name} = ${input.clientName}`).limit(1)
-      : await db.insert(client).values({ name: input.clientName }).returning();
+  const live = await db.select().from(client).where(and(eq(client.name, input.clientName), isNull(client.archivedAt))).limit(1);
+  const [c] = live.length > 0 ? live : await db.insert(client).values({ name: input.clientName }).returning();
 
   await withTenant(c!.id, (tx) =>
     tx.insert(clientBudget).values({ clientId: c!.id, monthlyUsd: "300" }).onConflictDoNothing(),

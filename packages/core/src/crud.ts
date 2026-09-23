@@ -43,24 +43,37 @@ export async function updateClient(input: {
   return { updated: true };
 }
 
-/** Delete a client. Refuses while it still has requirements — archive or clear first. */
+/** A refusal meant for the person — the API shows its message, not a 500. */
+export class ClientRefused extends Error {}
+
+/**
+ * Delete a client and everything under it — all of it or none of it.
+ * Refuses while it still has requirements. Its own repos go with it; one
+ * another client also uses stays, as a shared repo. History the system
+ * must keep (event_log, claude_call) cannot be deleted, so when there is
+ * any the row stays hidden (`archived_at`) and the name is free again.
+ */
 export async function deleteClient(clientId: string) {
-  const [wi] = await withTenant(clientId, (tx) =>
-    tx.select({ n: sql<number>`count(*)::int` }).from(workitem).where(eq(workitem.clientId, clientId)),
-  );
-  if ((wi?.n ?? 0) > 0) throw new Error(`client still has ${wi!.n} requirement(s) — delete or move them first`);
-  await withTenant(clientId, async (tx) => {
+  // client_repo is behind RLS, so other clients' links are visible only from here
+  const sharedRepos = await db
+    .select({ id: repo.id })
+    .from(repo)
+    .where(and(eq(repo.clientId, clientId), sql`exists (select 1 from client_repo cr where cr.repo_id = ${repo.id} and cr.client_id <> ${clientId})`));
+  return withTenant(clientId, async (tx) => {
+    const [wi] = await tx.select({ n: sql<number>`count(*)::int` }).from(workitem).where(eq(workitem.clientId, clientId));
+    if ((wi?.n ?? 0) > 0) throw new ClientRefused(`ללקוח יש עדיין ${wi!.n} דרישות. צריך למחוק אותן קודם, ורק אז את הלקוח.`);
     await tx.delete(clientRepo).where(eq(clientRepo.clientId, clientId));
     await tx.delete(serviceConnection).where(eq(serviceConnection.clientId, clientId));
     await tx.delete(clientBudget).where(eq(clientBudget.clientId, clientId));
+    for (const r of sharedRepos) await tx.update(repo).set({ clientId: null }).where(eq(repo.id, r.id));
+    await tx.delete(repo).where(eq(repo.clientId, clientId));
+    try {
+      await tx.transaction((sp) => sp.delete(client).where(eq(client.id, clientId)));
+    } catch {
+      await tx.update(client).set({ archivedAt: new Date() }).where(eq(client.id, clientId));
+    }
+    return { deleted: true };
   });
-  await db.delete(client).where(eq(client.id, clientId));
-  return { deleted: true };
-}
-
-export async function archiveClient(clientId: string, archived: boolean) {
-  await db.update(client).set({ archivedAt: archived ? new Date() : null }).where(eq(client.id, clientId));
-  return { archived };
 }
 
 /* ── requirement (workitem) ─────────────────────────────────────────── */

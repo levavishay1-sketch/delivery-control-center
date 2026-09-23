@@ -6,6 +6,7 @@ import type { Concept } from "../index.ts";
  */
 export const ADMIN_CONCEPTS: Concept[] = [
   { key: "client", kind: "term", title: "לקוח", aliases: ["לקוחות"], explain: "הגוף שעבורו עובדים. כל לקוח הוא עולם סגור: הדרישות, המאגרים והחיבורים שלו לא נראים ללקוח אחר, וזה נאכף במסד הנתונים עצמו." },
+  { key: "client_delete", kind: "button", title: "מחיקה", aliases: ["מחיקת לקוח"], explain: "מוחק את הלקוח ואת מה שתחתיו ב-DCC: ה-repositories שלו, החיבורים והתקציב. אפשר למחוק רק לקוח שאין לו דרישות.", press: "הלקוח נעלם מכל המסכים, ואפשר ליצור לקוח חדש באותו שם. repository שגם לקוח אחר משתמש בו נשאר, כמשותף. הקבצים במחשב וב-GitHub לא נמחקים, והיסטוריית העלויות נשמרת. אי אפשר לבטל." },
   { key: "repository", kind: "term", title: "Repository", aliases: ["מאגר", "ריפו", "ריפוזיטורי"], explain: "המקום שבו הקוד של המוצר גר, אצל ספק כמו GitHub או Azure DevOps. DCC מתחבר אליו כדי לקרוא קוד ולפתוח בקשות מיזוג." },
   { key: "shared_repo", kind: "term", title: "Repository משותף", aliases: ["משותף"], explain: "מאגר ששייך ליותר מלקוח אחד. הטמעת AI זמינה רק למאגר של לקוח יחיד, כי קובצי ההנחיה שנכתבים בו הם של אותו לקוח." },
   { key: "onboarding_status", kind: "field", title: "מצב הטמעת AI", aliases: ["הטמעת AI"], screens: ["onboarding"], explain: "האם המאגר כבר הוכן לעבודה עם Claude Code — כלומר נכתבו בו קובצי ההנחיה שמסבירים לקלוד איך הוא בנוי." },
