@@ -620,6 +620,14 @@ const checkouts = new Map<string, Promise<Checkout>>();
 /** Why there is no working copy — a sentence for the person, never a silent null. */
 export type Checkout = { dir: string | null; reason: string | null };
 
+/** The line worth showing from a failed git run — prefer git's own "fatal:"/
+ *  "error:" over a trailing hint line ("and retry with…"), which names no
+ *  cause at all. */
+function gitFailureDetail(out: string): string {
+  const lines = out.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+  return lines.find((l) => /^(fatal|error):/i.test(l)) ?? lines.pop() ?? "ללא פירוט";
+}
+
 export function checkoutRepo(r: { id: string; name: string; localPath: string | null; adoRepoRef: string | null }): Promise<Checkout> {
   const running = checkouts.get(r.id);
   if (running) return running;
@@ -667,20 +675,44 @@ async function doCheckout(r: { id: string; name: string; localPath: string | nul
     // An update that fails still leaves a usable (if older) copy — say so
     // rather than throwing the copy away over a flaky network.
     const pull = await git(["pull", "--ff-only"], dir, { timeoutMs: UPDATE_TIMEOUT_MS });
-    return { dir, reason: pull.code === 0 ? null : `העותק המקומי של ${r.name} לא עודכן (${pull.out.trim().split("\n").pop() ?? "שגיאת רשת"}) — נקרא כפי שהוא.` };
+    return { dir, reason: pull.code === 0 ? null : `העותק המקומי של ${r.name} לא עודכן (${gitFailureDetail(pull.out)}) — נקרא כפי שהוא.` };
   }
   // Clone beside the target and move it into place only once it succeeded,
   // so a killed clone can never be mistaken for a usable copy.
   const tmp = `${dir}.partial-${randomUUID().slice(0, 8)}`;
-  const cloned = await git(["clone", "--depth", "80", gitUrl, tmp], REPO_CACHE, { timeoutMs: CLONE_TIMEOUT_MS });
+  // Assess/breakdown/implement only ever read the CURRENT snapshot of the
+  // code — not its history — so the first clone asks for just that (depth
+  // 1). On a slow link, 80 commits' worth of blobs was the difference
+  // between minutes and never; a caller that later wants real history can
+  // `git fetch --deepen` this same cache.
+  const cloned = await git(["clone", "--depth", "1", gitUrl, tmp], REPO_CACHE, { timeoutMs: CLONE_TIMEOUT_MS });
   if (cloned.code !== 0 || (await git(["rev-parse", "--verify", "--quiet", "HEAD"], tmp)).code !== 0) {
     rmSync(tmp, { recursive: true, force: true });
-    const detail = cloned.out.trim().split("\n").filter(Boolean).pop() ?? "ללא פירוט";
-    return { dir: null, reason: `הבאת ${r.name} מ-git נכשלה: ${detail}` };
+    return { dir: null, reason: `הבאת ${r.name} מ-git נכשלה: ${gitFailureDetail(cloned.out)}` };
   }
-  rmSync(dir, { recursive: true, force: true });
-  renameSync(tmp, dir);
-  return { dir, reason: null };
+  // A second request for the same repo (a retry, another requirement) that
+  // arrived after this one's dedup slot had already been claimed and freed
+  // can reach here in parallel. If that other attempt already finished, use
+  // its result instead of overwriting a directory Windows may still have a
+  // handle open on (real, seen live: a fresh rename EPERM'd for exactly
+  // this reason) — and the wait for `tmp` was not wasted, `dir` is current.
+  if (existsSync(path.join(dir, ".git")) && (await git(["rev-parse", "--verify", "--quiet", "HEAD"], dir)).code === 0) {
+    rmSync(tmp, { recursive: true, force: true });
+    return { dir, reason: null };
+  }
+  // Windows can hold a just-written directory briefly (antivirus, the
+  // indexer) — retry past that instead of failing a otherwise-successful
+  // clone over a lock that clears itself within a second or two.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      rmSync(dir, { recursive: true, force: true });
+      renameSync(tmp, dir);
+      return { dir, reason: null };
+    } catch (e) {
+      if (attempt >= 5) throw e;
+      await new Promise((res) => setTimeout(res, 500 * attempt));
+    }
+  }
 }
 
 type Dev = { userId: string };
@@ -826,7 +858,7 @@ async function buildAssessPrompt(input: {
   clientId: string; workitemId: string; promptKey: string; customEmphasis?: string; model?: string;
 }): Promise<{
   prompt: string; promptHe: string | null; model: string | undefined; cwd: string | null;
-  repoName: string | null; staleWarning: string | null; filesRead: number; templateTitle: string;
+  repoName: string | null; staleWarning: string | null; filesRead: number; templateTitle: string; currentTitle: string;
 }> {
   const { wi, notes, files } = await loadRequirementText(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
@@ -871,7 +903,7 @@ async function buildAssessPrompt(input: {
   // Repository knowledge is not prepended here: an onboarded repo carries
   // it in its own CLAUDE.md / skills, which the `claude -p` run loads
   // natively from `cwd`.
-  return { prompt, promptHe, model, cwd, repoName, staleWarning, filesRead: files.length, templateTitle: tmpl?.title ?? input.promptKey };
+  return { prompt, promptHe, model, cwd, repoName, staleWarning, filesRead: files.length, templateTitle: tmpl?.title ?? input.promptKey, currentTitle: wi.title };
 }
 
 /** Render (never run) the prompt for one tier — powers the preview modal. */
@@ -952,8 +984,14 @@ async function runAssess(input: { clientId: string; workitemId: string; by: Dev;
       why: g.why, kind: g.kind, whoAnswers: g.whoAnswers, options: g.options, impactIfWrong: g.impactIfWrong,
     });
   }
+  // A title typed only to satisfy the required field ("כדגכ", "x", a copy
+  // of the client name) carries no information — once Claude has actually
+  // read the raw text and any attached spec, its title is strictly more
+  // informative. A real title, however short, is never overwritten.
+  const patch: { phase: "shaping"; updatedAt: Date; title?: string } = { phase: "shaping", updatedAt: new Date() };
+  if (res.title.trim() && built.currentTitle.trim().length <= 6) patch.title = res.title.trim();
   await withTenant(input.clientId, (tx) =>
-    tx.update(workitem).set({ phase: "shaping", updatedAt: new Date() }).where(eq(workitem.id, input.workitemId)),
+    tx.update(workitem).set(patch).where(eq(workitem.id, input.workitemId)),
   );
   await regenerateBrief(input.clientId, input.workitemId);
 
@@ -1235,7 +1273,11 @@ export function git(args: string[], cwd: string, opts?: { timeoutMs?: number; en
     // Manager) can still pop its own GUI/browser prompt that this process
     // can never answer, so network operations (push/fetch against a
     // remote with no cached credential) also get a hard timeout below.
-    const p = spawn("git", args, { cwd, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...(opts?.env ?? {}) } });
+    // core.longpaths: Windows' 260-char MAX_PATH kills a clone/checkout the
+    // instant a repo has one deeply-nested path (a .NET obj/ build output,
+    // seen for real on a live repo — 8000+ files in, "Filename too long").
+    // A no-op on every other platform, so always on rather than sniffed.
+    const p = spawn("git", ["-c", "core.longpaths=true", ...args], { cwd, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: "0", ...(opts?.env ?? {}) } });
     let out = "";
     let done = false;
     const finish = (r: { code: number; out: string }) => { if (!done) { done = true; if (killer) clearTimeout(killer); res(r); } };
