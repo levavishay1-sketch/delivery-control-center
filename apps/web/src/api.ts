@@ -240,6 +240,8 @@ export type ProposalPayload = {
   status: "proposed" | "running" | "done" | "cancelled" | "failed"; result?: unknown; error?: string; ranAt?: string; recorded?: string;
   /** The approve button's words, when "אשר והרץ" would say the wrong thing (closing a gap). */
   approveLabel?: string;
+  /** For an action that calls no model: what approving it costs, in words. */
+  costNote?: string;
 };
 export type DeclaredCostPayload = {
   reason: string; question: string; estimate: { model: string; effort: string; usdMin: number; usdMax: number };

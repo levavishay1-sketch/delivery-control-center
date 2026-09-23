@@ -36,6 +36,8 @@ export type ActionDef = {
   describe: (p: ActionParams, e: ActionEntity) => string | Promise<string>;
   /** The approve button's words on the card, when "אשר והרץ" would say the wrong thing. */
   approveLabel?: string;
+  /** For an action with no model estimate: what approving it costs, in words. A bare "$0" under a paid answer reads as if the answer were free. */
+  costNote?: string;
   allowed: (by: Actor, e: ActionEntity, p: ActionParams) => Promise<Allowed>;
   estimate: (p: ActionParams, e: ActionEntity) => Promise<ActionEstimate>;
   /** The exact prompt — the same "what will be sent" gate every button opens. */
@@ -100,6 +102,7 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
   },
   approve_task: {
     key: "approve_task", title: "אישור המשימה", consequential: true, topic: "task",
+    costNote: "האישור לא עולה כסף — הוא רק מסמן את המשימה כמאושרת",
     params: [],
     describe: () => "המשימה תסומן כמאושרת לפיתוח, בשמכם. אפשר לתקן קודם את הניסוח ואת הגודל במסך המשימה.",
     allowed: async (_by, e) => {
@@ -114,6 +117,7 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
   },
   send_to_session: {
     key: "send_to_session", title: "שליחת הוראה לסשן ההטמעה", consequential: true, topic: "run",
+    costNote: "ההוראה נכנסת לסשן שכבר רץ — מה שקלוד יעשה בעקבותיה נרשם בעלות של הסשן",
     params: [{ name: "text", explain: "ההוראה לסשן, באנגלית, פסקה אחת", required: true }],
     describe: (p) => `ההוראה תוקלד לתוך הסשן החי של Claude Code, בשמכם, כאילו כתבתם אותה בטרמינל:\n"${str(p.text) ?? ""}"`,
     allowed: async (_by, e, p) => {
@@ -128,6 +132,7 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
   // only the person closes a gap: each of these is a card they approve.
   resolve_gap: {
     key: "resolve_gap", title: "סגירת פער עם הכרעה", consequential: true, topic: "gaps", approveLabel: "אשר וסגור את הפער",
+    costNote: "האישור לא עולה כסף — הוא רק שומר את ההכרעה. העלות של התשובה של קלוד רשומה מעליה",
     params: [
       { name: "gap", explain: "המזהה הקצר של הפער (8 התווים שבסוגריים בעובדות)", required: true },
       { name: "answer", explain: "ההכרעה כפי שסוכמה בשיחה, בעברית, שלמה ועומדת בפני עצמה — מי שיקרא אותה בלי השיחה יבין מה הוחלט", required: true },
@@ -151,6 +156,7 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
   },
   dismiss_gap: {
     key: "dismiss_gap", title: "סימון כלא-פער", consequential: true, topic: "gaps", approveLabel: "אשר — זה לא פער",
+    costNote: "האישור לא עולה כסף — הוא רק שומר את הסיבה. העלות של התשובה של קלוד רשומה מעליה",
     params: [
       { name: "gap", explain: "המזהה הקצר של הפער (8 התווים שבסוגריים בעובדות)", required: true },
       { name: "reason", explain: "למה זה לא פער אמיתי, כפי שעלה בשיחה — נשמר כדי שהשאלה לא תעלה שוב", required: true },

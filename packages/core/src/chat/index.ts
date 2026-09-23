@@ -10,7 +10,7 @@ import { runClaudeRaw } from "../ai-assist.ts";
 import { chatPolicy } from "../routing.ts";
 import { asksAboutScreen, glossaryAnswer, glossaryFor, matchGlossary, type ScreenGlossary } from "../glossary/index.ts";
 import { onboardingChatFacts } from "../repo-onboarding/runs.ts";
-import { actionEntityFor, actionsFor, type ActionDef } from "../actions/index.ts";
+import { ACTIONS, actionEntityFor, actionsFor, type ActionDef } from "../actions/index.ts";
 import { placesFor, renderPlaces } from "../screens/index.ts";
 import { codeReadEstimate, codeReads } from "./proposals.ts";
 import { parseBlocks, type ParsedAction } from "./blocks.ts";
@@ -178,9 +178,17 @@ async function messagesOf(c: Pick<ConvRow, "id" | "clientId">): Promise<ChatMess
 }
 
 export const messageView = (m: MsgRow, call: typeof claudeCall.$inferSelect | null): ChatMessage => toMessage(m, call);
+/** A card's wording comes from the registry as it is now — so a card written before the wording changed reads right too. */
+function withActionWording(kind: string, payload: Record<string, unknown>): Record<string, unknown> {
+  if (kind !== "proposal" || typeof payload.key !== "string") return payload;
+  const def = ACTIONS[payload.key as keyof typeof ACTIONS];
+  if (!def) return payload;
+  return { ...payload, ...(def.approveLabel ? { approveLabel: def.approveLabel } : {}), ...(def.costNote ? { costNote: def.costNote } : {}) };
+}
+
 const toMessage = (m: MsgRow, call: typeof claudeCall.$inferSelect | null): ChatMessage => ({
   id: m.id, conversationId: m.conversationId, role: m.role, kind: m.kind, text: m.text, source: m.source, callId: m.callId,
-  payload: m.payload ?? {}, helpful: m.helpful, helpfulSource: m.helpfulSource, createdAt: new Date(m.createdAt).toISOString(),
+  payload: withActionWording(m.kind, m.payload ?? {}), helpful: m.helpful, helpfulSource: m.helpfulSource, createdAt: new Date(m.createdAt).toISOString(),
   cost: call ? { model: call.modelUsed ?? call.modelRequested, effort: call.effort, inputTokens: call.inputTokens, outputTokens: call.outputTokens, cacheReadTokens: call.cacheReadTokens, costUsd: usd(call.costUsd) } : null,
 });
 
@@ -522,7 +530,7 @@ async function proposalCards(conv: ConvRow, topic: ResolvedTopic, userId: string
       const estimate = await def.estimate(params, entity);
       cards.push(await addMessage(conv, {
         role: "assistant", kind: "proposal", source: "model", text: def.title,
-        payload: { key: def.key, title: def.title, describe: await def.describe(params, entity), params, consequential: def.consequential, estimate, status: "proposed", ...(def.approveLabel ? { approveLabel: def.approveLabel } : {}) },
+        payload: { key: def.key, title: def.title, describe: await def.describe(params, entity), params, consequential: def.consequential, estimate, status: "proposed",  },
       }));
     }
   }
