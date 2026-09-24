@@ -252,7 +252,7 @@ export function PromptText({ prompt, promptHe, maxHeight = "40vh" }: { prompt: s
  * 2026-09-12).
  */
 export function PromptPreviewModal({
-  title, data, loading, error, onClose, onConfirm, confirming, confirmLabel, disabledReason, reasonField, loadingHint,
+  title, data, loading, error, onClose, onConfirm, confirming, confirmLabel, disabledReason, reasonField, loadingHint, deterministic,
 }: {
   title: string;
   data: { prompt: string; promptHe: string } | null;
@@ -273,6 +273,9 @@ export function PromptPreviewModal({
    *  (design notes, `decision-history`). Confirm stays disabled until
    *  it's filled. */
   reasonField?: { label: string; value: string; onChange: (v: string) => void };
+  /** This action resolved to a direct command — nothing is sent to Claude,
+   *  so `data.prompt` is the command itself, not a prompt to preview in two languages. */
+  deterministic?: boolean;
 }) {
   return (
     // No dismiss-on-backdrop-click: a real request may be running behind
@@ -292,10 +295,14 @@ export function PromptPreviewModal({
           }}>✕</a>
         </div>
         <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 14 }}>
-          זה בדיוק מה שיישלח ל-Claude (הפרומפט האמיתי תמיד רץ באנגלית — התצוגה בעברית היא לנוחות הקריאה בלבד).
+          {deterministic
+            ? "זוהתה פקודת build ישירה למאגר הזה — זה ירוץ ישירות במחשב הזה, בלי לעבור דרך קלוד ובלי עלות AI."
+            : "זה בדיוק מה שיישלח ל-Claude (הפרומפט האמיתי תמיד רץ באנגלית — התצוגה בעברית היא לנוחות הקריאה בלבד)."}
         </p>
         {loading ? (
           <div className="spin">{loadingHint ?? "טוען…"}</div>
+        ) : data && deterministic ? (
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: 12.5, lineHeight: 1.7, fontFamily: "var(--mono)", direction: "ltr", textAlign: "left", background: "var(--surface-muted)", borderRadius: 10, padding: 14, margin: "0 0 16px" }}>{data.prompt}</pre>
         ) : data ? (
           <PromptText prompt={data.prompt} promptHe={data.promptHe} />
         ) : null}

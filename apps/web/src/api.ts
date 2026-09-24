@@ -400,7 +400,7 @@ export const startBreakdown = (id: string, reason?: string) =>
 export const previewBreakdown = (id: string) =>
   get<{ prompt: string; promptHe: string; repoName: string | null }>(`/workitems/${id}/breakdown-preview`);
 export const previewImplement = (taskId: string) =>
-  get<{ prompt: string; promptHe: string; approved: boolean }>(`/tasks/${taskId}/implement-preview`);
+  get<{ prompt: string; promptHe: string; approved: boolean; deterministic?: boolean }>(`/tasks/${taskId}/implement-preview`);
 export type FlowRun = {
   id: string | null; kind: "assess" | "breakdown" | "implement" | null;
   /** "rolled_back" — a past implement run whose code was undone; the

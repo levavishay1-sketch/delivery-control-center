@@ -1780,9 +1780,27 @@ async function runChecksStep(input: { clientId: string; workitemId: string; by: 
 const checksOf = (clientId: string, taskId: string) => withTenant(clientId, (tx) => tx.select().from(task)
   .where(and(eq(task.parentTaskId, taskId), eq(task.kind, "check"), eq(task.active, true), sql`${task.state} <> 'dropped'`)).orderBy(task.seq));
 
-export async function previewImplementPrompt(input: { clientId: string; workitemId: string; taskId: string }): Promise<{ prompt: string; promptHe: string; approved: boolean }> {
+export async function previewImplementPrompt(input: { clientId: string; workitemId: string; taskId: string }): Promise<{ prompt: string; promptHe: string; approved: boolean; deterministic?: boolean }> {
   // The same facts a run would decide by, read from the clone as it is now — so the preview says what will be sent.
   const built = await taskBuiltOn(input.clientId, input.taskId).catch(() => null);
+
+  // A build check previews the real command when one resolves — never a Claude
+  // prompt for work that will not go through Claude at all (runBuildStep decides
+  // the same way, at run time, from the same facts).
+  const [t0] = await withTenant(input.clientId, (tx) => tx.select().from(task).where(eq(task.id, input.taskId)).limit(1));
+  if (t0?.kind === "check" && t0.checkKind === "build" && t0.parentTaskId) {
+    const [owner] = await withTenant(input.clientId, (tx) => tx.select().from(task).where(eq(task.id, t0.parentTaskId!)).limit(1));
+    if (owner) {
+      const r = await firstRepo(input.clientId, input.workitemId);
+      const dir = r ? existingCheckout({ ...r, localPath: null }) : null;
+      const resolved = dir ? resolveAllBuildRecipes(dir, owner.compiledComponents as string[]) : { recipes: null, reason: "אין עותק עבודה של המאגר" };
+      if (resolved.recipes) {
+        const cmd = resolved.recipes.map((rc) => `${rc.command} ${rc.args.join(" ")}`).join("\n");
+        return { prompt: cmd, promptHe: cmd, approved: t0.approvedAt != null, deterministic: true };
+      }
+    }
+  }
+
   const { prompt, promptHe, t } = await buildImplementPrompt(input, built);
   return { prompt, promptHe, approved: t.approvedAt != null };
 }
