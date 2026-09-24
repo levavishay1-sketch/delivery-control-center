@@ -1560,14 +1560,14 @@ export async function taskFlowOf(clientId: string, taskId: string): Promise<Flow
   const [t] = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.id, taskId)).limit(1));
   // A group has no development of its own to draw — its screen follows its sub-tasks.
   if (!t || t.kind === "check" || (await relationsOf(clientId, t.workitemId)).rel.isGroup(taskId)) return [];
-  const runs = await db.select({ state: flowRun.state, result: flowRun.result, startedAt: flowRun.startedAt }).from(flowRun)
+  const runs = await db.select({ id: flowRun.id, state: flowRun.state, result: flowRun.result, startedAt: flowRun.startedAt }).from(flowRun)
     .where(and(eq(flowRun.taskId, taskId), eq(flowRun.kind, "implement"))).orderBy(flowRun.startedAt);
   const cycles: FlowCycle[] = runs.filter((r) => r.state !== "stopped").map((r) => {
     const res = r.result as Partial<ImplementResult> | null;
     const all = res?.checks ?? [];
     const after = all.filter((c) => c.kind !== "build");
     return {
-      state: r.state as FlowCycle["state"], startedAt: r.startedAt.toISOString(), base: res?.base,
+      runId: r.id, state: r.state as FlowCycle["state"], startedAt: r.startedAt.toISOString(), base: res?.base,
       buildVerified: all.some((c) => c.kind === "build"),
       buildFailed: all.some((c) => c.kind === "build" && !c.passed) || !!res?.skipped?.length,
       checks: {
@@ -2149,6 +2149,44 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     ...(skipped.length ? { skipped } : {}),
     ...(base ? { base } : {}),
   };
+}
+
+/** One development run of a task, as the screen tells its story: what it said it did, the files, the checks — never the transcript, which is fetched on its own. */
+export type TaskRunRecord = {
+  id: string;
+  /** done — its code is in place; rolled_back — the code was undone, the record stays; error — it did not finish. */
+  state: string;
+  startedAt: string;
+  finishedAt: string | null;
+  summary: string;
+  filesChanged: string[];
+  commit: string | null;
+  testsRun: string | null;
+  followUps: string[];
+  checks: NonNullable<ImplementResult["checks"]>;
+  skipped: number[];
+  manual: ImplementResult["manual"] | null;
+  error: string | null;
+};
+
+/** Every development run of a task, oldest first — what each round of its story was. */
+export async function taskRunHistory(taskId: string): Promise<TaskRunRecord[]> {
+  const runs = await db.select({ id: flowRun.id, state: flowRun.state, result: flowRun.result, error: flowRun.error, startedAt: flowRun.startedAt, finishedAt: flowRun.finishedAt }).from(flowRun)
+    .where(and(eq(flowRun.taskId, taskId), eq(flowRun.kind, "implement"))).orderBy(flowRun.startedAt);
+  return runs.filter((r) => r.state !== "stopped" && r.state !== "running").map((r) => {
+    const res = (r.result ?? {}) as Partial<ImplementResult>;
+    return {
+      id: r.id, state: r.state, startedAt: r.startedAt.toISOString(), finishedAt: r.finishedAt ? r.finishedAt.toISOString() : null,
+      summary: res.summary ?? "", filesChanged: res.filesChanged ?? [], commit: res.commit ?? null, testsRun: res.testsRun ?? null,
+      followUps: res.followUps ?? [], checks: res.checks ?? [], skipped: res.skipped ?? [], manual: res.manual ?? null, error: r.error ?? null,
+    };
+  });
+}
+
+/** The transcript of one development run of a task — read only when a person asks for it. */
+export async function taskRunLog(taskId: string, runId: string): Promise<string[]> {
+  const [r] = await db.select({ log: flowRun.log }).from(flowRun).where(and(eq(flowRun.id, runId), eq(flowRun.taskId, taskId))).limit(1);
+  return (r?.log as string[] | null) ?? [];
 }
 
 /** What the development in place says it did — the result of the task's latest development run that finished and was not rolled back. */

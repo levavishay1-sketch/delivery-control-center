@@ -91,6 +91,13 @@ describe("flowSteps", () => {
   });
 });
 
+describe("a past step knows the run it was", () => {
+  it("names, for each step of an earlier round, the last run of that round — where its record is kept", () => {
+    const steps = flowSteps([run({ runId: "r1", base: base([3]) }), run({ runId: "r2", base: base([3]) })], now({ pendingDeps: [3] }));
+    expect(steps.filter((x) => x.past).map((x) => `${x.kind}:${x.runId}`)).toEqual(["develop:r2", "checks:r2"]);
+  });
+});
+
 describe("liveCycleState", () => {
   it("reads the build check's live result, not a stale run snapshot — the '🔁 הרץ Build שוב' case", () => {
     // A combined run failed the build; "🔁 הרץ Build שוב" ran it again on its own and it passed — the check row shows it live.

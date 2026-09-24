@@ -41,7 +41,7 @@ export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, recoverFlowRuns, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, RepoRequired,
-  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, taskStatusesFor, taskStatusOf, taskFlowOf, latestDevelopment, checkOutcomesOf, mapSpecToTasks, buildSpecMapPrompt, taskDoneBlockers, ensureStandardChecks, backfillStandardChecks, STANDARD_CHECK_INTENT, requirementCostSummary, requirementCostDetail,
+  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, taskStatusesFor, taskStatusOf, taskFlowOf, latestDevelopment, taskRunHistory, taskRunLog, type TaskRunRecord, checkOutcomesOf, mapSpecToTasks, buildSpecMapPrompt, taskDoneBlockers, ensureStandardChecks, backfillStandardChecks, STANDARD_CHECK_INTENT, requirementCostSummary, requirementCostDetail,
   type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";
