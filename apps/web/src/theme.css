@@ -955,7 +955,7 @@ a { color: var(--color-accent); }
 .seg button[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .seg button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
-.rq-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
+.rq-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
 .rq-split.one { grid-template-columns: minmax(0, 360px) minmax(0, 1fr); }
 .rq-pane { background: var(--surface); border: 1.5px solid var(--border-hairline); border-radius: 12px; box-shadow: var(--shadow-panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .rq-pane-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 13px 8px; border-bottom: 1px solid var(--divider); flex-wrap: wrap; }
@@ -964,7 +964,7 @@ a { color: var(--color-accent); }
 .rq-pane-b { overflow: auto; padding: 10px 12px 14px; flex: 1; min-height: 0; }
 .rq-unread .rq-pane-b { padding: 16px; }
 @media (max-width: 1000px) {
-  .rq-split, .rq-split.one { grid-template-columns: 1fr; }
+  .rq-split, .rq-split.one { grid-template-columns: 1fr; grid-template-rows: none; }
   .rq-wrap { height: auto; }
   .rq-pane-b { max-height: 60vh; }
 }
@@ -1008,10 +1008,10 @@ a { color: var(--color-accent); }
 
 /* the spec beside them */
 .spec-head { padding: 9px 13px 8px; border-bottom: 1px solid var(--divider); display: flex; flex-direction: column; gap: 5px; }
-.spec-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.spec-head-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: nowrap; min-width: 0; }
 .spec-head-row b { font-size: 13.5px; font-weight: 650; color: var(--ink-900); display: inline-flex; align-items: center; }
 .spec-src { font-size: 11px; color: var(--ink-500); font-family: var(--mono); direction: ltr; }
-.spec-note { font-size: 11.5px; color: var(--ink-500); }
+.spec-note { font-size: 11.5px; color: var(--ink-500); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .spec-cover { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-700); white-space: nowrap; }
 .spec-meter { width: 70px; height: 6px; border-radius: 99px; background: var(--status-critical-bg); overflow: hidden; display: inline-block; }
 .spec-meter i { display: block; height: 100%; background: var(--status-healthy); }
@@ -1053,6 +1053,9 @@ tr.sd-a:hover > td { background: var(--surface-muted); }
 .sd-who { display: inline-flex; gap: 3px; margin-inline-start: 6px; vertical-align: 1px; flex-wrap: wrap; }
 .sd-who b { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--color-accent-dark); background: var(--surface); border: 1px solid var(--color-accent); border-radius: 5px; padding: 0 4px; line-height: 16px; }
 .sd-who i { font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--status-critical); background: var(--surface); border: 1px dashed var(--status-critical); border-radius: 5px; padding: 0 6px; line-height: 16px; white-space: nowrap; }
+/* Inside a table the marks float over the corner of their cell, so choosing a task never widens a column or moves a row. */
+.sd-tbl td, .sd-tbl .sd-a { position: relative; }
+.sd-tbl .sd-who { position: absolute; inset-inline-end: 3px; top: 2px; margin: 0; z-index: 2; flex-wrap: nowrap; }
 
 .sd del { color: var(--status-critical); text-decoration-thickness: 1.5px; }
 .sd ins { text-decoration: none; background: var(--status-ai-bg); color: var(--status-ai); font-weight: 600; border-radius: 4px; padding: 0 4px; }
