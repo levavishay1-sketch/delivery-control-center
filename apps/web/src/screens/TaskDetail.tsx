@@ -553,7 +553,11 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     </Fold>
   );
 
-  const buildResult = buildCheck && d.checkStatuses[buildCheck.id] && (buildCheck.checkResult || running) && (
+  // Shown whenever the check row exists — including "לא רצה עדיין" (never run at all,
+  // e.g. a task developed before this pipeline existed): that fact is itself worth
+  // seeing, and it is exactly when a person most needs the button to just run it,
+  // rather than "✦ הרץ שוב" above re-developing code that already exists.
+  const buildResult = buildCheck && d.checkStatuses[buildCheck.id] && (
     <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 12.5, flexWrap: "wrap" }}>
       <span style={{ color: "var(--ink-500)" }}>Build:</span>
       <TaskStatusPill status={d.checkStatuses[buildCheck.id]!} />
@@ -561,7 +565,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         <span style={{ display: "inline-flex", alignItems: "center", gap: 2, marginInlineStart: 6 }}>
           <button className="btn btn-secondary btn-sm" disabled={checkBusy === buildCheck.id}
             onClick={() => openSend({ id: buildCheck.id, label: "Build" })}>
-            {checkBusy === buildCheck.id ? "מריץ Build…" : "🔁 הרץ Build שוב"}
+            {checkBusy === buildCheck.id ? "מריץ Build…" : buildCheck.checkResult ? "🔁 הרץ Build שוב" : "▶ הרץ Build"}
           </button>
           <Info k="task_rebuild_check" />
         </span>
@@ -624,7 +628,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       </p>
       {running && run?.phase === "test" && <div style={{ marginBottom: 10 }}>{runControls("")}</div>}
       {s.note && <p style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>תוצאות: {s.note}<Info k="check_results" /></p>}
-      {impl?.skipped && impl.skipped.length > 0 && (
+      {/* impl.skipped is from the last saved run — worth showing only while the build is STILL
+          failing live; a check-only rerun since then (e.g. "🔁 הרץ Build שוב") can make this
+          stale in a way that would flatly contradict "פיתוח (כולל Build)" showing done. */}
+      {impl?.skipped && impl.skipped.length > 0 && buildCheck?.checkResult === "failed" && (
         <p style={{ fontSize: 12, color: "var(--status-critical)", marginBottom: 8 }}>
           {impl.skipped.length} בדיקות לא רצו — ה-Build לא עבר, ובדיקות של קוד שלא נבנה לא אומרות כלום.
         </p>
