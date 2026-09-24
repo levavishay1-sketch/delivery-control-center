@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { flowSteps, gainedDeps, type FlowBase, type FlowCycle, type FlowNow } from "./task-flow-steps.ts";
+import { flowSteps, gainedDeps, liveCycleState, type FlowBase, type FlowCycle, type FlowNow } from "./task-flow-steps.ts";
 
 const base = (without: number[] = [], on: number | null = null, sha: string | null = null): FlowBase => ({ on: on == null ? null : { seq: on, sha }, without });
 const run = (over: Partial<FlowCycle> = {}): FlowCycle => ({
@@ -88,5 +88,26 @@ describe("flowSteps", () => {
 
   it("is done when the task was closed", () => {
     expect(flowSteps([run()], now({ closed: true })).at(-1)!.state).toBe("done");
+  });
+});
+
+describe("liveCycleState", () => {
+  it("reads the build check's live result, not a stale run snapshot — the '🔁 הרץ Build שוב' case", () => {
+    // A combined run failed the build; "🔁 הרץ Build שוב" ran it again on its own and it passed — the check row shows it live.
+    const live = [{ kind: "build", result: "passed", cause: null }, { kind: "tests", result: "failed", cause: null }, { kind: "regression", result: "failed", cause: null }];
+    expect(liveCycleState(live)).toMatchObject({ buildVerified: true, buildFailed: false, checks: { ran: 2, passed: 0, failed: 2, waiting: 0 } });
+    const steps = flowSteps([run({ buildFailed: true, checks: { ran: 0, passed: 0, failed: 0, waiting: 0 } }, )], now());
+    const overlaid = flowSteps([{ ...run(), ...liveCycleState(live) }], now());
+    expect(overlaid.map((s) => s.kind + ":" + s.state)).toEqual(["develop:done", "checks:failed", "review:todo"]);
+    expect(steps[0]!.state).toBe("failed"); // sanity: the un-overlaid snapshot really was stale
+  });
+
+  it("counts nothing run yet as nothing to report — a task whose checks never started", () => {
+    expect(liveCycleState([{ kind: "build", result: null, cause: null }])).toMatchObject({ buildVerified: false, buildFailed: false, checks: { ran: 0 } });
+  });
+
+  it("does not count a check waiting on a dependency as failed", () => {
+    const live = [{ kind: "build", result: "passed", cause: null }, { kind: "tests", result: "waiting", cause: "dependency_missing" }];
+    expect(liveCycleState(live)).toMatchObject({ checks: { ran: 1, passed: 0, failed: 0, waiting: 1 } });
   });
 });

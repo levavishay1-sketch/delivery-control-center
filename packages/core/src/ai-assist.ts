@@ -18,7 +18,7 @@ import { regenerateBrief } from "./brief/generate.ts";
 import { proposeGap } from "./gaps.ts";
 import { chooseBase, depLabel, type BasePlan, type DependencyFacts } from "./task-base.ts";
 import { dependencyBlockers, taskStatus, type CheckKind, type RunPhase, type StatusFacts, type TaskStatus } from "./task-status.ts";
-import { flowSteps, gainedDeps, type FlowBase, type FlowCycle, type FlowStep } from "./task-flow-steps.ts";
+import { flowSteps, gainedDeps, liveCycleState, type FlowBase, type FlowCycle, type FlowStep } from "./task-flow-steps.ts";
 import { resolveAllBuildRecipes, runBuildRecipe } from "./build-recipe.ts";
 
 /**
@@ -1514,6 +1514,16 @@ export async function taskFlowOf(clientId: string, taskId: string): Promise<Flow
       reviewed: !!(res?.pushedAt || res?.closedAt),
     };
   });
+
+  // The last cycle's own `checks` is a snapshot from when THAT run finished — but
+  // "🔁 הרץ X שוב" reruns one check on its own id, never creating a new run here,
+  // so that snapshot goes stale the moment a person does exactly that. Overlay the
+  // live state of the task's own active checks so the rail never disagrees with
+  // what the checks themselves show.
+  if (cycles.length) {
+    const liveChecks = await checksOf(clientId, taskId);
+    cycles[cycles.length - 1] = { ...cycles.at(-1)!, ...liveCycleState(liveChecks.map((c) => ({ kind: c.checkKind, result: c.checkResult, cause: c.checkCause }))) };
+  }
 
   let pendingDeps: number[] = [];
   const last = cycles.at(-1);
