@@ -59,6 +59,8 @@ export type FlowStep = {
   note?: string;
   /** The development run of that round (the last one in it) — where its summary, files, checks and transcript are kept. */
   runId?: string;
+  /** A dependency step waiting for the person: its work exists, the task was not built on it yet. Not a run going on. */
+  pending?: boolean;
 };
 
 const refs = (xs: number[]) => xs.map((s) => `#${s}`).join(", ");
@@ -161,9 +163,19 @@ export function flowSteps(cycles: FlowCycle[], now: FlowNow): FlowStep[] {
 
   if (pending.length) {
     const round = rounds.length + 1;
-    steps.push({ kind: "dependency", state: "current", round, past: false, deps: pending, note: `${refs(pending)} פותחה מאז — Rollback והרצה חוזרת יבנו את המשימה עליה` });
-    steps.push({ kind: "checks", state: "todo", round, past: false });
-    steps.push({ kind: "review", state: "todo", round, past: false });
+    // The person may go on without rebuilding: the checks and the review keep the state the code they ran on gave them.
+    const prev = rounds.at(-1)?.cycles.at(-1);
+    const prevBuilt = !!prev && prev.state === "done" && !prev.buildFailed && prev.buildVerified;
+    const checks: FlowStepState = !prevBuilt ? "todo"
+      : prev.checks.ran === 0 ? "current"
+      : prev.checks.failed ? "failed"
+      : prev.checks.waiting ? "waiting"
+      : (prev.checks.notRun ?? 0) > 0 ? "current"
+      : "done";
+    const review: FlowStepState = now.closed ? "done" : checks === "done" || checks === "waiting" ? "current" : "todo";
+    steps.push({ kind: "dependency", state: "current", pending: true, round, past: false, deps: pending, note: `${refs(pending)} פותחה מאז — אפשר להמשיך לבדיקות כמו שהן, או Rollback והרצה חוזרת שיבנו את המשימה עליה` });
+    steps.push({ kind: "checks", state: checks, round, past: false, ...(prev && prev.checks.ran ? { note: checksNote(prev.checks) } : {}) });
+    steps.push({ kind: "review", state: review, round, past: false });
   }
   return steps;
 }

@@ -257,6 +257,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   // A step that came in or went away moves every index after it — go back to following the task.
   const stepCount = d?.flow.length ?? 0;
   useEffect(() => { setManualStep(null); }, [stepCount]);
+  // A run moving on — into the build, then the checks — takes the screen along with it, as it does through the development.
+  useEffect(() => { setManualStep(null); }, [run?.phase]);
 
   // On-demand TFS → DCC pull: is the real work item now "Removed"? DCC
   // has no poller/webhook — this is the only way it finds out, short of
@@ -763,8 +765,24 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       )}
       {rollbackMsg && <p style={{ fontSize: 12, color: "var(--ink-500)", margin: "6px 0" }}>{rollbackMsg}</p>}
       <div style={{ marginTop: 8, ...(hasCode && !running ? { opacity: 0.55, pointerEvents: "none" as const } : {}) }}>{runControls("✦ הרץ שוב")}</div>
+      {!running && hasCode && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #e5e7eb)" }}>
+          <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 8 }}>או — בלי לבנות מחדש: להמשיך לבדיקות על הקוד שיש. בדיקה שצריכה את {refs(s.deps)} תסומן "מחכה לתלות", לא "נכשלה".</p>
+          <button className="btn btn-primary" onClick={() => setManualStep(steps.findIndex((x, i) => i > activeIdx && x.kind === "checks"))}>המשך לבדיקות ←</button>
+        </div>
+      )}
       {instructionBlock}
       {promptFold}
+    </>
+  );
+
+  // A dependency step the task WAS built on: like the development it is — what it did, its files, the build — and running it again.
+  const dependencyBuiltPane = (s: TaskFlowStep) => (
+    <>
+      <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
+        המשימה נבנתה מחדש על {refs(s.deps)} (Rollback והרצה חוזרת){s.note ? ` — ${s.note}` : ""}. מה שקלוד עשה בסבב הזה, והקבצים, למטה.
+      </p>
+      {claudeDevelopPane(s)}
     </>
   );
 
@@ -1076,7 +1094,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     if (!s) return null;
     if (s.past) return pastPane(s);
     if (s.kind === "develop") return developPane(s);
-    if (s.kind === "dependency") return dependencyPane(s);
+    if (s.kind === "dependency") return s.pending ? dependencyPane(s) : dependencyBuiltPane(s);
     if (s.kind === "checks") return checksPane(s);
     return reviewPane;
   };
