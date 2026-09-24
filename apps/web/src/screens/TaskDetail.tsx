@@ -181,7 +181,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [manualStep, setManualStep] = useState<number | null>(null);
   // mandatory gate — nothing reaches Claude except from the modal's confirm.
   const [sendOpen, setSendOpen] = useState(false);
-  const [sendData, setSendData] = useState<{ prompt: string; promptHe: string } | null>(null);
+  const [sendData, setSendData] = useState<{ prompt: string; promptHe: string; deterministic?: boolean } | null>(null);
   const [sendLoading, setSendLoading] = useState(false);
   const [sendErr, setSendErr] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -862,12 +862,12 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     <>
       {sendOpen && (
         <PromptPreviewModal
-          title={sendTarget ? `הרצה חוזרת — ${sendTarget.label}` : attempted ? "הרצה חוזרת — פיתוח המשימה" : "תן ל-Claude לפתח את המשימה"}
-          data={sendData} loading={sendLoading} error={sendErr}
-          loadingHint="מביא עותק עבודה של ה-repository, כדי שקלוד יוכל לקרוא את הקוד — בפעם הראשונה, או על רשת איטית, זה יכול לקחת כמה דקות…"
+          title={sendData?.deterministic ? `${sendTarget?.label ?? "Build"} — הרצה ישירה` : sendTarget ? `הרצה חוזרת — ${sendTarget.label}` : attempted ? "הרצה חוזרת — פיתוח המשימה" : "תן ל-Claude לפתח את המשימה"}
+          data={sendData} loading={sendLoading} error={sendErr} deterministic={sendData?.deterministic}
+          loadingHint="מביא עותק עבודה של ה-repository — בפעם הראשונה, או על רשת איטית, זה יכול לקחת כמה דקות…"
           onClose={() => { setSendOpen(false); setSendData(null); setSendErr(null); setSendTarget(null); }}
           onConfirm={confirmSend} confirming={sending}
-          confirmLabel={sendTarget ? `✦ הרץ ${sendTarget.label} שוב` : "✦ שלח ל-Claude, תתחיל לפתח"}
+          confirmLabel={sendData?.deterministic ? `✦ הרץ ${sendTarget?.label ?? "Build"} ישירות` : sendTarget ? `✦ הרץ ${sendTarget.label} שוב` : "✦ שלח ל-Claude, תתחיל לפתח"}
         />
       )}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
