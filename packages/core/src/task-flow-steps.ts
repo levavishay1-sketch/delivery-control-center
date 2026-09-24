@@ -55,6 +55,28 @@ export type FlowStep = {
 
 const refs = (xs: number[]) => xs.map((s) => `#${s}`).join(", ");
 
+/**
+ * What the last cycle's own build/checks state should say, read live instead of
+ * from that cycle's saved snapshot — "🔁 הרץ X שוב" reruns one check on its own
+ * id, never touching the task's own run row, so the snapshot goes stale the
+ * moment someone does exactly that. Call with the task's current active checks
+ * (kind, result, cause) and overlay the result onto the last cycle before it
+ * reaches `flowSteps`.
+ */
+export function liveCycleState(checks: { kind: string | null; result: string | null; cause: string | null }[]): Pick<FlowCycle, "buildVerified" | "buildFailed" | "checks"> {
+  const build = checks.find((c) => c.kind === "build");
+  const after = checks.filter((c) => c.kind !== "build" && c.result != null);
+  return {
+    buildVerified: !!build && build.result != null,
+    buildFailed: build?.result === "failed",
+    checks: {
+      ran: after.length, passed: after.filter((c) => c.result === "passed").length,
+      failed: after.filter((c) => c.result === "failed" && c.cause !== "dependency_missing").length,
+      waiting: after.filter((c) => c.result === "waiting").length,
+    },
+  };
+}
+
 /** The dependencies whose work is in `next` and was not in `prev`: one it was built without, or a base that moved on. */
 export function gainedDeps(prev: FlowBase, next: FlowBase): number[] {
   const out = new Set<number>();
