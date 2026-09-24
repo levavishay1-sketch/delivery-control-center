@@ -67,6 +67,14 @@ describe("taskStatus", () => {
     expect(taskStatus(f({ developed: true, checks: std(null, null, null), openDeps: [{ seq: 2, developed: false }] })).key).toBe("build_pending");
   });
 
+  it("says a disabled build's last result, not that it never ran — a real task surfaced this too", () => {
+    const disabledPassed = [{ ...check(10, "build", "passed"), active: false }, check(11, "tests", null), check(12, "regression", null)];
+    expect(taskStatus(f({ developed: true, checks: disabledPassed }))).toMatchObject({ key: "build_pending", label: "ה-Build מושבת", tone: "inactive" });
+    expect(taskStatus(f({ developed: true, checks: disabledPassed })).reason).toContain("עברה");
+    const disabledFailed = [{ ...check(10, "build", "failed"), active: false }, check(11, "tests", null), check(12, "regression", null)];
+    expect(taskStatus(f({ developed: true, checks: disabledFailed })).reason).toContain("נכשלה");
+  });
+
   it("says when the checks after the build have not run — only once the build itself passed", () => {
     expect(taskStatus(f({ developed: true, checks: std("passed", null, null) })).key).toBe("checks_pending");
   });

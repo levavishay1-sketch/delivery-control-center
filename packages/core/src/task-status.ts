@@ -54,6 +54,7 @@ export type StatusFacts = {
 const PHASE_HE: Record<RunPhase, string> = { develop: "בפיתוח", build: "מקמפלת", test: "בבדיקות" };
 const KIND_ORDER: (string | null)[] = ["build", "tests", "regression", "e2e", null];
 const KIND_FAIL_LABEL: Record<string, string> = { build: "נפלה על ה-Build", tests: "נפלה על בדיקות הפיתוח", regression: "נפלה על בדיקות רגרסיה", e2e: "נפלה על בדיקות E2E" };
+const RESULT_HE: Record<string, string> = { passed: "עברה", failed: "נכשלה", waiting: "חיכתה לתלות" };
 const refs = (xs: { seq: number }[]) => xs.map((x) => `#${x.seq}`).join(", ");
 
 function whyFailed(c: StatusCheck, openDeps: StatusDep[]): string {
@@ -110,7 +111,20 @@ function phaseStatus(f: StatusFacts): TaskStatus {
   // code has been shown to compile). Reporting it as "waiting for checks" — as if
   // development were behind it — is exactly the mismatch a real task surfaced.
   const build = checks.find((c) => c.kind === "build");
-  if (!build || build.result == null) return { key: "build_pending", label: "ממתינה להרצת Build", tone: "warning", reason: "ה-Build — חלק משלב הפיתוח — עדיין לא רץ אף פעם" };
+  if (!build || build.result == null) {
+    // A build check can be disabled after it ran (manually, or a stale toggle
+    // left over from testing) — its last real result still exists on the row,
+    // just excluded from `checks` above. Saying "never ran" would be false;
+    // say what it last did instead, and that the result no longer counts.
+    const disabledBuild = f.checks.find((c) => c.kind === "build" && !c.active && c.result != null);
+    if (disabledBuild) {
+      return {
+        key: "build_pending", label: "ה-Build מושבת", tone: "inactive",
+        reason: `הריצה האחרונה ${RESULT_HE[disabledBuild.result!] ?? disabledBuild.result} — אבל הבדיקה מושבתת, כך שזה לא נספר. הפעילו אותה כדי שתרוץ שוב.`,
+      };
+    }
+    return { key: "build_pending", label: "ממתינה להרצת Build", tone: "warning", reason: "ה-Build — חלק משלב הפיתוח — עדיין לא רץ אף פעם" };
+  }
 
   // Build is done: what is left is the checks after it. Not "בעבודה" — that prefix
   // means a run is genuinely going on right now (f.running, above); this is the
