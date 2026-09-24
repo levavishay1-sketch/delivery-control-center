@@ -3,14 +3,19 @@
 ## Routing each verdict back to its check
 
 The development run writes the code and the tests for it and reports no
-checks. The task's checks then run as calls of their own (`checks.run` on
-the Prompts screen) — the build checks first, and the others only once the
-build passes. Each check is listed by its `seq`, the same ordinal already
-shown to users everywhere ("#3 בדיקה..."), with its kind when DCC added it:
+checks. The build comes next and is never a model call: `build-recipe.ts`
+builds the projects that hold the files the task changed (and the compiled
+components named for it) with their real command, one after another — a
+task that changed no compiled file has nothing to build and says so, and a
+change DCC does not know how to build fails in words, as an environment
+matter. Only once the build passes do the other checks run, as one call of
+their own (`checks.run` on the Prompts screen). Each is listed by its `seq`,
+the same ordinal already shown to users everywhere ("#4 בדיקה..."), with its
+kind when DCC added it:
 
 ```
-#3 [build]: <check 3's instruction>
 #4 [tests]: <check 4's instruction>
+#5 [regression]: <check 5's instruction>
 ```
 
 `ImplementResult.checks` is `[{seq, passed, detail, likelyCause, kind}]`.
@@ -88,3 +93,24 @@ above, surfaced as a button at the review step ("אשר ידנית למרות
 הכישלון"). The gate lives at the transition, not as a separate
 validation pass, so there is exactly one place that can ever move a
 task to `done`.
+
+## A group's checks
+
+A task with sub-tasks is a group (`task-relations.ts`): its work is exactly
+its sub-tasks, so it is never developed and gets none of the standard
+checks. A check the breakdown attached to it verifies the sub-tasks
+together — DCC merges their branches onto a local branch made from the
+default one (never pushed) and runs the check there, once every sub-task
+has been developed. Two sub-tasks that change the same lines differently
+fail that check in words, naming the file, instead of being checked apart
+as if they fitted. The group's status follows its sub-tasks, and it closes
+after they all have.
+
+## The stored state
+
+`task.state` stays the coarse value TFS and the graph run on; the status a
+person reads is computed (`task-status.ts`). The stored `failed_checks`
+means one thing only — an active check of the task actually failed — and
+is re-evaluated after every check write (`storedStateAfterChecks`). A check
+that has not run yet failed nothing. A Rollback clears the task's check
+results: they verified code that is no longer there.

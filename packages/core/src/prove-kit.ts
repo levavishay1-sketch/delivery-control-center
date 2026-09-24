@@ -7,9 +7,11 @@
  *
  * The stand-in: a development prompt writes the file its instruction names
  * ("write b.txt"). A checks prompt reports each check — a check that "needs
- * x.txt" waits for it when x.txt is not in the branch, a build check fails
- * while "broken.txt" is there, a check that says "tamper" changes a tracked
- * file (which DCC must put back), everything else passes.
+ * x.txt" waits for it when x.txt is not in the branch, a check that says
+ * "tamper" changes a tracked file (which DCC must put back), everything else
+ * passes. The build is never the stand-in's: the repository is a real npm
+ * package whose own build script fails while "broken.txt" is there, and DCC
+ * runs it directly.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -36,8 +38,7 @@ function answer(input) {
       if (/tamper/.test(text)) writeFileSync("base.txt", "tampered\\n");
       const needs = text.match(/needs (\\S+)/)?.[1];
       if (needs && !existsSync(needs)) return { seq, passed: false, detail: needs + " is not here", likelyCause: "dependency_missing" };
-      if (kind === "build" && existsSync("broken.txt")) return { seq, passed: false, detail: "does not compile", likelyCause: "implementation" };
-      return { seq, passed: true, detail: "ok", likelyCause: null };
+      return { seq, passed: true, detail: "ok" + (kind ? " (" + kind + ")" : ""), likelyCause: null };
     });
     out = { summary: "checked", checks };
   } else {
@@ -96,6 +97,8 @@ export async function proveKit(name: string) {
   const seed = path.join(work, "seed");
   g(work, "clone", "--quiet", origin, seed);
   writeFileSync(path.join(seed, "base.txt"), "base\n");
+  // A real package with a real build: it fails while broken.txt is in the tree.
+  writeFileSync(path.join(seed, "package.json"), JSON.stringify({ name: "prove-repo", private: true, scripts: { build: "node -e \"process.exit(require('fs').existsSync('broken.txt') ? 1 : 0)\"" } }, null, 2));
   g(seed, "add", "-A"); g(seed, "commit", "--quiet", "-m", "base"); g(seed, "push", "--quiet", "origin", "HEAD:main");
   const r = await core.linkRepoToClient({ clientId, name: `prove-repo-${stamp}`, gitUrl: "https://example.invalid/prove.git", by });
   const cache = path.join(os.homedir(), ".dcc-repos", r.id);

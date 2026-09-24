@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { getAllAdoTasks, approveTask, ADO_LADDER, type AllAdoTasks, type AdoTaskRow } from "../api.ts";
-import { PageHead, Pill } from "../ui.tsx";
+import { PageHead, Pill, TaskStatusPill } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 
 /**
@@ -47,7 +47,7 @@ function TaskRows({ rows, clientId, nav, onChanged }: {
                       {approvingId === t.id ? "מאשר…" : "✓ אישור הקמת משימה ב-TFS"}
                     </button>}
             </td>
-            <td style={{ fontSize: 11.5 }}>{t.state.replace(/_/g, " ")}</td>
+            <td style={{ fontSize: 11.5 }}>{t.status ? <TaskStatusPill status={t.status} /> : t.state.replace(/_/g, " ")}</td>
             <td style={{ fontSize: 11.5 }}>{t.appetite}</td>
             <td>
               <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/wi/${t.requirementId}`)} title={t.requirementTitle}>

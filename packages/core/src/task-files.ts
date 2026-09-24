@@ -27,28 +27,28 @@ import type { ChangedFile } from "./repo-onboarding/types.ts";
 
 const MAX_FILE_BYTES = 400_000;
 
-/** The checkout dir and the two commits every file question below compares. */
+/** The checkout dir and the two commits every file question below compares — null while the task has no branch of its own (not developed). */
 async function taskGitContext(clientId: string, taskId: string) {
   const [t] = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.id, taskId)).limit(1));
   if (!t) throw new Error("משימה לא נמצאה");
   const [wi] = await withTenant(clientId, (tx) => tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, t.workitemId)).limit(1));
   const r = await firstRepo(clientId, t.workitemId);
   const dir = r ? existingCheckout({ ...r, localPath: null }) : null;
-  if (!dir) throw new Error("אין עותק עבודה של המאגר עדיין");
+  if (!dir) return null;
   const branch = taskBranchName(wi?.key, t);
-  const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
-  if (exists.code !== 0) throw new Error("למשימה הזו עדיין אין ענף — היא לא פותחה");
+  if ((await git(["rev-parse", "--verify", "--quiet", branch], dir)).code !== 0) return null;
   const base = await taskBaseSha(dir, branch, t);
-  if (!base) throw new Error("למשימה הזו עדיין אין בסיס להשוואה — היא לא פותחה");
-  return { dir, base, branch };
+  return base ? { dir, base, branch } : null;
 }
 
-/** Every file the task's branch touched, against what it was built on — its own commits only. */
+/** Every file the task's branch touched, against what it was built on — its own commits only. None before it was developed. */
 export async function taskChangedFiles(clientId: string, taskId: string): Promise<ChangedFile[]> {
-  const { dir, base, branch } = await taskGitContext(clientId, taskId);
+  const ctx = await taskGitContext(clientId, taskId);
+  if (!ctx) return [];
+  const { dir, base, branch } = ctx;
   const [status, numstat] = await Promise.all([
-    git(["diff", "--name-status", base, branch], dir, { timeoutMs: 60_000 }),
-    git(["diff", "--numstat", base, branch], dir, { timeoutMs: 60_000 }),
+    git(["-c", "core.quotepath=false", "diff", "--name-status", base, branch], dir, { timeoutMs: 60_000 }),
+    git(["-c", "core.quotepath=false", "diff", "--numstat", base, branch], dir, { timeoutMs: 60_000 }),
   ]);
   const counts = new Map<string, { additions: number; deletions: number }>();
   for (const line of numstat.out.split("\n")) {
@@ -68,7 +68,9 @@ export async function taskChangedFiles(clientId: string, taskId: string): Promis
 /** One of them, before and after — both read from git objects, never the working tree. */
 export async function taskFileVersions(clientId: string, taskId: string, filePath: string): Promise<{ path: string; before: string | null; after: string | null; binary: boolean; tooLarge: boolean }> {
   if (!filePath || filePath.includes("..") || filePath.startsWith("/")) throw new Error("נתיב לא חוקי");
-  const { dir, base, branch } = await taskGitContext(clientId, taskId);
+  const ctx = await taskGitContext(clientId, taskId);
+  if (!ctx) throw new Error("למשימה הזו עדיין אין ענף — היא לא פותחה");
+  const { dir, base, branch } = ctx;
   const read = async (ref: string): Promise<{ text: string | null; tooLarge: boolean }> => {
     const at = `${ref}:${filePath}`;
     if ((await git(["cat-file", "-e", at], dir)).code !== 0) return { text: null, tooLarge: false };

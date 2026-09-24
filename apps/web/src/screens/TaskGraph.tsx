@@ -130,7 +130,9 @@ function Badge({ tone }: { tone: Tone }) {
 
 function Card({ node, tone, onClick }: { node: TaskFlowNode; tone: Tone; onClick: () => void }) {
   const idLabel = node.linkedAdoId ? `#${node.linkedAdoId}` : `הצעה #${node.seq}`;
-  const doneChecks = node.checks.filter((c) => c.state === "done").length;
+  // Counted from each check's own status — the same one its row on the task screen shows; a check set aside is not counted.
+  const activeChecks = node.checks.filter((c) => c.status?.key !== "inactive");
+  const passedChecks = activeChecks.filter((c) => c.status?.key === "check_passed").length;
   return (
     <div className={`flow-node ${tone.key}`} onClick={onClick} style={{ width: LAYER_W, direction: "rtl", opacity: node.active ? 1 : 0.6 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: node.status?.dependency ? 4 : 6, flexWrap: "wrap", gap: 4 }}>
@@ -149,12 +151,12 @@ function Card({ node, tone, onClick }: { node: TaskFlowNode; tone: Tone; onClick
         display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", marginBottom: 5,
       }}>{node.intent}</div>
       <div style={{ fontSize: 10.5, color: "var(--ink-500)", marginBottom: node.checks.length ? 6 : 0, display: "flex", justifyContent: "space-between" }}>
-        <span>{node.adoType ?? "Task"} · {node.appetite} · {node.origin === "ai" ? "🤖 AI" : "👤 אדם"}</span>
+        <span>{node.isGroup ? "קבוצה" : node.adoType ?? "Task"} · {node.appetite} · {node.origin === "ai" ? "🤖 AI" : "👤 אדם"}</span>
         {(node.adoSyncedAt || node.approvedAt) && <span>{fmtDate(node.adoSyncedAt ?? node.approvedAt)}</span>}
       </div>
-      {node.checks.length > 0 && (
+      {activeChecks.length > 0 && (
         <div style={{ fontSize: 10, color: "var(--ink-500)", display: "flex", alignItems: "center", gap: 4, borderTop: "1px solid var(--divider)", paddingTop: 6 }}>
-          <span>☑</span><span>{doneChecks}/{node.checks.length} בדיקות</span>
+          <span>☑</span><span>{passedChecks}/{activeChecks.length} בדיקות עברו</span>
         </div>
       )}
     </div>
@@ -225,7 +227,7 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
               <div key={b.node.id} style={{ marginBottom: 12 }}>
                 <div style={{ display: "grid", gap: 10 }}>
                   <div>
-                    <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 3 }}>מי חוסם?</p>
+                    <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 3 }}>תלויה ב</p>
                     <a onClick={() => onJump(b.node.id)} style={{ fontSize: 14, cursor: "pointer" }}>
                       {b.node.linkedAdoId ? `#${b.node.linkedAdoId}` : `הצעה #${b.node.seq}`} — {b.node.intent.slice(0, 60)}
                     </a>
@@ -233,7 +235,7 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
                   </div>
                   <div>
                     <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 3 }}>מה צריך לקרות?</p>
-                    <p style={{ fontSize: 13.5, lineHeight: 1.5 }}>{b.reason || `להשלים את "${b.node.intent.slice(0, 50)}" (כרגע: ${b.node.state === "in_progress" ? "בביצוע" : "טרם התחיל"})`}</p>
+                    <p style={{ fontSize: 13.5, lineHeight: 1.5 }}>{b.reason || `להשלים את "${b.node.intent.slice(0, 50)}" (כרגע: ${b.node.status?.label ?? b.node.state})`}</p>
                   </div>
                 </div>
               </div>
@@ -242,12 +244,12 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
             )}
             {downstream > 0 && (
               <p style={{ fontSize: 12.5, color: "#c93b3b", marginTop: 6 }}>
-                השפעה: {downstream} משימות בהמשך ה-flow ממתינות לפתיחת החסימה הזו.
+                {downstream} משימות בהמשך ה-flow מחכות לתלות הזו.
               </p>
             )}
             <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
               {blockers[0] && (
-                <a onClick={() => onJump(blockers[0]!.node.id)} className="btn btn-secondary btn-sm">פתח גורם חוסם</a>
+                <a onClick={() => onJump(blockers[0]!.node.id)} className="btn btn-secondary btn-sm">פתח את התלות</a>
               )}
             </div>
           </div>
@@ -276,10 +278,10 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
         )}
         {node.checks.length > 0 && (
           <div style={{ marginBottom: 16 }}>
-            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 6 }}>רשימת בדיקה ({node.checks.filter((c) => c.state === "done").length}/{node.checks.length})</p>
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 6 }}>בדיקות ({node.checks.filter((c) => c.status?.key === "check_passed").length}/{node.checks.filter((c) => c.status?.key !== "inactive").length} עברו)</p>
             {node.checks.map((c) => (
-              <p key={c.id} style={{ fontSize: 13.5, margin: "4px 0", textDecoration: c.state === "done" ? "line-through" : "none", color: c.state === "done" ? "var(--ink-400)" : "var(--ink-700)" }}>
-                {c.state === "done" ? "☑" : "☐"} {c.intent}
+              <p key={c.id} style={{ fontSize: 13.5, margin: "4px 0", color: c.status?.key === "inactive" ? "var(--ink-400)" : "var(--ink-700)" }}>
+                {c.status?.key === "check_passed" ? "☑" : "☐"} {c.intent}{c.status && <span style={{ fontSize: 11.5, color: "var(--ink-500)" }}> — {c.status.label}</span>}
               </p>
             ))}
           </div>
@@ -290,7 +292,7 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
               {approving ? "מאשר…" : "✓ אישור הקמת משימה"}
             </button>
           )}
-          <button className={node.approved || !onApprove ? "btn btn-primary" : "btn btn-secondary"} onClick={() => nav(`#/task/${node.id}`)}>פתח את מסך המשימה ←</button>
+          <button className={node.approved || !onApprove ? "btn btn-primary" : "btn btn-secondary"} onClick={() => nav(`#/task/${node.id}`)}>{node.isGroup ? "פתח את מסך הקבוצה ←" : "פתח את מסך המשימה ←"}</button>
           {onToggleActive && (
             <button className="btn btn-secondary" disabled={togglingActive} onClick={() => onToggleActive(node.id, !node.active)}>
               {togglingActive ? "מעדכן…" : node.active ? "◻ השבת" : "☐ הפעל מחדש"}
@@ -399,9 +401,10 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
 
     const stats = {
       total: flow.nodes.length,
-      done: flow.nodes.filter((n) => n.state === "done").length,
-      inProgress: flow.nodes.filter((n) => n.state === "in_progress").length,
-      blocked: blockedSet.size,
+      // The counts read the same colour every card shows — never the stored state beneath it.
+      done: flow.nodes.filter((n) => toneOf(n, blockedSet.has(n.id)).key === "done").length,
+      inProgress: flow.nodes.filter((n) => toneOf(n, blockedSet.has(n.id)).key === "in_progress").length,
+      failed: flow.nodes.filter((n) => n.active && toneOf(n, blockedSet.has(n.id)).key === "blocked").length,
       deps: flow.edges.filter((e) => e.kind === "depends").length,
     };
 
@@ -415,9 +418,9 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
     <div className="chips">
       <span className="flow-chip">{stats.total} משימות</span>
       <span className="flow-chip">{stats.deps} תלויות</span>
-      <span className="flow-chip">{stats.inProgress} בביצוע</span>
-      <span className="flow-chip">{stats.blocked} חסומות</span>
-      <span className="flow-chip">{stats.done} הושלמו</span>
+      <span className="flow-chip">{stats.inProgress} בעבודה</span>
+      <span className="flow-chip">{stats.failed} נפלו</span>
+      <span className="flow-chip">{stats.done} הסתיימו</span>
     </div>
   );
 
@@ -457,8 +460,8 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
             <div className="flow-legend">
               <span className="done"><i />הסתיימה</span>
               <span className="progress"><i />בעבודה</span>
-              <span className="blocked"><i />נפלה / קיימת תלות</span>
-              <span className="decision"><i />ממתינה לתלות</span>
+              <span className="blocked"><i />נפלה</span>
+              <span className="decision"><i />ממתינה לפעולה (Build, בדיקות, תלות)</span>
               <span className="review"><i />ממתינה לסקירה</span>
               <span className="ready"><i />מוכנה לפיתוח</span>
             </div>
@@ -492,7 +495,7 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
               )}
             </div>
             <p style={{ fontSize: 11, color: "var(--ink-400)", marginTop: 6 }}>
-              קו אפור = סדר/היררכיה · קו אדום מקווקו = חסימה בפועל · בדיקות פנימיות לא מקבלות כרטיס משלהן — הן מופיעות בתוך כרטיס המשימה שלהן.
+              קו אפור = סדר/היררכיה · קו אדום מקווקו = התלות עוד לא הושלמה · בדיקות פנימיות לא מקבלות כרטיס משלהן — הן מופיעות בתוך כרטיס המשימה שלהן.
             </p>
           </>
         )}

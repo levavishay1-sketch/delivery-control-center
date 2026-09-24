@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, type CallTrigger } from "@dcc/db";
 import { repositoryOnboardingRun, task } from "@dcc/db/schema";
-import { approveTask, previewAssessPrompt, previewBreakdownPrompt, previewImplementPrompt, startFlowRun } from "../ai-assist.ts";
+import { GROUP_NOT_DEVELOPED, approveTask, isGroupTask, previewAssessPrompt, previewBreakdownPrompt, previewImplementPrompt, startFlowRun } from "../ai-assist.ts";
 import { sendToOnboardingSession } from "../repo-onboarding/runs.ts";
 import { terminalState } from "../repo-onboarding/session.ts";
 import { estimateUsd, recommend, type Capability } from "../routing.ts";
@@ -96,6 +96,7 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
       if (!t.approvedAt) return { ok: false, reason: "המשימה עדיין לא אושרה — קודם מאשרים אותה, ואז מפתחים" };
       // The TFS item is what the work is tracked on; a check carries its task's.
       if (t.linkedAdoId == null) return { ok: false, reason: "המשימה עוד לא הוקמה ב-TFS — אי אפשר לפתח לפני שיש לה work item. נסו שוב להקים אותה במסך המשימה" };
+      if (t.kind === "task" && (await isGroupTask(e.clientId, t.id))) return { ok: false, reason: GROUP_NOT_DEVELOPED };
       return { ok: true };
     },
     estimate: async () => typical("execution", { input: 60_000, output: 6_000 }),

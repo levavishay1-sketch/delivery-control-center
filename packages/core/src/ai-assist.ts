@@ -19,7 +19,8 @@ import { proposeGap } from "./gaps.ts";
 import { chooseBase, depLabel, type BasePlan, type DependencyFacts } from "./task-base.ts";
 import { dependencyBlockers, taskStatus, type CheckKind, type RunPhase, type StatusFacts, type TaskStatus } from "./task-status.ts";
 import { flowSteps, gainedDeps, liveCycleState, type FlowBase, type FlowCycle, type FlowStep } from "./task-flow-steps.ts";
-import { resolveAllBuildRecipes, runBuildRecipe } from "./build-recipe.ts";
+import { describeBuildPlan, findClassicMsbuild, planBuild, runBuildRecipe, type BuildPlan } from "./build-recipe.ts";
+import { taskRelations } from "./task-relations.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -1333,11 +1334,24 @@ async function taskCommitCount(dir: string, branch: string, t: { baseSha: string
 
 type TaskRow = typeof task.$inferSelect;
 
-/** The open tasks this one depends on, with what git knows about each. No clone = nothing developed yet. */
-async function dependencyFacts(clientId: string, t: Pick<TaskRow, "id">, reqKey: string | null | undefined, dir: string | null): Promise<(DependencyFacts & { baseSha: string | null })[]> {
-  const deps = await withTenant(clientId, (tx) => tx.select().from(task)
-    .where(sql`${task.id} in (select depends_on_task_id from task_dependency where task_id = ${t.id}) and ${task.state} <> 'dropped' and ${task.active} = true and ${task.kind} = 'task'`)
-    .orderBy(task.seq));
+/** Every row of a requirement and every dependency between them — what task-relations.ts decides by. */
+async function relationsOf(clientId: string, workitemId: string) {
+  const rows = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.workitemId, workitemId)));
+  const ids = rows.map((r) => r.id);
+  const deps = ids.length ? await withTenant(clientId, (tx) => tx.select().from(taskDependency).where(inArray(taskDependency.taskId, ids))) : [];
+  return { rows, byId: new Map(rows.map((r) => [r.id, r])), rel: taskRelations(rows, deps) };
+}
+
+/** Whether a task is a group — has sub-tasks of its own, so it is never developed itself. */
+export async function isGroupTask(clientId: string, taskId: string): Promise<boolean> {
+  const [t] = await withTenant(clientId, (tx) => tx.select({ workitemId: task.workitemId }).from(task).where(eq(task.id, taskId)).limit(1));
+  return t ? (await relationsOf(clientId, t.workitemId)).rel.isGroup(taskId) : false;
+}
+
+/** The developed tasks this one waits for (through a group, a check or its own group too), with what git knows about each. No clone = nothing developed yet. */
+async function dependencyFacts(clientId: string, t: Pick<TaskRow, "id" | "workitemId">, reqKey: string | null | undefined, dir: string | null): Promise<(DependencyFacts & { baseSha: string | null })[]> {
+  const { byId, rel } = await relationsOf(clientId, t.workitemId);
+  const deps = rel.effectiveDeps(t.id).map((d) => byId.get(d.id)!).sort((a, b) => a.seq - b.seq);
   const def = dir ? await defaultBranch(dir) : null;
   const out: (DependencyFacts & { baseSha: string | null })[] = [];
   for (const d of deps) {
@@ -1350,7 +1364,7 @@ async function dependencyFacts(clientId: string, t: Pick<TaskRow, "id">, reqKey:
 }
 
 /** What a branch created now would start from. */
-async function planTaskBase(clientId: string, t: Pick<TaskRow, "id">, reqKey: string | null | undefined, dir: string | null): Promise<BasePlan> {
+async function planTaskBase(clientId: string, t: Pick<TaskRow, "id" | "workitemId">, reqKey: string | null | undefined, dir: string | null): Promise<BasePlan> {
   const deps = await dependencyFacts(clientId, t, reqKey, dir);
   const holds = new Set<string>();
   const open = deps.filter((d) => d.branch && !d.merged);
@@ -1385,7 +1399,9 @@ export async function taskBuiltOn(clientId: string, taskId: string, dirHint?: st
   const branch = taskBranchName(wi?.key, t);
   const own = dir ? await taskCommitCount(dir, branch, t) : 0;
 
-  if (own === 0) {
+  // Developed = its branch was made by a run (the base is recorded then, and forgotten on rollback) —
+  // even when that run changed no file, so it has no commits of its own.
+  if (own === 0 && !t.baseSha) {
     const plan = await planTaskBase(clientId, t, wi?.key, dir);
     return {
       state: "planned",
@@ -1421,16 +1437,16 @@ export async function taskBuiltOn(clientId: string, taskId: string, dirHint?: st
 /* ── a task's status (task-status.ts decides; this gathers the facts) ── */
 
 /** The facts every task of a requirement's status is read from — one pass over the tasks, their runs and dependencies. */
-async function statusFactsFor(clientId: string, workitemId: string): Promise<{ facts: Map<string, StatusFacts>; rows: TaskRow[] }> {
-  const rows = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.workitemId, workitemId)));
-  const ids = rows.map((r) => r.id);
-  const deps = ids.length ? await withTenant(clientId, (tx) => tx.select().from(taskDependency).where(inArray(taskDependency.taskId, ids))) : [];
+async function statusFactsFor(clientId: string, workitemId: string): Promise<{ facts: Map<string, StatusFacts>; rows: TaskRow[]; ownDevelopment: Set<string> }> {
+  const { rows, byId, rel } = await relationsOf(clientId, workitemId);
   const runs = await db.select({ taskId: flowRun.taskId, state: flowRun.state, error: flowRun.error }).from(flowRun)
     .where(and(eq(flowRun.workitemId, workitemId), eq(flowRun.kind, "implement"))).orderBy(desc(flowRun.startedAt));
-  const developed = new Set(runs.filter((r) => r.state === "done").map((r) => r.taskId));
+  // A development run of the row itself that finished and was not rolled back.
+  const ownDevelopment = new Set(runs.filter((r) => r.state === "done" && r.taskId).map((r) => r.taskId!));
+  // Developed, as a dependency or a sub-task is read: a group — once any of its sub-tasks is.
+  const developed = (id: string): boolean => rel.isGroup(id) ? rel.subtasksOf(id).some((s) => developed(s.id) || s.state === "done") : ownDevelopment.has(id);
   const lastRun = new Map<string, (typeof runs)[number]>();
   for (const r of runs) if (r.taskId && !lastRun.has(r.taskId)) lastRun.set(r.taskId, r);
-  const byId = new Map(rows.map((r) => [r.id, r]));
   const inPlay = (x: TaskRow | undefined): x is TaskRow => !!x && x.active && x.state !== "dropped";
 
   // Only a task built on another one needs git (did that one move since?) — read from the clone, never cloned.
@@ -1443,33 +1459,36 @@ async function statusFactsFor(clientId: string, workitemId: string): Promise<{ f
   const facts = new Map<string, StatusFacts>();
   for (const t of rows) {
     const last = lastRun.get(t.id);
+    const group = rel.isGroup(t.id);
+    const ownChecks = rows.filter((c) => c.parentTaskId === t.id && c.kind === "check" && c.state !== "dropped");
     let running = liveTaskPhase(t.id);
     if (!running && t.kind === "check" && t.parentTaskId) {
       // A check is running when its task's run is at its step.
       const p = liveTaskPhase(t.parentTaskId);
       if ((p === "build" && t.checkKind === "build") || (p === "test" && t.checkKind !== "build")) running = p;
     }
+    // A group runs only its own checks.
+    if (!running && group && ownChecks.some((c) => liveTaskPhase(c.id))) running = "test";
     let onMoved: StatusFacts["onMoved"] = null;
-    if (t.baseTaskId && t.baseBranch && t.baseSha && developed.has(t.id)) {
+    if (!group && t.baseTaskId && t.baseBranch && t.baseSha && ownDevelopment.has(t.id)) {
       const d = await clone();
       const tip = d ? (await git(["rev-parse", "--verify", "--quiet", t.baseBranch], d)).out : "";
       if (d && tip && tip !== t.baseSha && (await git(["merge-base", "--is-ancestor", t.baseSha, tip], d)).code === 0) onMoved = { seq: byId.get(t.baseTaskId)?.seq ?? 0 };
     }
     facts.set(t.id, {
       kind: t.kind, state: t.state, active: t.active, approved: !!t.approvedAt, inTfs: t.linkedAdoId != null, running,
-      lastRunError: last?.state === "error" ? (last.error ?? "שגיאה") : null,
-      developed: developed.has(t.id),
-      checks: rows.filter((c) => c.parentTaskId === t.id && c.kind === "check" && c.state !== "dropped")
-        .map((c) => ({ seq: c.seq, kind: c.checkKind, result: c.checkResult, cause: c.checkCause, active: c.active })),
-      openDeps: deps.filter((d) => d.taskId === t.id).map((d) => byId.get(d.dependsOnTaskId))
-        .filter((d): d is TaskRow => inPlay(d) && d.kind === "task" && d.state !== "done")
-        .map((d) => ({ seq: d.seq, developed: developed.has(d.id) })),
-      builtWithout: (t.builtWithout as string[]).map((id) => byId.get(id)).filter(inPlay)
-        .map((d) => ({ seq: d.seq, available: developed.has(d.id) || d.state === "done" })),
+      lastRunError: !group && last?.state === "error" ? (last.error ?? "שגיאה") : null,
+      developed: developed(t.id),
+      checks: ownChecks.map((c) => ({ seq: c.seq, kind: c.checkKind, result: c.checkResult, cause: c.checkCause, active: c.active })),
+      openDeps: rel.effectiveDeps(t.id).map((d) => byId.get(d.id)!).filter((d) => d.state !== "done").sort((a, b) => a.seq - b.seq)
+        .map((d) => ({ seq: d.seq, developed: developed(d.id) })),
+      builtWithout: group ? [] : (t.builtWithout as string[]).map((id) => byId.get(id)).filter(inPlay)
+        .map((d) => ({ seq: d.seq, available: developed(d.id) || d.state === "done" })),
       onMoved, checkResult: t.checkResult, checkCause: t.checkCause,
+      ...(group ? { subtasks: rel.subtasksOf(t.id).map((s) => ({ seq: s.seq, developed: developed(s.id), done: s.state === "done" })) } : {}),
     });
   }
-  return { facts, rows };
+  return { facts, rows, ownDevelopment };
 }
 
 /** Every task of a requirement (and every check), by id: its status as a person reads it. */
@@ -1478,13 +1497,47 @@ export async function taskStatusesFor(clientId: string, workitemId: string): Pro
   return Object.fromEntries([...facts].map(([id, f]) => [id, taskStatus(f)]));
 }
 
-/** One task's status, and its checks'. */
-export async function taskStatusOf(clientId: string, taskId: string): Promise<{ status: TaskStatus; checks: Record<string, TaskStatus> }> {
+/**
+ * One task's status and its checks', every other row's of the same requirement
+ * (so the screen names a dependency or a sub-task exactly as its own screen
+ * does), and whether development of the row itself is in place.
+ */
+export async function taskStatusOf(clientId: string, taskId: string): Promise<{
+  status: TaskStatus; checks: Record<string, TaskStatus>; statuses: Record<string, TaskStatus>; developed: boolean;
+  /** A group only: its sub-tasks, developed and done. */
+  subtasks: NonNullable<StatusFacts["subtasks"]>;
+}> {
   const [t] = await withTenant(clientId, (tx) => tx.select({ workitemId: task.workitemId }).from(task).where(eq(task.id, taskId)).limit(1));
   if (!t) throw new Error("משימה לא נמצאה");
-  const { facts, rows } = await statusFactsFor(clientId, t.workitemId);
+  const { facts, rows, ownDevelopment } = await statusFactsFor(clientId, t.workitemId);
+  const statuses = Object.fromEntries([...facts].map(([id, f]) => [id, taskStatus(f)]));
   const checks = rows.filter((c) => c.parentTaskId === taskId && c.kind === "check");
-  return { status: taskStatus(facts.get(taskId)!), checks: Object.fromEntries(checks.map((c) => [c.id, taskStatus(facts.get(c.id)!)])) };
+  return {
+    status: statuses[taskId]!, checks: Object.fromEntries(checks.map((c) => [c.id, statuses[c.id]!])), statuses,
+    developed: ownDevelopment.has(taskId), subtasks: facts.get(taskId)?.subtasks ?? [],
+  };
+}
+
+/**
+ * What each of a task's checks said the last time it ran — from whichever run
+ * ran it last: the task's own development run, or the check's own rerun. The
+ * task's run alone goes stale the moment one check is rerun on its own.
+ */
+export async function checkOutcomesOf(clientId: string, taskId: string): Promise<Record<string, CheckOutcome & { at: string }>> {
+  const checks = await withTenant(clientId, (tx) => tx.select({ id: task.id, seq: task.seq }).from(task).where(and(eq(task.parentTaskId, taskId), eq(task.kind, "check"))));
+  if (!checks.length) return {};
+  const runs = await db.select({ taskId: flowRun.taskId, result: flowRun.result, startedAt: flowRun.startedAt }).from(flowRun)
+    .where(and(inArray(flowRun.taskId, [taskId, ...checks.map((c) => c.id)]), eq(flowRun.kind, "implement"), eq(flowRun.state, "done")))
+    .orderBy(desc(flowRun.startedAt));
+  const out: Record<string, CheckOutcome & { at: string }> = {};
+  for (const c of checks) {
+    for (const r of runs) {
+      if (r.taskId !== taskId && r.taskId !== c.id) continue;
+      const o = (r.result as Partial<ImplementResult> | null)?.checks?.find((x) => x.seq === c.seq);
+      if (o) { out[c.id] = { ...o, at: r.startedAt.toISOString() }; break; }
+    }
+  }
+  return out;
 }
 
 /**
@@ -1495,7 +1548,8 @@ export async function taskStatusOf(clientId: string, taskId: string): Promise<{ 
  */
 export async function taskFlowOf(clientId: string, taskId: string): Promise<FlowStep[]> {
   const [t] = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.id, taskId)).limit(1));
-  if (!t || t.kind === "check") return [];
+  // A group has no development of its own to draw — its screen follows its sub-tasks.
+  if (!t || t.kind === "check" || (await relationsOf(clientId, t.workitemId)).rel.isGroup(taskId)) return [];
   const runs = await db.select({ state: flowRun.state, result: flowRun.result, startedAt: flowRun.startedAt }).from(flowRun)
     .where(and(eq(flowRun.taskId, taskId), eq(flowRun.kind, "implement"))).orderBy(flowRun.startedAt);
   const cycles: FlowCycle[] = runs.filter((r) => r.state !== "stopped").map((r) => {
@@ -1520,7 +1574,9 @@ export async function taskFlowOf(clientId: string, taskId: string): Promise<Flow
   // so that snapshot goes stale the moment a person does exactly that. Overlay the
   // live state of the task's own active checks so the rail never disagrees with
   // what the checks themselves show.
-  if (cycles.length) {
+  // Only while that cycle's code is in place: after a Rollback the checks describe nothing
+  // there any more, and the cycle's own snapshot is what it was — history, kept as it was.
+  if (cycles.at(-1)?.state === "done") {
     const liveChecks = await checksOf(clientId, taskId);
     cycles[cycles.length - 1] = { ...cycles.at(-1)!, ...liveCycleState(liveChecks.map((c) => ({ kind: c.checkKind, result: c.checkResult, cause: c.checkCause }))) };
   }
@@ -1540,13 +1596,15 @@ export async function taskFlowOf(clientId: string, taskId: string): Promise<Flow
   return flowSteps(cycles, { running: liveTaskPhase(taskId), closed: t.state === "done", pendingDeps: [...new Set(pendingDeps)] });
 }
 
-/** What keeps a task from being closed on the dependency side: its dependencies not done, work it was developed without, a base that moved. */
+/** What keeps a task from being closed besides its own checks: its dependencies not done, work it was developed without, a base that moved — and for a group, its sub-tasks not done. */
 export async function taskDoneBlockers(clientId: string, taskId: string): Promise<string[]> {
   const [t] = await withTenant(clientId, (tx) => tx.select({ workitemId: task.workitemId, kind: task.kind }).from(task).where(eq(task.id, taskId)).limit(1));
   if (!t || t.kind === "check") return [];
   const { facts } = await statusFactsFor(clientId, t.workitemId);
   const f = facts.get(taskId);
-  return f ? dependencyBlockers(f) : [];
+  if (!f) return [];
+  const open = (f.subtasks ?? []).filter((s) => !s.done);
+  return [...(open.length ? [`${open.map((s) => `#${s.seq}`).join(", ")} עוד לא הסתיימה — קבוצה נסגרת אחרי כל תת-המשימות שלה`] : []), ...dependencyBlockers(f)];
 }
 
 /** The two prompt values that say what the branch holds and what it does not. */
@@ -1587,8 +1645,11 @@ async function buildImplementPrompt(input: { clientId: string; workitemId: strin
     if (!owner) throw new Error("לבדיקה הזו אין משימה שהיא בודקת — אין מה לאמת");
     const r = await firstRepo(input.clientId, input.workitemId);
     const dir = r ? existingCheckout({ ...r, localPath: null }) : null;
-    const b = built !== undefined ? built : await taskBuiltOn(input.clientId, owner.id, dir).catch(() => null);
-    const c = await buildChecksPrompt(input.clientId, owner, [t], b, dir);
+    const { rel, byId } = await relationsOf(input.clientId, owner.workitemId);
+    // A group's check verifies its sub-tasks' work together; a task's, the task's own.
+    const subs = rel.isGroup(owner.id) ? rel.subtasksOf(owner.id).map((s) => byId.get(s.id)!) : undefined;
+    const b = subs ? null : built !== undefined ? built : await taskBuiltOn(input.clientId, owner.id, dir).catch(() => null);
+    const c = await buildChecksPrompt(input.clientId, owner, [t], b, dir, subs);
     return { prompt: c.prompt, promptHe: c.promptHe, instruction, t, wi: c.wi, hasChecks: false };
   }
 
@@ -1612,15 +1673,22 @@ async function buildImplementPrompt(input: { clientId: string; workitemId: strin
 
 /** A task's checks as one run without write access (checks.run): what the task
  *  did, what it changed, what its branch holds of its dependencies, and the
- *  checks numbered by their seq so each verdict comes back to its own row. */
-async function buildChecksPrompt(clientId: string, owner: TaskRow, checks: TaskRow[], built: TaskBuiltOn | null, dir: string | null) {
+ *  checks numbered by their seq so each verdict comes back to its own row.
+ *  A group's checks: what all its sub-tasks changed, together. */
+async function buildChecksPrompt(clientId: string, owner: TaskRow, checks: TaskRow[], built: TaskBuiltOn | null, dir: string | null, subtasks?: TaskRow[]) {
   const { wi, ctx } = await requirementContext(clientId, owner.workitemId);
-  const branch = taskBranchName(wi?.key, owner);
   let changed = "(not known here — read this branch's own commits)";
-  if (dir && (await git(["rev-parse", "--verify", "--quiet", branch], dir)).code === 0) {
-    const from = await taskBaseSha(dir, branch, owner);
-    const files = from ? (await git(["diff", "--name-only", `${from}..${branch}`], dir)).out.split("\n").map((x) => x.trim()).filter(Boolean) : [];
-    changed = files.length ? files.join(", ") : "(none — this task changed no files)";
+  if (dir) {
+    const files = new Set<string>();
+    let any = false;
+    for (const s of subtasks ?? [owner]) {
+      const branch = taskBranchName(wi?.key, s);
+      if ((await git(["rev-parse", "--verify", "--quiet", branch], dir)).code !== 0) continue;
+      any = true;
+      const from = await taskBaseSha(dir, branch, s);
+      if (from) for (const f of (await git(["diff", "--name-only", `${from}..${branch}`], dir)).out.split("\n").map((x) => x.trim()).filter(Boolean)) files.add(f);
+    }
+    if (any) changed = files.size ? [...files].join(", ") : "(none — this task changed no files)";
   }
   const tmpl = await requirePrompt("checks.run");
   const vars = {
@@ -1705,6 +1773,68 @@ export async function backfillStandardChecks(): Promise<number> {
 type CheckOutcome = NonNullable<ImplementResult["checks"]>[number];
 const CHECK_CAUSES = ["implementation", "requirement_ambiguity", "dependency_missing", "environment"] as const;
 
+const gitLines = (s: string) => s.split("\n").map((x) => x.trim()).filter(Boolean);
+
+/** What building a task means right now, read from its branch in git — the same facts for the preview and for the run (build-recipe.ts decides). */
+async function buildPlanFor(dir: string, owner: TaskRow, branch: string): Promise<BuildPlan> {
+  if ((await git(["rev-parse", "--verify", "--quiet", branch], dir)).code !== 0) return { kind: "nothing", reason: "למשימה עוד אין ענף — היא עוד לא פותחה" };
+  const from = await taskBaseSha(dir, branch, owner);
+  const changed = from ? gitLines((await git(["-c", "core.quotepath=false", "diff", "--name-only", `${from}..${branch}`], dir)).out) : [];
+  const files = gitLines((await git(["-c", "core.quotepath=false", "ls-tree", "-r", "--name-only", branch], dir)).out);
+  return planBuild({
+    dir, files, changed, declared: owner.compiledComponents as string[], msbuild: findClassicMsbuild(),
+    read: async (rel) => { const r = await git(["show", `${branch}:${rel}`], dir); return r.code === 0 ? r.out : null; },
+  });
+}
+
+/**
+ * The build check — never a model call, the same way for every task: the
+ * projects that hold what the task changed, built with their real command
+ * (build-recipe.ts), one after another. "Nothing to build" passes and says so;
+ * a change DCC does not know how to build fails as an environment matter, in
+ * words — the side chat is where a person works out what is missing.
+ */
+async function runBuildStep(input: { clientId: string; workitemId: string; by: Dev; runId?: string }, dir: string, owner: TaskRow, checks: TaskRow[], branch: string): Promise<{ summary: string; checks: CheckOutcome[] }> {
+  const plan = await buildPlanFor(dir, owner, branch);
+  let passed: boolean;
+  let detail: string;
+  let cause: (typeof CHECK_CAUSES)[number] | null = null;
+  if (plan.kind === "build") {
+    pushLine(input.runId, `Build ישירות (בלי AI): ${plan.recipes.map((r) => r.project).join(", ")}`);
+    const outs: string[] = [];
+    passed = true;
+    // One at a time: projects that reference each other write the same output folders.
+    for (const r of plan.recipes) {
+      const res = await runBuildRecipe(r);
+      outs.push(`${r.tool} ${r.project} — ${res.passed ? "עבר" : "נכשל"}:\n${res.out.slice(-2000)}`);
+      if (!res.passed) { passed = false; break; }
+    }
+    detail = [...outs, ...plan.notes].join("\n\n");
+    if (!passed) cause = "implementation";
+  } else {
+    passed = plan.kind === "nothing";
+    detail = describeBuildPlan(plan);
+    if (!passed) cause = "environment";
+  }
+  const verdict = plan.kind === "nothing" ? "אין מה לבנות" : plan.kind === "cannot" ? "אי אפשר לבנות כאן" : passed ? "עבר" : "נכשל";
+
+  const outcomes: CheckOutcome[] = [];
+  for (const c of checks) {
+    await withTenant(input.clientId, (tx) => tx.update(task).set({
+      checkResult: passed ? "passed" : "failed", checkCause: cause, state: passed ? "done" : "pending", updatedAt: new Date(),
+    }).where(eq(task.id, c.id)));
+    await appendEvent({
+      clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
+      actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:implement" },
+      links: [{ rel: "task", ref: c.id }],
+      payload: { body: `${passed ? "✓" : "✕"} בדיקה #${c.seq} (Build, בלי AI) — ${verdict}: ${detail.slice(0, 800)}` },
+    });
+    pushLine(input.runId, `${passed ? "✓" : "✕"} בדיקה #${c.seq} ${c.intent.slice(0, 50)} — ${verdict}`);
+    outcomes.push({ seq: c.seq, kind: c.checkKind, passed, detail, likelyCause: cause });
+  }
+  return { summary: `Build (בלי AI): ${verdict}`, checks: outcomes };
+}
+
 /**
  * Run some of a task's checks as one call that may read and run commands but
  * not edit (checks.run), and write each verdict to its own row. A check that
@@ -1712,41 +1842,8 @@ const CHECK_CAUSES = ["implementation", "requirement_ambiguity", "dependency_mis
  * says so; one Claude did not report is left "not run". Whatever a check
  * changed in tracked files is put back — a check that changes code proves nothing.
  */
-/**
- * The build check without AI, for a task whose `compiledComponents` all
- * resolve to a project file DCC recognizes (build-recipe.ts) — runs the real
- * build command directly, no model call. Falls back to the existing
- * AI-driven `runChecksStep` the moment anything is not recognized: same
- * shape either way, same DB writes, same event log — a person reading the
- * task's history cannot tell which path ran except by how fast it was.
- */
-async function runBuildStep(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }, dir: string, owner: TaskRow, checks: TaskRow[], built: TaskBuiltOn | null): Promise<{ summary: string; checks: CheckOutcome[] }> {
-  const c = checks[0];
-  if (checks.length !== 1 || !c) return runChecksStep(input, dir, owner, checks, built);
-  const resolved = resolveAllBuildRecipes(dir, owner.compiledComponents as string[]);
-  if (!resolved.recipes) { pushLine(input.runId, `Build: ${resolved.reason} — עובר לבדיקה עם Claude`); return runChecksStep(input, dir, owner, checks, built); }
-
-  pushLine(input.runId, `Build ישירות (בלי AI): ${resolved.recipes.map((r) => r.tool).join(", ")}`);
-  const runs = await Promise.all(resolved.recipes.map((r) => runBuildRecipe(r)));
-  const passed = runs.every((r) => r.passed);
-  const detail = runs.map((r, i) => `${resolved.recipes![i]!.tool} ${resolved.recipes![i]!.args.at(-1)}:\n${r.out.slice(-2000)}`).join("\n\n");
-  const cause = passed ? null : "implementation" as const;
-
-  await withTenant(input.clientId, (tx) => tx.update(task).set({
-    checkResult: passed ? "passed" : "failed", checkCause: cause, state: passed ? "done" : "pending", updatedAt: new Date(),
-  }).where(eq(task.id, c.id)));
-  await appendEvent({
-    clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
-    actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:implement" },
-    links: [{ rel: "task", ref: c.id }],
-    payload: { body: `${passed ? "✓" : "✕"} בדיקה #${c.seq} (Build ישירות): ${detail.slice(0, 800)}` },
-  });
-  pushLine(input.runId, `${passed ? "✓" : "✕"} בדיקה #${c.seq} ${c.intent.slice(0, 50)}`);
-  return { summary: `Build ישירות (בלי AI): ${passed ? "עבר" : "נכשל"}`, checks: [{ seq: c.seq, kind: c.checkKind, passed, detail, likelyCause: cause }] };
-}
-
-async function runChecksStep(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }, dir: string, owner: TaskRow, checks: TaskRow[], built: TaskBuiltOn | null): Promise<{ summary: string; checks: CheckOutcome[] }> {
-  const { prompt } = await buildChecksPrompt(input.clientId, owner, checks, built, dir);
+async function runChecksStep(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }, dir: string, owner: TaskRow, checks: TaskRow[], built: TaskBuiltOn | null, subtasks?: TaskRow[]): Promise<{ summary: string; checks: CheckOutcome[] }> {
+  const { prompt } = await buildChecksPrompt(input.clientId, owner, checks, built, dir, subtasks);
   const res = await runClaudeJson<{ summary?: string; checks?: { seq: number; passed: boolean; detail?: string; likelyCause?: string | null }[] }>(dir, prompt, {
     timeoutMs: 900_000, runId: input.runId, commands: true,
     ledger: {
@@ -1794,25 +1891,58 @@ export async function previewImplementPrompt(input: { clientId: string; workitem
   // The same facts a run would decide by, read from the clone as it is now — so the preview says what will be sent.
   const built = await taskBuiltOn(input.clientId, input.taskId).catch(() => null);
 
-  // A build check previews the real command when one resolves — never a Claude
-  // prompt for work that will not go through Claude at all (runBuildStep decides
-  // the same way, at run time, from the same facts).
+  // A build check always previews what it will run — the real commands, or why
+  // there is nothing to build — never a Claude prompt: it never goes through
+  // Claude (runBuildStep decides the same way, at run time, from the same facts).
   const [t0] = await withTenant(input.clientId, (tx) => tx.select().from(task).where(eq(task.id, input.taskId)).limit(1));
   if (t0?.kind === "check" && t0.checkKind === "build" && t0.parentTaskId) {
     const [owner] = await withTenant(input.clientId, (tx) => tx.select().from(task).where(eq(task.id, t0.parentTaskId!)).limit(1));
-    if (owner) {
-      const r = await firstRepo(input.clientId, input.workitemId);
-      const dir = r ? existingCheckout({ ...r, localPath: null }) : null;
-      const resolved = dir ? resolveAllBuildRecipes(dir, owner.compiledComponents as string[]) : { recipes: null, reason: "אין עותק עבודה של המאגר" };
-      if (resolved.recipes) {
-        const cmd = resolved.recipes.map((rc) => `${rc.command} ${rc.args.join(" ")}`).join("\n");
-        return { prompt: cmd, promptHe: cmd, approved: t0.approvedAt != null, deterministic: true };
-      }
-    }
+    const [wi] = await withTenant(input.clientId, (tx) => tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, input.workitemId)).limit(1));
+    const r = await firstRepo(input.clientId, input.workitemId);
+    const dir = r ? existingCheckout({ ...r, localPath: null }) : null;
+    const plan: BuildPlan = !owner ? { kind: "cannot", reason: "לבדיקה הזו אין משימה שהיא בונה" }
+      : !dir ? { kind: "nothing", reason: "אין עדיין עותק עבודה של המאגר — המשימה עוד לא פותחה" }
+      : await buildPlanFor(dir, owner, taskBranchName(wi?.key, owner));
+    const text = describeBuildPlan(plan);
+    return { prompt: text, promptHe: text, approved: t0.approvedAt != null, deterministic: true };
   }
+  // A group sends nothing to Claude — the preview says why instead of failing.
+  if (t0?.kind === "task" && (await isGroupTask(input.clientId, t0.id))) return { prompt: GROUP_NOT_DEVELOPED, promptHe: GROUP_NOT_DEVELOPED, approved: t0.approvedAt != null, deterministic: true };
 
   const { prompt, promptHe, t } = await buildImplementPrompt(input, built);
   return { prompt, promptHe, approved: t.approvedAt != null };
+}
+
+export const GROUP_NOT_DEVELOPED = "זו קבוצה — יש לה תת-משימות, והעבודה שלה היא תת-המשימות. היא לא מפותחת בעצמה: מפתחים כל תת-משימה, ובדיקת הקבוצה בודקת אותן יחד.";
+
+/**
+ * A group's check runs on its sub-tasks' work together: a local branch from the
+ * default branch with each developed sub-task's branch merged in (never pushed).
+ * Throws while a sub-task has not been developed; returns what conflicts, in
+ * words, when two sub-tasks changed the same lines differently — a real
+ * finding about the group, not an error of the run.
+ */
+async function integrateSubtasks(dir: string, reqKey: string | null | undefined, branch: string, subs: TaskRow[], runId?: string): Promise<string | null> {
+  const withCode: TaskRow[] = [];
+  const missing: number[] = [];
+  for (const s of subs) {
+    if ((await taskCommitCount(dir, taskBranchName(reqKey, s), s)) > 0) withCode.push(s);
+    else if (s.state !== "done") missing.push(s.seq);
+  }
+  if (missing.length) throw new Error(`בדיקת הקבוצה רצה על העבודה של כל תת-המשימות יחד — ${missing.map((n) => `#${n}`).join(", ")} עוד לא פותחה`);
+  await git(["checkout", "-B", branch, await defaultBranch(dir)], dir);
+  for (const s of withCode) {
+    const from = taskBranchName(reqKey, s);
+    const m = await git(["-c", "user.name=DCC", "-c", "user.email=dcc@localhost", "merge", "--no-edit", "--no-ff", from], dir);
+    if (m.code !== 0) {
+      const files = gitLines((await git(["-c", "core.quotepath=false", "diff", "--name-only", "--diff-filter=U"], dir)).out);
+      await git(["merge", "--abort"], dir);
+      const before = withCode.slice(0, withCode.indexOf(s)).map((x) => `#${x.seq}`).join(", ");
+      return `תת-משימה #${s.seq} מתנגשת עם ${before || "הענף הראשי"}${files.length ? ` בקבצים ${files.join(", ")}` : ""} — הן שינו את אותם מקומות בדרכים שונות, ולכן אי אפשר לבדוק אותן יחד עד שמיישבים את זה`;
+    }
+    pushLine(runId, `מוזג לבדיקה: #${s.seq}`);
+  }
+  return null;
 }
 
 async function runImplement(input: { clientId: string; workitemId: string; taskId: string; by: Dev; runId?: string; trigger?: CallTrigger }): Promise<ImplementResult> {
@@ -1836,25 +1966,44 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
 
   // A check run on its own verifies the PARENT task's branch — it has no
   // branch of its own to create, and creating one fresh from base would
-  // mean it never sees the change it's supposed to be checking.
+  // mean it never sees the change it's supposed to be checking. A group's
+  // check verifies all its sub-tasks' work together, on a branch made of them.
   let branchOwner = t;
   if (isCheck && t.parentTaskId) {
     const [parent] = await withTenant(input.clientId, (tx) => tx.select().from(task).where(eq(task.id, t.parentTaskId!)).limit(1));
     if (parent) branchOwner = parent;
   }
-  const branch = taskBranchName(wi?.key, branchOwner);
+  const { rel, byId } = await relationsOf(input.clientId, input.workitemId);
+  if (!isCheck && rel.isGroup(t.id)) throw new Error(GROUP_NOT_DEVELOPED);
+  const groupSubs = isCheck && rel.isGroup(branchOwner.id) ? rel.subtasksOf(branchOwner.id).map((s) => byId.get(s.id)!) : undefined;
+  const branch = groupSubs ? `${taskBranchName(wi?.key, branchOwner)}-together` : taskBranchName(wi?.key, branchOwner);
   pushLine(input.runId, `branch: ${branch}`);
 
   await git(["reset", "--hard"], dir);
   await git(["clean", "-fd"], dir);
   let built: TaskBuiltOn | null = null;
   let baseSha: string | null = t.baseSha;
-  if (isCheck) {
+  if (isCheck && groupSubs) {
+    const conflict = await integrateSubtasks(dir, wi?.key, branch, groupSubs, input.runId);
+    if (conflict) {
+      await withTenant(input.clientId, (tx) => tx.update(task).set({ checkResult: "failed", checkCause: "implementation", state: "pending", updatedAt: new Date() }).where(eq(task.id, t.id)));
+      await appendEvent({
+        clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
+        actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:implement" },
+        links: [{ rel: "task", ref: t.id }],
+        payload: { body: `✕ בדיקה #${t.seq}: ${conflict}` },
+      });
+      await syncTaskStateAfterCheckChange(input.clientId, branchOwner.id);
+      await regenerateBrief(input.clientId, input.workitemId);
+      return { branch, dir, repoName: r.name, summary: conflict, filesChanged: [], commit: null, testsRun: null, followUps: [], affectedConsumers: [], checks: [{ seq: t.seq, kind: t.checkKind, passed: false, detail: conflict, likelyCause: "implementation" }] };
+    }
+  } else if (isCheck) {
     const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
     if (exists.code !== 0) throw new Error(`אין branch בשם ${branch} — המשימה שהבדיקה הזו שייכת לה עוד לא פותחה, אין מה לאמת`);
     await git(["checkout", branch], dir);
-  } else if ((await taskCommitCount(dir, branch, t)) > 0) {
-    // Work of its own already there: continue on it, on what it was built on.
+  } else if ((await taskCommitCount(dir, branch, t)) > 0 || (t.baseSha && (await git(["rev-parse", "--verify", "--quiet", branch], dir)).code === 0)) {
+    // Developed already (with work of its own, or a run that changed nothing): continue on
+    // it, on what it was built on — the same thing taskBuiltOn tells the screen and the preview.
     await git(["checkout", branch], dir);
     built = await taskBuiltOn(input.clientId, input.taskId, dir);
   } else {
@@ -1881,11 +2030,11 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   if (isCheck) {
     // A check on its own: that one check, on its task's branch, with no write access.
     setPhase(input.runId, "test");
-    const ownerBuilt = await taskBuiltOn(input.clientId, branchOwner.id, dir).catch(() => null);
-    const step = t.checkKind === "build"
-      ? await runBuildStep(input, dir, branchOwner, [t], ownerBuilt)
-      : await runChecksStep(input, dir, branchOwner, [t], ownerBuilt);
-    await syncTaskStateAfterCheckChange(input.clientId, branchOwner.id, { attempted: true });
+    const ownerBuilt = groupSubs ? null : await taskBuiltOn(input.clientId, branchOwner.id, dir).catch(() => null);
+    const step = t.checkKind === "build" && !groupSubs
+      ? await runBuildStep(input, dir, branchOwner, [t], branch)
+      : await runChecksStep(input, dir, branchOwner, [t], ownerBuilt, groupSubs);
+    await syncTaskStateAfterCheckChange(input.clientId, branchOwner.id);
     await appendEvent({
       clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
       actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:implement" },
@@ -1952,7 +2101,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   if (buildChecks.length) {
     setPhase(input.runId, "build");
     pushLine(input.runId, "שלב 2 מתוך 3 — Build");
-    outcomes.push(...(await runBuildStep(input, dir, t, buildChecks, built)).checks);
+    outcomes.push(...(await runBuildStep(input, dir, t, buildChecks, branch)).checks);
   }
   if (rest.length) {
     if (outcomes.every((o) => o.passed)) {
@@ -1966,7 +2115,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
       pushLine(input.runId, `⚠ ה-Build לא עבר — ${rest.length} הבדיקות האחרות לא רצו`);
     }
   }
-  await syncTaskStateAfterCheckChange(input.clientId, input.taskId, { attempted: true });
+  await syncTaskStateAfterCheckChange(input.clientId, input.taskId);
 
   const passed = outcomes.filter((o) => o.passed).length;
   const waiting = outcomes.filter((o) => o.likelyCause === "dependency_missing").length;
@@ -1990,6 +2139,14 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     ...(skipped.length ? { skipped } : {}),
     ...(base ? { base } : {}),
   };
+}
+
+/** What the development in place says it did — the result of the task's latest development run that finished and was not rolled back. */
+export async function latestDevelopment(taskId: string): Promise<ImplementResult | null> {
+  const [r] = await db.select({ result: flowRun.result }).from(flowRun)
+    .where(and(eq(flowRun.taskId, taskId), eq(flowRun.kind, "implement"), eq(flowRun.state, "done")))
+    .orderBy(desc(flowRun.startedAt)).limit(1);
+  return (r?.result as ImplementResult | null) ?? null;
 }
 
 /** Adds to the result of a task's latest development run that finished — it was pushed, or the task was closed on it. */
@@ -2042,13 +2199,16 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
   // What it was built on is forgotten too: the next run decides again, from
   // what exists by then — this is how a task developed before its dependency
   // comes to build on it once that dependency has been developed.
-  await withTenant(input.clientId, (tx) =>
-    tx.update(task).set({
-      state: t.state === "in_progress" ? "pending" : t.state,
+  // Its checks verified code that is gone: they have not run on what is there now.
+  await withTenant(input.clientId, async (tx) => {
+    await tx.update(task).set({
+      state: t.state === "in_progress" || t.state === "failed_checks" ? "pending" : t.state, wasDone: false,
       baseTaskId: null, baseBranch: null, baseSha: null, builtWithout: [],
       updatedAt: new Date(),
-    }).where(eq(task.id, input.taskId)),
-  );
+    }).where(eq(task.id, input.taskId));
+    await tx.update(task).set({ checkResult: null, checkCause: null, checkResolvedBy: null, checkResolvedAt: null, state: "pending", updatedAt: new Date() })
+      .where(and(eq(task.parentTaskId, input.taskId), eq(task.kind, "check"), sql`${task.state} <> 'dropped'`));
+  });
 
   // The task is meant to look exactly like it never ran — no live "here's
   // what Claude changed" card, no filesChanged, nothing. The record of

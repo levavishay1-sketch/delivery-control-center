@@ -12,7 +12,7 @@ export { repoBranches, type RepoBranches, type BranchHealth } from "./repo-branc
 export { pullRequestDetail, pullRequestFile, type FileVersions, pullRequestQuick, type PullRequestQuick, type PullRequestDetail, type Blocker, type NextStep, type FileGroup, type TimelineItem, type ConflictFile, type ConflictView } from "./pull-request-detail.ts";
 export { codeMapForTask, codeMapForWorkspace, codeMapFrom, readCodeMapFacts, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapArrow, type CodeMapPlace, type CodeMapFacts } from "./code-map.ts";
 export { proposeGap, verifyGap } from "./gaps.ts";
-export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksNotPassed, setTaskActive, checkAdoRemovedState, syncTaskStateAfterCheckChange, type TaskInput, type TaskDetail } from "./tasks.ts";
+export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksNotPassed, setTaskActive, checkAdoRemovedState, syncTaskStateAfterCheckChange, resyncTaskStates, type TaskInput, type TaskDetail } from "./tasks.ts";
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";
 export { briefFor } from "./brief/read.ts";
@@ -39,7 +39,7 @@ export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, recoverFlowRuns, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, RepoRequired,
-  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, taskStatusesFor, taskStatusOf, taskFlowOf, taskDoneBlockers, ensureStandardChecks, backfillStandardChecks, STANDARD_CHECK_INTENT, requirementCostSummary, requirementCostDetail,
+  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, taskStatusesFor, taskStatusOf, taskFlowOf, latestDevelopment, checkOutcomesOf, taskDoneBlockers, ensureStandardChecks, backfillStandardChecks, STANDARD_CHECK_INTENT, requirementCostSummary, requirementCostDetail,
   type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";

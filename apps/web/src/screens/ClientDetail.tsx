@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, getClientAdoTasks, unlinkClientRepo, approveTask, REQ_TYPE_HE, type AdoTasks, type ClientDetail as CD, type Requirement } from "../api.ts";
-import { PageHead, Pill } from "../ui.tsx";
+import { PageHead, Pill, TaskStatusPill } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { errText } from "./onboarding/labels.ts";
 import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
@@ -149,7 +149,7 @@ export function ClientDetail({ id, nav }: { id: string; nav: (h: string) => void
                             {approvingId === t.id ? "מאשר…" : "✓ אישור הקמת משימה ב-TFS"}
                           </button>}
                   </td>
-                  <td style={{ fontSize: 11.5 }}>{t.state.replace(/_/g, " ")}</td>
+                  <td style={{ fontSize: 11.5 }}>{t.status ? <TaskStatusPill status={t.status} /> : t.state.replace(/_/g, " ")}</td>
                   <td>
                     <button className="btn btn-secondary btn-sm" onClick={() => nav(`#/wi/${t.requirementId}`)} title={t.requirementTitle}>
                       ⬅ {t.requirementKey ?? (t.requirementTitle.length > 24 ? `${t.requirementTitle.slice(0, 24)}…` : t.requirementTitle)}

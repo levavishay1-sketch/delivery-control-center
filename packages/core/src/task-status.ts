@@ -15,6 +15,8 @@ export type RunPhase = "develop" | "build" | "test";
 export type TaskStatusKey =
   | "inactive" | "dropped" | "awaiting_approval" | "awaiting_tfs" | "ready" | "blocked"
   | "running" | "failed" | "build_pending" | "checks_pending" | "waiting_dependency" | "review" | "done"
+  // a group (a task with sub-tasks) while its sub-tasks are still open
+  | "group_open"
   // a check row's own status
   | "check_passed" | "check_failed" | "check_waiting" | "check_not_run";
 
@@ -49,6 +51,8 @@ export type StatusFacts = {
   /** Check rows only: why it did not pass. */
   checkResult?: string | null;
   checkCause?: string | null;
+  /** A group only (task-relations.ts): its sub-tasks. A group is never developed itself; its status follows them. */
+  subtasks?: { seq: number; developed: boolean; done: boolean }[];
 };
 
 const PHASE_HE: Record<RunPhase, string> = { develop: "בפיתוח", build: "מקמפלת", test: "בבדיקות" };
@@ -92,6 +96,7 @@ function phaseStatus(f: StatusFacts): TaskStatus {
   if (!f.inTfs && !f.developed) return { key: "awaiting_tfs", label: "ממתינה להקמה ב-TFS", tone: "warning", reason: "אי אפשר להתחיל לפתח לפני שהמשימה קיימת ב-TFS" };
 
   const checks = f.checks.filter((c) => c.active).sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.seq - b.seq);
+  if (f.subtasks?.length) return groupStatus(f, checks);
   const failed = checks.filter((c) => c.result === "failed");
   if (failed.length) {
     const first = failed[0]!;
@@ -143,6 +148,47 @@ function phaseStatus(f: StatusFacts): TaskStatus {
     };
   }
   return { key: "review", label: "ממתינה לסקירה וסגירה", tone: "ai", reason: "הפיתוח והבדיקות עברו — נשאר לסקור, לדחוף ולסמן כהסתיימה" };
+}
+
+/**
+ * A group: its work is its sub-tasks, so what is left is theirs — then its own
+ * checks, which verify them together (on all their branches at once), then closing.
+ */
+function groupStatus(f: StatusFacts, checks: StatusCheck[]): TaskStatus {
+  const subs = f.subtasks!;
+  const failed = checks.filter((c) => c.result === "failed");
+  if (failed.length) return { key: "failed", label: "נפלה בבדיקת השילוב", tone: "critical", reason: whyFailed(failed[0]!, f.openDeps) };
+  if (f.state === "blocked") return { key: "blocked", label: "חסומה", tone: "critical", reason: "סומנה כחסומה ידנית" };
+
+  const progress = `${subs.filter((s) => s.done).length}/${subs.length} תת-משימות הסתיימו`;
+  const undeveloped = subs.filter((s) => !s.developed && !s.done);
+  if (undeveloped.length) {
+    return {
+      key: "group_open", label: progress, tone: subs.some((s) => s.developed || s.done) ? "active" : "neutral",
+      reason: `${refs(undeveloped)} עוד לא פותחה — הקבוצה עצמה לא מפותחת, העבודה שלה היא תת-המשימות`,
+    };
+  }
+  if (checks.some((c) => c.result == null)) return { key: "checks_pending", label: "ממתינה לבדיקת השילוב", tone: "warning", reason: "כל תת-המשימות פותחו — אפשר להריץ את בדיקת השילוב על כל הענפים שלהן יחד" };
+  const open = subs.filter((s) => !s.done);
+  if (open.length) return { key: "group_open", label: progress, tone: "active", reason: `${refs(open)} עוד לא נסגרה` };
+  if (f.openDeps.length) return { key: "waiting_dependency", label: "הסתיימה — ממתינה לתלות", tone: "warning", reason: `${refs(f.openDeps)} עוד לא הושלמה` };
+  return { key: "review", label: "ממתינה לסגירה", tone: "ai", reason: `כל תת-המשימות הסתיימו${checks.length ? " ובדיקת השילוב עברה" : ""} — נשאר לסמן כהסתיימה` };
+}
+
+/**
+ * The stored, coarse `task.state` after a task's checks changed: `failed_checks`
+ * only while one of its active checks actually failed — a check that has not run
+ * yet, or waits for a dependency, failed nothing. Leaving it goes back to where the
+ * task was (`done`, if a failing check reopened a closed task). Null = no change.
+ */
+export function storedStateAfterChecks(current: string, wasDone: boolean, failedChecks: number): { state: string; wasDone: boolean } | null {
+  if (current === "dropped") return null;
+  if (failedChecks > 0) {
+    if (current === "failed_checks") return null;
+    return { state: "failed_checks", wasDone: current === "done" };
+  }
+  if (current === "failed_checks") return { state: wasDone ? "done" : "in_progress", wasDone: false };
+  return null;
 }
 
 function checkStatus(f: StatusFacts): TaskStatus {

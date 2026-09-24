@@ -1,11 +1,13 @@
 import { and, eq, sql } from "drizzle-orm";
-import { db as dbAny, withTenant, appendEvent } from "@dcc/db";
+import { db as dbAny, withTenant, withoutTenant, appendEvent } from "@dcc/db";
 import { task, taskDependency, workitem } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
 import { adoGet, adoSend } from "./ado-http.ts";
 import { TASK_STATE_TO_ADO_STATE } from "./ado-map.ts";
 import { recordDecision } from "./decisions.ts";
+import { storedStateAfterChecks } from "./task-status.ts";
+import { taskRelations, type DepVia } from "./task-relations.ts";
 
 /**
  * Task decomposition (architecture §5). The contract is
@@ -203,58 +205,37 @@ export async function progressTask(input: {
 }
 
 /**
- * Re-evaluates a task's own `state` from its active checks, after
+ * Re-evaluates a task's own stored `state` from its active checks, after
  * anything that could have changed which checks count or what they
- * reported: a check's active/inactive toggle, or a check finishing on
- * its own (in the steps after the parent's development, or re-verified independently
- * — `runImplement`'s per-check write only ever touches the check's own
- * row, never its parent, so without this call an independently re-run
- * check can leave its parent's status stale in either direction).
- *
- * The one piece of memory this needs is `wasDone`: a task that was
- * `done` and got reopened by a check remembers that, so resolving that
- * check again returns it to `done` on its own rather than leaving it
- * sitting in `failed_checks` — the interruption was procedural, not the
- * user un-deciding that the task was finished.
- *
- * `attempted` distinguishes the two callers: `runImplement` passes
- * `true` (a run just happened, so a newly-unresolved check is a real
- * blocker even if the task's prior state was still `pending`); the
- * check active/inactive toggle omits it, so flipping a check on a task
- * that has literally never been run doesn't fabricate a `failed_checks`
- * status for work that hasn't started.
+ * reported: a check's active/inactive toggle, or a check finishing — on
+ * its own or in a run (`runImplement`'s per-check write only ever touches
+ * the check's own row, never its task, so without this call the task's
+ * state goes stale). The rule is `storedStateAfterChecks`: failed_checks
+ * only while a check actually failed — never for one that has not run yet.
  */
-export async function syncTaskStateAfterCheckChange(clientId: string, parentTaskId: string, opts?: { attempted?: boolean }) {
+export async function syncTaskStateAfterCheckChange(clientId: string, parentTaskId: string) {
   return withTenant(clientId, async (tx) => {
     const [parent] = await tx.select().from(task).where(sql`${task.id} = ${parentTaskId}`).limit(1);
     if (!parent || parent.kind === "check") return;
-
-    // A check waiting for a dependency's work did not fail: it does not move
-    // the task to failed_checks. It still keeps it from being done (progressTask).
     const [row] = await tx.select({ n: sql<number>`count(*)::int` }).from(task).where(
-      and(eq(task.parentTaskId, parentTaskId), eq(task.kind, "check"), eq(task.active, true), sql`${task.state} <> 'dropped'`, sql`${task.checkResult} is distinct from 'passed'`, sql`${task.checkResult} is distinct from 'waiting'`),
+      and(eq(task.parentTaskId, parentTaskId), eq(task.kind, "check"), eq(task.active, true), sql`${task.state} <> 'dropped'`, eq(task.checkResult, "failed")),
     );
-    const unresolved = row?.n ?? 0;
-    const now = new Date();
-
-    if (unresolved > 0) {
-      if (parent.state === "done") {
-        await tx.update(task).set({ state: "failed_checks", wasDone: true, updatedAt: now }).where(eq(task.id, parentTaskId));
-      } else if (parent.state !== "failed_checks" && (opts?.attempted || parent.state !== "pending")) {
-        // already attempted (in_progress, blocked, ...) — a newly
-        // unresolved check now blocks completion too.
-        await tx.update(task).set({ state: "failed_checks", updatedAt: now }).where(eq(task.id, parentTaskId));
-      }
-      // still 'pending' and no run just happened — nothing to revert;
-      // the check just waits for the next run.
-    } else if (parent.state === "failed_checks") {
-      await tx.update(task).set({
-        state: parent.wasDone ? "done" : "in_progress",
-        wasDone: false,
-        updatedAt: now,
-      }).where(eq(task.id, parentTaskId));
-    }
+    const next = storedStateAfterChecks(parent.state, parent.wasDone, row?.n ?? 0);
+    if (next) await tx.update(task).set({ state: next.state as typeof parent.state, wasDone: next.wasDone, updatedAt: new Date() }).where(eq(task.id, parentTaskId));
   });
+}
+
+/**
+ * Once, at startup: every task's stored state brought to that same rule — the
+ * ones an earlier rule left in failed_checks with nothing failed (a build that
+ * failed and then passed on a rerun, its other checks not run yet). One query
+ * and nothing to do after the first time.
+ */
+export async function resyncTaskStates(): Promise<number> {
+  const rows = await withoutTenant((tx) => tx.select({ id: task.id, clientId: task.clientId }).from(task).where(sql`${task.kind} = 'task' and ${task.state} = 'failed_checks'
+      and not exists (select 1 from task c where c.parent_task_id = ${task.id} and c.kind = 'check' and c.active = true and c.state <> 'dropped' and c.check_result = 'failed')`));
+  for (const r of rows) await syncTaskStateAfterCheckChange(r.clientId, r.id);
+  return rows.length;
 }
 
 /** Best-effort mirror of a DCC-side active/inactive toggle to the real
@@ -386,10 +367,12 @@ export type TaskDetail = {
   requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
   parent: { id: string; seq: number; intent: string; adoType: string | null } | null;
   children: { id: string; seq: number; intent: string; adoType: string | null; kind: string; state: string; linkedAdoId: number | null; checkResult: string | null; checkResolvedBy: string | null; active: boolean; checkKind: string | null }[];
-  /** tasks that must finish before this one */
-  blockedBy: { id: string; seq: number; intent: string; state: string; linkedAdoId: number | null }[];
-  /** tasks waiting on this one */
-  blocks: { id: string; seq: number; intent: string; state: string }[];
+  /** The developed tasks this one waits for (task-relations.ts) — through a group, a check or its own group too, as `via` says. */
+  blockedBy: { id: string; seq: number; intent: string; state: string; kind: string; linkedAdoId: number | null; via?: DepVia }[];
+  /** Rows that wait for this one — tasks, or a group's check. */
+  blocks: { id: string; seq: number; intent: string; state: string; kind: string }[];
+  /** A task with sub-tasks: its work is theirs, it is never developed itself. */
+  isGroup: boolean;
   repos: { id: string; name: string; adoRepoRef: string | null }[];
 };
 
@@ -407,15 +390,15 @@ export async function taskDetail(clientId: string, taskId: string): Promise<Task
       : null;
     const children = await tx.select(slim).from(task).where(sql`${task.parentTaskId} = ${taskId} and ${task.state} <> 'dropped'`).orderBy(task.seq);
 
-    // exclude 'dropped' (a rejected/replaced proposal leaves its
-    // dependency edges behind — they point at a real row, so no FK to
-    // cascade — and should read as gone, not as a live blocker) and
-    // exclude inactive (deactivated tasks/checks are, by design, treated
-    // as not there for dependency purposes — see setTaskActive).
-    const blockedBy = await tx.select(slim).from(task)
-      .where(sql`${task.id} in (select depends_on_task_id from task_dependency where task_id = ${taskId}) and ${task.state} <> 'dropped' and ${task.active} = true`).orderBy(task.seq);
-    const blocks = await tx.select(slim).from(task)
-      .where(sql`${task.id} in (select task_id from task_dependency where depends_on_task_id = ${taskId}) and ${task.state} <> 'dropped' and ${task.active} = true`).orderBy(task.seq);
+    // The same relations the status and the branch base are decided by (task-relations.ts):
+    // dropped and inactive rows are not there; a group stands for its sub-tasks, a check for its task.
+    const rows = await tx.select({ ...slim, parentTaskId: task.parentTaskId }).from(task).where(sql`${task.workitemId} = ${t.workitemId}`);
+    const deps = await tx.select({ taskId: taskDependency.taskId, dependsOnTaskId: taskDependency.dependsOnTaskId }).from(taskDependency)
+      .where(sql`${taskDependency.taskId} in (select id from task where workitem_id = ${t.workitemId})`);
+    const rel = taskRelations(rows, deps);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const blockedBy = rel.effectiveDeps(taskId).map((d) => ({ ...byId.get(d.id)!, ...(d.via ? { via: d.via } : {}) })).sort((a, b) => a.seq - b.seq);
+    const blocks = rel.waitingOn(taskId).map((id) => byId.get(id)!).sort((a, b) => a.seq - b.seq);
 
     const repos = await tx
       .select({ id: sql<string>`r.id`, name: sql<string>`r.name`, adoRepoRef: sql<string | null>`r.ado_repo_ref` })
@@ -426,7 +409,7 @@ export async function taskDetail(clientId: string, taskId: string): Promise<Task
       task: t,
       requirement: wi ?? { id: t.workitemId, key: null, title: "", phase: "", clientId },
       parent: parent ? { id: parent.id, seq: parent.seq, intent: parent.intent, adoType: parent.adoType } : null,
-      children, blockedBy, blocks,
+      children, blockedBy, blocks, isGroup: rel.isGroup(taskId),
       repos: repos as { id: string; name: string; adoRepoRef: string | null }[],
     };
   });
