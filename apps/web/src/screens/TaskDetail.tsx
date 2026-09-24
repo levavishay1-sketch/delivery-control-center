@@ -771,17 +771,28 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       )}
       {rollbackMsg && <p style={{ fontSize: 12, color: "var(--ink-500)", margin: "6px 0" }}>{rollbackMsg}</p>}
       <div style={{ marginTop: 8, ...(hasCode && !running ? { opacity: 0.55, pointerEvents: "none" as const } : {}) }}>{runControls("✦ הרץ שוב")}</div>
-      {!running && hasCode && (
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #e5e7eb)" }}>
-          <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 8 }}>או — בלי לבנות מחדש: להמשיך לבדיקות על הקוד שיש. בדיקה שצריכה את {refs(s.deps)} תסומן "מחכה לתלות", לא "נכשלה".</p>
-          <button className="btn btn-primary" onClick={() => {
-            const sig = (s.deps ?? []).join(",");
-            try { sessionStorage.setItem(depAckKey, sig); } catch { /* the choice then lasts until the screen is left */ }
-            setDepAck(sig);
-            setManualStep(steps.findIndex((x, i) => i > activeIdx && x.kind === "checks"));
-          }}>המשך לבדיקות ←</button>
-        </div>
-      )}
+      {!running && hasCode && (() => {
+        // The checks only mean something once the code builds: with a failed build there is nothing to go on to.
+        const nextChecks = steps.find((x, i) => i > activeIdx && x.kind === "checks");
+        const canGoOn = !!nextChecks && nextChecks.state !== "todo";
+        return (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #e5e7eb)" }}>
+            {canGoOn ? (
+              <>
+                <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 8 }}>או — בלי לבנות מחדש: להמשיך לבדיקות על הקוד שיש. בדיקה שצריכה את {refs(s.deps)} תסומן "מחכה לתלות", לא "נכשלה".</p>
+                <button className="btn btn-primary" onClick={() => {
+                  const sig = (s.deps ?? []).join(",");
+                  try { sessionStorage.setItem(depAckKey, sig); } catch { /* the choice then lasts until the screen is left */ }
+                  setDepAck(sig);
+                  setManualStep(steps.findIndex((x, i) => i > activeIdx && x.kind === "checks"));
+                }}>המשך לבדיקות ←</button>
+              </>
+            ) : (
+              <p style={{ fontSize: 12.5, color: "var(--status-warning)" }}>אי אפשר להמשיך לבדיקות על הקוד הקיים: ה-Build שלו לא עבר, ובדיקות של קוד שלא נבנה לא אומרות כלום. Rollback והרצה חוזרת יבנו את המשימה על {refs(s.deps)} — לפעמים זה מה שחסר ל-Build.</p>
+            )}
+          </div>
+        );
+      })()}
       {instructionBlock}
       {promptFold}
     </>
