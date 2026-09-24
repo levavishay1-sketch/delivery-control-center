@@ -16,6 +16,8 @@ import type { RunPhase } from "./task-status.ts";
 export type FlowBase = { on: { seq: number; sha: string | null } | null; without: number[] };
 
 export type FlowCycle = {
+  /** The development run this cycle is — what the step's record is read from. */
+  runId?: string;
   state: "running" | "done" | "error" | "rolled_back";
   startedAt: string;
   /** What the run was built on and without; absent on a run from before that was recorded. */
@@ -55,6 +57,8 @@ export type FlowStep = {
   at?: string;
   /** One line on what happened in it. */
   note?: string;
+  /** The development run of that round (the last one in it) — where its summary, files, checks and transcript are kept. */
+  runId?: string;
 };
 
 const refs = (xs: number[]) => xs.map((s) => `#${s}`).join(", ");
@@ -124,9 +128,10 @@ export function flowSteps(cycles: FlowCycle[], now: FlowNow): FlowStep[] {
     if (!live) {
       const built = r.cycles.filter((c) => c.state === "done" || c.state === "rolled_back");
       const withChecks = built.filter((c) => c.checks.ran > 0);
-      steps.push({ kind: workKind, state: built.length ? "done" : "failed", round, past: true, deps, at, note: baseNote(built.at(-1)?.base) });
-      if (withChecks.length) steps.push({ kind: "checks", state: "done", round, past: true, at, note: checksNote(withChecks.at(-1)!.checks) });
-      if (r.cycles.some((c) => c.reviewed)) steps.push({ kind: "review", state: "done", round, past: true, at });
+      const runId = (built.at(-1) ?? r.cycles.at(-1))?.runId;
+      steps.push({ kind: workKind, state: built.length ? "done" : "failed", round, past: true, deps, at, note: baseNote(built.at(-1)?.base), runId });
+      if (withChecks.length) steps.push({ kind: "checks", state: "done", round, past: true, at, note: checksNote(withChecks.at(-1)!.checks), runId: withChecks.at(-1)!.runId });
+      if (r.cycles.some((c) => c.reviewed)) steps.push({ kind: "review", state: "done", round, past: true, at, runId });
       return;
     }
 

@@ -112,7 +112,7 @@ import {
   taskStatusesFor,
   taskStatusOf,
   taskFlowOf,
-  latestDevelopment,
+  latestDevelopment, taskRunHistory, taskRunLog,
   checkOutcomesOf,
   resyncTaskStates,
   specFor,
@@ -1113,9 +1113,17 @@ app.get("/tasks/:id", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
   const clientId = await taskClient(id);
-  const [detail, status, flow, development, checkOutcomes] = await Promise.all([taskDetail(clientId, id), taskStatusOf(clientId, id), taskFlowOf(clientId, id), latestDevelopment(id), checkOutcomesOf(clientId, id)]);
+  const [detail, status, flow, development, checkOutcomes, history] = await Promise.all([taskDetail(clientId, id), taskStatusOf(clientId, id), taskFlowOf(clientId, id), latestDevelopment(id), checkOutcomesOf(clientId, id), taskRunHistory(id)]);
   // Everything the screen decides by comes from here — it never works a fact out of its own partial data.
-  return { ...detail, status: status.status, checkStatuses: status.checks, statuses: status.statuses, developed: status.developed, subtasks: status.subtasks, development, checkOutcomes, flow };
+  return { ...detail, status: status.status, checkStatuses: status.checks, statuses: status.statuses, developed: status.developed, subtasks: status.subtasks, development, checkOutcomes, flow, history };
+});
+
+// the transcript of one round of the task's development — only when asked for
+app.get("/tasks/:id/runs/:runId/log", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as { id: string; runId: string };
+  await taskClient(id);
+  return { lines: await taskRunLog(id, runId) };
 });
 
 // the optional end-to-end check — added to one task on request, like the three every task gets

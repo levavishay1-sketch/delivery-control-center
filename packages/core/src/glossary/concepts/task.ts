@@ -9,6 +9,7 @@ export const TASK_CONCEPTS: Concept[] = [
   { key: "push", kind: "button", title: "דחיפה", aliases: ["push", "דחוף"], screens: ["task"], explain: "שולח את הענף של המשימה לשרת ה-git, כדי לפתוח ממנו בקשת מיזוג.", press: "הענף עולה לשרת בשם שלכם. בקשת המיזוג עצמה נפתחת במסך בקשות מיזוג." },
 
   /* the cards of the task screen */
+  { key: "round_record", kind: "section", title: "מה נעשה בסבב", aliases: ["סבב קודם", "היסטוריית פיתוח"], screens: ["task"], explain: "מה שנשמר מההרצה של הסבב הזה: מה שקלוד סיפר שעשה, הקבצים, תוצאות הבדיקות והתמלול. גם סבב שהקוד שלו בוטל ב-Rollback נשאר כאן לתיעוד." },
   { key: "task_result", kind: "section", title: "מה Claude עשה", screens: ["task"], explain: "מה שהפיתוח שבמקום עשה: הסיכום של קלוד, והקבצים שהענף באמת שינה. זה מה שעובר סקירה לפני שמשהו נדחף." },
   { key: "task_delete", kind: "section", title: "מחיקת משימה", screens: ["task"], explain: "הסרת המשימה מהדרישה. אם היא כבר קיימת ב-TFS, המחיקה שם היא פעולה נפרדת — המסך אומר מה בדיוק יקרה לפני שמאשרים." },
   { key: "task_previous_run", kind: "section", title: "הרצה קודמת", screens: ["task"], explain: "הרצה שבוטלה או הוחלפה. היא נשארת כאן כדי שאפשר יהיה לראות מה נוסה קודם ולמה — שום דבר לא נמחק מההיסטוריה." },

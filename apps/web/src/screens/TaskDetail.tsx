@@ -3,7 +3,7 @@ import {
   getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, addE2ECheck, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
   getTaskFiles, getTaskFile, type ChangedFile,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
-  setTaskManual, reportManualWork, cancelManualReport, setCheckManually, CUSTOMISATION_TEMPLATE,
+  setTaskManual, reportManualWork, cancelManualReport, setCheckManually, CUSTOMISATION_TEMPLATE, getTaskRunLog, type TaskRunRecord,
   type FlowRun, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck, type TaskFlowStep,
 } from "../api.ts";
 import { CardTitle, PageHead, Pill, PromptPreviewModal, PromptText, TaskStatusPill, DependencyTagPill, CHECK_KIND_HE } from "../ui.tsx";
@@ -228,6 +228,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [manualErr, setManualErr] = useState<string | null>(null);
   const [editingReport, setEditingReport] = useState(false);
   const [checkManualBusy, setCheckManualBusy] = useState<string | null>(null);
+  // The transcript of a past round, fetched when a person asks for it.
+  const [logs, setLogs] = useState<Record<string, string[] | "loading">>({});
   const [checkManualErr, setCheckManualErr] = useState<{ id: string; text: string } | null>(null);
 
   const load = useCallback(() => {
@@ -993,6 +995,69 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     </>
   );
 
+  /** What a round of the task's story was, from its own run: what it said it did, the files, the checks, the transcript. */
+  const runRecord = (rec: TaskRunRecord, kind: TaskFlowStep["kind"]) => {
+    // Its code is in place only for the latest run that finished — an earlier one was built over, or undone.
+    const inPlace = rec.state === "done" && d.history.filter((h) => h.state === "done").at(-1)?.id === rec.id;
+    const log = logs[rec.id];
+    const nameOf = (seq: number) => checks.find((c) => c.seq === seq);
+    return (
+      <div className="pr-record">
+        {rec.state === "rolled_back" && <p className="pr-note">↩ הקוד של הסבב הזה בוטל ב-Rollback. מה שנכתב כאן הוא התיעוד של מה שקרה בו.</p>}
+        {rec.state === "error" && <p className="pr-note crit">הסבב לא הסתיים{rec.error ? `: ${rec.error.slice(0, 200)}` : ""}</p>}
+        {rec.summary && (kind === "develop" || kind === "dependency") && (
+          <div className="field">
+            <label>מה נעשה בסבב<Info k="round_record" /></label>
+            <p className="pr-summary">{rec.summary}</p>
+          </div>
+        )}
+        {(kind === "develop" || kind === "dependency") && (
+          inPlace
+            ? changedFiles
+            : rec.filesChanged.length > 0 && (
+                <div className="field">
+                  <label>קבצים שנגעו בהם ({rec.filesChanged.length})<Info k="files_changed" /></label>
+                  <div className="pr-files">{rec.filesChanged.map((f) => <code key={f} title={f}>{f}</code>)}</div>
+                </div>
+              )
+        )}
+        {kind === "develop" && rec.followUps.length > 0 && (
+          <div className="field">
+            <label>המשך שנשאר<Info k="remaining_work" /></label>
+            <ul style={{ margin: 0, paddingInlineStart: 18, fontSize: 12.5, lineHeight: 1.7 }}>{rec.followUps.map((f, i) => <li key={i}>{f}</li>)}</ul>
+          </div>
+        )}
+        {(kind === "checks" || kind === "develop") && rec.checks.length > 0 && (
+          <div className="field">
+            <label>מה יצא בבדיקות<Info k="check_results" /></label>
+            <div className="rowlist">
+              {rec.checks.filter((c) => kind === "checks" ? c.kind !== "build" : true).map((c) => (
+                <div className="row" key={c.seq} style={{ alignItems: "flex-start", flexDirection: "column", gap: 2, paddingBlock: 6 }}>
+                  <span style={{ fontSize: 12.5 }}>
+                    <b style={{ color: c.passed ? "var(--status-healthy)" : c.likelyCause === "dependency_missing" ? "var(--status-warning)" : "var(--status-critical)" }}>{c.passed ? "✓" : c.likelyCause === "dependency_missing" ? "⏸" : "✕"}</b> #{c.seq}{c.kind ? ` · ${CHECK_KIND_HE[c.kind] ?? c.kind}` : ""}{nameOf(c.seq) ? ` — ${nameOf(c.seq)!.intent.slice(0, 70)}` : ""}
+                  </span>
+                  {c.detail && <span style={{ fontSize: 12, color: "var(--ink-500)", whiteSpace: "pre-wrap" }}>{c.detail.slice(0, 700)}</span>}
+                </div>
+              ))}
+            </div>
+            {rec.skipped.length > 0 && <p className="pr-note">{rec.skipped.length} בדיקות לא רצו — ה-Build לא עבר.</p>}
+          </div>
+        )}
+        {!rec.manual && (
+          <div style={{ marginTop: 10 }}>
+            <a className="link" style={{ fontSize: 12 }} onClick={() => {
+              if (log && log !== "loading") { setLogs((p) => { const n = { ...p }; delete n[rec.id]; return n; }); return; }
+              setLogs((p) => ({ ...p, [rec.id]: "loading" }));
+              getTaskRunLog(id, rec.id).then((r) => setLogs((p) => ({ ...p, [rec.id]: r.lines }))).catch(() => setLogs((p) => ({ ...p, [rec.id]: ["לא הצלחתי לקרוא את התמלול"] })));
+            }}>{log && log !== "loading" ? "▲ הסתר" : "▼ הצג"} את התמלול המלא של הסבב</a>
+            {log === "loading" && <p className="ob-sub">טוען…</p>}
+            {Array.isArray(log) && <div style={{ marginTop: 8 }}><Transcript lines={log} /></div>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const pastPane = (s: TaskFlowStep) => (
     <>
       <p style={{ fontSize: 12, color: "var(--ink-500)", marginBottom: 8 }}>סבב {s.round}{s.at ? ` · התחיל ב-${fmtDay(s.at)}` : ""} — היסטוריה. מה שקרה כאן נשאר לתיעוד; העבודה עצמה ממשיכה בשלבים שאחריו.</p>
@@ -1002,6 +1067,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
           : s.kind === "checks" ? `הבדיקות רצו: ${s.note ?? ""}.`
           : "המשימה הגיעה לסקירה (נדחפה או נסגרה)."}
       </p>
+      {s.runId && d.history.find((h) => h.id === s.runId) && runRecord(d.history.find((h) => h.id === s.runId)!, s.kind)}
     </>
   );
 

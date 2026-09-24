@@ -347,6 +347,8 @@ export type TaskFlowStep = {
   kind: "develop" | "dependency" | "checks" | "review";
   state: "done" | "current" | "todo" | "failed" | "waiting";
   round: number; past: boolean; deps?: number[]; at?: string; note?: string;
+  /** The development run of that round — its record is in the task's `history`. */
+  runId?: string;
 };
 export type TaskFlowNode = {
   id: string; seq: number; kind: TaskKind; intent: string; appetite: string; state: string;
@@ -600,7 +602,21 @@ export type TaskDetail = {
   /** What each check said the last time it ran — its own rerun or the task's run, whichever was later. By check id. */
   checkOutcomes: Record<string, NonNullable<ImplementResult["checks"]>[number] & { at: string }>;
   flow: TaskFlowStep[];
+  /** Every development run of the task, oldest first — what each round of its story was. */
+  history: TaskRunRecord[];
 };
+/** One development run, as the screen tells its story. The transcript is fetched on its own. */
+export type TaskRunRecord = {
+  id: string;
+  /** done — its code is in place; rolled_back — the code was undone, the record stays; error — it did not finish. */
+  state: string;
+  startedAt: string; finishedAt: string | null;
+  summary: string; filesChanged: string[]; commit: string | null; testsRun: string | null; followUps: string[];
+  checks: NonNullable<ImplementResult["checks"]>; skipped: number[];
+  manual: ImplementResult["manual"] | null;
+  error: string | null;
+};
+export const getTaskRunLog = (taskId: string, runId: string) => get<{ lines: string[] }>(`/tasks/${taskId}/runs/${runId}/log`);
 export const getTask = (id: string) => get<TaskDetail>(`/tasks/${id}`);
 /** The optional end-to-end check, added to one task — like the build, tests and regression checks every task gets. */
 export const addE2ECheck = (id: string) => post<{ added: string[] }>(`/tasks/${id}/checks/e2e`, {});
