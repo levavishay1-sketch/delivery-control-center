@@ -134,17 +134,18 @@ export async function cancelManualReport(clientId: string, taskId: string, by: B
 }
 
 /**
- * Set one check of a task developed by hand: it passed, it failed, or it is
- * back to "not run". Recorded as that check's own run, so what the person
- * wrote is what the check shows — and the done gate reads it like any result.
+ * Set one check by hand: it passed, it failed, or it is back to "not run".
+ * Always open to a person — whoever developed the task, Claude or a person: the
+ * last word on a check is theirs. Recorded as that check's own run, so what the
+ * person wrote is what the check shows, and the done gate reads it like any result.
  */
 export async function setCheckManually(input: { clientId: string; checkId: string; result: "passed" | "failed" | "not_run"; note?: string; by: By }): Promise<{ result: string }> {
   const { clientId, checkId, by } = input;
   const c = await loadTask(clientId, checkId);
   if (c.kind !== "check" || !c.parentTaskId) throw new Error("זו לא בדיקה");
   const parent = await loadTask(clientId, c.parentTaskId);
-  if (!parent.developedManually) throw new Error("רק בדיקה של משימה שסומנה כמפותחת ידנית אפשר לערוך ידנית");
-  if (!(await doneRuns(parent.id)).some((r) => isManualRun(r.result))) throw new Error("דווחו קודם על הפיתוח — ואז אפשר לסמן את הבדיקות");
+  if (liveTaskPhase(parent.id)) throw new Error("יש הרצה של Claude על המשימה כרגע — חכו שתסתיים, או עצרו אותה");
+  if (!(await doneRuns(parent.id)).length) throw new Error(parent.developedManually ? "דווחו קודם על הפיתוח — ואז אפשר לסמן את הבדיקות" : "המשימה עוד לא פותחה — אין מה לסמן");
   const text = (input.note ?? "").trim();
   if (input.result === "failed" && !text) throw new Error("כתבו מה נכשל — כדי שמי שימשיך יבין");
 

@@ -830,7 +830,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                     </>
                   )}
                   {c.checkResolvedBy && <p style={{ color: "var(--status-warning)", marginBottom: 4 }}>✓ אושרה ידנית ע"י אדם — לא (רק) תוצאת הבדיקה של Claude.</p>}
-                  {manual && reported && manualCheckEditor(c)}
+                  {(manual ? reported : d.developed) && manualCheckEditor(c)}
                   <a onClick={() => nav(`#/task/${c.id}`)} style={{ fontSize: 11.5, color: "var(--color-accent)", fontWeight: 600, cursor: "pointer" }}>לעריכת ההוראה של הבדיקה ולפרטים המלאים ←</a>
                 </div>
               )}
