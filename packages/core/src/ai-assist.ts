@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { branchOf, taskBranchName } from "./task-branch.ts";
+export { branchOf, taskBranchName };
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -1306,15 +1308,6 @@ export function git(args: string[], cwd: string, opts?: { timeoutMs?: number; en
   });
 }
 
-const slug = (s: string) =>
-  s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
-
-/** Deterministic branch name for a task's implement run — same formula
- *  everywhere (`runImplement`, `rollbackTask`, the delete precheck) so
- *  nothing extra needs to be persisted to find a task's branch again. */
-export const taskBranchName = (reqKey: string | null | undefined, t: { seq: number; intent: string }) =>
-  `task/${reqKey ?? "REQ"}-t${t.seq}${slug(t.intent) ? `-${slug(t.intent)}` : ""}`;
-
 /** The repository's default branch in a clone, e.g. "main". */
 async function defaultBranch(dir: string): Promise<string> {
   return (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
@@ -1365,7 +1358,7 @@ async function dependencyFacts(clientId: string, t: Pick<TaskRow, "id" | "workit
   const def = dir ? await defaultBranch(dir) : null;
   const out: (DependencyFacts & { baseSha: string | null })[] = [];
   for (const d of deps) {
-    const branch = taskBranchName(reqKey, d);
+    const branch = branchOf(reqKey, d);
     const own = dir ? await taskCommitCount(dir, branch, d) : 0;
     const merged = own > 0 && !!dir && (await git(["merge-base", "--is-ancestor", branch, `origin/${def}`], dir)).code === 0;
     out.push({ id: d.id, seq: d.seq, intent: d.intent, state: d.state, branch: own > 0 ? branch : null, merged, baseSha: d.baseSha });
@@ -1406,7 +1399,7 @@ export async function taskBuiltOn(clientId: string, taskId: string, dirHint?: st
   const [wi] = await withTenant(clientId, (tx) => tx.select({ key: workitem.key }).from(workitem).where(eq(workitem.id, t.workitemId)).limit(1));
   const r = await firstRepo(clientId, t.workitemId);
   const dir = dirHint !== undefined ? dirHint : r ? existingCheckout({ ...r, localPath: null }) : null;
-  const branch = taskBranchName(wi?.key, t);
+  const branch = branchOf(wi?.key, t);
   const own = dir ? await taskCommitCount(dir, branch, t) : 0;
 
   // Developed = its branch was made by a run (the base is recorded then, and forgotten on rollback) —
@@ -1433,12 +1426,12 @@ export async function taskBuiltOn(clientId: string, taskId: string, dirHint?: st
   const without = (t.builtWithout as string[]).map((id) => byId.get(id)).filter((x): x is TaskRow => !!x && x.state !== "dropped");
   const nowAvailable: TaskBuiltOn["nowAvailable"] = [];
   for (const d of without) {
-    const has = dir ? (await taskCommitCount(dir, taskBranchName(wi?.key, d), d)) > 0 : false;
+    const has = dir ? (await taskCommitCount(dir, branchOf(wi?.key, d), d)) > 0 : false;
     if (has || d.state === "done") nowAvailable.push({ id: d.id, seq: d.seq, intent: d.intent });
   }
   return {
     state: "built",
-    on: base ? { id: base.id, seq: base.seq, intent: base.intent, branch: t.baseBranch ?? taskBranchName(wi?.key, base) } : null,
+    on: base ? { id: base.id, seq: base.seq, intent: base.intent, branch: t.baseBranch ?? branchOf(wi?.key, base) } : null,
     missing: without.map((d) => ({ id: d.id, seq: d.seq, intent: d.intent, state: d.state, why: "not_in_base" as const })),
     onMoved, nowAvailable,
   };
@@ -1692,7 +1685,7 @@ async function buildChecksPrompt(clientId: string, owner: TaskRow, checks: TaskR
     const files = new Set<string>();
     let any = false;
     for (const s of subtasks ?? [owner]) {
-      const branch = taskBranchName(wi?.key, s);
+      const branch = branchOf(wi?.key, s);
       if ((await git(["rev-parse", "--verify", "--quiet", branch], dir)).code !== 0) continue;
       any = true;
       const from = await taskBaseSha(dir, branch, s);
@@ -1912,7 +1905,7 @@ export async function previewImplementPrompt(input: { clientId: string; workitem
     const dir = r ? existingCheckout({ ...r, localPath: null }) : null;
     const plan: BuildPlan = !owner ? { kind: "cannot", reason: "לבדיקה הזו אין משימה שהיא בונה" }
       : !dir ? { kind: "nothing", reason: "אין עדיין עותק עבודה של המאגר — המשימה עוד לא פותחה" }
-      : await buildPlanFor(dir, owner, taskBranchName(wi?.key, owner));
+      : await buildPlanFor(dir, owner, branchOf(wi?.key, owner));
     const text = describeBuildPlan(plan);
     return { prompt: text, promptHe: text, approved: t0.approvedAt != null, deterministic: true };
   }
@@ -1936,13 +1929,13 @@ async function integrateSubtasks(dir: string, reqKey: string | null | undefined,
   const withCode: TaskRow[] = [];
   const missing: number[] = [];
   for (const s of subs) {
-    if ((await taskCommitCount(dir, taskBranchName(reqKey, s), s)) > 0) withCode.push(s);
+    if ((await taskCommitCount(dir, branchOf(reqKey, s), s)) > 0) withCode.push(s);
     else if (s.state !== "done") missing.push(s.seq);
   }
   if (missing.length) throw new Error(`בדיקת הקבוצה רצה על העבודה של כל תת-המשימות יחד — ${missing.map((n) => `#${n}`).join(", ")} עוד לא פותחה`);
   await git(["checkout", "-B", branch, await defaultBranch(dir)], dir);
   for (const s of withCode) {
-    const from = taskBranchName(reqKey, s);
+    const from = branchOf(reqKey, s);
     const m = await git(["-c", "user.name=DCC", "-c", "user.email=dcc@localhost", "merge", "--no-edit", "--no-ff", from], dir);
     if (m.code !== 0) {
       const files = gitLines((await git(["-c", "core.quotepath=false", "diff", "--name-only", "--diff-filter=U"], dir)).out);
@@ -1986,7 +1979,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   const { rel, byId } = await relationsOf(input.clientId, input.workitemId);
   if (!isCheck && rel.isGroup(t.id)) throw new Error(GROUP_NOT_DEVELOPED);
   const groupSubs = isCheck && rel.isGroup(branchOwner.id) ? rel.subtasksOf(branchOwner.id).map((s) => byId.get(s.id)!) : undefined;
-  const branch = groupSubs ? `${taskBranchName(wi?.key, branchOwner)}-together` : taskBranchName(wi?.key, branchOwner);
+  const branch = groupSubs ? `${branchOf(wi?.key, branchOwner)}-together` : branchOf(wi?.key, branchOwner);
   pushLine(input.runId, `branch: ${branch}`);
 
   await git(["reset", "--hard"], dir);
@@ -2026,7 +2019,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     baseSha = (await git(["rev-parse", from], dir)).out;
     await git(["checkout", "-B", branch, from], dir);
     await withTenant(input.clientId, (tx) => tx.update(task).set({
-      baseTaskId: plan.on?.id ?? null, baseBranch: from, baseSha, builtWithout: plan.missing.map((m) => m.dep.id), updatedAt: new Date(),
+      branch, baseTaskId: plan.on?.id ?? null, baseBranch: from, baseSha, builtWithout: plan.missing.map((m) => m.dep.id), updatedAt: new Date(),
     }).where(eq(task.id, t.id)));
     built = {
       state: "built", onMoved: false, nowAvailable: [],
@@ -2232,7 +2225,7 @@ export async function rollbackTask(input: { clientId: string; workitemId: string
   const dir = await ensureCheckout({ ...r, localPath: null });
   if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
 
-  const branch = taskBranchName(wi?.key, t);
+  const branch = branchOf(wi?.key, t);
   const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
   if (exists.code !== 0) return { rolledBack: false, reason: "המשימה עדיין לא פותחה — אין מה לבטל" };
 
@@ -2321,7 +2314,7 @@ export async function pushTask(input: { clientId: string; workitemId: string; ta
   const dir = await ensureCheckout({ ...r, localPath: null });
   if (!dir) throw new Error(`לא הצלחתי להביא עותק של ${r.name}`);
 
-  const branch = taskBranchName(wi?.key, t);
+  const branch = branchOf(wi?.key, t);
   const commits = await taskCommitCount(dir, branch, t);
   if (commits === 0) return { pushed: false, reason: "אין קוד מומש על המשימה הזו — אין מה לדחוף" };
 
@@ -2447,7 +2440,7 @@ export async function precheckTaskDelete(clientId: string, workitemId: string, t
   const commitCounts = new Map<string, number>();
   if (dir) {
     for (const t of subtreeRows) {
-      commitCounts.set(t.id, await taskCommitCount(dir, taskBranchName(wi?.key, t), t));
+      commitCounts.set(t.id, await taskCommitCount(dir, branchOf(wi?.key, t), t));
     }
   }
 

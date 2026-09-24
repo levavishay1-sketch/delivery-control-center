@@ -294,6 +294,13 @@ export const task = pgTable(
      */
     developedManually: boolean("developed_manually").notNull().default(false),
     /**
+     * The branch a run created for this task — recorded once and read from here
+     * ever after. It is never worked out again from the requirement's key or the
+     * task's wording: both can change, and a name worked out again then points
+     * at a branch that is not there. Kept on rollback (the next run reuses it).
+     */
+    branch: text("branch"),
+    /**
      * What this task's branch was created from, recorded when it is created
      * (see `task-base.ts`). `baseTaskId` is the dependency whose branch it
      * starts from when that work is not in the default branch yet — null

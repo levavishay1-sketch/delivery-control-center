@@ -78,6 +78,29 @@ try {
   await core.rollbackTask({ clientId, workitemId, taskId: B.id, by });
   const files = g(cache, "ls-tree", "--name-only", branchB).split("\n");
   check("rollback of B stops at A's work", files.includes("a.txt") && !files.includes("b.txt"));
+
+  // 8. The requirement gets its real key and the instruction is reworded after B was developed:
+  //    B still finds its own branch — a branch is recorded when it is created, never worked out again.
+  await k.develop(B.id);
+  check("a branch is recorded on the task when its run creates it", (await k.row(B.id)).branch === branchB, String((await k.row(B.id)).branch));
+  await k.dbm.withTenant(clientId, (tx) => tx.update(k.schema.workitem).set({ key: "WI-2000" }).where(k.eq(k.schema.workitem.id, workitemId)));
+  await k.dbm.withTenant(clientId, (tx) => tx.update(k.schema.task).set({ intent: "B, reworded" }).where(k.eq(k.schema.task.id, B.id)));
+  b = await core.taskBuiltOn(clientId, B.id);
+  check("after the key and the wording changed, B still counts as developed", b.state === "built", JSON.stringify(b));
+  let changed = await core.taskChangedFiles(clientId, B.id);
+  check("...and still shows the files it changed", !!changed && changed.some((f) => f.path === "b.txt"), JSON.stringify(changed));
+
+  // A task from before branches were recorded: the name looked for no longer exists, so the branch is not found
+  // (null — not an empty list, which would say 'changed nothing'); the repair records it from what its run reported.
+  await k.dbm.withTenant(clientId, (tx) => tx.update(k.schema.task).set({ branch: null }).where(k.eq(k.schema.task.id, B.id)));
+  changed = await core.taskChangedFiles(clientId, B.id);
+  check("with no branch recorded and a renamed requirement, the branch is 'not found', not 'no changes'", changed === null, JSON.stringify(changed));
+  const { recordTaskBranches } = await import("./task-branch-repair.ts");
+  const fixed = await recordTaskBranches();
+  check("the repair records the branch the task's own run reported", fixed.some((r) => r.seq === B.seq && r.recorded === branchB && !r.wasRight), JSON.stringify(fixed));
+  changed = await core.taskChangedFiles(clientId, B.id);
+  check("...and the files show again", !!changed && changed.some((f) => f.path === "b.txt"), JSON.stringify(changed));
+  check("running the repair again changes nothing", (await recordTaskBranches()).every((r) => r.seq !== B.seq));
 } finally {
   await k.finish();
 }

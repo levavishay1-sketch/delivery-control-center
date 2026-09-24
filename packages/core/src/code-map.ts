@@ -3,7 +3,8 @@ import path from "node:path";
 import { eq } from "drizzle-orm";
 import { withTenant } from "@dcc/db";
 import { task, workitem } from "@dcc/db/schema";
-import { existingCheckout, firstRepo, git, httpsRepoUrl, taskBranchName } from "./ai-assist.ts";
+import { existingCheckout, firstRepo, git, httpsRepoUrl } from "./ai-assist.ts";
+import { branchOf } from "./task-branch.ts";
 import { displayPath } from "./local-folder.ts";
 
 /**
@@ -402,7 +403,7 @@ export async function codeMapForTask(input: { clientId: string; workitemId: stri
   // Opening a screen must never start a clone: only a copy that already exists is read.
   const dir = existingCheckout(r);
   if (!dir) return { codeMap: null, branch: null, reason: "אין עותק מקומי של הריפו — הוא ייווצר בהרצה הבאה" };
-  const branch = taskBranchName(wi?.key, t);
+  const branch = branchOf(wi?.key, t);
   const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
   if (exists.code !== 0) return { codeMap: null, branch, reason: "עוד לא נוצר ענף למשימה הזו" };
   // A task built on another task's branch shows only its own commits, from where it started — not the other task's work under it.
