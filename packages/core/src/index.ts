@@ -39,7 +39,7 @@ export { startBuilding, type StartBuildResult } from "./start-build.ts";
 export {
   startFlowRun, getFlowRunView, getTaskRunView, recoverFlowRuns, approveTask, rejectTask, pendingApprovalCount, rollbackTask, pushTask,
   precheckTaskDelete, deleteTaskSurgical, DeleteNeedsConfirmation, previewAssessPrompt, RepoRequired,
-  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, taskStatusesFor, taskStatusOf, taskFlowOf, latestDevelopment, checkOutcomesOf, taskDoneBlockers, ensureStandardChecks, backfillStandardChecks, STANDARD_CHECK_INTENT, requirementCostSummary, requirementCostDetail,
+  stopFlowRun, stopAllFlowRuns, sendRunMessage, previewBreakdownPrompt, previewImplementPrompt, taskBuiltOn, type TaskBuiltOn, taskStatusesFor, taskStatusOf, taskFlowOf, latestDevelopment, checkOutcomesOf, mapSpecToTasks, buildSpecMapPrompt, taskDoneBlockers, ensureStandardChecks, backfillStandardChecks, STANDARD_CHECK_INTENT, requirementCostSummary, requirementCostDetail,
   type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";
@@ -57,3 +57,5 @@ export * from "./repo-onboarding/index.ts";
 export { taskStatus, type TaskStatus, type TaskStatusKey, type StatusTone, type CheckKind, type DependencyTag } from "./task-status.ts";
 export type { FlowStep, FlowStepKind, FlowStepState } from "./task-flow-steps.ts";
 export { taskChangedFiles, taskFileVersions } from "./task-files.ts";
+export { specFor, specForTask, setTaskSpecLinks, checkSpecRead, type SpecView, type SpecPiece, type SpecDecision, type SpecCorrection, type SpecRead } from "./spec-map.ts";
+export type { SpecDoc, DocBlock, DocRow, DocCell, DocLine } from "./spec-doc.ts";

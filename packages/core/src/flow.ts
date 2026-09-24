@@ -2,6 +2,8 @@ import { sql } from "drizzle-orm";
 import { db, withTenant, appendEvent } from "@dcc/db";
 import { client, gap, task, taskDependency, workitem, workitemDependency } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
+import { taskRelations } from "./task-relations.ts";
+import { requirementRung, structuralTypes } from "./task-types.ts";
 
 /**
  * WorkItem-level dependencies and the project Flow graph (architecture
@@ -159,14 +161,22 @@ export type TaskFlowNode = {
   adoSyncedAt: string | null;
   /** check-kind children folded into this node (never their own flow node — see the FLOW screen). */
   checks: { id: string; seq: number; intent: string; state: string; checkKind: string | null }[];
+  /** It has sub-tasks: a group, never developed and never scheduled (task-relations.ts). */
+  isGroup: boolean;
+  /** What it really waits for — through a group, a check, or its own group. Empty on a group. */
+  dependsOn: string[];
+  /** How many rounds of work must finish first. Null on a group, which is not scheduled. */
+  stage: number | null;
 };
+/** The type the requirement itself takes above its top-level tasks — a Feature over several User Stories — or null when it takes none. */
+export type RequirementRung = { type: string; over: number; of: string };
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 
 /**
  * The proposed/approved task tree for a requirement: hierarchy edges plus
  * dependency edges. `depth` is what picked the TFS types off the ladder.
  */
-export async function taskFlowFor(clientId: string, workitemId: string): Promise<{ depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] }> {
+export async function taskFlowFor(clientId: string, workitemId: string): Promise<{ depth: number; requirementRung: RequirementRung | null; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] }> {
   return withTenant(clientId, async (tx) => {
     const rows = await tx
       .select({
@@ -179,7 +189,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       .from(task)
       .where(sql`${task.workitemId} = ${workitemId} and ${task.state} <> 'dropped'`)
       .orderBy(task.seq);
-    if (rows.length === 0) return { depth: 0, nodes: [], edges: [] };
+    if (rows.length === 0) return { depth: 0, requirementRung: null, nodes: [], edges: [] };
 
     const byId = new Map(rows.map((r) => [r.id, r]));
     const level = (id: string, seen = new Set<string>()): number => {
@@ -210,6 +220,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null,
       adoSyncedAt: r.adoSyncedAt ? r.adoSyncedAt.toISOString() : null,
       checks: (checksByParent.get(r.id) ?? []).sort((a, b) => a.seq - b.seq),
+      isGroup: false, dependsOn: [], stage: null,
     }));
 
     // an inactive node still gets a (greyed) card, but never participates
@@ -223,7 +234,44 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       ...deps.filter((d) => activeIdSet.has(d.dependsOnTaskId) && activeIdSet.has(d.taskId))
         .map((d) => ({ from: d.dependsOnTaskId, to: d.taskId, kind: "depends" as const, reason: d.reason })),
     ];
-    return { depth, nodes, edges };
+
+    /*
+     * The schedule, decided once here so every view answers the same way.
+     * A GROUP is not scheduled — it is never developed, its sub-tasks are
+     * (task-relations.ts), so it gets no stage and no dependency of its own.
+     * What a task waits for is its EFFECTIVE dependencies: a dependency on a
+     * group means each of its sub-tasks, and a sub-task also waits for
+     * whatever its group waits for. Reading the raw edges instead is what
+     * put a task one stage too early and drew a group into the columns.
+     */
+    const rel = taskRelations(
+      rows.map((r) => ({ id: r.id, seq: r.seq, kind: r.kind, parentTaskId: r.parentTaskId, active: r.active, state: r.state })),
+      deps.map((d) => ({ taskId: d.taskId, dependsOnTaskId: d.dependsOnTaskId })),
+    );
+    for (const n of nodes) {
+      n.isGroup = rel.isGroup(n.id);
+      n.dependsOn = n.isGroup ? [] : rel.effectiveDeps(n.id).map((d) => d.id).filter((id) => activeIdSet.has(id));
+    }
+    const byIdNode = new Map(nodes.map((n) => [n.id, n]));
+    const stageOf = (id: string, seen = new Set<string>()): number => {
+      const n = byIdNode.get(id);
+      if (!n || n.isGroup || seen.has(id)) return 0;
+      if (n.stage != null) return n.stage;
+      seen.add(id);
+      const s = n.dependsOn.length ? Math.max(...n.dependsOn.map((d) => stageOf(d, seen))) + 1 : 0;
+      seen.delete(id);
+      n.stage = s;
+      return s;
+    };
+    for (const n of nodes) if (!n.isGroup) stageOf(n.id);
+
+    // The TFS type of a task follows the role it plays in the tree (task-types.ts).
+    // One that already exists in TFS keeps the type it was created with.
+    const work = nodes.filter((n) => n.active).map((n) => ({ id: n.id, parentId: n.parentTaskId }));
+    const types = structuralTypes(work);
+    for (const n of nodes) if (!n.linkedAdoId) n.adoType = types.get(n.id) ?? n.adoType;
+
+    return { depth, requirementRung: requirementRung(work), nodes, edges };
   });
 }
 

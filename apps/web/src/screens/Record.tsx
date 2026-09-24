@@ -416,6 +416,15 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
         </div>
         <div style={{ display: "flex", gap: 6 }}>
+          {/* The map is at its most useful while the work is running, and the
+              breakdown step that used to be the only way in is long gone by
+              then — so it hangs here, beside the requirement's own actions. */}
+          {liveTasks.length > 0 && (
+            <>
+              <a className="btn btn-secondary btn-sm" href={`#/flow/${wi.id}`} style={{ whiteSpace: "nowrap" }}>⤢ מפת הדרישה</a>
+              <Info k="page_flow" />
+            </>
+          )}
           <button className="btn btn-secondary btn-sm" onClick={() => setNoteOpen(true)}>+ אירוע</button>
           <button className="btn btn-secondary btn-sm" onClick={() => setEditOpen(true)}>עריכה</button>
           <button className="btn btn-secondary btn-sm" style={{ color: "var(--status-critical)" }} onClick={onDelete}>מחיקה</button>

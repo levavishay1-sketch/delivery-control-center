@@ -13,6 +13,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -680,3 +681,91 @@ export const flowRun = pgTable(
     index("flow_run_task_idx").on(t.taskId, t.startedAt),
   ],
 );
+
+/**
+ * A requirement's specification document as it arrived — its headings,
+ * paragraphs and tables, read out of the attached file (`spec-doc.ts`),
+ * with an id on every row, cell and line. Kept as it was read, so the ids a
+ * task was linked to keep pointing at the same words even if the parser
+ * changes later. `corrections` are where a closed decision overrules the
+ * document's own words: the words stay, and the screen strikes them through
+ * beside what the decision settled.
+ */
+export const specDocument = pgTable(
+  "spec_document",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
+    /** The file it was read out of. */
+    attachmentId: uuid("attachment_id").references(() => attachment.id, { onDelete: "set null" }),
+    /** SpecDoc — the blocks, with their ids. */
+    doc: jsonb("doc").notNull(),
+    /** SpecCorrection[] — { id, decision, from, to }. */
+    corrections: jsonb("corrections").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("spec_document_workitem_idx").on(t.workitemId),
+    tenantPolicy("spec_document_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
+ * What in the specification is a requirement — a piece a task can
+ * implement, and so a piece that is either covered or a gap. `anchor` is
+ * the id of a row, cell or line of `spec_document` (the document's own
+ * words, never restated), or `d.<gap>` for a closed decision.
+ */
+export const specSection = pgTable(
+  "spec_section",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
+    /** A piece of the document ("t1.r2.c6", "t3.r1.c4.l7") or a decision ("d.86e1920a"). */
+    anchor: text("anchor").notNull(),
+    /** Reading order on the screen. */
+    ordinal: integer("ordinal").notNull().default(0),
+    /** requirement | decision */
+    kind: text("kind").notNull(),
+    /** A short name for it, for a list that shows it away from the document. */
+    title: text("title").notNull(),
+    /** The words it points at — the document's own, or the decision's answer. */
+    body: text("body").notNull().default(""),
+    /** Where it came from: the attachment it was read out of, or null for a decision. */
+    attachmentId: uuid("attachment_id").references(() => attachment.id, { onDelete: "cascade" }),
+    /** Decisions only: the gap this section is. */
+    gapId: uuid("gap_id").references(() => gap.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("spec_section_anchor_idx").on(t.workitemId, t.anchor),
+    tenantPolicy("spec_section_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
+ * A task implements a piece of the spec. Written by the breakdown (which
+ * already reads the spec) or by the mapping run over a requirement broken
+ * down before this existed; `source` says which, so a person can tell a
+ * mapping that was decided with the task apart from one inferred later.
+ */
+export const taskSpecLink = pgTable(
+  "task_spec_link",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").notNull().references(() => task.id, { onDelete: "cascade" }),
+    anchor: text("anchor").notNull(),
+    /** breakdown | mapping | manual */
+    source: text("source").notNull().default("mapping"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("task_spec_link_idx").on(t.taskId, t.anchor),
+    index("task_spec_link_workitem_idx").on(t.workitemId),
+    tenantPolicy("task_spec_link_tenant_isolation"),
+  ],
+).enableRLS();

@@ -72,6 +72,11 @@ export const PROMPT_USES: Record<string, PromptUse> = {
     capability: "chat_code_read", vars: [],
     keeps: ['<action key="resolve_gap">', '<action key="dismiss_gap">', '"gap":"REF"', '"answer":', '"reason":'],
   },
+  // Marking which pieces of the spec, as it arrived, are requirements, and which task implements each.
+  "spec.map": {
+    capability: "decomposition", vars: ["TITLE", "DOC_NAME", "SPEC", "DECISIONS", "TASKS"],
+    keeps: ['"requirements"', '"id"', '"title"', '"links"', '"seq"', '"evidence"', '"corrections"', '"decision"', '"from"', '"to"'],
+  },
   "insights.clusters": { capability: "usage_insights", vars: [], keeps: ['"n"', '"finding"', '"recommendation"'] },
   "onboarding.file_notes": { capability: "onboarding_file_notes", vars: [], keeps: ['"path"', '"note"'] },
 };

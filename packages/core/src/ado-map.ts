@@ -74,24 +74,8 @@ export const TASK_STATE_TO_ADO_STATE: Record<string, string> = {
   dropped: "Removed",
 };
 
-/**
- * The Agile process hierarchy, top down. A requirement never reaches TFS
- * — the TASKS it breaks into do, and the DEPTH of the task tree picks the
- * rungs, anchored at the bottom (the leaves are always Tasks):
- *   depth 1 → Task
- *   depth 2 → User Story, Task
- *   depth 3 → Feature, User Story, Task
- *   depth 4 → Epic, Feature, User Story, Task
- */
-export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
-export const MAX_TASK_DEPTH = ADO_LADDER.length;
-
-/** TFS work-item type for a node at 0-based `level` of a tree `depth` deep. */
-export function adoTypeForLevel(level: number, depth: number): string {
-  const d = Math.min(Math.max(depth, 1), MAX_TASK_DEPTH);
-  const start = MAX_TASK_DEPTH - d;
-  return ADO_LADDER[Math.min(start + level, MAX_TASK_DEPTH - 1)]!;
-}
+/** The Agile process has four rungs; how deep a task tree may go. Which rung a node takes is task-types.ts. */
+export const MAX_TASK_DEPTH = 4;
 
 export const mapAdoType = (raw: string): ReqType => ADO_TYPE_TO_DCC[raw.trim().toLowerCase()] ?? "task";
 export const mapAdoState = (raw: string): Phase => ADO_STATE_TO_PHASE[raw.trim().toLowerCase()] ?? "intake";

@@ -7,7 +7,8 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, recordClaudeCall, usd, withTenant, withoutTenant, type CallEntityKind, type CallOutcome, type CallTrigger } from "@dcc/db";
 import { attachment, claudeCall, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
 import { route, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
-import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
+import { MAX_TASK_DEPTH } from "./ado-map.ts";
+import { requirementRung, structuralTypes } from "./task-types.ts";
 import { adoSend } from "./ado-http.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
 import { materializeTasksToAdo } from "./task-ado-sync.ts";
@@ -21,6 +22,8 @@ import { dependencyBlockers, taskStatus, type CheckKind, type RunPhase, type Sta
 import { flowSteps, gainedDeps, liveCycleState, type FlowBase, type FlowCycle, type FlowStep } from "./task-flow-steps.ts";
 import { describeBuildPlan, findClassicMsbuild, planBuild, runBuildRecipe, type BuildPlan } from "./build-recipe.ts";
 import { taskRelations } from "./task-relations.ts";
+import { checkSpecRead, decisionAnchor, readSpecDoc, saveSpecRead, specFor, specReadInput, type SpecRead } from "./spec-map.ts";
+import { docForPrompt } from "./spec-doc.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -1108,7 +1111,7 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
   });
   pushLine(input.runId, "בונה את היררכיית המשימות…");
 
-  // resolve the tree: level per node, then the depth that picks TFS types.
+  // resolve the tree: the level of every node, and from the tree the TFS type of each.
   // A "check" is always a leaf — if the model gave one children anyway,
   // it must really be work (a check can't be a parent), so promote it.
   const bySeq = new Map(proposed.map((p) => [p.seq, p]));
@@ -1123,14 +1126,16 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
     return levelOf(parent, seen) + 1;
   };
   const levels = new Map(proposed.map((p) => [p.seq, Math.min(levelOf(p.seq), MAX_TASK_DEPTH - 1)]));
-  // depth (→ the TFS ladder) is driven only by "task" nodes — a check never
-  // gets a rung of its own and never stretches the ladder.
-  const depth = Math.min(
-    Math.max(0, ...proposed.filter((p) => kindOf(p.seq) === "task").map((p) => levels.get(p.seq) ?? 0)) + 1,
-    MAX_TASK_DEPTH,
-  );
+  // A node's TFS type is the role it plays — a leaf is a Task, what holds
+  // Tasks is a User Story, and so on up (task-types.ts) — never its depth.
+  // A check is not a work item of its own and takes no rung.
+  const work = proposed.filter((p) => kindOf(p.seq) === "task").map((p) => ({ id: String(p.seq), parentId: p.parentSeq != null ? String(p.parentSeq) : null }));
+  const depth = Math.min(Math.max(0, ...proposed.filter((p) => kindOf(p.seq) === "task").map((p) => levels.get(p.seq) ?? 0)) + 1, MAX_TASK_DEPTH);
+  const typeOfSeq = structuralTypes(work);
+  const rung = requirementRung(work);
   const checkCount = proposed.filter((p) => kindOf(p.seq) === "check").length;
-  pushLine(input.runId, `עומק ${depth} → ${ADO_LADDER.slice(MAX_TASK_DEPTH - depth).join(" › ")}${checkCount ? ` · ${checkCount} בדיקות (לא ב-TFS בנפרד)` : ""}`);
+  const counts = [...typeOfSeq.values()].reduce((m, t) => m.set(t, (m.get(t) ?? 0) + 1), new Map<string, number>());
+  pushLine(input.runId, `${[...counts].map(([t, n]) => `${n} ${t}`).join(" · ")}${rung ? ` · הדרישה עצמה היא ${rung.type} מעל ${rung.over} ${rung.of}` : ""}${checkCount ? ` · ${checkCount} בדיקות (לא ב-TFS בנפרד)` : ""}`);
 
   const out = await withTenant(input.clientId, async (tx) => {
     // Re-running a breakdown REPLACES the previous proposal — otherwise
@@ -1149,7 +1154,7 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
       const appetite = ["small", "standard", "large"].includes(p.appetite) ? p.appetite : "standard";
       const level = levels.get(p.seq) ?? 0;
       const kind = kindOf(p.seq);
-      const adoType = kind === "task" ? adoTypeForLevel(level, depth) : null;
+      const adoType = kind === "task" ? typeOfSeq.get(String(p.seq)) ?? "Task" : null;
       const parentId = p.parentSeq != null ? seqToId.get(p.parentSeq) ?? null : null;
       const [t] = await tx.insert(task).values({
         clientId: input.clientId, workitemId: input.workitemId, seq: p.seq, kind,
@@ -2599,4 +2604,69 @@ export async function pendingApprovalCount(clientId: string, workitemId: string)
       .where(and(eq(task.workitemId, workitemId), eq(task.origin, "ai"), isNull(task.approvedAt), sql`${task.state} <> 'dropped'`)),
   );
   return row?.n ?? 0;
+}
+
+/* ── marking the requirements in a spec, and who implements each ────── */
+
+/** What a task says it does — its title and its instruction. A link's quoted evidence is checked against exactly this. */
+const taskSaid = (t: { intent: string; prompt: string | null }) => {
+  const p = (t.prompt ?? "").trim();
+  return p && p !== t.intent.trim() ? `${t.intent}\n   ${p}` : t.intent;
+};
+
+/** The `spec.map` prompt, filled — the same text the preview shows and the run sends. */
+export async function buildSpecMapPrompt(clientId: string, workitemId: string) {
+  const input = await specReadInput(clientId, workitemId);
+  if (!input.doc) throw new Error("אין לדרישה מסמך אפיון קריא — צרפו קובץ, או שהטקסט שלו לא חולץ");
+  if (!input.tasks.length) throw new Error("הדרישה עוד לא פורקה למשימות — אין מה למפות");
+  const doc = await readSpecDoc(input.doc);
+  if (!doc) throw new Error("לא הצלחתי לקרוא את מסמך האפיון");
+  const tmpl = await requirePrompt("spec.map");
+  const vars = {
+    TITLE: `${input.key ? `${input.key}: ` : ""}${input.title}`,
+    DOC_NAME: input.doc.name,
+    // The document as it arrived, every piece with the id the screen draws it under.
+    SPEC: docForPrompt(doc),
+    DECISIONS: input.decisions.length
+      ? input.decisions.map((d) => `[${decisionAnchor(d.id)}] ${d.description}\n   → ${d.answer}`).join("\n")
+      : "(אין)",
+    // Each task's WHOLE instruction: a link must quote it, so a cut-off instruction would hide what a task really does.
+    TASKS: input.tasks.map((t) => `#${t.seq} [${t.kind}]: ${taskSaid(t)}`).join("\n\n"),
+  };
+  return {
+    prompt: renderPrompt(tmpl.body, vars),
+    promptHe: tmpl.bodyHe ? renderPrompt(tmpl.bodyHe, vars) : renderPrompt(tmpl.body, vars),
+    input,
+    doc,
+  };
+}
+
+/**
+ * Mark the requirements in the spec once, and record which task implements
+ * which. Refuses what it cannot trust (`checkSpecRead`) rather than writing
+ * half a reading — a wrong mapping is worse than none, because the screen
+ * would then say a line is covered when it is not.
+ */
+export async function mapSpecToTasks(input: { clientId: string; workitemId: string; by: Dev; trigger?: CallTrigger }): Promise<{ requirements: number; links: number; unsupported: number; uncovered: number; lostManual: number }> {
+  const built = await buildSpecMapPrompt(input.clientId, input.workitemId);
+  const r = await firstRepo(input.clientId, input.workitemId);
+  const dir = (r ? existingCheckout({ ...r, localPath: null }) : null) ?? process.cwd();
+  const raw = await runClaudeJson<SpecRead>(dir, built.prompt, {
+    timeoutMs: 600_000,
+    ledger: {
+      clientId: input.clientId, userId: input.by.userId, capability: "decomposition", trigger: input.trigger ?? "button",
+      entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement",
+      label: `סימון הדרישות באפיון · ${built.input.title.slice(0, 50)}`,
+      signals: { mechanical: true },
+    },
+  });
+  const checked = checkSpecRead(raw, built.doc, built.input.tasks.map((t) => ({ seq: t.seq, text: taskSaid(t) })), built.input.decisions.map((d) => decisionAnchor(d.id)));
+  if (!checked.ok) throw new Error(`הקריאה של האפיון לא התקבלה: ${checked.why}`);
+  const saved = await saveSpecRead({
+    clientId: input.clientId, workitemId: input.workitemId, attachmentId: built.input.doc!.id, doc: built.doc,
+    read: checked.value, decisions: built.input.decisions, tasks: built.input.tasks, by: input.by, source: "mapping",
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+  const view = await specFor(input.clientId, input.workitemId);
+  return { ...saved, unsupported: checked.value.unsupported.length, uncovered: view.uncovered.length };
 }
