@@ -708,7 +708,7 @@ a { color: var(--color-accent); }
 .fc-head .old { color: var(--status-critical); border-inline-end: 1px solid var(--border-soft); }
 .fc-head .new { color: var(--status-healthy); }
 .fc-body { max-height: 460px; overflow: auto; font-family: var(--mono); font-size: 11.5px; line-height: 1.5; }
-.fc-row { display: grid; grid-template-columns: 1fr 1fr; }
+.fc-row { display: grid; grid-template-columns: 1fr 1fr; content-visibility: auto; contain-intrinsic-size: auto 18px; }
 .fc-cell { display: flex; gap: 8px; padding: 0 8px; min-width: 0; }
 .fc-cell:first-child { border-inline-end: 1px solid var(--border-soft); }
 .fc-cell.empty { background: var(--surface-muted); }
@@ -1126,3 +1126,13 @@ tr.sd-a:hover > td { background: var(--surface-muted); }
 .mw-check .mw-k { display: flex; align-items: center; margin: 0 0 4px; font-family: var(--font); }
 .mw-ask { margin-top: 8px; }
 .mw-ask textarea { width: 100%; }
+
+/* a file shown whole, the changes marked in it */
+.fc-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 5px 10px; background: var(--surface); border-bottom: 1px solid var(--border-soft); font-size: 11px; }
+.fc-count { flex: 1; color: var(--ink-500); }
+.fc-nav { display: inline-flex; gap: 4px; }
+.fc-nav button { appearance: none; border: 1px solid var(--border-hairline); background: var(--surface); border-radius: 6px; font: inherit; font-size: 11px; padding: 1px 8px; cursor: pointer; color: var(--ink-700); }
+.fc-nav button:hover { background: var(--surface-muted); }
+.fc-seg button { padding: 2px 9px; font-size: 11px; }
+.fc-body.whole { max-height: 76vh; }
+.files-all { display: flex; gap: 10px; align-items: center; margin: 2px 0 6px; font-size: 12px; }

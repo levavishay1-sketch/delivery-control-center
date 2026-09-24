@@ -100,7 +100,7 @@ function buildRows(before: string | null, after: string | null): Row[] {
 
 /** Long unchanged stretches fold away, leaving a few lines of context around each change. */
 const CONTEXT = 3;
-type Chunk = { rows: Row[]; folded: boolean };
+type Chunk = { rows: Row[]; folded: boolean; start: number };
 function fold(rows: Row[]): Chunk[] {
   const keep = new Array<boolean>(rows.length).fill(false);
   rows.forEach((r, i) => { if (r.kind !== "same") for (let d = -CONTEXT; d <= CONTEXT; d++) if (rows[i + d]) keep[i + d] = true; });
@@ -109,7 +109,7 @@ function fold(rows: Row[]): Chunk[] {
     const k = keep[i]!;
     let j = i;
     while (j < rows.length && keep[j] === k) j++;
-    chunks.push({ rows: rows.slice(i, j), folded: !k });
+    chunks.push({ rows: rows.slice(i, j), folded: !k, start: i });
     i = j;
   }
   return chunks;
@@ -133,12 +133,25 @@ function Line({ c, side, kind, lang }: { c: Cell; side: "l" | "r"; kind: Row["ki
   return <div className={`fc-cell${tone}`}><span className="fc-n">{c.n}</span><span className="fc-t"><Text c={c} lang={lang} /></span></div>;
 }
 
-function Compare({ v }: { v: FileVersionsData }) {
+function Compare({ v, full }: { v: FileVersionsData; full: boolean }) {
   const lang = useMemo(() => langOf(v.path), [v.path]);
   const rows = useMemo(() => buildRows(v.before, v.after), [v.before, v.after]);
-  const chunks = useMemo(() => fold(rows), [rows]);
+  // The whole file — every line, the changes marked in it — or only the changes with a little around them.
+  const [whole, setWhole] = useState(full);
+  const chunks = useMemo(() => (whole ? [{ rows, folded: false, start: 0 }] : fold(rows)), [rows, whole]);
   const [unfolded, setUnfolded] = useState<Set<number>>(new Set());
   const changes = rows.filter((r) => r.kind !== "same").length;
+  // Where each change begins (a run of changed lines is one change) — to walk them in a long file.
+  const hunks = useMemo(() => rows.flatMap((r, i) => (r.kind !== "same" && (i === 0 || rows[i - 1]!.kind === "same") ? [i] : [])), [rows]);
+  const [at, setAt] = useState(-1);
+  const body = useRef<HTMLDivElement>(null);
+  const go = (to: number) => {
+    const n = hunks.length;
+    if (!n) return;
+    const k = ((to % n) + n) % n;
+    setAt(k);
+    body.current?.querySelector(`[data-row="${hunks[k]}"]`)?.scrollIntoView({ block: "center" });
+  };
   const first = useRef<HTMLDivElement>(null);
   // Opens right under its row; if that was near the bottom of the window, bring it into view.
   useEffect(() => { first.current?.scrollIntoView({ block: "nearest" }); }, []);
@@ -149,13 +162,24 @@ function Compare({ v }: { v: FileVersionsData }) {
         <span className="old"><Info k="file_compare" />לפני{v.before === null ? " · הקובץ לא היה קיים" : ""}</span>
         <span className="new">אחרי{v.after === null ? " · הקובץ נמחק" : ""}</span>
       </div>
-      <div className="fc-body">
+      <div className="fc-bar">
+        <span className="fc-count">{hunks.length === 1 ? "שינוי אחד" : `${hunks.length} שינויים`} · {rows.length} שורות{whole ? "" : " (מקופלות ברובן)"}</span>
+        <span className="fc-nav">
+          <button type="button" onClick={() => go(at < 0 ? hunks.length - 1 : at - 1)} title="לשינוי הקודם">▲</button>
+          <button type="button" onClick={() => go(at + 1)} title="לשינוי הבא">▼ שינוי הבא</button>
+        </span>
+        <span className="seg fc-seg" role="group" aria-label="כמה מהקובץ להציג">
+          <button type="button" aria-pressed={whole} onClick={() => setWhole(true)}>הקובץ במלואו</button>
+          <button type="button" aria-pressed={!whole} onClick={() => setWhole(false)}>רק השינויים</button>
+        </span>
+      </div>
+      <div className={`fc-body${whole ? " whole" : ""}`} ref={body}>
         {chunks.map((c, ci) => c.folded && !unfolded.has(ci) ? (
           <button key={ci} type="button" className="fc-fold" onClick={() => setUnfolded(new Set(unfolded).add(ci))}>
             ⋯ {c.rows.length} שורות ללא שינוי · הצג
           </button>
         ) : c.rows.map((r, ri) => (
-          <div className="fc-row" key={`${ci}-${ri}`}>
+          <div className="fc-row" key={`${ci}-${ri}`} data-row={c.start + ri}>
             <Line c={r.left} side="l" kind={r.kind} lang={lang} />
             <Line c={r.right} side="r" kind={r.kind} lang={lang} />
           </div>
@@ -166,7 +190,7 @@ function Compare({ v }: { v: FileVersionsData }) {
 }
 
 /** Fetches the two versions when it opens, then shows them. Mount it under the row that was pressed. */
-export function FileCompare({ load, links }: { load: () => Promise<FileVersionsData>; links?: { label: string; href: string }[] }) {
+export function FileCompare({ load, links, full = false }: { load: () => Promise<FileVersionsData>; links?: { label: string; href: string }[]; /** Open showing the whole file, the changes marked in it. */ full?: boolean }) {
   const [v, setV] = useState<FileVersionsData | null>(null);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
@@ -182,7 +206,7 @@ export function FileCompare({ load, links }: { load: () => Promise<FileVersionsD
         : !v ? <p className="ob-sub" style={{ margin: "6px 4px" }}>טוען את שתי הגרסאות…</p>
         : v.binary ? <p className="ob-sub" style={{ margin: "6px 4px" }}>קובץ בינארי (תמונה, קובץ בנוי וכדומה): אין מה להשוות שורה מול שורה.</p>
         : v.tooLarge ? <p className="ob-sub" style={{ margin: "6px 4px" }}>הקובץ גדול מדי להשוואה כאן.</p>
-        : <Compare v={v} />}
+        : <Compare v={v} full={full} />}
       {all.length > 0 && <div className="fc-links">{all.map((l) => <a key={l.href} href={l.href} target="_blank" rel="noreferrer">{l.label}</a>)}</div>}
     </div>
   );
