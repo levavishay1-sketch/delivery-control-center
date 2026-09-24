@@ -47,7 +47,7 @@ describe("flowSteps", () => {
 
   it("lets the person go on to the checks without rebuilding: they keep the state the code they ran on gave them", () => {
     const failed = flowSteps([run({ base: base([3]), checks: { ran: 2, passed: 1, failed: 1, waiting: 0 } })], now({ pendingDeps: [3] }));
-    expect(shape(failed)).toEqual(["develop:done", "checks:done", "dependency:current", "checks:failed", "review:todo"]);
+    expect(shape(failed)).toEqual(["develop:done", "checks:failed", "dependency:current", "checks:failed", "review:todo"]);
     expect(failed[2]!.pending).toBe(true);
     const unbuilt = flowSteps([run({ base: base([3]), buildVerified: false, checks: { ran: 0, passed: 0, failed: 0, waiting: 0 } })], now({ pendingDeps: [3] }));
     expect(shape(unbuilt).slice(-2)).toEqual(["checks:todo", "review:todo"]);
@@ -96,6 +96,18 @@ describe("flowSteps", () => {
 
   it("is done when the task was closed", () => {
     expect(flowSteps([run()], now({ closed: true })).at(-1)!.state).toBe("done");
+  });
+});
+
+describe("a past step keeps what really happened in it", () => {
+  it("draws a build that failed as failed, even though a dependency step came after it", () => {
+    const steps = flowSteps([run({ base: base([3]), buildFailed: true, checks: { ran: 0, passed: 0, failed: 0, waiting: 0 } })], now({ pendingDeps: [3] }));
+    expect(steps.filter((x) => x.past).map((x) => `${x.kind}:${x.state}`)).toEqual(["develop:failed"]);
+  });
+
+  it("draws checks that failed as failed", () => {
+    const steps = flowSteps([run({ base: base([3]), checks: { ran: 2, passed: 1, failed: 1, waiting: 0 } })], now({ pendingDeps: [3] }));
+    expect(steps.filter((x) => x.past).map((x) => `${x.kind}:${x.state}`)).toEqual(["develop:done", "checks:failed"]);
   });
 });
 

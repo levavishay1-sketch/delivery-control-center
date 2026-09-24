@@ -131,8 +131,11 @@ export function flowSteps(cycles: FlowCycle[], now: FlowNow): FlowStep[] {
       const built = r.cycles.filter((c) => c.state === "done" || c.state === "rolled_back");
       const withChecks = built.filter((c) => c.checks.ran > 0);
       const runId = (built.at(-1) ?? r.cycles.at(-1))?.runId;
-      steps.push({ kind: workKind, state: built.length ? "done" : "failed", round, past: true, deps, at, note: baseNote(built.at(-1)?.base), runId });
-      if (withChecks.length) steps.push({ kind: "checks", state: "done", round, past: true, at, note: checksNote(withChecks.at(-1)!.checks), runId: withChecks.at(-1)!.runId });
+      // A past round is still what it was: a build that failed stays failed on it, it is not drawn as done because a later step exists.
+      const lastBuilt = built.at(-1);
+      steps.push({ kind: workKind, state: !lastBuilt || lastBuilt.buildFailed ? "failed" : "done", round, past: true, deps, at, note: baseNote(lastBuilt?.base), runId });
+      const lastChecked = withChecks.at(-1);
+      if (lastChecked) steps.push({ kind: "checks", state: lastChecked.checks.failed ? "failed" : "done", round, past: true, at, note: checksNote(lastChecked.checks), runId: lastChecked.runId });
       if (r.cycles.some((c) => c.reviewed)) steps.push({ kind: "review", state: "done", round, past: true, at, runId });
       return;
     }
