@@ -1,3 +1,4 @@
+import { openInNewTab } from "../openTab.ts";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getSpec, previewSpecMap, mapSpec, type TaskFlow, type SpecView } from "../api.ts";
 import { TaskGraph } from "./TaskGraph.tsx";
@@ -24,10 +25,9 @@ import { Info } from "../claude/Info.tsx";
 
 type Layout = "list" | "cards";
 
-export function RequirementMap({ id, flow, nav, embedded = false }: {
+export function RequirementMap({ id, flow, embedded = false }: {
   id: string;
   flow: TaskFlow;
-  nav: (h: string) => void;
   /** Inside a requirement's step: a fixed height, and a way out to the full screen. */
   embedded?: boolean;
 }) {
@@ -141,11 +141,11 @@ export function RequirementMap({ id, flow, nav, embedded = false }: {
           ? <TaskTree
               flow={flow} mode={mode} selected={task} related={related} open={open} covers={spec?.read ? covers : null}
               onToggle={(tid) => setOpen((p) => { const n = new Set(p); n.has(tid) ? n.delete(tid) : n.add(tid); return n; })}
-              onPick={pickTask} onOpenTask={(tid) => nav(`#/task/${tid}`)}
+              onPick={pickTask} onOpenTask={(tid) => openInNewTab(`#/task/${tid}`)}
               implementedBy={spec?.read ? implementedBy : null}
             />
           : <TaskGraph
-              flow={flow} nav={nav} mode={mode} zoomable
+              flow={flow} mode={mode} zoomable
               height={embedded ? 420 : Math.max(420, (typeof window !== "undefined" ? window.innerHeight : 900) - 300)}
               selectedId={task} relatedIds={related} onSelect={selectTask}
               implementedBy={spec?.read ? implementedBy : null}
@@ -221,7 +221,7 @@ export function RequirementMap({ id, flow, nav, embedded = false }: {
  * cards are where a task is approved or set aside from the step itself.
  */
 const VIEW_KEY = "dcc.taskView";
-export function TaskViewChoice({ id, flow, nav, classic }: { id: string; flow: TaskFlow; nav: (h: string) => void; classic: ReactNode }) {
+export function TaskViewChoice({ id, flow, classic }: { id: string; flow: TaskFlow; classic: ReactNode }) {
   const [view, setView] = useState<"map" | "classic">(() => {
     try { return localStorage.getItem(VIEW_KEY) === "classic" ? "classic" : "map"; } catch { return "map"; }
   });
@@ -239,7 +239,7 @@ export function TaskViewChoice({ id, flow, nav, classic }: { id: string; flow: T
         </div>
         <Info k="page_flow" />
       </div>
-      {view === "map" ? <RequirementMap id={id} flow={flow} nav={nav} embedded /> : classic}
+      {view === "map" ? <RequirementMap id={id} flow={flow} embedded /> : classic}
     </div>
   );
 }

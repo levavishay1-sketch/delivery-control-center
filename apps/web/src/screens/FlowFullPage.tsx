@@ -23,7 +23,7 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
         <a className="rq-back" onClick={() => nav(`#/wi/${id}`)}>← {d.workitem.key ?? "לדרישה"}</a>
         <CardTitle as="h1" info="page_flow" style={{ fontSize: 20, fontWeight: 700, margin: "4px 0 0" }}>{d.workitem.title}</CardTitle>
       </div>
-      <RequirementMap id={id} flow={flow} nav={nav} />
+      <RequirementMap id={id} flow={flow} />
     </div>
   );
 }
