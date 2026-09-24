@@ -683,13 +683,39 @@ export const flowRun = pgTable(
 );
 
 /**
- * One addressable piece of a requirement's specification — a field, a
- * rule, a line of a mapping, a closed decision. The spec itself stays
- * where it is (the attachment's `extracted_text`, the `gap` rows); this
- * is the INDEX over it, so a task can say which pieces it implements and
- * the screen can mark them. `anchor` is the stable id everything else
- * refers to; it is DCC's own, never a line number, so re-reading the
- * same document does not move what was already mapped.
+ * A requirement's specification document as it arrived — its headings,
+ * paragraphs and tables, read out of the attached file (`spec-doc.ts`),
+ * with an id on every row, cell and line. Kept as it was read, so the ids a
+ * task was linked to keep pointing at the same words even if the parser
+ * changes later. `corrections` are where a closed decision overrules the
+ * document's own words: the words stay, and the screen strikes them through
+ * beside what the decision settled.
+ */
+export const specDocument = pgTable(
+  "spec_document",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
+    /** The file it was read out of. */
+    attachmentId: uuid("attachment_id").references(() => attachment.id, { onDelete: "set null" }),
+    /** SpecDoc — the blocks, with their ids. */
+    doc: jsonb("doc").notNull(),
+    /** SpecCorrection[] — { id, decision, from, to }. */
+    corrections: jsonb("corrections").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("spec_document_workitem_idx").on(t.workitemId),
+    tenantPolicy("spec_document_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
+ * What in the specification is a requirement — a piece a task can
+ * implement, and so a piece that is either covered or a gap. `anchor` is
+ * the id of a row, cell or line of `spec_document` (the document's own
+ * words, never restated), or `d.<gap>` for a closed decision.
  */
 export const specSection = pgTable(
   "spec_section",
@@ -697,29 +723,20 @@ export const specSection = pgTable(
     id: uuid("id").primaryKey().defaultRandom(),
     clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
     workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
-    /** Stable within the requirement: "f20", "r3a", "d.<gap id>". */
+    /** A piece of the document ("t1.r2.c6", "t3.r1.c4.l7") or a decision ("d.86e1920a"). */
     anchor: text("anchor").notNull(),
     /** Reading order on the screen. */
     ordinal: integer("ordinal").notNull().default(0),
-    /** heading | field | rule | mapping | decision */
+    /** requirement | decision */
     kind: text("kind").notNull(),
-    /** The heading it sits under, for grouping — an anchor of a `heading` section. */
-    parentAnchor: text("parent_anchor"),
-    /** Short name, as the spec words it. */
+    /** A short name for it, for a list that shows it away from the document. */
     title: text("title").notNull(),
-    /** What it says. Empty on a heading. */
+    /** The words it points at — the document's own, or the decision's answer. */
     body: text("body").notNull().default(""),
     /** Where it came from: the attachment it was read out of, or null for a decision. */
     attachmentId: uuid("attachment_id").references(() => attachment.id, { onDelete: "cascade" }),
     /** Decisions only: the gap this section is. */
     gapId: uuid("gap_id").references(() => gap.id, { onDelete: "cascade" }),
-    /**
-     * A decision that CORRECTS this section — the spec's own words stay in
-     * `body`, and the screen shows them struck through beside the correction.
-     */
-    correctedByGapId: uuid("corrected_by_gap_id").references(() => gap.id, { onDelete: "set null" }),
-    /** What the correction says instead, in the spec's own terms. */
-    correction: text("correction"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

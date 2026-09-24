@@ -56,12 +56,12 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
 
   const covers = useMemo(() => {
     const m = new Map<string, number>();
-    for (const s of spec?.sections ?? []) for (const t of s.tasks) m.set(t.id, (m.get(t.id) ?? 0) + 1);
+    for (const s of spec?.pieces ?? []) for (const t of s.tasks) m.set(t.id, (m.get(t.id) ?? 0) + 1);
     // A group's own count is what its sub-tasks implement.
     for (const n of flow?.nodes ?? []) {
       if (!n.isGroup) continue;
       const kids = (flow?.nodes ?? []).filter((k) => k.parentTaskId === n.id);
-      m.set(n.id, new Set((spec?.sections ?? []).filter((s) => s.tasks.some((t) => kids.some((k) => k.id === t.id))).map((s) => s.anchor)).size);
+      m.set(n.id, new Set((spec?.pieces ?? []).filter((s) => s.tasks.some((t) => kids.some((k) => k.id === t.id))).map((s) => s.anchor)).size);
     }
     return m;
   }, [spec, flow]);
@@ -70,12 +70,12 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
     if (!task || !spec) return new Set<string>();
     const kids = (flow?.nodes ?? []).filter((n) => n.parentTaskId === task).map((n) => n.id);
     const mine = new Set([task, ...kids]);
-    return new Set(spec.sections.filter((s) => s.tasks.some((t) => mine.has(t.id))).map((s) => s.anchor));
+    return new Set(spec.pieces.filter((s) => s.tasks.some((t) => mine.has(t.id))).map((s) => s.anchor));
   }, [task, spec, flow]);
 
   const related = useMemo(() => {
     if (!anchor || !spec) return new Set<string>();
-    const ids = new Set(spec.sections.find((s) => s.anchor === anchor)?.tasks.map((t) => t.id) ?? []);
+    const ids = new Set(spec.pieces.find((s) => s.anchor === anchor)?.tasks.map((t) => t.id) ?? []);
     for (const n of flow?.nodes ?? []) if (n.isGroup && (flow?.nodes ?? []).some((k) => k.parentTaskId === n.id && ids.has(k.id))) ids.add(n.id);
     return ids;
   }, [anchor, spec, flow]);
@@ -87,7 +87,7 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
   const pickAnchor = (a: string) => {
     setAnchor((cur) => (cur === a ? null : a));
     setTask(null);
-    const ids = spec?.sections.find((s) => s.anchor === a)?.tasks.map((t) => t.id) ?? [];
+    const ids = spec?.pieces.find((s) => s.anchor === a)?.tasks.map((t) => t.id) ?? [];
     if (ids.length && flow) {
       // open whatever holds them, in whichever view is showing
       setOpen((prev) => {
@@ -120,10 +120,12 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
   if (!d || !flow) return <div className="spin">טוען…</div>;
 
   const note = task
-    ? `#${flow.nodes.find((n) => n.id === task)?.seq ?? ""} — ${hit.size === 0 ? "לא מופיעה באפיון" : hit.size === 1 ? "חלק אחד באפיון" : `${hit.size} חלקים באפיון`}`
+    ? `#${flow.nodes.find((n) => n.id === task)?.seq ?? ""} — ${hit.size === 0 ? "לא מופיעה באפיון" : hit.size === 1 ? "דרישה אחת באפיון" : `${hit.size} דרישות באפיון`}`
     : anchor
-      ? `${related.size === 0 ? "אף משימה לא מממשת" : related.size === 1 ? "משימה אחת מממשת" : `${related.size} משימות מממשות`} את החלק שנבחר`
-      : "לחצו על משימה כדי לראות מה היא מממשת, או על שורה באפיון כדי לראות מי מממש אותה";
+      ? `${related.size === 0 ? "אף משימה לא מממשת" : related.size === 1 ? "משימה אחת מממשת" : `${related.size} משימות מממשות`} את מה שנבחר`
+      : spec?.read
+        ? "לחצו על משימה כדי לראות מה היא מממשת, או על שורה באפיון כדי לראות מי מממש אותה"
+        : "";
 
   const tasksPane = (
     <div className="rq-pane">
@@ -134,7 +136,7 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
       <div className="rq-pane-b">
         {layout === "list"
           ? <TaskTree
-              flow={flow} mode={mode} selected={task} related={related} open={open} covers={covers}
+              flow={flow} mode={mode} selected={task} related={related} open={open} covers={spec?.read ? covers : null}
               onToggle={(tid) => setOpen((p) => { const n = new Set(p); n.has(tid) ? n.delete(tid) : n.add(tid); return n; })}
               onPick={pickTask} onOpenTask={(tid) => nav(`#/task/${tid}`)}
             />
@@ -151,12 +153,12 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
     <div className="rq-wrap">
       {mapOpen && (
         <PromptPreviewModal
-          title="קריאת האפיון לחלקים"
+          title="סימון הדרישות באפיון"
           data={mapData} loading={mapLoading} error={mapErr}
           loadingHint="בונה את מה שיישלח — האפיון, ההחלטות והמשימות…"
           onClose={() => { setMapOpen(false); setMapErr(null); }}
           onConfirm={runMap} confirming={mapping}
-          confirmLabel="✦ קרא את האפיון"
+          confirmLabel="✦ סמן את הדרישות"
         />
       )}
       <div className="rq-head">
@@ -182,22 +184,27 @@ export function FlowFullPage({ id, nav }: { id: string; nav: (h: string) => void
         </div>
       </div>
 
-      <div className={`rq-split${spec?.read ? "" : " one"}`}>
-        {spec?.read ? (
+      <div className={`rq-split${spec?.doc ? "" : " one"}`}>
+        {spec?.doc ? (
+          // The document shows as it arrived from the first look; marking its requirements is the one step that costs.
           <div className="rq-pane">
             <SpecHead spec={spec} note={note} />
+            {!spec.read && (
+              <div className="rq-unmarked">
+                <span>עוד לא סומן מה במסמך הוא דרישה ואיזו משימה מממשת אותה.</span>
+                <button className="btn btn-primary btn-sm" onClick={openMap}>✦ סמן את הדרישות</button>
+                <Info k="spec_read" />
+              </div>
+            )}
             <div className="rq-pane-b"><SpecPane spec={spec} hit={hit} picked={anchor} onPick={pickAnchor} /></div>
           </div>
         ) : (
           <div className="rq-pane rq-unread">
             <div className="rq-pane-b">
-              <p className="section-lbl">האפיון עוד לא נקרא לחלקים<Info k="spec_pane" /></p>
-              <p style={{ fontSize: 13, color: "var(--ink-700)", lineHeight: 1.65, marginBottom: 12 }}>
-                קלוד יקרא את מסמך האפיון ואת ההחלטות שנסגרו, יחתוך אותם לחלקים, ויסמן איזו משימה מממשת כל חלק — וגם מה שאף משימה לא מממשת.
-                הוא לא משנה את האפיון. זו הרצה אחת שעולה כסף, ורואים בדיוק מה נשלח לפניה.
+              <p className="section-lbl">אין לדרישה מסמך אפיון<Info k="spec_pane" /></p>
+              <p style={{ fontSize: 13, color: "var(--ink-700)", lineHeight: 1.65 }}>
+                האפיון מוצג כאן כמו שהגיע, מהקובץ שצורף לדרישה. צרפו את מסמך האפיון במסך הדרישה, והוא יופיע כאן.
               </p>
-              <button className="btn btn-primary btn-sm" onClick={openMap}>✦ קרא את האפיון</button>
-              <Info k="spec_read" />
             </div>
           </div>
         )}

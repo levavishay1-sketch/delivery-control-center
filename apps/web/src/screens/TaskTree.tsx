@@ -42,8 +42,8 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
   onToggle: (id: string) => void;
   onPick: (id: string) => void;
   onOpenTask: (id: string) => void;
-  /** How many pieces of the spec each task implements. */
-  covers: Map<string, number>;
+  /** How many requirements in the spec each task implements — null until the spec has been marked, when nobody knows yet. */
+  covers: Map<string, number> | null;
 }) {
   const byId = new Map(flow.nodes.map((n) => [n.id, n]));
   const work = flow.nodes.filter((n) => !n.isGroup);
@@ -54,7 +54,7 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
     const isOpen = open.has(n.id);
     const done = n.isGroup ? flow.nodes.filter((k) => k.parentTaskId === n.id && k.state === "done").length : 0;
     const subs = n.isGroup ? flow.nodes.filter((k) => k.parentTaskId === n.id).length : 0;
-    const lines = covers.get(n.id) ?? 0;
+    const lines = covers?.get(n.id) ?? 0;
     return (
       <div
         className={`tt-row${selected === n.id ? " sel" : related.has(n.id) ? " rel" : ""}`}
@@ -74,7 +74,7 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
           {extra && <span className="tt-extra">{extra}</span>}
           {n.isGroup
             ? <span className="tt-prog" title="תת-משימות שהסתיימו"><span className="tt-bar"><i style={{ width: `${subs ? (done / subs) * 100 : 0}%` }} /></span>{done}/{subs}</span>
-            : <span className="tt-lines" title="חלקים באפיון שהמשימה מממשת">{lines === 0 ? "לא באפיון" : lines === 1 ? "שורה אחת" : `${lines} שורות`}</span>}
+            : covers && <span className="tt-lines" title="דרישות באפיון שהמשימה מממשת">{lines === 0 ? "לא באפיון" : lines === 1 ? "שורה אחת" : `${lines} שורות`}</span>}
           {n.status ? <TaskStatusPill status={n.status} /> : <Pill tone="inactive">{n.state}</Pill>}
           <a className="tt-open" title="פתח את מסך המשימה" onClick={(e) => { e.stopPropagation(); onOpenTask(n.id); }}>←</a>
         </span>

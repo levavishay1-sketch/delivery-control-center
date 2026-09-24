@@ -955,7 +955,7 @@ a { color: var(--color-accent); }
 .seg button[aria-pressed="true"] { background: var(--color-accent); color: #fff; }
 .seg button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 
-.rq-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; flex: 1; min-height: 0; }
+.rq-split { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 12px; flex: 1; min-height: 0; }
 .rq-split.one { grid-template-columns: minmax(0, 360px) minmax(0, 1fr); }
 .rq-pane { background: var(--surface); border: 1.5px solid var(--border-hairline); border-radius: 12px; box-shadow: var(--shadow-panel); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
 .rq-pane-h { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 13px 8px; border-bottom: 1px solid var(--divider); flex-wrap: wrap; }
@@ -1015,48 +1015,54 @@ a { color: var(--color-accent); }
 .spec-cover { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: var(--ink-700); white-space: nowrap; }
 .spec-meter { width: 70px; height: 6px; border-radius: 99px; background: var(--status-critical-bg); overflow: hidden; display: inline-block; }
 .spec-meter i { display: block; height: 100%; background: var(--status-healthy); }
-/* The document as the outline it already is: the customer's own numbered
-   headings, each holding what belongs under it, on the same rail the task
-   list uses so both halves of the screen read alike. */
-.spec-doc { display: flex; flex-direction: column; }
-.spec-sec { display: flex; flex-direction: column; }
-.spec-sec.dim, .spec-line.dim { opacity: .4; }
-.spec-sec.l0 { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--divider); }
-.spec-sec.l0:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
-.spec-sec.l1, .spec-sec.l2 { margin-top: 8px; }
-.spec-h { display: flex; align-items: center; gap: 6px; width: 100%; appearance: none; border: 0; background: transparent; padding: 3px 4px; border-radius: 7px; cursor: pointer; font: inherit; text-align: start; color: var(--ink-900); }
-.spec-h:hover { background: var(--surface-muted); }
-.spec-h:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.spec-h .t { font-weight: 700; }
-.spec-h .n { font-size: 10px; font-weight: 600; color: var(--ink-500); background: var(--badge-bg); border-radius: 99px; padding: 1px 7px; }
-.spec-sec.l0 > .spec-h .t { font-size: 14px; }
-.spec-sec.l1 > .spec-h .t { font-size: 12.5px; color: var(--ink-700); }
-.spec-sec.l2 > .spec-h .t { font-size: 11.5px; color: var(--ink-500); }
-.spec-chev { width: 12px; height: 12px; color: var(--ink-400); flex-shrink: 0; transform: rotate(-90deg); transition: transform .15s; }
-.spec-chev.open { transform: rotate(0deg); }
-.spec-kids { position: relative; margin-top: 3px; padding-inline-start: 16px; border-inline-start: 1.5px solid var(--divider); margin-inline-start: 9px; display: flex; flex-direction: column; gap: 3px; }
-.spec-sec.l0 > .spec-kids { border-inline-start-color: var(--border-hairline); }
-.spec-item { display: flex; flex-direction: column; }
-.spec-line { border: 1.5px solid transparent; border-radius: 8px; padding: 5px 8px; cursor: pointer; }
-.spec-line:hover { background: var(--surface-muted); }
-.spec-line:focus-visible { outline: 2px solid var(--color-accent); outline-offset: -2px; }
-.spec-line.hit { background: var(--color-accent-muted); border-color: var(--color-accent); }
-.spec-line.picked { background: var(--color-accent-muted); border-color: var(--color-accent); box-shadow: 0 0 0 1.5px var(--color-accent); }
-.spec-line.gap { border-color: var(--status-critical); background: var(--status-critical-bg); }
-.spec-top { display: flex; align-items: baseline; gap: 7px; }
-.spec-top .spacer { flex: 1; }
-/* The kind is a tag, not a word in the sentence — "שדה" and "כלל" have to be
-   told apart without reading them. */
-.spec-kind { font-size: 9.5px; font-weight: 700; letter-spacing: .04em; white-space: nowrap; border-radius: 5px; padding: 1px 6px; line-height: 14px; color: var(--ink-500); background: var(--badge-bg); }
-.spec-kind.k-field { color: var(--color-accent-dark); background: var(--color-accent-muted); }
-.spec-kind.k-mapping { color: var(--status-ai); background: var(--status-ai-bg); }
-.spec-kind.k-decision { color: var(--status-healthy); background: var(--status-healthy-bg); }
-.spec-title { font-size: 12.5px; color: var(--ink-900); font-weight: 500; }
-.spec-body { font-size: 11.5px; color: var(--ink-500); margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.spec-who { display: inline-flex; gap: 3px; flex-wrap: wrap; }
-.spec-who b { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--color-accent-dark); background: var(--surface); border: 1px solid var(--color-accent); border-radius: 5px; padding: 0 4px; line-height: 15px; }
-.spec-none { font-size: 10px; font-weight: 600; color: var(--status-critical); border: 1px dashed var(--status-critical); border-radius: 5px; padding: 0 5px; line-height: 15px; white-space: nowrap; }
-.spec-fix { font-size: 11px; color: var(--status-ai); background: var(--status-ai-bg); border-radius: 6px; padding: 3px 7px; margin-top: 4px; }
+/* The document as it arrived: the customer's own headings, paragraphs and
+   tables, word for word. What a model added is only marks on top — a
+   requirement is clickable, one nothing implements is red, and an overruled
+   phrase is struck through beside what was decided. */
+.rq-unmarked { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 13px; background: var(--status-ai-bg); border-bottom: 1px solid var(--divider); font-size: 12px; color: var(--ink-700); }
+.rq-unmarked span { flex: 1 1 200px; }
+.sd { font-size: 12.5px; line-height: 1.6; color: var(--ink-700); }
+.sd-h { color: var(--ink-900); font-weight: 650; margin: 18px 0 8px; }
+.sd-h:first-child { margin-top: 0; }
+.sd-h.l1 { font-size: 15px; }
+.sd-h.l2 { font-size: 13px; }
+.sd-h.l3 { font-size: 12px; color: var(--ink-500); }
+.sd-dech { display: flex; align-items: center; border-top: 1px solid var(--divider); padding-top: 14px; margin-top: 22px; }
+.sd-para { margin: 6px 0; }
+.sd-tbl { overflow-x: auto; border: 1px solid var(--border-hairline); border-radius: 10px; margin: 0 0 12px; }
+.sd-tbl table { border-collapse: collapse; width: 100%; font-size: 12px; }
+.sd-tbl th, .sd-tbl td { min-width: 80px; overflow-wrap: anywhere; }
+.sd-tbl th { background: var(--surface-muted); color: var(--ink-500); font-weight: 600; text-align: start; padding: 7px 9px; border-bottom: 1px solid var(--border-hairline); vertical-align: bottom; }
+.sd-tbl td { padding: 7px 9px; border-bottom: 1px solid var(--divider); vertical-align: top; }
+.sd-tbl tr:last-child td { border-bottom: 0; }
+/* a schema name, a code: the document's own identifiers read left to right inside the Hebrew */
+.sd-line { unicode-bidi: plaintext; }
+
+.sd-a { cursor: pointer; border-radius: 6px; transition: background-color .15s, box-shadow .15s, opacity .15s; }
+div.sd-a { padding: 1px 5px; margin-inline: -5px; }
+.sd-a:hover { box-shadow: 0 0 0 1px var(--border-hairline); }
+.sd-a:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.sd-a.hit { background: var(--color-accent-muted); box-shadow: 0 0 0 1.5px var(--color-accent); }
+.sd-a.picked { background: var(--color-accent-muted); box-shadow: 0 0 0 2.5px var(--color-accent); }
+.sd-a.gap { background: var(--status-critical-bg); box-shadow: 0 0 0 1.5px var(--status-critical); }
+tr.sd-a.hit > td, tr.sd-a.picked > td { background: var(--color-accent-muted); }
+tr.sd-a.gap > td { background: var(--status-critical-bg); }
+tr.sd-a, td.sd-a { box-shadow: none; }
+tr.sd-a:hover > td { background: var(--surface-muted); }
+.sd-a.dim { opacity: .42; }
+
+.sd-who { display: inline-flex; gap: 3px; margin-inline-start: 6px; vertical-align: 1px; flex-wrap: wrap; }
+.sd-who b { font-family: var(--mono); font-size: 10px; font-weight: 500; color: var(--color-accent-dark); background: var(--surface); border: 1px solid var(--color-accent); border-radius: 5px; padding: 0 4px; line-height: 16px; }
+.sd-who i { font-style: normal; font-size: 10.5px; font-weight: 600; color: var(--status-critical); background: var(--surface); border: 1px dashed var(--status-critical); border-radius: 5px; padding: 0 6px; line-height: 16px; white-space: nowrap; }
+
+.sd del { color: var(--status-critical); text-decoration-thickness: 1.5px; }
+.sd ins { text-decoration: none; background: var(--status-ai-bg); color: var(--status-ai); font-weight: 600; border-radius: 4px; padding: 0 4px; }
+.sd-fix { appearance: none; border: 0; font: inherit; font-size: 10.5px; font-weight: 600; color: var(--status-ai); background: var(--status-ai-bg); border-radius: 5px; padding: 1px 7px; margin-inline: 6px; cursor: pointer; }
+.sd-fix:focus-visible { outline: 2px solid var(--status-ai); outline-offset: 1px; }
+
+.sd-dec { border-inline-start: 3px solid var(--status-ai-bg); padding-inline-start: 8px; margin-bottom: 10px; }
+.sd-dec .q { font-weight: 600; color: var(--ink-900); }
+.sd-dec .ans { margin-top: 2px; white-space: pre-wrap; }
 
 /* a FLOW card the requirement screen has chosen, or that answers the chosen line */
 .flow-node.sel { outline: 2.5px solid var(--color-accent); outline-offset: 1px; }

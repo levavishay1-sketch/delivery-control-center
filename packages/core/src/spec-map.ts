@@ -1,87 +1,112 @@
 /**
- * The specification as pieces a task can point at.
+ * The specification as it arrived, and what in it a task implements.
  *
- * A requirement's spec lives in two places that were never addressable: the
- * attachment's extracted text, and the decisions closed on it (`gap` rows).
- * This module reads both into `spec_section` — one row per field, rule,
- * mapping line or decision — and records which task implements which piece
- * (`task_spec_link`). Nothing here rewrites the spec: the section keeps the
- * document's own words, and a decision that contradicts them is recorded
- * beside them as a correction, never instead of them.
- *
- * Reading the document is the one step that needs a model, and only when a
- * requirement was broken down before this existed. A breakdown from now on
- * writes its own links (`source: "breakdown"`), because it already reads the
- * spec while it splits the work.
+ * A requirement's spec lives in two places: the attached document, and the
+ * decisions closed on it (`gap` rows). The document is read straight out of
+ * the file into its own headings, paragraphs and tables, with an id on every
+ * row, cell and line (`spec-doc.ts`), and kept as read (`spec_document`) —
+ * that is what the screen draws, word for word. The one step that needs a
+ * model is saying which of those pieces are requirements (`spec_section`),
+ * which task implements each (`task_spec_link`), and where a closed decision
+ * overrules the document's words. Nothing here rewrites the spec: a
+ * correction strikes the words through beside what was decided, never
+ * instead of them.
  */
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { appendEvent, withTenant } from "@dcc/db";
-import { attachment, gap, specSection, task, taskSpecLink, workitem } from "@dcc/db/schema";
+import { attachment, gap, specDocument, specSection, task, taskSpecLink, workitem } from "@dcc/db/schema";
+import { docElements, docFromHtml, docFromText, overruledPieces, type SpecCorrection, type SpecDoc, type SpecReadAccepted } from "./spec-doc.ts";
+export { checkSpecRead, type SpecCorrection, type SpecLink, type SpecRead, type SpecReadAccepted } from "./spec-doc.ts";
 
-/** A decision is part of the spec too, and a task can point at it — this is the anchor it gets, everywhere. */
+/** A decision is part of the spec too, and a task can point at it — this is the id it gets, everywhere. */
 export const decisionAnchor = (gapId: string) => `d.${gapId.slice(0, 8)}`;
 
-export type SpecSectionRow = typeof specSection.$inferSelect;
-export type SpecSectionView = {
+export type SpecPiece = {
   anchor: string;
-  kind: string;
-  parentAnchor: string | null;
+  kind: "requirement" | "decision";
   title: string;
-  body: string;
-  /** A decision that corrects this section: what it says instead, and which decision said so. */
-  correction: { text: string; gapId: string; question: string } | null;
+  /** A closed decision struck out every word of it — nothing is left to build, so it is not a gap. */
+  overruled: boolean;
   /** The tasks that implement it, by seq — empty means nothing does. */
   tasks: { id: string; seq: number; intent: string; source: string }[];
 };
+export type SpecDecision = { anchor: string; question: string; answer: string };
 export type SpecView = {
-  /** Present once the spec has been read into sections. */
+  /** Present once the requirements in the document have been marked. */
   read: boolean;
   /** What it was read from, so the screen can say. */
   source: { attachmentId: string; name: string } | null;
-  sections: SpecSectionView[];
-  /** Anchors no task implements. */
+  /** The document as it arrived. */
+  doc: SpecDoc | null;
+  corrections: SpecCorrection[];
+  /** Every requirement in the document, in its order, then every closed decision. */
+  pieces: SpecPiece[];
+  /** Every question closed on the requirement, with its answer — as it stands now. */
+  decisions: SpecDecision[];
+  /** Anchors no task implements — a requirement a decision struck out entirely is not one of them. */
   uncovered: string[];
 };
 
-/** The requirement's spec, its sections and who implements each — what the screen draws. */
+/** The attachment the spec is read out of: the one with the most to say. */
+const specAttachment = <A extends { extractedText: string | null }>(atts: A[]): A | null =>
+  atts.filter((a) => (a.extractedText ?? "").trim().length > 0).sort((a, b) => (b.extractedText?.length ?? 0) - (a.extractedText?.length ?? 0))[0] ?? null;
+
+/**
+ * The document, the requirements in it and who implements each — what the
+ * screen draws. The document needs no model to be shown: until its
+ * requirements have been marked it is read straight out of the file, and
+ * shown as it arrived with nothing marked on it.
+ */
 export async function specFor(clientId: string, workitemId: string): Promise<SpecView> {
-  return withTenant(clientId, async (tx) => {
-    const sections = await tx.select().from(specSection).where(eq(specSection.workitemId, workitemId)).orderBy(asc(specSection.ordinal));
+  const view = await withTenant(clientId, async (tx) => {
+    const [stored] = await tx.select().from(specDocument).where(eq(specDocument.workitemId, workitemId)).limit(1);
+    const reqs = await tx.select().from(specSection).where(and(eq(specSection.workitemId, workitemId), eq(specSection.kind, "requirement"))).orderBy(asc(specSection.ordinal));
     const links = await tx.select().from(taskSpecLink).where(eq(taskSpecLink.workitemId, workitemId));
     const ids = [...new Set(links.map((l) => l.taskId))];
     const tasks = ids.length ? await tx.select({ id: task.id, seq: task.seq, intent: task.intent, active: task.active, state: task.state }).from(task).where(inArray(task.id, ids)) : [];
     const byId = new Map(tasks.map((t) => [t.id, t]));
-    const gapIds = [...new Set(sections.map((s) => s.correctedByGapId).filter((g): g is string => !!g))];
-    const gaps = gapIds.length ? await tx.select({ id: gap.id, description: gap.description }).from(gap).where(inArray(gap.id, gapIds)) : [];
-    const gapById = new Map(gaps.map((g) => [g.id, g]));
-    const [att] = sections.some((s) => s.attachmentId)
-      ? await tx.select({ id: attachment.id, name: attachment.name }).from(attachment).where(eq(attachment.id, sections.find((s) => s.attachmentId)!.attachmentId!)).limit(1)
+    // The answers as they stand now — a question closed after the reading still shows, and shows as not yet implemented.
+    const decisions = (await tx.select().from(gap).where(eq(gap.workitemId, workitemId)))
+      .filter((g) => g.state === "resolved" && (g.answer ?? "").trim())
+      .sort((a, b) => +a.createdAt - +b.createdAt)
+      .map((g): SpecDecision => ({ anchor: decisionAnchor(g.id), question: g.description.trim(), answer: (g.answer ?? "").trim() }));
+    const [att] = stored?.attachmentId
+      ? await tx.select({ id: attachment.id, name: attachment.name }).from(attachment).where(eq(attachment.id, stored.attachmentId)).limit(1)
       : [];
 
-    const byAnchor = new Map<string, SpecSectionView["tasks"]>();
+    const byAnchor = new Map<string, SpecPiece["tasks"]>();
     for (const l of links) {
       const t = byId.get(l.taskId);
       if (!t || !t.active || t.state === "dropped") continue;
       byAnchor.set(l.anchor, [...(byAnchor.get(l.anchor) ?? []), { id: t.id, seq: t.seq, intent: t.intent, source: l.source }]);
     }
-    const view = sections.map((s): SpecSectionView => ({
-      anchor: s.anchor, kind: s.kind, parentAnchor: s.parentAnchor, title: s.title, body: s.body,
-      correction: s.correctedByGapId && s.correction
-        ? { text: s.correction, gapId: s.correctedByGapId, question: gapById.get(s.correctedByGapId)?.description ?? "" }
-        : null,
-      tasks: (byAnchor.get(s.anchor) ?? []).sort((a, b) => a.seq - b.seq),
-    }));
+    const tasksOf = (a: string) => (byAnchor.get(a) ?? []).sort((x, y) => x.seq - y.seq);
+    const doc = (stored?.doc as SpecDoc | undefined) ?? null;
+    const corrections = (stored?.corrections as SpecCorrection[] | undefined) ?? [];
+    const overruled = doc ? overruledPieces(doc, corrections) : new Set<string>();
+    const pieces: SpecPiece[] = stored
+      ? [
+          ...reqs.map((r): SpecPiece => ({ anchor: r.anchor, kind: "requirement", title: r.title, overruled: overruled.has(r.anchor), tasks: tasksOf(r.anchor) })),
+          ...decisions.map((d): SpecPiece => ({ anchor: d.anchor, kind: "decision", title: d.question, overruled: false, tasks: tasksOf(d.anchor) })),
+        ]
+      : [];
     return {
-      read: sections.length > 0,
+      read: !!stored,
       source: att ? { attachmentId: att.id, name: att.name } : null,
-      sections: view,
-      // A heading is a place in the document, not something a task implements.
-      uncovered: view.filter((s) => s.kind !== "heading" && !s.tasks.length).map((s) => s.anchor),
+      doc,
+      corrections,
+      pieces,
+      decisions,
+      uncovered: pieces.filter((p) => !p.tasks.length && !p.overruled).map((p) => p.anchor),
     };
   });
+  if (view.read) return view;
+  const att = await withTenant(clientId, async (tx) => specAttachment(await tx.select().from(attachment).where(eq(attachment.workitemId, workitemId))));
+  const doc = att ? await readSpecDoc(att).catch(() => null) : null;
+  return { ...view, doc, source: att && doc ? { attachmentId: att.id, name: att.name } : null };
 }
 
-/** What one task implements — the task screen's own list. */
+/** What one task implements — its own list, away from the document. */
 export async function specForTask(clientId: string, taskId: string): Promise<{ anchor: string; title: string; kind: string }[]> {
   return withTenant(clientId, async (tx) => {
     const links = await tx.select().from(taskSpecLink).where(eq(taskSpecLink.taskId, taskId));
@@ -91,128 +116,88 @@ export async function specForTask(clientId: string, taskId: string): Promise<{ a
   });
 }
 
-/* ── what the model is asked to produce, and what is accepted ──────── */
-
-export type SpecRead = {
-  sections: { anchor: string; kind: string; parentAnchor?: string | null; title: string; body?: string }[];
-  links: { seq: number; anchors: string[] }[];
-  corrections?: { anchor: string; decision: number; correction: string }[];
-};
-const KINDS = new Set(["heading", "field", "rule", "mapping", "decision"]);
-/** Anchors are DCC's own ids and are written into links — keep them short, plain and stable. */
-const ANCHOR = /^[a-z0-9][a-z0-9._-]{0,39}$/i;
+/* ── reading the document out of the file ──────────────────────────── */
 
 /**
- * Accept what the model returned, or say exactly what is wrong with it.
- * A link may point at a section the model wrote, or at a decision — whose
- * anchor the system decides and the prompt hands over.
- * Pure — the prove script and the unit test drive it without a database.
+ * The document's own blocks. A .docx is converted to HTML and walked, so its
+ * tables stay tables with the customer's columns; anything else falls back
+ * to the text that was already extracted from it.
  */
-export function checkSpecRead(raw: SpecRead, taskSeqs: number[], decisionAnchors: string[]): { ok: true; value: SpecRead } | { ok: false; why: string } {
-  const sections = raw.sections ?? [];
-  if (!sections.length) return { ok: false, why: "לא הוחזר אף חלק של האפיון" };
-  const seen = new Set<string>();
-  for (const s of sections) {
-    if (!ANCHOR.test(s.anchor ?? "")) return { ok: false, why: `מזהה לא חוקי: ${JSON.stringify(s.anchor)}` };
-    if (seen.has(s.anchor)) return { ok: false, why: `מזהה חוזר פעמיים: ${s.anchor}` };
-    seen.add(s.anchor);
-    if (!KINDS.has(s.kind)) return { ok: false, why: `סוג לא מוכר ב-${s.anchor}: ${s.kind}` };
-    if (!(s.title ?? "").trim()) return { ok: false, why: `אין כותרת ל-${s.anchor}` };
+export async function readSpecDoc(att: { name: string; content: Buffer | null; extractedText: string | null }): Promise<SpecDoc | null> {
+  if (att.content && /\.docx$/i.test(att.name)) {
+    const mammoth = (await import("mammoth")).default;
+    const { value } = await mammoth.convertToHtml({ buffer: att.content });
+    const doc = docFromHtml(value);
+    if (doc.blocks.length) return doc;
   }
-  // "Sits under": a rule under its heading, a field's own requirement under the
-  // field. Any existing section may be the parent — but not itself, and not a
-  // ring, which would make the screen recurse forever.
-  const parentOf = new Map(sections.map((s) => [s.anchor, s.parentAnchor ?? null]));
-  for (const s of sections) {
-    if (!s.parentAnchor) continue;
-    if (!seen.has(s.parentAnchor)) return { ok: false, why: `${s.anchor} יושב תחת חלק שלא קיים: ${s.parentAnchor}` };
-    const walked = new Set<string>([s.anchor]);
-    for (let up = s.parentAnchor; up; up = parentOf.get(up) ?? "") {
-      if (walked.has(up)) return { ok: false, why: `${s.anchor} יושב תחת עצמו, במעגל` };
-      walked.add(up);
-    }
-  }
-  const seqs = new Set(taskSeqs);
-  const linkable = new Set([...seen, ...decisionAnchors]);
-  for (const l of raw.links ?? []) {
-    if (!seqs.has(l.seq)) return { ok: false, why: `אין משימה #${l.seq}` };
-    for (const a of l.anchors ?? []) if (!linkable.has(a)) return { ok: false, why: `משימה #${l.seq} מפנה לחלק שלא קיים: ${a}` };
-  }
-  for (const c of raw.corrections ?? []) {
-    if (!seen.has(c.anchor)) return { ok: false, why: `תיקון מפנה לחלק שלא קיים: ${c.anchor}` };
-    if (c.decision < 1 || c.decision > decisionAnchors.length) return { ok: false, why: `תיקון מפנה להחלטה ${c.decision}, ויש ${decisionAnchors.length}` };
-  }
-  return { ok: true, value: { sections, links: raw.links ?? [], corrections: raw.corrections ?? [] } };
+  const text = (att.extractedText ?? "").trim();
+  return text ? docFromText(text) : null;
 }
 
 /* ── writing it down ───────────────────────────────────────────────── */
 
 /**
- * Replace the requirement's spec index with what was just read. The links a
- * PERSON made by hand survive: they are re-attached when their anchor is
- * still there, and reported when it is not.
+ * Replace the requirement's reading with this one: the document as read,
+ * the requirements in it, the decisions, and who implements what. Links a
+ * PERSON made by hand survive when the piece they point at is still there,
+ * and are counted when it is not.
  */
 export async function saveSpecRead(input: {
-  clientId: string; workitemId: string; attachmentId: string | null; read: SpecRead;
-  /** The decisions, in the order they were given to the model. */
+  clientId: string; workitemId: string; attachmentId: string | null; doc: SpecDoc;
+  read: SpecReadAccepted;
   decisions: { id: string; description: string; answer: string | null }[];
   tasks: { id: string; seq: number }[];
   by: { userId: string };
   source?: "breakdown" | "mapping";
-}): Promise<{ sections: number; links: number; lostManual: number }> {
-  const { clientId, workitemId, read } = input;
+}): Promise<{ requirements: number; links: number; lostManual: number }> {
+  const { clientId, workitemId, read, doc } = input;
   const bySeq = new Map(input.tasks.map((t) => [t.seq, t.id]));
-  const decisionAt = (n: number) => input.decisions[n - 1];
+  const order = docElements(doc);
+  const at = new Map(order.map((e, i) => [e.id, i]));
+  const textOf = new Map(order.map((e) => [e.id, e.text]));
 
   const kept = await withTenant(clientId, async (tx) => {
     const manual = await tx.select().from(taskSpecLink).where(and(eq(taskSpecLink.workitemId, workitemId), eq(taskSpecLink.source, "manual")));
     await tx.delete(taskSpecLink).where(eq(taskSpecLink.workitemId, workitemId));
     await tx.delete(specSection).where(eq(specSection.workitemId, workitemId));
+    await tx.delete(specDocument).where(eq(specDocument.workitemId, workitemId));
+    await tx.insert(specDocument).values({ clientId, workitemId, attachmentId: input.attachmentId, doc, corrections: read.corrections });
 
+    const reqs = [...read.requirements].sort((a, b) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0));
     let ordinal = 0;
-    for (const s of read.sections) {
-      const fix = read.corrections?.find((c) => c.anchor === s.anchor);
-      const d = fix ? decisionAt(fix.decision) : undefined;
+    for (const r of reqs) {
       await tx.insert(specSection).values({
-        clientId, workitemId, anchor: s.anchor, ordinal: ordinal++, kind: s.kind,
-        parentAnchor: s.parentAnchor ?? null, title: s.title.trim(), body: (s.body ?? "").trim(),
-        attachmentId: s.kind === "decision" ? null : input.attachmentId,
-        ...(fix && d ? { correctedByGapId: d.id, correction: fix.correction } : {}),
+        clientId, workitemId, anchor: r.id, ordinal: ordinal++, kind: "requirement",
+        title: r.title.trim(), body: textOf.get(r.id) ?? "", attachmentId: input.attachmentId,
       });
     }
-    // A decision is part of the spec too — one section each, in the order they were closed.
     for (const d of input.decisions) {
-      const anchor = decisionAnchor(d.id);
-      if (read.sections.some((s) => s.anchor === anchor)) continue;
       await tx.insert(specSection).values({
-        clientId, workitemId, anchor, ordinal: ordinal++, kind: "decision",
-        parentAnchor: null, title: d.description.trim(), body: (d.answer ?? "").trim(), gapId: d.id,
+        clientId, workitemId, anchor: decisionAnchor(d.id), ordinal: ordinal++, kind: "decision",
+        title: d.description.trim(), body: (d.answer ?? "").trim(), gapId: d.id,
       });
     }
 
-    const anchors = new Set([...read.sections.map((s) => s.anchor), ...input.decisions.map((d) => decisionAnchor(d.id))]);
+    const anchors = new Set([...reqs.map((r) => r.id), ...input.decisions.map((d) => decisionAnchor(d.id))]);
     let links = 0;
     for (const l of read.links) {
       const taskId = bySeq.get(l.seq);
-      if (!taskId) continue;
-      for (const a of new Set(l.anchors)) {
-        if (!anchors.has(a)) continue;
-        await tx.insert(taskSpecLink).values({ clientId, workitemId, taskId, anchor: a, source: input.source ?? "mapping" }).onConflictDoNothing();
-        links++;
-      }
+      if (!taskId || !anchors.has(l.id)) continue;
+      const added = await tx.insert(taskSpecLink).values({ clientId, workitemId, taskId, anchor: l.id, source: input.source ?? "mapping" }).onConflictDoNothing().returning({ id: taskSpecLink.id });
+      links += added.length;
     }
     let lostManual = 0;
     for (const m of manual) {
       if (!anchors.has(m.anchor)) { lostManual++; continue; }
       await tx.insert(taskSpecLink).values({ clientId, workitemId, taskId: m.taskId, anchor: m.anchor, source: "manual" }).onConflictDoUpdate({ target: [taskSpecLink.taskId, taskSpecLink.anchor], set: { source: "manual" } });
     }
-    return { sections: ordinal, links, lostManual };
+    return { requirements: reqs.length, links, lostManual };
   });
 
   await appendEvent({
     clientId, workitemId, source: "claude_session", type: "note.added",
     actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:spec-map" },
-    payload: { body: `📑 האפיון נקרא ל-${kept.sections} חלקים · ${kept.links} קישורים למשימות${kept.lostManual ? ` · ${kept.lostManual} קישורים ידניים אבדו (החלק שהם הצביעו עליו כבר לא קיים)` : ""}` },
+    payload: { body: `📑 האפיון נקרא: ${kept.requirements} דרישות סומנו במסמך · ${kept.links} קישורים למשימות${read.unsupported.length ? ` · ${read.unsupported.length} קישורים נדחו — ההוראה של המשימה לא אומרת את מה שצוטט ממנה` : ""}${read.corrections.length ? ` · ${read.corrections.length} מקומות שהחלטה גוברת על המסמך` : ""}${kept.lostManual ? ` · ${kept.lostManual} קישורים ידניים אבדו (החלק שהם הצביעו עליו כבר לא קיים)` : ""}` },
   });
   return kept;
 }
@@ -236,9 +221,10 @@ export async function specReadInput(clientId: string, workitemId: string) {
   return withTenant(clientId, async (tx) => {
     const [wi] = await tx.select({ title: workitem.title, key: workitem.key }).from(workitem).where(eq(workitem.id, workitemId)).limit(1);
     const atts = await tx.select().from(attachment).where(eq(attachment.workitemId, workitemId));
-    const doc = atts.filter((a) => (a.extractedText ?? "").trim().length > 0).sort((a, b) => (b.extractedText?.length ?? 0) - (a.extractedText?.length ?? 0))[0] ?? null;
+    const doc = specAttachment(atts);
     const decisions = (await tx.select().from(gap).where(eq(gap.workitemId, workitemId)))
       .filter((g) => g.state === "resolved" && (g.answer ?? "").trim())
+      .sort((a, b) => +a.createdAt - +b.createdAt)
       .map((g) => ({ id: g.id, description: g.description, answer: g.answer }));
     // The work the requirement was actually broken into. DCC's own standard
     // checks (build, tests, regression, e2e) are left out: they verify that the

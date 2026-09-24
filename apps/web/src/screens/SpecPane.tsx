@@ -1,31 +1,21 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
 import { Info } from "../claude/Info.tsx";
-import type { SpecSection, SpecView } from "../api.ts";
+import type { SpecDocLine, SpecPiece, SpecView } from "../api.ts";
 
 /**
- * The requirement's specification, as pieces a task can point at.
+ * The requirement's specification, as it arrived — the customer's own
+ * headings, paragraphs and tables, word for word — and after it every
+ * question that was closed on the requirement, with its answer.
  *
- * It is drawn as the OUTLINE the document already is — the customer's own
- * numbered headings, each holding what belongs under it, foldable, with the
- * same rail the task list uses so the two halves of the screen read alike.
- * A flat stream of boxes was the same information and unreadable: nothing
- * said where "3.9.2 שדות בישות" ended and "3.9.6 פונקציונליות" began.
- *
- * The document's own words stay exactly as they were written: where a closed
- * decision overrules them, the decision's wording sits beside the original —
- * never rewritten, so what the client asked for and what was decided later
- * are both readable.
- *
- * Clicking a piece is how a person asks "who implements this?"; the tasks
- * that do are marked in the view beside it.
+ * What a model added is only marks on top: which rows, cells and lines are
+ * requirements, which task implements each, and where a closed decision
+ * overrules the words. A requirement is clickable ("who implements this?");
+ * one nothing implements is red. An overruled phrase is struck through with
+ * what was decided beside it, and "✎ החלטה" jumps to the question and answer
+ * that decided it — the document itself is never rewritten.
  */
 
-const KIND_HE: Record<string, string> = { field: "שדה", rule: "כלל", mapping: "מיפוי", decision: "החלטה", heading: "" };
-
-/** Decisions carry no parent — they are not part of the document. They get their own place. */
-const DECISIONS = "\u0000decisions";
-
-type Node = { s: SpecSection; kids: Node[] };
+type Fix = { decision: string; from: string; to: string };
 
 export function SpecPane({ spec, hit, picked, onPick }: {
   spec: SpecView;
@@ -35,127 +25,160 @@ export function SpecPane({ spec, hit, picked, onPick }: {
   picked: string | null;
   onPick: (anchor: string) => void;
 }) {
-  const [shut, setShut] = useState<Set<string>>(new Set());
-  const uncovered = useMemo(() => new Set(spec.uncovered), [spec]);
+  const box = useRef<HTMLDivElement>(null);
+  const pieces = useMemo(() => new Map(spec.pieces.map((p) => [p.anchor, p])), [spec]);
   const focused = hit.size > 0 || picked != null;
 
-  /* the document's own outline, in the order it was read */
-  const { roots, decisions } = useMemo(() => {
-    const nodes = new Map(spec.sections.map((s) => [s.anchor, { s, kids: [] } as Node]));
-    const roots: Node[] = [];
-    const decisions: Node[] = [];
-    for (const s of spec.sections) {
-      const n = nodes.get(s.anchor)!;
-      const parent = s.parentAnchor ? nodes.get(s.parentAnchor) : null;
-      if (parent) parent.kids.push(n);
-      else if (s.kind === "decision") decisions.push(n);
-      else roots.push(n);
+  /* Every correction lands on the line that holds its words — or, when the words were not found, on the piece's last line. */
+  const fixesOn = useMemo(() => {
+    const m = new Map<string, Fix[]>();
+    const linesUnder = new Map<string, SpecDocLine[]>();
+    for (const b of spec.doc?.blocks ?? []) {
+      if (b.type === "para") { linesUnder.set(b.id, b.lines); for (const l of b.lines) linesUnder.set(l.id, [l]); }
+      if (b.type === "table") for (const r of b.rows) {
+        linesUnder.set(r.id, r.cells.flatMap((c) => c.lines));
+        for (const c of r.cells) { linesUnder.set(c.id, c.lines); for (const l of c.lines) linesUnder.set(l.id, [l]); }
+      }
     }
-    return { roots, decisions };
+    for (const c of spec.corrections) {
+      const lines = linesUnder.get(c.id) ?? [];
+      const at = (c.from && lines.find((l) => l.text.includes(c.from))) || lines[lines.length - 1];
+      if (at) m.set(at.id, [...(m.get(at.id) ?? []), { decision: c.decision, from: at.text.includes(c.from) ? c.from : "", to: c.to }]);
+    }
+    return m;
   }, [spec]);
 
-  /** Marked, or holding something marked — so a fold does not hide the answer. */
-  const marked = useMemo(() => {
-    const m = new Set<string>();
-    const walk = (n: Node): boolean => {
-      const kids = n.kids.map(walk).some(Boolean);
-      const self = hit.has(n.s.anchor) || picked === n.s.anchor;
-      if (kids || self) m.add(n.s.anchor);
-      return kids || self;
+  /* A heading's depth, ranked among the depths this document uses. */
+  const rankOf = useMemo(() => {
+    const levels = [...new Set((spec.doc?.blocks ?? []).flatMap((b) => (b.type === "heading" ? [b.level] : [])))].sort((a, b) => a - b);
+    return (level: number) => Math.min(levels.indexOf(level) + 1, 3);
+  }, [spec]);
+
+  // A task was chosen: bring the first thing it implements into view.
+  useEffect(() => {
+    if (!hit.size) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    box.current?.querySelector(".sd-a.hit")?.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [hit]);
+
+  const jump = (decision: string) => {
+    onPick(decision);
+    document.getElementById(`sd-${decision}`)?.scrollIntoView({ block: "center" });
+  };
+
+  /** The props that make an element a requirement: its state, and a click that asks who implements it. */
+  const piece = (id: string) => {
+    const p = pieces.get(id);
+    if (!p) return { p: null, cls: "", props: {} };
+    const state = picked === id ? " picked" : hit.has(id) ? " hit" : "";
+    // Struck out entirely by a decision: nothing left to build, so not a gap.
+    const gap = p.tasks.length || p.overruled ? "" : " gap";
+    return {
+      p,
+      cls: `sd-a${state}${gap}${focused && !state && !gap ? " dim" : ""}`,
+      props: {
+        role: "button", tabIndex: 0,
+        title: p.title,
+        onClick: (e: MouseEvent) => { e.stopPropagation(); onPick(id); },
+        onKeyDown: (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onPick(id); } },
+      },
     };
-    [...roots, ...decisions].forEach(walk);
-    return m;
-  }, [roots, decisions, hit, picked]);
+  };
+  /** Who implements it — shown where it matters: on a chosen piece, and on one nothing implements. */
+  const who = (p: SpecPiece | null) => {
+    if (!p || !(picked === p.anchor || hit.has(p.anchor) || (!p.tasks.length && !p.overruled))) return null;
+    if (!p.tasks.length && p.overruled) return null;
+    return p.tasks.length
+      ? <span className="sd-who">{p.tasks.map((t) => <b key={t.id} title={`#${t.seq} ${t.intent}`}>#{t.seq}</b>)}</span>
+      : <span className="sd-who"><i>אף משימה</i></span>;
+  };
 
-  const toggle = (a: string) => setShut((p) => { const n = new Set(p); n.has(a) ? n.delete(a) : n.add(a); return n; });
-
-  const branch = (n: Node, level: number) => {
-    const { s } = n;
-    const open = !shut.has(s.anchor);
-    const dim = focused && !marked.has(s.anchor);
-    const kids = n.kids.length > 0 && open && (
-      <div className="spec-kids">{n.kids.map((k) => branch(k, level + 1))}</div>
+  const words = (l: SpecDocLine): ReactNode => {
+    const fixes = fixesOn.get(l.id);
+    if (!fixes) return l.text;
+    const inline = fixes.find((f) => f.from);
+    const beside = fixes.filter((f) => f !== inline);
+    const button = (f: Fix) => (
+      <button key={`b${f.decision}`} className="sd-fix" type="button" title="ההחלטה שתיקנה את השורה" onClick={(e) => { e.stopPropagation(); jump(f.decision); }}>✎ החלטה</button>
     );
-
-    if (s.kind === "heading") {
-      return (
-        <section className={`spec-sec l${Math.min(level, 2)}${dim ? " dim" : ""}`} key={s.anchor}>
-          {/* no-info: the customer's own heading, read out of their document — DCC has nothing to explain about it */}
-          <button className="spec-h" type="button" aria-expanded={open} onClick={() => toggle(s.anchor)}>
-            <Chevron open={open} />
-            <span className="t">{s.title}</span>
-            <span className="n">{count(n)}</span>
-          </button>
-          {kids}
-        </section>
-      );
+    let body: ReactNode = l.text;
+    if (inline) {
+      const at = l.text.indexOf(inline.from);
+      body = <>{l.text.slice(0, at)}<del>{inline.from}</del> <ins>{inline.to}</ins>{button(inline)}{l.text.slice(at + inline.from.length)}</>;
     }
+    return <>{body}{beside.map((f) => <span key={f.decision}> <ins>{f.to}</ins>{button(f)}</span>)}</>;
+  };
 
-    const state = picked === s.anchor ? " picked" : hit.has(s.anchor) ? " hit" : "";
-    const gap = uncovered.has(s.anchor) ? " gap" : "";
-    return (
-      <div className="spec-item" key={s.anchor}>
-        <div
-          role="button" tabIndex={0}
-          className={`spec-line${state}${gap}${dim && !gap ? " dim" : ""}`}
-          onClick={() => onPick(s.anchor)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onPick(s.anchor); } }}
-          title={s.body && s.body !== s.title ? s.body : undefined}
-        >
-          <div className="spec-top">
-            <span className={`spec-kind k-${s.kind}`}>{KIND_HE[s.kind] ?? s.kind}</span>
-            <span className="spec-title">{s.title}</span>
-            <span className="spacer" />
-            {s.tasks.length > 0
-              ? <span className="spec-who">{s.tasks.map((t) => <b key={t.id} title={`#${t.seq} ${t.intent}`}>#{t.seq}</b>)}</span>
-              : <span className="spec-none">אף משימה</span>}
-          </div>
-          {s.body && s.body !== s.title && <div className="spec-body">{s.body}</div>}
-          {s.correction && (
-            <div className="spec-fix" title={s.correction.question}>
-              ✎ החלטה גוברת על מה שכתוב: <b>{s.correction.text}</b>
-            </div>
-          )}
-        </div>
-        {kids}
-      </div>
-    );
+  const line = (l: SpecDocLine) => {
+    const { p, cls, props } = piece(l.id);
+    return <div key={l.id} className={`sd-line ${cls}`} {...props}>{words(l)}{who(p)}</div>;
   };
 
   return (
-    <div className="spec-doc">
-      {roots.map((r) => branch(r, 0))}
-      {decisions.length > 0 && (
-        <section className={`spec-sec l0${focused && !decisions.some((d) => marked.has(d.s.anchor)) ? " dim" : ""}`}>
-          <button className="spec-h" type="button" aria-expanded={!shut.has(DECISIONS)} onClick={() => toggle(DECISIONS)}>
-            <Chevron open={!shut.has(DECISIONS)} />
-            <span className="t">החלטות שנסגרו על הדרישה</span>
-            <span className="n">{decisions.length}</span>
-          </button>
-          <Info k="spec_decisions" />
-          {!shut.has(DECISIONS) && <div className="spec-kids">{decisions.map((d) => branch(d, 1))}</div>}
-        </section>
+    <div ref={box} className={`sd${focused ? " focused" : ""}`}>
+      {(spec.doc?.blocks ?? []).map((b) => {
+        if (b.type === "heading") {
+          // no-info: the customer's own heading, read out of their document — DCC has nothing to explain about it
+          return <p key={b.id} className={`sd-h l${rankOf(b.level)}`}>{b.text}</p>;
+        }
+        if (b.type === "para") {
+          const { p, cls, props } = piece(b.id);
+          return <div key={b.id} className={`sd-para ${cls}`} {...props}>{b.lines.map(line)}{who(p)}</div>;
+        }
+        return (
+          <div key={b.id} className="sd-tbl">
+            {/* Room for every one of the customer's columns — a wide table scrolls sideways rather than stacking its words a letter a line. */}
+            <table style={{ minWidth: Math.max(b.head.length, ...b.rows.map((r) => r.cells.length)) * 125 }}>
+              {b.head.length > 0 && <thead><tr>{b.head.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>}
+              <tbody>
+                {b.rows.map((r) => {
+                  const row = piece(r.id);
+                  // The row's own marks sit in its first cell that has words after the number.
+                  const chipAt = r.cells.findIndex((c, i) => i > 0 && c.lines.length > 0);
+                  return (
+                    <tr key={r.id} className={row.cls} {...row.props}>
+                      {r.cells.map((c, ci) => {
+                        const cell = piece(c.id);
+                        return (
+                          <td key={c.id} className={cell.cls} {...cell.props}>
+                            {c.lines.map(line)}
+                            {who(cell.p)}
+                            {ci === (chipAt < 0 ? 0 : chipAt) && who(row.p)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+
+      {spec.decisions.length > 0 && (
+        <>
+          <p className="sd-h l1 sd-dech">החלטות שנסגרו על הדרישה<Info k="spec_decisions" /></p>
+          {spec.decisions.map((d) => {
+            const { p, cls, props } = piece(d.anchor);
+            return (
+              <div key={d.anchor} id={`sd-${d.anchor}`} className="sd-dec">
+                <div className={cls} {...props}>
+                  <div className="q">{d.question}{who(p)}</div>
+                  <div className="ans">{d.answer}</div>
+                </div>
+              </div>
+            );
+          })}
+        </>
       )}
     </div>
   );
 }
 
-/** Everything under a heading, however deep — what folding it hides. */
-function count(n: Node): number {
-  return n.kids.reduce((t, k) => t + (k.s.kind === "heading" ? count(k) : 1), 0);
-}
-
-function Chevron({ open }: { open: boolean }) {
-  return (
-    <svg className={`spec-chev${open ? " open" : ""}`} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
 /** The bar above the spec: what it was read from, and how much of it a task implements. */
 export function SpecHead({ spec, note }: { spec: SpecView; note: string }) {
-  const counted = spec.sections.filter((s) => s.kind !== "heading").length;
+  const counted = spec.pieces.filter((p) => !p.overruled).length;
   const covered = counted - spec.uncovered.length;
   return (
     <div className="spec-head">
@@ -164,10 +187,12 @@ export function SpecHead({ spec, note }: { spec: SpecView; note: string }) {
         {spec.source && <span className="spec-src">{spec.source.name}</span>}
       </div>
       <div className="spec-head-row">
-        <span className="spec-cover" title="חלקים באפיון שיש משימה שמממשת אותם">
-          <span className="spec-meter"><i style={{ width: `${counted ? (covered / counted) * 100 : 0}%` }} /></span>
-          {covered}/{counted} מכוסים
-        </span>
+        {spec.read && (
+          <span className="spec-cover" title="דרישות באפיון ובהחלטות שיש משימה שמממשת אותן">
+            <span className="spec-meter"><i style={{ width: `${counted ? (covered / counted) * 100 : 0}%` }} /></span>
+            {covered}/{counted} מכוסות
+          </span>
+        )}
         <span className="spec-note">{note}</span>
       </div>
     </div>

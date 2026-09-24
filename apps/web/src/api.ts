@@ -361,22 +361,32 @@ export type TaskFlowNode = {
   stage: number | null;
 };
 
-/** One addressable piece of the requirement's spec, and who implements it. */
-export type SpecSection = {
+/** The specification document as it arrived (packages/core/src/spec-doc.ts): every row, cell and line has an id. */
+export type SpecDocLine = { id: string; text: string };
+export type SpecDocCell = { id: string; lines: SpecDocLine[] };
+export type SpecDocBlock =
+  | { type: "heading"; id: string; level: number; text: string }
+  | { type: "para"; id: string; lines: SpecDocLine[] }
+  | { type: "table"; id: string; head: string[]; rows: { id: string; cells: SpecDocCell[] }[] };
+/** A requirement marked in the document, or a closed decision — and who implements it. */
+export type SpecPiece = {
   anchor: string;
-  kind: "heading" | "field" | "rule" | "mapping" | "decision";
-  parentAnchor: string | null;
+  kind: "requirement" | "decision";
   title: string;
-  body: string;
-  /** A decision that overrules what the document says here. */
-  correction: { text: string; gapId: string; question: string } | null;
+  /** A closed decision struck out every word of it — nothing is left to build, so it is not a gap. */
+  overruled: boolean;
   tasks: { id: string; seq: number; intent: string; source: string }[];
 };
 export type SpecView = {
-  /** The spec has been read into pieces. Until it has, there is nothing to show beside the tasks. */
+  /** The requirements in the document have been marked. Until they have, there is nothing to show beside the tasks. */
   read: boolean;
   source: { attachmentId: string; name: string } | null;
-  sections: SpecSection[];
+  doc: { blocks: SpecDocBlock[] } | null;
+  /** Where a closed decision overrules the document: `from`, in piece `id`, no longer holds; `to` does. */
+  corrections: { id: string; decision: string; from: string; to: string }[];
+  pieces: SpecPiece[];
+  /** Every question closed on the requirement, with its answer. */
+  decisions: { anchor: string; question: string; answer: string }[];
   /** Anchors no task implements. */
   uncovered: string[];
 };
@@ -384,7 +394,7 @@ export const getSpec = (workitemId: string) => get<SpecView>(`/workitems/${worki
 export const previewSpecMap = (workitemId: string) =>
   get<{ prompt: string; promptHe: string; doc: string | null; tasks: number; decisions: number }>(`/workitems/${workitemId}/spec/preview`);
 export const mapSpec = (workitemId: string) =>
-  post<{ sections: number; links: number; uncovered: number; lostManual: number }>(`/workitems/${workitemId}/spec/map`, {});
+  post<{ requirements: number; links: number; unsupported: number; uncovered: number; lostManual: number }>(`/workitems/${workitemId}/spec/map`, {});
 export const getTaskSpec = (taskId: string) => get<{ anchor: string; title: string; kind: string }[]>(`/tasks/${taskId}/spec`);
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] };

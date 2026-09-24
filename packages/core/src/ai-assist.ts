@@ -21,7 +21,8 @@ import { dependencyBlockers, taskStatus, type CheckKind, type RunPhase, type Sta
 import { flowSteps, gainedDeps, liveCycleState, type FlowBase, type FlowCycle, type FlowStep } from "./task-flow-steps.ts";
 import { describeBuildPlan, findClassicMsbuild, planBuild, runBuildRecipe, type BuildPlan } from "./build-recipe.ts";
 import { taskRelations } from "./task-relations.ts";
-import { checkSpecRead, decisionAnchor, saveSpecRead, specFor, specReadInput, type SpecRead } from "./spec-map.ts";
+import { checkSpecRead, decisionAnchor, readSpecDoc, saveSpecRead, specFor, specReadInput, type SpecRead } from "./spec-map.ts";
+import { docForPrompt } from "./spec-doc.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -2602,39 +2603,48 @@ export async function pendingApprovalCount(clientId: string, workitemId: string)
   return row?.n ?? 0;
 }
 
-/* ── reading a requirement's spec into pieces a task can point at ──── */
+/* ── marking the requirements in a spec, and who implements each ────── */
+
+/** What a task says it does — its title and its instruction. A link's quoted evidence is checked against exactly this. */
+const taskSaid = (t: { intent: string; prompt: string | null }) => {
+  const p = (t.prompt ?? "").trim();
+  return p && p !== t.intent.trim() ? `${t.intent}\n   ${p}` : t.intent;
+};
 
 /** The `spec.map` prompt, filled — the same text the preview shows and the run sends. */
 export async function buildSpecMapPrompt(clientId: string, workitemId: string) {
   const input = await specReadInput(clientId, workitemId);
   if (!input.doc) throw new Error("אין לדרישה מסמך אפיון קריא — צרפו קובץ, או שהטקסט שלו לא חולץ");
   if (!input.tasks.length) throw new Error("הדרישה עוד לא פורקה למשימות — אין מה למפות");
+  const doc = await readSpecDoc(input.doc);
+  if (!doc) throw new Error("לא הצלחתי לקרוא את מסמך האפיון");
   const tmpl = await requirePrompt("spec.map");
   const vars = {
     TITLE: `${input.key ? `${input.key}: ` : ""}${input.title}`,
     DOC_NAME: input.doc.name,
-    SPEC: (input.doc.extractedText ?? "").trim(),
-    // Each decision carries the anchor the system will give it, so a link may point at one.
+    // The document as it arrived, every piece with the id the screen draws it under.
+    SPEC: docForPrompt(doc),
     DECISIONS: input.decisions.length
-      ? input.decisions.map((d, i) => `${i + 1}. [anchor: ${decisionAnchor(d.id)}] ${d.description}\n   → ${d.answer}`).join("\n")
+      ? input.decisions.map((d) => `[${decisionAnchor(d.id)}] ${d.description}\n   → ${d.answer}`).join("\n")
       : "(אין)",
-    TASKS: input.tasks.map((t) => `#${t.seq} [${t.kind}]: ${t.intent}\n   ${((t.prompt ?? "").trim() || t.intent).slice(0, 500)}`).join("\n"),
+    // Each task's WHOLE instruction: a link must quote it, so a cut-off instruction would hide what a task really does.
+    TASKS: input.tasks.map((t) => `#${t.seq} [${t.kind}]: ${taskSaid(t)}`).join("\n\n"),
   };
   return {
     prompt: renderPrompt(tmpl.body, vars),
     promptHe: tmpl.bodyHe ? renderPrompt(tmpl.bodyHe, vars) : renderPrompt(tmpl.body, vars),
     input,
+    doc,
   };
 }
 
 /**
- * Read the spec once for a requirement that was broken down before the
- * index existed, and record which task implements which piece. Refuses
- * what it cannot trust (`checkSpecRead`) rather than writing half an
- * index — a wrong mapping is worse than none, because the screen would
- * then say a line is covered when it is not.
+ * Mark the requirements in the spec once, and record which task implements
+ * which. Refuses what it cannot trust (`checkSpecRead`) rather than writing
+ * half a reading — a wrong mapping is worse than none, because the screen
+ * would then say a line is covered when it is not.
  */
-export async function mapSpecToTasks(input: { clientId: string; workitemId: string; by: Dev; trigger?: CallTrigger }): Promise<{ sections: number; links: number; uncovered: number; lostManual: number }> {
+export async function mapSpecToTasks(input: { clientId: string; workitemId: string; by: Dev; trigger?: CallTrigger }): Promise<{ requirements: number; links: number; unsupported: number; uncovered: number; lostManual: number }> {
   const built = await buildSpecMapPrompt(input.clientId, input.workitemId);
   const r = await firstRepo(input.clientId, input.workitemId);
   const dir = (r ? existingCheckout({ ...r, localPath: null }) : null) ?? process.cwd();
@@ -2643,17 +2653,17 @@ export async function mapSpecToTasks(input: { clientId: string; workitemId: stri
     ledger: {
       clientId: input.clientId, userId: input.by.userId, capability: "decomposition", trigger: input.trigger ?? "button",
       entity: { kind: "workitem", id: input.workitemId }, workitemId: input.workitemId, screen: "requirement",
-      label: `קריאת האפיון לחלקים · ${built.input.title.slice(0, 50)}`,
+      label: `סימון הדרישות באפיון · ${built.input.title.slice(0, 50)}`,
       signals: { mechanical: true },
     },
   });
-  const checked = checkSpecRead(raw, built.input.tasks.map((t) => t.seq), built.input.decisions.map((d) => decisionAnchor(d.id)));
+  const checked = checkSpecRead(raw, built.doc, built.input.tasks.map((t) => ({ seq: t.seq, text: taskSaid(t) })), built.input.decisions.map((d) => decisionAnchor(d.id)));
   if (!checked.ok) throw new Error(`הקריאה של האפיון לא התקבלה: ${checked.why}`);
   const saved = await saveSpecRead({
-    clientId: input.clientId, workitemId: input.workitemId, attachmentId: built.input.doc!.id,
+    clientId: input.clientId, workitemId: input.workitemId, attachmentId: built.input.doc!.id, doc: built.doc,
     read: checked.value, decisions: built.input.decisions, tasks: built.input.tasks, by: input.by, source: "mapping",
   });
   await regenerateBrief(input.clientId, input.workitemId);
   const view = await specFor(input.clientId, input.workitemId);
-  return { ...saved, uncovered: view.uncovered.length };
+  return { ...saved, unsupported: checked.value.unsupported.length, uncovered: view.uncovered.length };
 }
