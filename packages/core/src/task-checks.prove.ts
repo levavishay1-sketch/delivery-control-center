@@ -217,11 +217,11 @@ try {
   check("developed without H: development and checks done, review next", (await steps()) === "develop:done checks:done review:current", await steps());
   check("the dependency tag stays on while it runs and after — red, H has no code", (await statusOf(G.id)).dependency?.tone === "critical");
   await k.develop(H.id);
-  const pending = "develop:done checks:done dependency:current checks:todo review:todo";
+  const pending = "develop:done checks:done dependency:current checks:done review:current";
   check("H has code now: a dependency step comes in as the next thing to do", (await steps()) === pending, await steps());
   check("and the tag turns orange — H has code but is not done", (await statusOf(G.id)).dependency?.tone === "warning");
   await core.rollbackTask({ clientId, workitemId: k.workitemId, taskId: G.id, by });
-  check("after Rollback the dependency step is still the next thing to do", (await steps()) === pending, await steps());
+  check("after Rollback the dependency step is still the next thing to do, and the checks wait: nothing is built to check", (await steps()) === "develop:done checks:done dependency:current checks:todo review:todo", await steps());
   await k.develop(G.id);
   check("run again on H: the dependency step is done, and the checks ran again after it", (await steps()) === "develop:done checks:done dependency:done checks:done review:current", await steps());
   const flowG = await core.taskFlowOf(clientId, G.id);
