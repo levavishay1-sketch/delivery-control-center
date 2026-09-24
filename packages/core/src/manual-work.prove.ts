@@ -75,7 +75,12 @@ try {
   // 4. Each check by hand, and the done gate reads them like any result.
   const [build, tests, regression] = await k.checksOf(M.id);
   const plainCheck = (await k.checksOf(NOT_MARKED.id))[0]!;
-  check("a check of a task nobody marked cannot be set by hand", (await refusal(() => core.setCheckManually({ clientId, checkId: plainCheck.id, result: "passed", by })))?.includes("סומנה כמפותחת ידנית") === true);
+  check("a check of a task nobody has developed yet has nothing to be set on", (await refusal(() => core.setCheckManually({ clientId, checkId: plainCheck.id, result: "passed", by })))?.includes("עוד לא פותחה") === true);
+  // Whoever developed the task, the last word on a check is a person's.
+  await k.develop(NOT_MARKED.id);
+  const claudeCheck = (await k.checksOf(NOT_MARKED.id)).find((c) => c.checkKind === "regression")!;
+  await core.setCheckManually({ clientId, checkId: claudeCheck.id, result: "failed", note: "נבדק ידנית — נפל", by });
+  check("a check of a task Claude developed can be set by hand too", (await k.row(claudeCheck.id)).checkResult === "failed");
   check("a failure needs its reason", (await refusal(() => core.setCheckManually({ clientId, checkId: regression!.id, result: "failed", by })))?.includes("מה נכשל") === true);
   await core.setCheckManually({ clientId, checkId: build!.id, result: "passed", note: "אין קימפול במשימה הזו — סקריפט בלבד", by });
   check("the build passed by hand: the row says so, and a person decided it", (await k.row(build!.id)).checkResult === "passed" && (await k.row(build!.id)).checkResolvedBy === by.userId);
