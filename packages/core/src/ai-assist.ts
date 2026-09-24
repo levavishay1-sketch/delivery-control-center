@@ -19,6 +19,7 @@ import { proposeGap } from "./gaps.ts";
 import { chooseBase, depLabel, type BasePlan, type DependencyFacts } from "./task-base.ts";
 import { dependencyBlockers, taskStatus, type CheckKind, type RunPhase, type StatusFacts, type TaskStatus } from "./task-status.ts";
 import { flowSteps, gainedDeps, type FlowBase, type FlowCycle, type FlowStep } from "./task-flow-steps.ts";
+import { resolveAllBuildRecipes, runBuildRecipe } from "./build-recipe.ts";
 
 /**
  * The AI-assisted steps of the flow. These run through the LOCAL `claude`
@@ -1701,6 +1702,39 @@ const CHECK_CAUSES = ["implementation", "requirement_ambiguity", "dependency_mis
  * says so; one Claude did not report is left "not run". Whatever a check
  * changed in tracked files is put back — a check that changes code proves nothing.
  */
+/**
+ * The build check without AI, for a task whose `compiledComponents` all
+ * resolve to a project file DCC recognizes (build-recipe.ts) — runs the real
+ * build command directly, no model call. Falls back to the existing
+ * AI-driven `runChecksStep` the moment anything is not recognized: same
+ * shape either way, same DB writes, same event log — a person reading the
+ * task's history cannot tell which path ran except by how fast it was.
+ */
+async function runBuildStep(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }, dir: string, owner: TaskRow, checks: TaskRow[], built: TaskBuiltOn | null): Promise<{ summary: string; checks: CheckOutcome[] }> {
+  const c = checks[0];
+  if (checks.length !== 1 || !c) return runChecksStep(input, dir, owner, checks, built);
+  const resolved = resolveAllBuildRecipes(dir, owner.compiledComponents as string[]);
+  if (!resolved.recipes) { pushLine(input.runId, `Build: ${resolved.reason} — עובר לבדיקה עם Claude`); return runChecksStep(input, dir, owner, checks, built); }
+
+  pushLine(input.runId, `Build ישירות (בלי AI): ${resolved.recipes.map((r) => r.tool).join(", ")}`);
+  const runs = await Promise.all(resolved.recipes.map((r) => runBuildRecipe(r)));
+  const passed = runs.every((r) => r.passed);
+  const detail = runs.map((r, i) => `${resolved.recipes![i]!.tool} ${resolved.recipes![i]!.args.at(-1)}:\n${r.out.slice(-2000)}`).join("\n\n");
+  const cause = passed ? null : "implementation" as const;
+
+  await withTenant(input.clientId, (tx) => tx.update(task).set({
+    checkResult: passed ? "passed" : "failed", checkCause: cause, state: passed ? "done" : "pending", updatedAt: new Date(),
+  }).where(eq(task.id, c.id)));
+  await appendEvent({
+    clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
+    actor: { kind: "delegated", userId: input.by.userId, identityType: "delegated", triggeredBy: "dcc:implement" },
+    links: [{ rel: "task", ref: c.id }],
+    payload: { body: `${passed ? "✓" : "✕"} בדיקה #${c.seq} (Build ישירות): ${detail.slice(0, 800)}` },
+  });
+  pushLine(input.runId, `${passed ? "✓" : "✕"} בדיקה #${c.seq} ${c.intent.slice(0, 50)}`);
+  return { summary: `Build ישירות (בלי AI): ${passed ? "עבר" : "נכשל"}`, checks: [{ seq: c.seq, kind: c.checkKind, passed, detail, likelyCause: cause }] };
+}
+
 async function runChecksStep(input: { clientId: string; workitemId: string; by: Dev; runId?: string; trigger?: CallTrigger }, dir: string, owner: TaskRow, checks: TaskRow[], built: TaskBuiltOn | null): Promise<{ summary: string; checks: CheckOutcome[] }> {
   const { prompt } = await buildChecksPrompt(input.clientId, owner, checks, built, dir);
   const res = await runClaudeJson<{ summary?: string; checks?: { seq: number; passed: boolean; detail?: string; likelyCause?: string | null }[] }>(dir, prompt, {
@@ -1820,7 +1854,9 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
     // A check on its own: that one check, on its task's branch, with no write access.
     setPhase(input.runId, "test");
     const ownerBuilt = await taskBuiltOn(input.clientId, branchOwner.id, dir).catch(() => null);
-    const step = await runChecksStep(input, dir, branchOwner, [t], ownerBuilt);
+    const step = t.checkKind === "build"
+      ? await runBuildStep(input, dir, branchOwner, [t], ownerBuilt)
+      : await runChecksStep(input, dir, branchOwner, [t], ownerBuilt);
     await syncTaskStateAfterCheckChange(input.clientId, branchOwner.id, { attempted: true });
     await appendEvent({
       clientId: input.clientId, workitemId: input.workitemId, source: "claude_session", type: "note.added",
@@ -1888,7 +1924,7 @@ async function runImplement(input: { clientId: string; workitemId: string; taskI
   if (buildChecks.length) {
     setPhase(input.runId, "build");
     pushLine(input.runId, "שלב 2 מתוך 3 — Build");
-    outcomes.push(...(await runChecksStep(input, dir, t, buildChecks, built)).checks);
+    outcomes.push(...(await runBuildStep(input, dir, t, buildChecks, built)).checks);
   }
   if (rest.length) {
     if (outcomes.every((o) => o.passed)) {
