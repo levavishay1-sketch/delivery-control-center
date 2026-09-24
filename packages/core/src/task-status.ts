@@ -14,7 +14,7 @@ export type RunPhase = "develop" | "build" | "test";
 
 export type TaskStatusKey =
   | "inactive" | "dropped" | "awaiting_approval" | "awaiting_tfs" | "ready" | "blocked"
-  | "running" | "failed" | "checks_pending" | "waiting_dependency" | "review" | "done"
+  | "running" | "failed" | "build_pending" | "checks_pending" | "waiting_dependency" | "review" | "done"
   // a check row's own status
   | "check_passed" | "check_failed" | "check_waiting" | "check_not_run";
 
@@ -103,11 +103,19 @@ function phaseStatus(f: StatusFacts): TaskStatus {
   // Not started: ready. An open dependency does not change that — it is shown beside the status (dependencyTag).
   if (!f.developed) return { key: "ready", label: "מוכנה לפיתוח", tone: "neutral" };
 
-  // Developed: what is left before it can be closed. Checks that never ran come first —
-  // nothing can be said to wait for a dependency before the checks have said anything.
-  // Not "בעבודה" — that prefix means a run is genuinely going on right now (f.running,
-  // above); this is the opposite, a dormant task nothing is currently doing anything to.
-  const notRun = checks.filter((c) => c.result == null);
+  // Developed: what is left before it can be closed. Build first — it is part of
+  // "פיתוח" (task-flow-steps.ts's own develop step, "כולל Build"), not of "בדיקות":
+  // a task whose build has never run is still IN development, whatever `f.developed`
+  // says (that flag only means some implement run finished; it does not mean the
+  // code has been shown to compile). Reporting it as "waiting for checks" — as if
+  // development were behind it — is exactly the mismatch a real task surfaced.
+  const build = checks.find((c) => c.kind === "build");
+  if (!build || build.result == null) return { key: "build_pending", label: "ממתינה להרצת Build", tone: "warning", reason: "ה-Build — חלק משלב הפיתוח — עדיין לא רץ אף פעם" };
+
+  // Build is done: what is left is the checks after it. Not "בעבודה" — that prefix
+  // means a run is genuinely going on right now (f.running, above); this is the
+  // opposite, a dormant task nothing is currently doing anything to.
+  const notRun = checks.filter((c) => c.kind !== "build" && c.result == null);
   if (notRun.length) return { key: "checks_pending", label: "ממתינה להרצת בדיקות", tone: "warning", reason: `${notRun.length} בדיקות עדיין לא רצו אף פעם — לחצו כדי להריץ אותן` };
   const waiting = checks.filter((c) => c.result === "waiting");
   const available = f.builtWithout.filter((d) => d.available);
