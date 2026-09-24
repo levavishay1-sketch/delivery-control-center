@@ -64,6 +64,12 @@ describe("taskStatus", () => {
     expect(taskStatus(f({ developed: true, checks: std(null, null, null), openDeps: [{ seq: 2, developed: false }] })).key).toBe("checks_pending");
   });
 
+  it("never says 'בעבודה' for checks pending — nothing is running, it is waiting for a click", () => {
+    const s = taskStatus(f({ developed: true, checks: std(null, null, null) }));
+    expect(s.label).not.toContain("בעבודה");
+    expect(s).toMatchObject({ label: "ממתינה להרצת בדיקות", tone: "warning" });
+  });
+
   it("is done when it was closed, and set aside when inactive or dropped", () => {
     expect(taskStatus(f({ state: "done", openDeps: [{ seq: 2, developed: false }] })).key).toBe("done");
     expect(taskStatus(f({ active: false })).key).toBe("inactive");

@@ -105,8 +105,10 @@ function phaseStatus(f: StatusFacts): TaskStatus {
 
   // Developed: what is left before it can be closed. Checks that never ran come first —
   // nothing can be said to wait for a dependency before the checks have said anything.
+  // Not "בעבודה" — that prefix means a run is genuinely going on right now (f.running,
+  // above); this is the opposite, a dormant task nothing is currently doing anything to.
   const notRun = checks.filter((c) => c.result == null);
-  if (notRun.length) return { key: "checks_pending", label: "בעבודה · בדיקות שלא רצו", tone: "active", reason: `${notRun.length} בדיקות עוד לא רצו — הרצה חוזרת תריץ אותן` };
+  if (notRun.length) return { key: "checks_pending", label: "ממתינה להרצת בדיקות", tone: "warning", reason: `${notRun.length} בדיקות עדיין לא רצו אף פעם — לחצו כדי להריץ אותן` };
   const waiting = checks.filter((c) => c.result === "waiting");
   const available = f.builtWithout.filter((d) => d.available);
   if (available.length) return { key: "waiting_dependency", label: "הסתיימה — ממתינה לתלות", tone: "warning", reason: `${refs(available)} פותחה מאז — Rollback והרצה חוזרת כדי לבנות עליה ולהריץ שוב את הבדיקות` };
