@@ -127,8 +127,7 @@ export function SpecPane({ spec, hit, picked, onPick }: {
         }
         return (
           <div key={b.id} className="sd-tbl">
-            {/* Room for every one of the customer's columns — a wide table scrolls sideways rather than stacking its words a letter a line. */}
-            <table style={{ minWidth: Math.max(b.head.length, ...b.rows.map((r) => r.cells.length)) * 125 }}>
+            <table>
               {b.head.length > 0 && <thead><tr>{b.head.map((h, i) => <th key={i}>{h}</th>)}</tr></thead>}
               <tbody>
                 {b.rows.map((r) => {
