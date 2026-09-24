@@ -56,3 +56,4 @@ export {
 export * from "./repo-onboarding/index.ts";
 export { taskStatus, type TaskStatus, type TaskStatusKey, type StatusTone, type CheckKind, type DependencyTag } from "./task-status.ts";
 export type { FlowStep, FlowStepKind, FlowStepState } from "./task-flow-steps.ts";
+export { taskChangedFiles, taskFileVersions } from "./task-files.ts";

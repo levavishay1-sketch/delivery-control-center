@@ -1,12 +1,14 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, addE2ECheck, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
+  getTaskFiles, getTaskFile, type ChangedFile,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
   type FlowRun, type ImplementResult, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck, type TaskFlowStep,
 } from "../api.ts";
 import { CardTitle, PageHead, Pill, PromptPreviewModal, PromptText, TaskStatusPill, DependencyTagPill, CHECK_KIND_HE } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
+import { FileCompare } from "../components/FileCompare.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 
 /**
@@ -171,6 +173,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [addingE2E, setAddingE2E] = useState(false);
   // The same picture the onboarding stages draw, for this task's branch.
   const [codeMap, setCodeMap] = useState<{ codeMap: CodeMap | null; branch: string | null; reason?: string } | null>(null);
+  // What the branch actually changed, live from git — not the last saved run's own
+  // list, which a check-only rerun since then can leave stale (see #50, #51).
+  const [taskFiles, setTaskFiles] = useState<ChangedFile[] | "none" | null>(null);
+  const [openFile, setOpenFile] = useState<string | null>(null);
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
   const [delLoading, setDelLoading] = useState(false);
   const [delAckSubtree, setDelAckSubtree] = useState(false);
@@ -214,14 +220,15 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   }, [id]);
   const loadPrompt = useCallback(() => { previewImplement(id).then(setPromptPreview).catch(() => setPromptPreview(null)); }, [id]);
   const loadCodeMap = useCallback(() => { getTaskCodeMap(id).then(setCodeMap).catch(() => setCodeMap(null)); }, [id]);
+  const loadFiles = useCallback(() => { setOpenFile(null); getTaskFiles(id).then((f) => setTaskFiles(f.length ? f : "none")).catch(() => setTaskFiles(null)); }, [id]);
   const refreshRun = useCallback(async () => {
     try {
       const r = await getTaskRun(id);
-      setRun((prev) => { if (prev?.state === "running" && r.state !== "running") load(); return r; });
+      setRun((prev) => { if (prev?.state === "running" && r.state !== "running") { load(); loadFiles(); } return r; });
     } catch { /* ignore */ }
-  }, [id, load]);
+  }, [id, load, loadFiles]);
 
-  useEffect(() => { load(); refreshRun(); loadPrompt(); loadCodeMap(); }, [load, refreshRun, loadPrompt, loadCodeMap]);
+  useEffect(() => { load(); refreshRun(); loadPrompt(); loadCodeMap(); loadFiles(); }, [load, refreshRun, loadPrompt, loadCodeMap, loadFiles]);
   const running = run?.state === "running";
   useEffect(() => {
     if (!running) return;
@@ -417,7 +424,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     setRollingBack(true); setErr(null); setRollbackMsg(null);
     try {
       const r = await rollbackTask(id);
-      loadCodeMap();
+      loadCodeMap(); loadFiles();
       setRollbackMsg(r.rolledBack ? "✓ שינויי הקוד בוטלו — ה-branch אופס לבסיס. עכשיו אפשר להריץ שוב." : (r.reason ?? "אין מה לבטל."));
       load();
       await refreshRun();
@@ -596,6 +603,38 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         );
       })()}
       {buildResult}
+      {/* Visible here — inside "פיתוח" — even when the task's live status is "ממתינה
+          להרצת Build" (its FLOW step is not "done" yet, exactly right: the build has
+          not verified). Whether the CODE itself was written is a separate, already-true
+          fact, and it belongs where the person actually looks for it. */}
+      {hasCode && (
+        <div className="ob-note" style={{ marginTop: 12, background: "var(--status-healthy-bg)", color: "var(--status-healthy)" }}>
+          ✓ הפיתוח הסתיים — יש קוד אמיתי, על הענף של המשימה, בעותק המבודד.
+        </div>
+      )}
+      {hasCode && (
+        <div className="field" style={{ marginTop: 14 }}>
+          <label>קבצים שהשתנו{Array.isArray(taskFiles) ? ` (${taskFiles.length})` : ""}<Info k="files_changed" /></label>
+          {taskFiles === null && <p className="ob-sub">טוען…</p>}
+          {taskFiles === "none" && <p className="ob-sub">לא נמצאו קבצים ששונו על הענף (מול מה שהיא נבנתה עליו).</p>}
+          {Array.isArray(taskFiles) && (
+            <div className="rowlist" style={{ marginTop: 4 }}>
+              {taskFiles.map((fl) => (
+                <div key={fl.path}>
+                  <div className="row" style={{ cursor: "pointer" }} onClick={() => setOpenFile(openFile === fl.path ? null : fl.path)}>
+                    <span className="title" style={{ fontFamily: "var(--mono)", fontSize: 12, direction: "ltr", textAlign: "left" }}>
+                      {openFile === fl.path ? "▾" : "▸"} {fl.path}
+                    </span>
+                    <span className="spacer" />
+                    <span style={{ fontSize: 11, color: "var(--ink-500)" }}>{fl.status} · +{fl.additions} −{fl.deletions}</span>
+                  </div>
+                  {openFile === fl.path && <div style={{ margin: "4px 0 10px" }}><FileCompare load={() => getTaskFile(id, fl.path)} /></div>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {instructionBlock}
       {promptFold}
       {scopeFold}

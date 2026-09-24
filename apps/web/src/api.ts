@@ -639,6 +639,9 @@ export type CodeMapArrow = { from: string; to: string; label: string; state: "do
 /** The one drawing DCC uses wherever git is involved; built on the server. */
 export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string; problem?: { text: string; folder?: string } };
 export const getTaskCodeMap = (taskId: string) => get<{ codeMap: CodeMap | null; branch: string | null; reason?: string }>(`/tasks/${taskId}/code-map`);
+/** What a task's branch actually changed against what it was built on — same read-only comparison as a pull request's own file list. */
+export const getTaskFiles = (taskId: string) => get<ChangedFile[]>(`/tasks/${taskId}/files`);
+export const getTaskFile = (taskId: string, path: string) => get<FileVersionsData>(`/tasks/${taskId}/file?${new URLSearchParams({ path })}`);
 
 export type PullRequestRow = {
   id: string; provider: "github" | "ado"; number: number; title: string; url: string;

@@ -1312,7 +1312,7 @@ async function defaultBranch(dir: string): Promise<string> {
 /** Where a task's own work starts: the commit recorded when its branch was
  *  created (it may be another task's branch, not the default one) — or, for
  *  a branch made before that was recorded, where it leaves the default branch. */
-async function taskBaseSha(dir: string, branch: string, t: { baseSha: string | null }): Promise<string | null> {
+export async function taskBaseSha(dir: string, branch: string, t: { baseSha: string | null }): Promise<string | null> {
   if (t.baseSha && (await git(["merge-base", "--is-ancestor", t.baseSha, branch], dir)).code === 0) return t.baseSha;
   return (await git(["merge-base", branch, `origin/${await defaultBranch(dir)}`], dir)).out || null;
 }
