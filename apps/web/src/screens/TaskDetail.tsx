@@ -125,7 +125,7 @@ function stepLabel(steps: TaskFlowStep[], i: number): string {
   const s = steps[i]!;
   const again = steps.slice(0, i).some((p) => p.kind === s.kind);
   if (s.kind === "develop") return "פיתוח (כולל Build)";
-  if (s.kind === "dependency") return s.state === "current" ? `${refs(s.deps)} פותחה` : `נבנתה על ${refs(s.deps)}`;
+  if (s.kind === "dependency") return s.pending ? (s.state === "current" ? `${refs(s.deps)} פותחה` : `${refs(s.deps)} פותחה — בלי לבנות מחדש`) : `נבנתה על ${refs(s.deps)}`;
   if (s.kind === "checks") return again ? "בדיקות שוב" : "בדיקות";
   return again ? "סקירה שוב" : "סקירה והחלטה";
 }
@@ -327,9 +327,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     ? { ...d.status, label: `בעבודה · ${run.phase === "build" ? "מקמפלת" : run.phase === "test" ? "בבדיקות" : "בפיתוח"}`, tone: "active" as const, reason: undefined }
     : d.status;
 
-  const steps = d.flow;
+  // A dependency the person chose to go on without is no longer the step in progress: it shows as settled, and the rail moves on.
+  const steps: TaskFlowStep[] = d.flow.map((s) => (s.pending && depAck != null && depAck === (s.deps ?? []).join(",") ? { ...s, state: "done" as const } : s));
   const liveIdx = (() => {
-    const i = steps.findIndex((s) => !s.past && !(s.pending && depAck != null && depAck === (s.deps ?? []).join(",")) && (s.state === "current" || s.state === "failed" || s.state === "waiting"));
+    const i = steps.findIndex((s) => !s.past && (s.state === "current" || s.state === "failed" || s.state === "waiting"));
     if (i >= 0) return i;
     const last = steps.map((s) => s.state !== "todo").lastIndexOf(true);
     return last >= 0 ? last : 0;
