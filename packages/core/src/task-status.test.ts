@@ -59,13 +59,20 @@ describe("taskStatus", () => {
     expect(taskStatus(f({ developed: true, state: "in_progress", checks: std("passed", "passed", "passed") })).key).toBe("review");
   });
 
-  it("says when checks have not run — before anything about its dependencies", () => {
+  it("is still in development — not 'waiting for checks' — while the build itself has never run", () => {
+    // A real task surfaced this: `developed` only means some implement run finished,
+    // not that the code compiled. The FLOW rail's own develop step ("כולל Build")
+    // is not done until the build check has; the status must agree, not skip ahead.
+    expect(taskStatus(f({ developed: true, checks: std(null, null, null) }))).toMatchObject({ key: "build_pending", label: "ממתינה להרצת Build", tone: "warning" });
+    expect(taskStatus(f({ developed: true, checks: std(null, null, null), openDeps: [{ seq: 2, developed: false }] })).key).toBe("build_pending");
+  });
+
+  it("says when the checks after the build have not run — only once the build itself passed", () => {
     expect(taskStatus(f({ developed: true, checks: std("passed", null, null) })).key).toBe("checks_pending");
-    expect(taskStatus(f({ developed: true, checks: std(null, null, null), openDeps: [{ seq: 2, developed: false }] })).key).toBe("checks_pending");
   });
 
   it("never says 'בעבודה' for checks pending — nothing is running, it is waiting for a click", () => {
-    const s = taskStatus(f({ developed: true, checks: std(null, null, null) }));
+    const s = taskStatus(f({ developed: true, checks: std("passed", null, null) }));
     expect(s.label).not.toContain("בעבודה");
     expect(s).toMatchObject({ label: "ממתינה להרצת בדיקות", tone: "warning" });
   });

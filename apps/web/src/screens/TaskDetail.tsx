@@ -468,6 +468,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   );
 
   const checks = d.children.filter((c) => c.kind === "check");
+  // Build is part of "פיתוח" (stage 1 — its own line there, buildResult below), not of
+  // "בדיקות" (stage 2) — its own checklist there must not repeat it as one more check.
+  const nonBuildChecks = checks.filter((c) => c.checkKind !== "build");
   const subtasks = d.children.filter((c) => c.kind !== "check");
   const buildCheck = checks.find((c) => c.checkKind === "build");
   const canRun = !!t.approvedAt && (inTfs || t.kind === "check") && t.active;
@@ -637,7 +640,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         </p>
       )}
       <div className="rowlist">
-        {checks.map((c) => {
+        {nonBuildChecks.map((c) => {
           const isOpen = expandedCheck === c.id;
           const isActive = c.active !== false;
           const o = outcomeOf(c.seq);
