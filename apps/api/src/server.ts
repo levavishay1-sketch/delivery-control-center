@@ -112,6 +112,9 @@ import {
   taskStatusesFor,
   taskStatusOf,
   taskFlowOf,
+  latestDevelopment,
+  checkOutcomesOf,
+  resyncTaskStates,
   ensureStandardChecks,
   ChecksNotPassed,
   setTaskActive,
@@ -173,6 +176,7 @@ import {
   PolicyError,
   scheduleRetention,
   archiveExpiredConversations,
+  type TaskStatus,
 } from "@dcc/core";
 import websocket from "@fastify/websocket";
 import { blocker, gap, task } from "@dcc/db/schema";
@@ -1022,10 +1026,18 @@ app.post("/workitems/:id/flow-run/message", async (req) => {
   return { sent: sendRunMessage(view.id!, text.trim()) };
 });
 
+// Each row with the status a person reads (task-status.ts) — the same one the task screen shows, never the stored state beneath it.
+async function withStatuses<R extends { id: string; requirementId: string }>(clientId: string, rows: R[]): Promise<(R & { status: TaskStatus | null })[]> {
+  const byReq = new Map<string, Record<string, TaskStatus>>();
+  for (const req of new Set(rows.map((r) => r.requirementId))) byReq.set(req, await taskStatusesFor(clientId, req));
+  return rows.map((r) => ({ ...r, status: byReq.get(r.requirementId)?.[r.id] ?? null }));
+}
+
 // org-wide TFS mirror: every client's task hierarchy (Azure DevOps nav screen)
 app.get("/ado-tasks", async (req) => {
   await actingUser(req);
-  return allAdoTasks();
+  const all = await allAdoTasks();
+  return { ...all, clients: await Promise.all(all.clients.map(async (c) => ({ ...c, rows: await withStatuses(c.clientId, c.rows) }))) };
 });
 
 // the client's whole TFS side: every task across every requirement,
@@ -1033,7 +1045,8 @@ app.get("/ado-tasks", async (req) => {
 app.get("/clients/:id/ado-tasks", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
-  return clientTaskTree(id);
+  const tree = await clientTaskTree(id);
+  return { ...tree, rows: await withStatuses(id, tree.rows) };
 });
 
 // the proposed/approved task tree + dependency edges (drawn in the flow tab)
@@ -1041,8 +1054,10 @@ app.get("/workitems/:id/task-flow", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
   const [flow, statuses] = await Promise.all([taskFlowFor(wi.clientId, id), taskStatusesFor(wi.clientId, id)]);
-  // Each card says the task's status as a person reads it (task-status.ts), and each folded check its own.
-  return { ...flow, nodes: flow.nodes.map((n) => ({ ...n, status: statuses[n.id] ?? null, checks: n.checks.map((c) => ({ ...c, status: statuses[c.id] ?? null })) })) };
+  // Each card says the task's status as a person reads it (task-status.ts), and each folded check its own;
+  // and whether it is a group (task-relations.ts) — opened to follow its sub-tasks, never to develop it.
+  const groups = new Set(flow.nodes.filter((n) => n.kind === "task" && n.active && n.parentTaskId).map((n) => n.parentTaskId));
+  return { ...flow, nodes: flow.nodes.map((n) => ({ ...n, isGroup: groups.has(n.id), status: statuses[n.id] ?? null, checks: n.checks.map((c) => ({ ...c, status: statuses[c.id] ?? null })) })) };
 });
 
 // approval done → create the tasks in TFS with their hierarchy + links.
@@ -1066,8 +1081,9 @@ app.get("/tasks/:id", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
   const clientId = await taskClient(id);
-  const [detail, status, flow] = await Promise.all([taskDetail(clientId, id), taskStatusOf(clientId, id), taskFlowOf(clientId, id)]);
-  return { ...detail, status: status.status, checkStatuses: status.checks, flow };
+  const [detail, status, flow, development, checkOutcomes] = await Promise.all([taskDetail(clientId, id), taskStatusOf(clientId, id), taskFlowOf(clientId, id), latestDevelopment(id), checkOutcomesOf(clientId, id)]);
+  // Everything the screen decides by comes from here — it never works a fact out of its own partial data.
+  return { ...detail, status: status.status, checkStatuses: status.checks, statuses: status.statuses, developed: status.developed, subtasks: status.subtasks, development, checkOutcomes, flow };
 });
 
 // the optional end-to-end check — added to one task on request, like the three every task gets
@@ -1669,6 +1685,7 @@ if (import.meta.main) {
   // forever with a stop button that can never reach it.
   recoverFlowRuns().then((n) => { if (n) app.log.warn(`flow runs: ${n} interrupted run(s) recovered after restart`); }).catch((e) => app.log.error(e));
   backfillStandardChecks().then((n) => { if (n) app.log.info(`checks: added the required checks to ${n} task(s) from before they existed`); }).catch((e) => app.log.error(e));
+  resyncTaskStates().then((n) => { if (n) app.log.info(`tasks: ${n} stored state(s) left in failed_checks with nothing failed — brought back in line`); }).catch((e) => app.log.error(e));
   // Retention (claude-in-dcc §9.10): expired conversations lose their text
   // once a day, inside this process — never a second process on the database.
   scheduleRetention(app.log);

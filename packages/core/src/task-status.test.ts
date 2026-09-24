@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dependencyBlockers, dependencyTag, taskStatus, type StatusCheck, type StatusFacts } from "./task-status.ts";
+import { dependencyBlockers, dependencyTag, storedStateAfterChecks, taskStatus, type StatusCheck, type StatusFacts } from "./task-status.ts";
 
 const f = (over: Partial<StatusFacts> = {}): StatusFacts => ({
   kind: "task", state: "pending", active: true, approved: true, inTfs: true, running: null, lastRunError: null, developed: false,
@@ -122,5 +122,56 @@ describe("dependencyBlockers", () => {
     const b = dependencyBlockers({ openDeps: [{ seq: 2, developed: true }], builtWithout: [{ seq: 2, available: true }], onMoved: { seq: 3 } });
     expect(b).toHaveLength(3);
     expect(b[0]).toContain("#2 עוד לא הושלמה");
+  });
+});
+
+describe("a group — a task with sub-tasks, never developed itself", () => {
+  const sub = (seq: number, developed: boolean, done = false) => ({ seq, developed, done });
+  const integration = (result: string | null) => [check(5, null, result)];
+
+  it("follows its sub-tasks while any is not developed — never 'ready to develop' or 'waiting for build'", () => {
+    const s = taskStatus(f({ subtasks: [sub(2, false), sub(3, false)], checks: integration(null) }));
+    expect(s).toMatchObject({ key: "group_open", label: "0/2 תת-משימות הסתיימו", tone: "neutral" });
+    expect(s.reason).toContain("#2, #3 עוד לא פותחה");
+    expect(taskStatus(f({ subtasks: [sub(2, true), sub(3, false)], developed: true })).tone).toBe("active");
+  });
+
+  it("waits for its integration check once every sub-task is developed", () => {
+    expect(taskStatus(f({ subtasks: [sub(2, true), sub(3, true)], developed: true, checks: integration(null) }))).toMatchObject({ key: "checks_pending", label: "ממתינה לבדיקת השילוב" });
+  });
+
+  it("falls on its integration check like any task falls on a check", () => {
+    expect(taskStatus(f({ subtasks: [sub(2, true)], developed: true, checks: integration("failed") }))).toMatchObject({ key: "failed", label: "נפלה בבדיקת השילוב" });
+  });
+
+  it("is ready to close only when every sub-task is done", () => {
+    expect(taskStatus(f({ subtasks: [sub(2, true, true), sub(3, true)], developed: true, checks: integration("passed") })).key).toBe("group_open");
+    expect(taskStatus(f({ subtasks: [sub(2, true, true), sub(3, true, true)], developed: true, checks: integration("passed") }))).toMatchObject({ key: "review", label: "ממתינה לסגירה" });
+  });
+
+  it("goes through the same gates as any task first: approval, TFS", () => {
+    expect(taskStatus(f({ approved: false, subtasks: [sub(2, false)] })).key).toBe("awaiting_approval");
+    expect(taskStatus(f({ inTfs: false, subtasks: [sub(2, false)] })).key).toBe("awaiting_tfs");
+  });
+});
+
+describe("storedStateAfterChecks — the stored coarse state", () => {
+  it("moves to failed_checks only when a check actually failed", () => {
+    expect(storedStateAfterChecks("in_progress", false, 1)).toEqual({ state: "failed_checks", wasDone: false });
+    expect(storedStateAfterChecks("in_progress", false, 0)).toBeNull();
+  });
+
+  it("leaves failed_checks the moment nothing failed — a check not run yet failed nothing", () => {
+    // The live bug: build failed, then passed on a rerun, the tests not run yet — the task stayed failed_checks.
+    expect(storedStateAfterChecks("failed_checks", false, 0)).toEqual({ state: "in_progress", wasDone: false });
+  });
+
+  it("remembers a closed task a failing check reopened, and returns it to done", () => {
+    expect(storedStateAfterChecks("done", false, 1)).toEqual({ state: "failed_checks", wasDone: true });
+    expect(storedStateAfterChecks("failed_checks", true, 0)).toEqual({ state: "done", wasDone: false });
+  });
+
+  it("never touches a dropped task", () => {
+    expect(storedStateAfterChecks("dropped", false, 3)).toBeNull();
   });
 });

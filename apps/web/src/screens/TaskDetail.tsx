@@ -3,7 +3,7 @@ import {
   getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, addE2ECheck, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
   getTaskFiles, getTaskFile, type ChangedFile,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
-  type FlowRun, type ImplementResult, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck, type TaskFlowStep,
+  type FlowRun, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck, type TaskFlowStep,
 } from "../api.ts";
 import { CardTitle, PageHead, Pill, PromptPreviewModal, PromptText, TaskStatusPill, DependencyTagPill, CHECK_KIND_HE } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
@@ -40,6 +40,12 @@ const Transcript = ({ lines }: { lines: string[] }) => {
 };
 
 const depName = (x: { seq: number; intent: string }) => `#${x.seq} — ${x.intent.slice(0, 70)}`;
+/** How a dependency reached the task (task-relations.ts): through a group it depends on, a check it depends on, or its own group. */
+const VIA_HE: Record<"group" | "check" | "parent", (seq: number) => string> = {
+  group: (s) => `· תת-משימה של הקבוצה #${s}`,
+  check: (s) => `· דרך בדיקה #${s}`,
+  parent: (s) => `· תלות של הקבוצה #${s}`,
+};
 const refs = (xs: number[] = []) => xs.map((s) => `#${s}`).join(", ");
 const fmtDay = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("he-IL", { day: "numeric", month: "numeric" }) : "");
 
@@ -193,7 +199,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [sending, setSending] = useState(false);
   // when set, the modal's confirm targets this check's own id (e.g. "run the Build again"),
   // not the task's — reuses the same preview+confirm gate instead of a second copy of it.
-  const [sendTarget, setSendTarget] = useState<{ id: string; label: string } | null>(null);
+  const [sendTarget, setSendTarget] = useState<{ id: string; label: string; build?: boolean } | null>(null);
   const [checkBusy, setCheckBusy] = useState<string | null>(null);
   // the full prompt, one fold away inside the development step
   const [promptPreview, setPromptPreview] = useState<{ prompt: string; promptHe: string; approved: boolean } | null>(null);
@@ -270,7 +276,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       "המשימה": d.task.intent, "מספר": d.task.seq, "סוג": d.task.kind === "check" ? "בדיקה" : "משימה", "סטטוס": d.status.label, "גודל": d.task.appetite,
       "אושרה": d.task.approvedAt ? "כן" : "עדיין לא", "ב-TFS": d.task.linkedAdoId ? `#${d.task.linkedAdoId}` : "עוד לא הוקמה", "הדרישה": d.requirement.title,
       "משימת אב": d.parent ? `#${d.parent.seq}: ${d.parent.intent}` : "(אין)",
-      "תלויה ב": d.blockedBy.map((t) => `#${t.seq}: ${t.intent} (${t.state === "done" ? "הושלמה" : "לא הושלמה"})`), "מאגרים": d.repos.map((r) => r.name),
+      "תלויה ב": d.blockedBy.map((t) => `#${t.seq}: ${t.intent} (${d.statuses[t.id]?.label ?? t.state})`), "קבוצה": d.isGroup ? `כן — ${d.subtasks.filter((x) => x.done).length}/${d.subtasks.length} תת-משימות הסתיימו; לא מפותחת בעצמה` : "לא", "מאגרים": d.repos.map((r) => r.name),
       ...(d.status.dependency ? { "תג התלות": `${d.status.dependency.label} — ${d.status.dependency.reason}` } : {}),
       ...(builtOn && (builtOn.on || builtOn.missing.length) ? {
         [builtOn.state === "built" ? "נבנתה על גבי" : "תיבנה על גבי"]: builtOn.on ? `הענף של #${builtOn.on.seq}: ${builtOn.on.intent}` : "הענף הראשי",
@@ -288,9 +294,12 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   if (!d) return <div className="spin">טוען…</div>;
   const t = d.task;
   const inTfs = t.linkedAdoId != null;
-  const impl = run?.state === "done" && run.kind === "implement" ? (run.result as unknown as ImplementResult | null) : null;
-  const hasCode = run?.state === "done" && run.kind === "implement";
-  const attempted = run !== null && run.kind === "implement" && run.state !== "running" && run.state !== "idle";
+  // The server's facts, never this screen's own reading of the last run: a later
+  // run that errored, or one check rerun on its own, does not undo development in place.
+  const impl = d.development;
+  const hasCode = d.developed && !d.isGroup;
+  const attempted = hasCode || (run?.kind === "implement" && run.state === "error");
+  const groupReady = d.isGroup && d.subtasks.every((s) => s.developed || s.done);
   // While a run is going on the status follows it step by step; the rest of the time it is the server's.
   const status = running && run?.kind === "implement" && t.kind === "task"
     ? { ...d.status, label: `בעבודה · ${run.phase === "build" ? "מקמפלת" : run.phase === "test" ? "בבדיקות" : "בפיתוח"}`, tone: "active" as const, reason: undefined }
@@ -310,7 +319,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
   // Step 1 of the gate: fetch the exact prompt and open the preview. Targets the
   // task itself by default; a specific check (e.g. "run the Build again") when given.
-  const openSend = async (target?: { id: string; label: string }) => {
+  const openSend = async (target?: { id: string; label: string; build?: boolean }) => {
     setErr(null); setSendErr(null); setSendData(null); setSendTarget(target ?? null); setSendOpen(true); setSendLoading(true);
     try { setSendData(await previewImplement(target?.id ?? id)); }
     catch (e) { setSendErr(String(e)); }
@@ -480,8 +489,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const nonBuildChecks = checks.filter((c) => c.checkKind !== "build");
   const subtasks = d.children.filter((c) => c.kind !== "check");
   const buildCheck = checks.find((c) => c.checkKind === "build");
-  const canRun = !!t.approvedAt && (inTfs || t.kind === "check") && t.active;
-  const outcomeOf = (seq: number) => impl?.checks?.find((c) => c.seq === seq);
+  const canRun = !!t.approvedAt && (inTfs || t.kind === "check") && t.active && !d.isGroup;
+  const outcomeOf = (seq: number) => { const c = checks.find((x) => x.seq === seq); return c ? d.checkOutcomes[c.id] : undefined; };
 
   /* ── the panes, one per kind of step ─────────────────────────────── */
 
@@ -563,6 +572,31 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     </Fold>
   );
 
+  // What the task's branch changed, live from git — the one list, in development and in review alike.
+  const changedFiles = (
+    <div className="field" style={{ marginTop: 14 }}>
+      <label>קבצים שהשתנו{Array.isArray(taskFiles) ? ` (${taskFiles.length})` : ""}<Info k="files_changed" /></label>
+      {taskFiles === null && <p className="ob-sub">טוען…</p>}
+      {taskFiles === "none" && <p className="ob-sub">המשימה לא שינתה אף קובץ (מול מה שהיא נבנתה עליו).</p>}
+      {Array.isArray(taskFiles) && (
+        <div className="rowlist" style={{ marginTop: 4 }}>
+          {taskFiles.map((fl) => (
+            <div key={fl.path}>
+              <div className="row" style={{ cursor: "pointer" }} onClick={() => setOpenFile(openFile === fl.path ? null : fl.path)}>
+                <span className="title" style={{ fontFamily: "var(--mono)", fontSize: 12, direction: "ltr", textAlign: "left" }}>
+                  {openFile === fl.path ? "▾" : "▸"} {fl.path}
+                </span>
+                <span className="spacer" />
+                <span style={{ fontSize: 11, color: "var(--ink-500)" }}>{fl.status} · +{fl.additions} −{fl.deletions}</span>
+              </div>
+              {openFile === fl.path && <div style={{ margin: "4px 0 10px" }}><FileCompare load={() => getTaskFile(id, fl.path)} /></div>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
   // Shown whenever the check row exists — including "לא רצה עדיין" (never run at all,
   // e.g. a task developed before this pipeline existed): that fact is itself worth
   // seeing, and it is exactly when a person most needs the button to just run it,
@@ -574,7 +608,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       {hasCode && !running && (
         <span style={{ display: "inline-flex", alignItems: "center", gap: 2, marginInlineStart: 6 }}>
           <button className="btn btn-secondary btn-sm" disabled={checkBusy === buildCheck.id}
-            onClick={() => openSend({ id: buildCheck.id, label: "Build" })}>
+            onClick={() => openSend({ id: buildCheck.id, label: "Build", build: true })}>
             {checkBusy === buildCheck.id ? "מריץ Build…" : buildCheck.checkResult ? "🔁 הרץ Build שוב" : "▶ הרץ Build"}
           </button>
           <Info k="task_rebuild_check" />
@@ -609,32 +643,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
           fact, and it belongs where the person actually looks for it. */}
       {hasCode && (
         <div className="ob-note" style={{ marginTop: 12, background: "var(--status-healthy-bg)", color: "var(--status-healthy)" }}>
-          ✓ הפיתוח הסתיים — יש קוד אמיתי, על הענף של המשימה, בעותק המבודד.
+          ✓ הפיתוח הסתיים{taskFiles === "none" ? " — בלי שינוי בקבצים." : " — השינויים על הענף של המשימה, בעותק המבודד."}
         </div>
       )}
-      {hasCode && (
-        <div className="field" style={{ marginTop: 14 }}>
-          <label>קבצים שהשתנו{Array.isArray(taskFiles) ? ` (${taskFiles.length})` : ""}<Info k="files_changed" /></label>
-          {taskFiles === null && <p className="ob-sub">טוען…</p>}
-          {taskFiles === "none" && <p className="ob-sub">לא נמצאו קבצים ששונו על הענף (מול מה שהיא נבנתה עליו).</p>}
-          {Array.isArray(taskFiles) && (
-            <div className="rowlist" style={{ marginTop: 4 }}>
-              {taskFiles.map((fl) => (
-                <div key={fl.path}>
-                  <div className="row" style={{ cursor: "pointer" }} onClick={() => setOpenFile(openFile === fl.path ? null : fl.path)}>
-                    <span className="title" style={{ fontFamily: "var(--mono)", fontSize: 12, direction: "ltr", textAlign: "left" }}>
-                      {openFile === fl.path ? "▾" : "▸"} {fl.path}
-                    </span>
-                    <span className="spacer" />
-                    <span style={{ fontSize: 11, color: "var(--ink-500)" }}>{fl.status} · +{fl.additions} −{fl.deletions}</span>
-                  </div>
-                  {openFile === fl.path && <div style={{ margin: "4px 0 10px" }}><FileCompare load={() => getTaskFile(id, fl.path)} /></div>}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {hasCode && changedFiles}
       {instructionBlock}
       {promptFold}
       {scopeFold}
@@ -741,6 +753,64 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     </>
   );
 
+  // Closing — the one control, the same for a developed task and for a group.
+  const closeBlock = (
+    <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, marginTop: 16 }}>
+      {t.state === "done" ? (
+        <>
+          <p style={{ fontSize: 13.5, color: "var(--status-healthy)", marginBottom: reopenOpen ? 10 : 0 }}>✓ המשימה סומנה כהושלמה.</p>
+          {!reopenOpen ? (
+            <a onClick={() => setReopenOpen(true)} style={{ fontSize: 12, color: "var(--ink-500)", cursor: "pointer" }}>↩ פתח מחדש</a>
+          ) : (
+            <div className="field">
+              {/* no-info: the label says what is being asked and where the answer is kept */}
+              <label>למה לפתוח מחדש? (יישמר בהיסטוריית הדרישה)</label>
+              <textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2} placeholder="למשל: נמצא באג, נדרש שינוי נוסף, וכו׳"
+                style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button className="btn btn-secondary" disabled={reopening || !reopenReason.trim()}
+                  onClick={async () => {
+                    setReopening(true);
+                    try { await progressTask(t.id, { to: "in_progress", clientId: t.clientId, reopenReason }); setReopenOpen(false); setReopenReason(""); load(); }
+                    catch (e) { setErr(String(e)); }
+                    finally { setReopening(false); }
+                  }}>
+                  {reopening ? "פותח…" : "↩ פתח מחדש עם הסיבה הזו"}
+                </button>
+                <button className="btn btn-secondary" onClick={() => { setReopenOpen(false); setReopenReason(""); }}>ביטול</button>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 10 }}>
+            {d.isGroup ? "לסמן שהקבוצה נגמרה — אחרי שכל תת-המשימות שלה נסגרו. קבוצה תלויה נסגרת רק אחרי שהתלות שלה הושלמה." : "לסמן שהעבודה של DCC על המשימה הזו נגמרה. אפשר גם בלי push — לא כל משימה מסתיימת בקוד. משימה תלויה נסגרת רק אחרי שהתלות שלה הושלמה."}
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-primary" disabled={completing} onClick={() => markDone(false)}>{completing ? "מסמן…" : "סמן כהושלם"}</button>
+            {doneErr && !overrideReasonOpen && (
+              <button className="btn btn-secondary" disabled={completing} onClick={() => setOverrideReasonOpen(true)} style={{ color: "var(--status-critical)" }}>אשר ידנית למרות זאת</button>
+            )}
+          </div>
+          {overrideReasonOpen && (
+            <div className="field" style={{ marginTop: 10 }}>
+              {/* no-info: the label says what is being asked and where the answer is kept */}
+              <label>למה לאשר בכל זאת? (יישמר בהיסטוריית הדרישה)</label>
+              <textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2} placeholder="למשל: הבדיקה החסומה כבר לא רלוונטית, הוחלט לוותר עליה, וכו׳"
+                style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }} />
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button className="btn btn-secondary" disabled={completing || !overrideReason.trim()} onClick={() => markDone(true)} style={{ color: "var(--status-critical)" }}>{completing ? "מאשר…" : "✓ אשר עם הסיבה הזו"}</button>
+                <button className="btn btn-secondary" onClick={() => { setOverrideReasonOpen(false); setOverrideReason(""); }}>ביטול</button>
+              </div>
+            </div>
+          )}
+          {doneErr && <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 8, whiteSpace: "pre-wrap" }}>{doneErr}</p>}
+        </>
+      )}
+    </div>
+  );
+
   const reviewPane = (
     <>
       {impl ? (
@@ -748,14 +818,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
           <CardTitle as="h3" info="task_result" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</CardTitle>
           <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
 
-          {impl.filesChanged.length > 0 && (
-            <div className="field" style={{ marginBottom: 10 }}>
-              <label>קבצים שהשתנו ({impl.filesChanged.length})<Info k="files_changed" /></label>
-              <div style={{ fontFamily: "var(--mono)", fontSize: 11.5, background: "var(--surface-muted)", padding: "8px 10px", borderRadius: 7, direction: "ltr", textAlign: "left" }}>
-                {impl.filesChanged.map((f) => <div key={f}>{f}</div>)}
-              </div>
-            </div>
-          )}
+          <div style={{ marginBottom: 10 }}>{changedFiles}</div>
           {impl.affectedConsumers?.length > 0 && (
             <div className="field" style={{ marginBottom: 10 }}>
               {/* no-info: the sentence under it is the explanation */}
@@ -829,60 +892,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         <p style={{ fontSize: 12.5, color: "var(--ink-500)", marginBottom: 12 }}>אין עדיין הרצה שהסתיימה — אין מה לסקור.</p>
       )}
 
-      <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 14, marginTop: 16 }}>
-        {t.state === "done" ? (
-          <>
-            <p style={{ fontSize: 13.5, color: "var(--status-healthy)", marginBottom: reopenOpen ? 10 : 0 }}>✓ המשימה סומנה כהושלמה.</p>
-            {!reopenOpen ? (
-              <a onClick={() => setReopenOpen(true)} style={{ fontSize: 12, color: "var(--ink-500)", cursor: "pointer" }}>↩ פתח מחדש</a>
-            ) : (
-              <div className="field">
-                {/* no-info: the label says what is being asked and where the answer is kept */}
-                <label>למה לפתוח מחדש? (יישמר בהיסטוריית הדרישה)</label>
-                <textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2} placeholder="למשל: נמצא באג, נדרש שינוי נוסף, וכו׳"
-                  style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }} />
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-secondary" disabled={reopening || !reopenReason.trim()}
-                    onClick={async () => {
-                      setReopening(true);
-                      try { await progressTask(t.id, { to: "in_progress", clientId: t.clientId, reopenReason }); setReopenOpen(false); setReopenReason(""); load(); }
-                      catch (e) { setErr(String(e)); }
-                      finally { setReopening(false); }
-                    }}>
-                    {reopening ? "פותח…" : "↩ פתח מחדש עם הסיבה הזו"}
-                  </button>
-                  <button className="btn btn-secondary" onClick={() => { setReopenOpen(false); setReopenReason(""); }}>ביטול</button>
-                </div>
-              </div>
-            )}
-          </>
-        ) : (
-          <>
-            <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 10 }}>
-              לסמן שהעבודה של DCC על המשימה הזו נגמרה. אפשר גם בלי push — לא כל משימה מסתיימת בקוד. משימה תלויה נסגרת רק אחרי שהתלות שלה הושלמה.
-            </p>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="btn btn-primary" disabled={completing} onClick={() => markDone(false)}>{completing ? "מסמן…" : "סמן כהושלם"}</button>
-              {doneErr && !overrideReasonOpen && (
-                <button className="btn btn-secondary" disabled={completing} onClick={() => setOverrideReasonOpen(true)} style={{ color: "var(--status-critical)" }}>אשר ידנית למרות זאת</button>
-              )}
-            </div>
-            {overrideReasonOpen && (
-              <div className="field" style={{ marginTop: 10 }}>
-                {/* no-info: the label says what is being asked and where the answer is kept */}
-                <label>למה לאשר בכל זאת? (יישמר בהיסטוריית הדרישה)</label>
-                <textarea value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} rows={2} placeholder="למשל: הבדיקה החסומה כבר לא רלוונטית, הוחלט לוותר עליה, וכו׳"
-                  style={{ width: "100%", fontSize: 12.5, padding: "7px 10px", border: "1px solid var(--border-hairline)", borderRadius: 8 }} />
-                <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                  <button className="btn btn-secondary" disabled={completing || !overrideReason.trim()} onClick={() => markDone(true)} style={{ color: "var(--status-critical)" }}>{completing ? "מאשר…" : "✓ אשר עם הסיבה הזו"}</button>
-                  <button className="btn btn-secondary" onClick={() => { setOverrideReasonOpen(false); setOverrideReason(""); }}>ביטול</button>
-                </div>
-              </div>
-            )}
-            {doneErr && <p style={{ fontSize: 12, color: "var(--status-critical)", marginTop: 8, whiteSpace: "pre-wrap" }}>{doneErr}</p>}
-          </>
-        )}
-      </div>
+      {closeBlock}
     </>
   );
 
@@ -907,16 +917,19 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     return reviewPane;
   };
 
+  // A build never goes through Claude — known before its preview has even loaded.
+  const direct = sendData?.deterministic ?? (!!sendTarget?.build || (!sendTarget && t.checkKind === "build"));
+
   return (
     <>
       {sendOpen && (
         <PromptPreviewModal
-          title={sendData?.deterministic ? `${sendTarget?.label ?? "Build"} — הרצה ישירה` : sendTarget ? `הרצה חוזרת — ${sendTarget.label}` : attempted ? "הרצה חוזרת — פיתוח המשימה" : "תן ל-Claude לפתח את המשימה"}
-          data={sendData} loading={sendLoading} error={sendErr} deterministic={sendData?.deterministic}
+          title={direct ? `${sendTarget?.label ?? "Build"} — הרצה ישירה` : sendTarget ? `הרצה חוזרת — ${sendTarget.label}` : attempted ? "הרצה חוזרת — פיתוח המשימה" : "תן ל-Claude לפתח את המשימה"}
+          data={sendData} loading={sendLoading} error={sendErr} deterministic={direct}
           loadingHint="מביא עותק עבודה של ה-repository — בפעם הראשונה, או על רשת איטית, זה יכול לקחת כמה דקות…"
           onClose={() => { setSendOpen(false); setSendData(null); setSendErr(null); setSendTarget(null); }}
           onConfirm={confirmSend} confirming={sending}
-          confirmLabel={sendData?.deterministic ? `✦ הרץ ${sendTarget?.label ?? "Build"} ישירות` : sendTarget ? `✦ הרץ ${sendTarget.label} שוב` : "✦ שלח ל-Claude, תתחיל לפתח"}
+          confirmLabel={direct ? `✦ הרץ ${sendTarget?.label ?? "Build"} ישירות` : sendTarget ? `✦ הרץ ${sendTarget.label} שוב` : "✦ שלח ל-Claude, תתחיל לפתח"}
         />
       )}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginBottom: 10 }}>
@@ -1006,7 +1019,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                 {delReport.subtree.filter((n) => n.id !== t.id).map((n) => (
                   <div className="row" key={n.id} style={{ fontSize: 12 }}>
                     <span>
-                      #{n.seq} {n.kind === "check" ? "✓ בדיקה" : "משימה"} · {STATE_HE[n.state] ?? n.state}
+                      #{n.seq} {n.kind === "check" ? "✓ בדיקה" : "משימה"} · {d.statuses[n.id]?.label ?? STATE_HE[n.state] ?? n.state}
                       {n.linkedAdoId ? <> · {n.adoUrl ? <a href={n.adoUrl} target="_blank" rel="noreferrer" style={{ color: "var(--status-healthy)" }}>TFS #{n.linkedAdoId} ↗</a> : `TFS #${n.linkedAdoId}`}</> : ""}
                       {n.commitCount ? ` · ${n.commitCount} commits` : ""}
                     </span>
@@ -1126,18 +1139,71 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
             <div key={b.id} className={`dep-row ${b.state === "done" ? "closed" : "open"}`}>
               <span className="dot" />
               <span className="w-title" onClick={() => nav(`#/task/${b.id}`)}>#{b.seq} — {b.intent.slice(0, 90)}</span>
+              {b.via && <span style={{ fontSize: 11, color: "var(--ink-500)", whiteSpace: "nowrap" }}>{VIA_HE[b.via.through](b.via.seq)}</span>}
               <span className="spacer" style={{ flex: 1 }} />
-              <span style={{ fontSize: 11.5, color: b.state === "done" ? "var(--status-active)" : "var(--status-critical)", whiteSpace: "nowrap" }}>{b.state === "done" ? "הושלמה" : STATE_HE[b.state] ?? b.state}</span>
+              {d.statuses[b.id] && <TaskStatusPill status={d.statuses[b.id]!} />}
             </div>
           ))}
           {d.blockedBy.some((b) => b.state !== "done") && (
-            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 8 }}>אפשר לפתח בכל זאת — המשימה נסגרת רק אחרי שכל התלויות הושלמו.</p>
+            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 8 }}>{d.isGroup ? "תת-המשימות של הקבוצה מחכות לתלויות האלה גם הן — ואפשר לפתח אותן בכל זאת. הקבוצה נסגרת רק אחרי שכל התלויות הושלמו." : "אפשר לפתח בכל זאת — המשימה נסגרת רק אחרי שכל התלויות הושלמו."}</p>
           )}
-          {builtOn && (builtOn.on || builtOn.missing.length > 0) && <BuiltOnCard b={builtOn} nav={nav} />}
+          {builtOn && !d.isGroup && (builtOn.on || builtOn.missing.length > 0) && <BuiltOnCard b={builtOn} nav={nav} />}
         </Card>
       )}
 
-      {t.approvedAt && t.kind === "task" && steps.length > 0 && (
+      {t.approvedAt && d.isGroup && (
+        <div className="panel" style={{ padding: 16, marginBottom: 16 }}>
+          <p className="section-lbl" style={{ marginBottom: 8 }}>קבוצה — העבודה היא תת-המשימות<Info k="task_group" /></p>
+          <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
+            למשימה הזו יש תת-משימות, ולכן היא לא מפותחת בעצמה: כל תת-משימה מפותחת, נבנית ונבדקת בנפרד, באותו תהליך בדיוק. הבדיקות של הקבוצה בודקות את כולן יחד, ואחרי שכל תת-המשימות נסגרו — סוגרים את הקבוצה.
+          </p>
+          {d.developed && Array.isArray(taskFiles) && (
+            <div className="ob-note warn" style={{ marginBottom: 12 }}>
+              <b>⚠ הקבוצה פותחה בעבר גם בעצמה</b>
+              <div style={{ marginTop: 4 }}>יש לה ענף עם קוד משלה — עבודה שתת-המשימות שלה עושות גם כן, ולכן היא כפולה ועלולה להתנגש איתן. מומלץ Rollback: הוא מבטל רק את הענף של הקבוצה, לא את תת-המשימות.</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+                <button className="btn btn-secondary btn-sm" disabled={rollingBack} onClick={rollback} style={{ color: "var(--status-critical)" }}>{rollingBack ? "מבטל…" : "↩ Rollback לענף של הקבוצה"}</button>
+                <Info k="rollback" />
+              </div>
+              {rollbackMsg && <div style={{ marginTop: 6, fontSize: 12 }}>{rollbackMsg}</div>}
+            </div>
+          )}
+          <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({subtasks.length})<Info k="subtasks" /></p>
+          <div className="rowlist" style={{ marginBottom: 14 }}>
+            {subtasks.map((c) => (
+              <div className="row" key={c.id}>
+                <span className="title w-title" onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent}</span>
+                <span className="spacer" />
+                {d.statuses[c.id] ? <TaskStatusPill status={d.statuses[c.id]!} /> : <Pill tone="inactive">{STATE_HE[c.state] ?? c.state}</Pill>}
+              </div>
+            ))}
+          </div>
+          {checks.length > 0 && (
+            <>
+              <p className="section-lbl" style={{ marginBottom: 6 }}>בדיקות הקבוצה ({checks.length})<Info k="group_check" /></p>
+              <div className="rowlist" style={{ marginBottom: 6 }}>
+                {checks.map((c) => (
+                  <div className="row" key={c.id} style={{ opacity: c.active === false ? 0.55 : 1 }}>
+                    <span className="title w-title" onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent.slice(0, 90)}</span>
+                    <span className="spacer" />
+                    {d.checkStatuses[c.id] && <TaskStatusPill status={d.checkStatuses[c.id]!} />}
+                    {c.active !== false && t.active && (
+                      <button className="btn btn-secondary btn-sm" style={{ marginInlineStart: 8 }} disabled={!groupReady || checkBusy === c.id}
+                        title={groupReady ? undefined : "נפתח אחרי שכל תת-המשימות פותחו"} onClick={() => openSend({ id: c.id, label: `בדיקה #${c.seq}` })}>
+                        {checkBusy === c.id ? "רצה…" : c.checkResult ? "🔁 הרץ שוב" : "▶ הרץ"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {!groupReady && <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginBottom: 6 }}>הבדיקות של הקבוצה רצות על העבודה של כל תת-המשימות יחד — הן נפתחות אחרי שכולן פותחו.</p>}
+            </>
+          )}
+          {closeBlock}
+        </div>
+      )}
+
+      {t.approvedAt && t.kind === "task" && !d.isGroup && steps.length > 0 && (
         <div className="panel" style={{ padding: 0, marginBottom: 16 }}>
           <TaskFlowRail steps={steps} active={activeIdx} onPick={setManualStep} />
           <div style={{ padding: 16 }}>
@@ -1154,32 +1220,22 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       {t.approvedAt && t.kind === "check" && (
         <div className="panel" style={{ padding: 16, marginBottom: 16 }}>
           <p className="section-lbl" style={{ marginBottom: 8 }}>הרצת הבדיקה<Info k="check" /></p>
-          <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>קלוד מריץ את הבדיקה על הענף של המשימה שהיא שייכת לה, בלי הרשאה לשנות קבצים.</p>
+          <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12 }}>
+            {t.checkKind === "build"
+              ? "ה-Build רץ ישירות, בלי Claude: הפרויקטים שמכילים את מה שהמשימה שינתה נבנים בפקודה האמיתית שלהם. לפני ההרצה רואים בדיוק מה ירוץ."
+              : "קלוד מריץ את הבדיקה על הענף של המשימה שהיא שייכת לה, בלי הרשאה לשנות קבצים."}
+          </p>
           {runControls(attempted ? "✦ הרץ את הבדיקה שוב" : "✦ הרץ את הבדיקה")}
           {impl && <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", marginTop: 12 }}>{impl.summary}</p>}
-          {instructionBlock}
+          {t.checkKind !== "build" && instructionBlock}
         </div>
       )}
 
-      {(subtasks.length > 0 || d.blocks.length > 0) && (
+      {d.blocks.length > 0 && (
         <Card>
-          {subtasks.length > 0 && (
-            <>
-              <p className="section-lbl" style={{ marginBottom: 6 }}>תת-משימות ({subtasks.length})<Info k="subtasks" /></p>
-              <div className="rowlist">
-                {subtasks.map((c) => (
-                  <div className="row" key={c.id}>
-                    <span className="title w-title" onClick={() => nav(`#/task/${c.id}`)}>#{c.seq} {c.intent}</span>
-                    <span className="spacer" />
-                    <Pill tone={c.state === "done" ? "healthy" : "inactive"}>{STATE_HE[c.state] ?? c.state}</Pill>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-          {d.blocks.length > 0 && (
-            <p style={{ fontSize: 11.5, color: "var(--ink-500)", marginTop: 10 }}>{d.blocks.length} משימות מחכות לזו: {d.blocks.map((b) => `#${b.seq}`).join(", ")}</p>
-          )}
+          <p style={{ fontSize: 11.5, color: "var(--ink-500)" }}>
+            {d.blocks.length} מחכות לזו: {d.blocks.map((b) => (b.kind === "check" ? `בדיקה #${b.seq}` : `#${b.seq}`)).join(", ")}
+          </p>
         </Card>
       )}
     </>

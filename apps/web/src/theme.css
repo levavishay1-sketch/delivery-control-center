@@ -143,6 +143,10 @@ a { color: var(--color-accent); }
 .btn-primary:hover { background: var(--color-accent-dark); }
 .btn-secondary { background: var(--surface); color: var(--ink-700); border: 1px solid var(--border-hairline); }
 .btn-secondary:hover { background: var(--surface-muted); }
+/* A button that cannot be pressed now looks it — everywhere, not per screen. */
+.btn:disabled { opacity: .5; cursor: not-allowed; box-shadow: none; }
+.btn-primary:disabled:hover { background: var(--color-accent); }
+.btn-secondary:disabled:hover { background: var(--surface); }
 .btn-destructive { background: var(--status-critical-bg); color: var(--status-critical); border: 1px solid rgb(220 38 38 / 0.18); }
 .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
 

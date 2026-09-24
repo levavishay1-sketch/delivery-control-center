@@ -54,6 +54,8 @@ export type Task = {
   /** Set only when a human overrode/decided on the result directly — a
    *  null here with a checkResult present means "Claude's report, as-is". */
   checkResolvedBy: string | null;
+  /** Check-kind rows only — build / tests / regression / e2e, or null for a check the breakdown proposed. */
+  checkKind: string | null;
   origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[]; compiledComponents: string[];
   parentTaskId: string | null; adoType: string | null; linkedAdoId: number | null; adoUrl: string | null;
   prompt: string | null;
@@ -351,6 +353,8 @@ export type TaskFlowNode = {
   prompt: string | null; origin: "ai" | "human"; approvedAt: string | null; adoSyncedAt: string | null;
   checks: { id: string; seq: number; intent: string; state: string; checkKind: string | null; status: TaskStatus | null }[];
   status: TaskStatus | null;
+  /** A task with sub-tasks — its work is theirs; it is never developed itself. */
+  isGroup: boolean;
 };
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] };
@@ -361,6 +365,8 @@ export type AdoTaskRow = {
   adoType: string | null; linkedAdoId: number | null; adoUrl: string | null; adoSyncedAt: string | null;
   approved: boolean; active: boolean; parentTaskId: string | null; level: number;
   checksCount: number; checksPosted: number;
+  /** Its status as a person reads it — the same one the task screen shows. */
+  status: TaskStatus | null;
 };
 export type AdoTasks = { rows: AdoTaskRow[]; inTfs: number; pending: number };
 export const getClientAdoTasks = (clientId: string) => get<AdoTasks>(`/clients/${clientId}/ado-tasks`);
@@ -532,12 +538,25 @@ export type TaskDetail = {
   requirement: { id: string; key: string | null; title: string; phase: string; clientId: string };
   parent: { id: string; seq: number; intent: string; adoType: string | null } | null;
   children: TaskSlim[];
-  blockedBy: TaskSlim[];
+  /** The developed tasks it waits for — through a group, a check or its own group too, as `via` says. */
+  blockedBy: (TaskSlim & { via?: { through: "group" | "check" | "parent"; seq: number } })[];
   blocks: TaskSlim[];
+  /** A task with sub-tasks — its work is theirs; it is never developed itself. */
+  isGroup: boolean;
   repos: { id: string; name: string; adoRepoRef: string | null }[];
   status: TaskStatus;
   /** Each check's own status, by its id. */
   checkStatuses: Record<string, TaskStatus>;
+  /** Every row of the requirement, by id — a dependency or a sub-task is named the way its own screen names it. */
+  statuses: Record<string, TaskStatus>;
+  /** Development of this row itself is in place (finished, not rolled back). For a group — it never should be. */
+  developed: boolean;
+  /** What that development said it did. */
+  development: ImplementResult | null;
+  /** A group only: its sub-tasks, developed and done. */
+  subtasks: { seq: number; developed: boolean; done: boolean }[];
+  /** What each check said the last time it ran — its own rerun or the task's run, whichever was later. By check id. */
+  checkOutcomes: Record<string, NonNullable<ImplementResult["checks"]>[number] & { at: string }>;
   flow: TaskFlowStep[];
 };
 export const getTask = (id: string) => get<TaskDetail>(`/tasks/${id}`);

@@ -1,38 +1,27 @@
 /**
- * A build check without AI, for the common case: given a component name
- * (from the breakdown's `compiledComponents`), find its project file in the
- * repository and run the real build command directly — no model call, no
- * guessing the tool from scratch on every run. Falls back to `null` for
- * anything it does not recognize; the caller keeps the existing AI-driven
- * check for that case. First step of the wishlist item "make the build
- * check deterministic" — small on purpose: extend the detector list, not
- * the mechanism, when a new ecosystem shows up.
+ * The build check, without AI, for every task the same way: build the
+ * projects that hold the files the task actually changed, and the compiled
+ * components the breakdown named for it — with the real command, no model
+ * call. A task that changed no compiled file has nothing to build, and says
+ * so; a changed source file DCC does not know how to build is said plainly
+ * too, rather than handed to a model to guess. Extend the detectors here,
+ * not the mechanism, when a new ecosystem shows up.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 
-export type BuildRecipe = { tool: string; command: string; args: string[]; cwd: string };
-export type ResolveResult = { component: string; recipe: BuildRecipe } | { component: string; recipe: null; reason: string };
+export type BuildRecipe = { tool: string; command: string; args: string[]; cwd: string; project: string };
 
-const SKIP_DIRS = new Set(["node_modules", ".git", "bin", "obj", "dist", "build", ".vs"]);
+export type BuildPlan =
+  | { kind: "build"; recipes: BuildRecipe[]; notes: string[] }
+  | { kind: "nothing"; reason: string }
+  | { kind: "cannot"; reason: string };
 
-/** Every file under `dir` whose name matches `fileName`, case-insensitively. Skips build output and VCS dirs. */
-function findFiles(dir: string, fileName: string, depth = 8): string[] {
-  const out: string[] = [];
-  const want = fileName.toLowerCase();
-  const walk = (d: string, left: number) => {
-    if (left <= 0) return;
-    let entries: import("node:fs").Dirent[];
-    try { entries = readdirSync(d, { withFileTypes: true }); } catch { return; }
-    for (const e of entries) {
-      if (e.isDirectory()) { if (!SKIP_DIRS.has(e.name)) walk(path.join(d, e.name), left - 1); }
-      else if (e.name.toLowerCase() === want) out.push(path.join(d, e.name));
-    }
-  };
-  walk(dir, depth);
-  return out;
-}
+const DOTNET_PROJECT = /\.(csproj|vbproj|fsproj)$/i;
+/** Source that only means something once compiled — a change to it outside any known project cannot be shown to build. */
+const MUST_COMPILE = /\.(cs|vb|fs|java|kt|scala|go|rs|c|cc|cpp|cxx|h|hpp|swift)$/i;
+const dirOf = (rel: string) => (rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "");
 
 /**
  * SDK-style (`<Project Sdk="...">`, `dotnet build` works directly) vs legacy
@@ -61,34 +50,103 @@ export function findClassicMsbuild(): string | null {
   return null;
 }
 
-/** One component: find its project file and decide the real command to build it — or say why not. */
-export function resolveBuildRecipe(dir: string, component: string): ResolveResult {
-  const csprojes = findFiles(dir, `${component}.csproj`);
-  if (csprojes.length === 1) {
-    const file = csprojes[0]!;
-    const xml = readFileSync(file, "utf8");
-    const hasPackagesConfig = existsSync(path.join(path.dirname(file), "packages.config"));
-    const kind = classifyCsproj(xml, hasPackagesConfig);
-    if (kind === "sdk") return { component, recipe: { tool: "dotnet", command: "dotnet", args: ["build", file], cwd: dir } };
-    const msbuild = findClassicMsbuild();
-    if (!msbuild) return { component, recipe: null, reason: `${component} הוא פרויקט .NET ישן (ToolsVersion/packages.config) שצריך MSBuild קלאסי — לא נמצא במחשב הזה` };
-    return { component, recipe: { tool: "msbuild", command: msbuild, args: [file, "-nologo", "-verbosity:quiet"], cwd: dir } };
-  }
-  if (csprojes.length > 1) return { component, recipe: null, reason: `כמה קבצי .csproj בשם ${component} — לא ברור איזה` };
+type PlanInput = {
+  /** Where the branch is checked out when the build runs. */
+  dir: string;
+  /** Every tracked file on the task's branch, repository-relative with "/". */
+  files: string[];
+  /** What the task's own commits changed, same form. */
+  changed: string[];
+  /** The compiled components the breakdown named — the projects the change is shipped in (e.g. a plugin that merges a changed library). */
+  declared: string[];
+  /** A tracked file's content on the branch. */
+  read: (rel: string) => Promise<string | null>;
+  msbuild: string | null;
+};
 
-  const pkgJson = findFiles(dir, "package.json").find((f) => JSON.parse(readFileSync(f, "utf8"))?.name === component);
-  if (pkgJson) {
-    const pkg = JSON.parse(readFileSync(pkgJson, "utf8")) as { scripts?: Record<string, string> };
-    if (pkg.scripts?.build) return { component, recipe: { tool: "npm", command: "npm", args: ["run", "build"], cwd: path.dirname(pkgJson) } };
-    return { component, recipe: null, reason: `${component} (package.json) אין לו script בשם build` };
-  }
-  return { component, recipe: null, reason: `לא נמצא קובץ פרויקט בשם ${component}` };
+const buildScript = async (read: PlanInput["read"], rel: string) => {
+  try { return !!(JSON.parse((await read(rel)) ?? "{}") as { scripts?: Record<string, string> }).scripts?.build; } catch { return false; }
+};
+
+/** The command that builds one project file — or why it cannot be built here. */
+async function recipeFor(input: PlanInput, rel: string): Promise<BuildRecipe | string> {
+  const abs = path.join(input.dir, rel);
+  if (rel.toLowerCase().endsWith("package.json")) return { tool: "npm", command: "npm", args: ["run", "build"], cwd: path.dirname(abs), project: rel };
+  const hasPackagesConfig = input.files.includes(`${dirOf(rel) ? `${dirOf(rel)}/` : ""}packages.config`);
+  if (classifyCsproj((await input.read(rel)) ?? "", hasPackagesConfig) === "sdk") return { tool: "dotnet", command: "dotnet", args: ["build", abs], cwd: input.dir, project: rel };
+  if (!input.msbuild) return `${rel} הוא פרויקט .NET ישן (ToolsVersion/packages.config) שצריך MSBuild קלאסי — לא נמצא במחשב הזה`;
+  return { tool: "msbuild", command: input.msbuild, args: [abs, "-nologo", "-verbosity:quiet"], cwd: input.dir, project: rel };
 }
 
-/** Runs one recipe directly — no AI, no shell. Captures combined output and the exit code. */
+/**
+ * What building this task means. The project of each changed file is the
+ * nearest folder above it with a project file (.csproj/.vbproj/.fsproj, or a
+ * package.json with a build script); the named components are found by name.
+ */
+export async function planBuild(input: PlanInput): Promise<BuildPlan> {
+  if (!input.changed.length) return { kind: "nothing", reason: "המשימה לא שינתה אף קובץ" };
+  const byDir = new Map<string, string[]>();
+  for (const f of input.files) {
+    if (!DOTNET_PROJECT.test(f) && !/(^|\/)package\.json$/i.test(f)) continue;
+    const d = dirOf(f);
+    byDir.set(d, [...(byDir.get(d) ?? []), f]);
+  }
+
+  const projects: string[] = [];
+  const notes: string[] = [];
+  const add = (p: string) => { if (!projects.includes(p)) projects.push(p); };
+
+  for (const file of input.changed) {
+    let found: string | null = null;
+    let settled = false;
+    for (let d = dirOf(file); !settled; d = dirOf(d)) {
+      const here = byDir.get(d) ?? [];
+      const dotnet = here.filter((f) => DOTNET_PROJECT.test(f));
+      if (dotnet.length > 1) return { kind: "cannot", reason: `בתיקייה ${d || "/"} יש כמה קבצי פרויקט (${dotnet.join(", ")}) — לא ברור לאיזה מהם ${file} שייך` };
+      if (dotnet.length === 1) { found = dotnet[0]!; settled = true; break; }
+      const pkg = here.find((f) => /package\.json$/i.test(f));
+      // A package without a build script is not compiled — its files have nothing to build.
+      if (pkg) { if (await buildScript(input.read, pkg)) found = pkg; settled = true; break; }
+      if (!d) break;
+    }
+    if (found) add(found);
+    else if (!settled && MUST_COMPILE.test(file)) return { kind: "cannot", reason: `DCC לא מזהה איך לבנות את ${file} — הוא לא בתוך פרויקט שהוא מכיר (.csproj / package.json)` };
+  }
+
+  for (const name of input.declared) {
+    const dotnet = input.files.filter((f) => DOTNET_PROJECT.test(f) && path.posix.basename(f).replace(DOTNET_PROJECT, "").toLowerCase() === name.toLowerCase());
+    if (dotnet.length > 1) return { kind: "cannot", reason: `כמה קבצי פרויקט בשם ${name} (${dotnet.join(", ")}) — לא ברור איזה לבנות` };
+    if (dotnet.length === 1) { add(dotnet[0]!); continue; }
+    let pkg: string | null = null;
+    for (const f of input.files.filter((x) => /(^|\/)package\.json$/i.test(x))) {
+      try { if ((JSON.parse((await input.read(f)) ?? "{}") as { name?: string }).name === name) { pkg = f; break; } } catch { /* not JSON */ }
+    }
+    if (pkg && (await buildScript(input.read, pkg))) add(pkg);
+    else notes.push(`הרכיב ${name} שהוגדר למשימה לא נמצא במאגר כפרויקט שנבנה — לא נבנה`);
+  }
+
+  if (!projects.length) return { kind: "nothing", reason: "הקבצים שהשתנו לא שייכים לאף פרויקט שמתקמפל (למשל הגדרות או תיעוד)" };
+  const recipes: BuildRecipe[] = [];
+  for (const p of projects) {
+    const r = await recipeFor(input, p);
+    if (typeof r === "string") return { kind: "cannot", reason: r };
+    recipes.push(r);
+  }
+  return { kind: "build", recipes, notes };
+}
+
+/** The plan as a person reads it before running it: the exact commands, or why there are none. */
+export function describeBuildPlan(plan: BuildPlan): string {
+  if (plan.kind === "nothing") return `אין מה לבנות: ${plan.reason}`;
+  if (plan.kind === "cannot") return `אי אפשר לבנות כאן: ${plan.reason}`;
+  return [...plan.recipes.map((r) => `${r.command} ${r.args.join(" ")}`), ...plan.notes.map((n) => `(${n})`)].join("\n");
+}
+
+/** Runs one recipe directly — no AI. Captures combined output and the exit code. */
 export function runBuildRecipe(recipe: BuildRecipe, timeoutMs = 600_000): Promise<{ passed: boolean; out: string }> {
   return new Promise((resolve) => {
-    const p = spawn(recipe.command, recipe.args, { cwd: recipe.cwd, windowsHide: true });
+    // npm is a .cmd on Windows, which Node only starts through a shell; its arguments here are fixed words.
+    const p = spawn(recipe.command, recipe.args, { cwd: recipe.cwd, windowsHide: true, shell: recipe.tool === "npm" && process.platform === "win32" });
     let out = "";
     let done = false;
     const finish = (r: { passed: boolean; out: string }) => { if (!done) { done = true; clearTimeout(killer); resolve(r); } };
@@ -98,13 +156,4 @@ export function runBuildRecipe(recipe: BuildRecipe, timeoutMs = 600_000): Promis
     p.on("error", (e) => finish({ passed: false, out: `${recipe.command} לא נמצא: ${e.message}` }));
     p.on("close", (code) => finish({ passed: code === 0, out: out.trim() }));
   });
-}
-
-/** Every compiled component of a task — recipes for all of them, or null the moment one is not recognized (the caller falls back to the AI check for the whole build, not a mix). */
-export function resolveAllBuildRecipes(dir: string, components: string[]): { recipes: BuildRecipe[] } | { recipes: null; reason: string } {
-  if (!components.length) return { recipes: null, reason: "אין compiledComponents למשימה" };
-  const results = components.map((c) => resolveBuildRecipe(dir, c));
-  const missed = results.find((r): r is { component: string; recipe: null; reason: string } => r.recipe === null);
-  if (missed) return { recipes: null, reason: missed.reason };
-  return { recipes: results.map((r) => r.recipe!) };
 }

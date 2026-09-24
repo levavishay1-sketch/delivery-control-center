@@ -762,7 +762,9 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                           <>
                             <div style={{ fontSize: 12.5, marginBottom: 6 }}>{n.intent}</div>
                             {n.kind !== "check" && (
-                              <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => nav(`#/task/${n.id}`)}>פתח את המשימה ותן ל-Claude לפתח ←</a>
+                              <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => nav(`#/task/${n.id}`)}>
+                                {n.isGroup ? "פתח את הקבוצה — העבודה בתת-המשימות שלה ←" : "פתח את המשימה ותן ל-Claude לפתח ←"}
+                              </a>
                             )}
                           </>
                         ) : (
