@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, addE2ECheck, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
-  getTaskFiles, getTaskFile, type ChangedFile,
+  getTaskFiles, getTaskFile, type ChangedFile, getTaskOverlaps, mergeDependency, type TaskOverlap, type MergeResult,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
   setTaskManual, reportManualWork, cancelManualReport, setCheckManually, CUSTOMISATION_TEMPLATE, getTaskRunLog, type TaskRunRecord,
   type FlowRun, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck, type TaskFlowStep,
@@ -186,6 +186,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   // list, which a check-only rerun since then can leave stale (see #50, #51).
   const [taskFiles, setTaskFiles] = useState<ChangedFile[] | "none" | "nobranch" | null>(null);
   // Which changed files are open — any number, each shown whole.
+  // Other tasks of the requirement that changed the same files, and what merging a dependency into this task said.
+  const [overlaps, setOverlaps] = useState<TaskOverlap[]>([]);
+  const [merging, setMerging] = useState<string | null>(null);
+  const [mergeOutcome, setMergeOutcome] = useState<(MergeResult & { seq: number }) | null>(null);
   const [openFiles, setOpenFiles] = useState<Set<string>>(new Set());
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
   const [delLoading, setDelLoading] = useState(false);
@@ -242,7 +246,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   }, [id]);
   const loadPrompt = useCallback(() => { previewImplement(id).then(setPromptPreview).catch(() => setPromptPreview(null)); }, [id]);
   const loadCodeMap = useCallback(() => { getTaskCodeMap(id).then(setCodeMap).catch(() => setCodeMap(null)); }, [id]);
-  const loadFiles = useCallback(() => { setOpenFiles(new Set()); getTaskFiles(id).then((f) => setTaskFiles(f === null ? "nobranch" : f.length ? f : "none")).catch(() => setTaskFiles(null)); }, [id]);
+  const loadFiles = useCallback(() => { getTaskOverlaps(id).then(setOverlaps).catch(() => setOverlaps([])); setOpenFiles(new Set()); getTaskFiles(id).then((f) => setTaskFiles(f === null ? "nobranch" : f.length ? f : "none")).catch(() => setTaskFiles(null)); }, [id]);
   const refreshRun = useCallback(async () => {
     try {
       const r = await getTaskRun(id);
@@ -625,7 +629,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   );
 
   // What the task's branch changed, live from git — the one list, in development and in review alike.
-  const changedFiles = (
+  const filesBlock = (
     <div className="field" style={{ marginTop: 14 }}>
       <label>קבצים שהשתנו{Array.isArray(taskFiles) ? ` (${taskFiles.length})` : ""}<Info k="files_changed" /></label>
       {taskFiles === null && <p className="ob-sub">טוען…</p>}
@@ -677,6 +681,35 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   );
 
   // The person's own development: they say what they did, and mark the build and the checks by hand.
+  const doMerge = async (dependencyId: string, seq: number) => {
+    setMerging(dependencyId); setErr(null); setMergeOutcome(null);
+    try {
+      const r = await mergeDependency(id, dependencyId);
+      setMergeOutcome({ ...r, seq });
+      load(); loadFiles();
+    } catch (e) { setErr(String(e)); }
+    finally { setMerging(null); }
+  };
+
+  const overlapsBlock = overlaps.length > 0 && (
+    <div className="field" style={{ marginTop: 14 }}>
+      <label>משימות שנגעו באותם קבצים<Info k="task_overlaps" /></label>
+      {overlaps.map((o) => (
+        <div key={o.id} className="ob-note" style={{ marginTop: 6, ...(o.merge && !o.merge.clean ? { background: "var(--status-critical-bg)", color: "var(--status-critical)" } : {}) }}>
+          <b>#{o.seq}</b> — {o.intent.slice(0, 70)}
+          <div style={{ fontSize: 12, marginTop: 4, direction: "ltr", textAlign: "left" }}>{o.files.join(", ")}</div>
+          <div style={{ fontSize: 12.5, marginTop: 4 }}>
+            {o.inOneLine ? "אחת מהן כבר מכילה את העבודה של השנייה — אין מה למזג."
+              : o.merge === null ? "לא הצלחתי לבדוק אם אפשר למזג אותן."
+              : o.merge.clean ? `אפשר למזג אותן בלי קונפליקט.${o.relation === "none" ? " אין ביניהן תלות — אם אחת צריכה לבוא אחרי השנייה, כדאי להגדיר תלות." : ""}`
+              : `מיזוג ביניהן יתנגש בקבצים: ${o.merge.conflictFiles.join(", ")}.${o.relation === "none" ? " אין ביניהן תלות — כדאי להגדיר תלות כדי שאחת תיבנה על השנייה." : " Rollback והרצה חוזרת של המאוחרת יבנו אותה על הקודמת."}`}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+  const changedFiles = <>{filesBlock}{overlapsBlock}</>;
+
   const manualDevelopPane = (
     <>
       <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
@@ -771,6 +804,19 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       )}
       {rollbackMsg && <p style={{ fontSize: 12, color: "var(--ink-500)", margin: "6px 0" }}>{rollbackMsg}</p>}
       <div style={{ marginTop: 8, ...(hasCode && !running ? { opacity: 0.55, pointerEvents: "none" as const } : {}) }}>{runControls("✦ הרץ שוב")}</div>
+      {!running && hasCode && s.deps && d.blockedBy.some((b) => s.deps!.includes(b.seq)) && (
+        <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #e5e7eb)" }}>
+          <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 8 }}>או — בלי לפתח מחדש: לצרף את העבודה של התלות לענף של המשימה (מיזוג). אם אין קונפליקט, המשימה נחשבת בנויה עליה והבדיקות ירוצו שוב על הקוד המשולב.<Info k="merge_dependency" /></p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {d.blockedBy.filter((b) => s.deps!.includes(b.seq)).map((b) => (
+              <button key={b.id} className="btn btn-secondary" disabled={merging !== null} onClick={() => doMerge(b.id, b.seq)}>{merging === b.id ? "ממזג…" : `⇄ מזג את #${b.seq} לענף של המשימה`}</button>
+            ))}
+          </div>
+          {mergeOutcome && (mergeOutcome.merged
+            ? <p style={{ fontSize: 12.5, color: "var(--status-healthy)", marginTop: 8 }}>✓ {mergeOutcome.already ? `העבודה של #${mergeOutcome.seq} כבר בענף של המשימה.` : `העבודה של #${mergeOutcome.seq} מוזגה בלי קונפליקט. הבדיקות נוקו — הריצו אותן שוב.`}</p>
+            : <div className="ob-note crit" style={{ marginTop: 8 }}>{mergeOutcome.reason}{mergeOutcome.conflictFiles.length > 0 && <div style={{ marginTop: 4, direction: "ltr", textAlign: "left", fontSize: 12 }}>{mergeOutcome.conflictFiles.join(", ")}</div>}</div>)}
+        </div>
+      )}
       {!running && hasCode && (() => {
         // The checks only mean something once the code builds: with a failed build there is nothing to go on to.
         const nextChecks = steps.find((x, i) => i > activeIdx && x.kind === "checks");
@@ -793,6 +839,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
           </div>
         );
       })()}
+      {hasCode && overlapsBlock}
       {instructionBlock}
       {promptFold}
     </>
@@ -814,6 +861,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
         אחרי שה-Build עובר רצות בדיקות הפיתוח והרגרסיה — בלי הרשאה לשנות קבצים. בדיקה שצריכה עבודה של תלות שעוד לא קיימת מסומנת "מחכה לתלות", לא "נכשלה".
       </p>
       {running && run?.phase === "test" && <div style={{ marginBottom: 10 }}>{runControls("")}</div>}
+      {hasCode && overlapsBlock}
       {s.note && <p style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>תוצאות: {s.note}<Info k="check_results" /></p>}
       {/* impl.skipped is from the last saved run — worth showing only while the build is STILL
           failing live; a check-only rerun since then (e.g. "🔁 הרץ Build שוב") can make this

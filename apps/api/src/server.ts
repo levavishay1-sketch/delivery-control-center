@@ -82,7 +82,7 @@ import {
   rollbackTask,
   pushTask,
   codeMapForTask,
-  taskChangedFiles,
+  taskChangedFiles, taskOverlaps, mergeDependencyIntoTask,
   taskFileVersions,
   listPullRequests,
   openLocalFolder,
@@ -1586,6 +1586,21 @@ app.delete("/tasks/:id/manual-report", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
   return cancelManualReport(await taskClient(id), id, { userId: dev.id });
+});
+
+// other tasks of the requirement that changed the same files, and whether the two combine
+app.get("/tasks/:id/overlaps", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  return taskOverlaps(await taskClient(id), id);
+});
+
+// bring a dependency's work into the task's own branch — a conflict is an answer, not an error
+app.post("/tasks/:id/merge-dependency", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ dependencyId: z.string().uuid() }).parse(req.body);
+  return mergeDependencyIntoTask({ clientId: await taskClient(id), taskId: id, dependencyId: b.dependencyId, by: { userId: dev.id } });
 });
 
 // the id is the CHECK's
