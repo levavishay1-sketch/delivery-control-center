@@ -22,7 +22,8 @@
 import { withTenant } from "@dcc/db";
 import { task, workitem } from "@dcc/db/schema";
 import { eq } from "drizzle-orm";
-import { existingCheckout, firstRepo, git, taskBaseSha, taskBranchName } from "./ai-assist.ts";
+import { existingCheckout, firstRepo, git, taskBaseSha } from "./ai-assist.ts";
+import { branchOf } from "./task-branch.ts";
 import type { ChangedFile } from "./repo-onboarding/types.ts";
 
 // Big enough for the whole of a large source file — the task screen shows files in full.
@@ -36,16 +37,16 @@ async function taskGitContext(clientId: string, taskId: string) {
   const r = await firstRepo(clientId, t.workitemId);
   const dir = r ? existingCheckout({ ...r, localPath: null }) : null;
   if (!dir) return null;
-  const branch = taskBranchName(wi?.key, t);
+  const branch = branchOf(wi?.key, t);
   if ((await git(["rev-parse", "--verify", "--quiet", branch], dir)).code !== 0) return null;
   const base = await taskBaseSha(dir, branch, t);
   return base ? { dir, base, branch } : null;
 }
 
-/** Every file the task's branch touched, against what it was built on — its own commits only. None before it was developed. */
-export async function taskChangedFiles(clientId: string, taskId: string): Promise<ChangedFile[]> {
+/** Every file the task's branch touched, against what it was built on — its own commits only. Null when the branch cannot be found — which is not the same as a branch that changed nothing (an empty list). */
+export async function taskChangedFiles(clientId: string, taskId: string): Promise<ChangedFile[] | null> {
   const ctx = await taskGitContext(clientId, taskId);
-  if (!ctx) return [];
+  if (!ctx) return null;
   const { dir, base, branch } = ctx;
   const [status, numstat] = await Promise.all([
     git(["-c", "core.quotepath=false", "diff", "--name-status", base, branch], dir, { timeoutMs: 60_000 }),

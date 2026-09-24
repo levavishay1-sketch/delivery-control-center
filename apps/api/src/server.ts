@@ -1214,7 +1214,8 @@ app.get("/tasks/:id/code-map", async (req) => {
 app.get("/tasks/:id/files", async (req) => {
   await actingUser(req);
   const { id } = req.params as { id: string };
-  return taskChangedFiles(await taskClient(id), id);
+  // files: null = the branch was not found, which is not the same as a branch that changed nothing ([]).
+  return { files: await taskChangedFiles(await taskClient(id), id) };
 });
 app.get("/tasks/:id/file", async (req) => {
   await actingUser(req);

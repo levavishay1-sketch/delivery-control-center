@@ -184,7 +184,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [codeMap, setCodeMap] = useState<{ codeMap: CodeMap | null; branch: string | null; reason?: string } | null>(null);
   // What the branch actually changed, live from git — not the last saved run's own
   // list, which a check-only rerun since then can leave stale (see #50, #51).
-  const [taskFiles, setTaskFiles] = useState<ChangedFile[] | "none" | null>(null);
+  const [taskFiles, setTaskFiles] = useState<ChangedFile[] | "none" | "nobranch" | null>(null);
   // Which changed files are open — any number, each shown whole.
   const [openFiles, setOpenFiles] = useState<Set<string>>(new Set());
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
@@ -238,7 +238,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   }, [id]);
   const loadPrompt = useCallback(() => { previewImplement(id).then(setPromptPreview).catch(() => setPromptPreview(null)); }, [id]);
   const loadCodeMap = useCallback(() => { getTaskCodeMap(id).then(setCodeMap).catch(() => setCodeMap(null)); }, [id]);
-  const loadFiles = useCallback(() => { setOpenFiles(new Set()); getTaskFiles(id).then((f) => setTaskFiles(f.length ? f : "none")).catch(() => setTaskFiles(null)); }, [id]);
+  const loadFiles = useCallback(() => { setOpenFiles(new Set()); getTaskFiles(id).then((f) => setTaskFiles(f === null ? "nobranch" : f.length ? f : "none")).catch(() => setTaskFiles(null)); }, [id]);
   const refreshRun = useCallback(async () => {
     try {
       const r = await getTaskRun(id);
@@ -621,6 +621,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     <div className="field" style={{ marginTop: 14 }}>
       <label>קבצים שהשתנו{Array.isArray(taskFiles) ? ` (${taskFiles.length})` : ""}<Info k="files_changed" /></label>
       {taskFiles === null && <p className="ob-sub">טוען…</p>}
+      {taskFiles === "nobranch" && <p className="ob-sub">לא מצאתי את הענף של המשימה בעותק העבודה, ולכן אי אפשר להראות מה השתנה. זו לא אמירה שלא השתנו קבצים.</p>}
       {taskFiles === "none" && <p className="ob-sub">המשימה לא שינתה אף קובץ (מול מה שהיא נבנתה עליו).</p>}
       {Array.isArray(taskFiles) && taskFiles.length > 0 && (
         <div className="files-all">
@@ -735,7 +736,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
           fact, and it belongs where the person actually looks for it. */}
       {hasCode && (
         <div className="ob-note" style={{ marginTop: 12, background: "var(--status-healthy-bg)", color: "var(--status-healthy)" }}>
-          ✓ הפיתוח הסתיים{taskFiles === "none" ? " — בלי שינוי בקבצים." : " — השינויים על הענף של המשימה, בעותק המבודד."}
+          ✓ הפיתוח הסתיים{taskFiles === "none" ? " — בלי שינוי בקבצים." : taskFiles === "nobranch" ? " — אבל הענף שלו לא נמצא בעותק העבודה, אז אי אפשר להראות מה השתנה." : " — השינויים על הענף של המשימה, בעותק המבודד."}
         </div>
       )}
       {hasCode && changedFiles}

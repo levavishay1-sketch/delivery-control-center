@@ -13,6 +13,7 @@
     "prove:built-on": "tsx src/task-base.prove.ts",
     "prove:checks": "tsx src/task-checks.prove.ts",
     "prove:manual": "tsx src/manual-work.prove.ts",
+    "repair:branches": "tsx src/task-branch-repair.run.ts",
     "prove:retention": "tsx src/chat/retention.prove.ts"
   },
   "dependencies": {
