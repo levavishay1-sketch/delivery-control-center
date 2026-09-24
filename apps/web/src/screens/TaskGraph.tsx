@@ -128,13 +128,13 @@ function Badge({ tone }: { tone: Tone }) {
   return <span className={`flow-badge ${tone.key}`}><i />{tone.label}</span>;
 }
 
-function Card({ node, tone, onClick }: { node: TaskFlowNode; tone: Tone; onClick: () => void }) {
+function Card({ node, tone, onClick, mark = "" }: { node: TaskFlowNode; tone: Tone; onClick: () => void; mark?: string }) {
   const idLabel = node.linkedAdoId ? `#${node.linkedAdoId}` : `הצעה #${node.seq}`;
   // Counted from each check's own status — the same one its row on the task screen shows; a check set aside is not counted.
   const activeChecks = node.checks.filter((c) => c.status?.key !== "inactive");
   const passedChecks = activeChecks.filter((c) => c.status?.key === "check_passed").length;
   return (
-    <div className={`flow-node ${tone.key}`} onClick={onClick} style={{ width: LAYER_W, direction: "rtl", opacity: node.active ? 1 : 0.6 }}>
+    <div className={`flow-node ${tone.key}${mark ? " " + mark : ""}`} onClick={onClick} style={{ width: LAYER_W, direction: "rtl", opacity: node.active ? 1 : 0.6, cursor: "pointer" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: node.status?.dependency ? 4 : 6, flexWrap: "wrap", gap: 4 }}>
         <Badge tone={tone} />
         {node.adoUrl
@@ -305,7 +305,7 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
   );
 }
 
-export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove, approvingId, onToggleActive, togglingActiveId, zoomable, workitemId }: {
+export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove, approvingId, onToggleActive, togglingActiveId, zoomable, workitemId, mode = "dep", selectedId = null, relatedIds, onSelect }: {
   flow: TaskFlow; height?: number; nav: (h: string) => void; title?: string; subtitle?: string;
   /** Reachable from the floating Detail popup — same "אישור הקמת משימה"
    *  action as the approve step's own row list, so approving doesn't
@@ -322,27 +322,57 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
   /** When set (and a title/subtitle header is shown), the header gets a
    *  link to open this requirement's Flow full-page, in a new tab. */
   workitemId?: string;
+  /**
+   * What the cards are laid out by. "dep" (the default) is the schedule:
+   * columns of what can start once the column before it is done. "hier" is
+   * composition: one zone per group, its sub-tasks inside it. A group is
+   * never a scheduled card — it is not developed, its sub-tasks are — so in
+   * "dep" it does not appear at all.
+   */
+  mode?: "dep" | "hier";
+  /** Driven from outside (the requirement screen): which card is chosen, and which belong with it. */
+  selectedId?: string | null;
+  relatedIds?: Set<string>;
+  onSelect?: (id: string) => void;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const byId = useMemo(() => new Map(flow.nodes.map((n) => [n.id, n])), [flow.nodes]);
 
-  const { rfNodes, rfEdges, steps, stats } = useMemo(() => {
-    // Stage/column is a SCHEDULE position — it must answer "what real work
-    // has to finish before this can start", nothing else. "parent" edges
-    // are Work Breakdown Structure (this task belongs under that story),
-    // not a predecessor relationship, and were pushing a task to a later
-    // stage purely because of where it sits in the hierarchy — not because
-    // anything downstream of it. Two independent, unblocked tasks belong
-    // in the same starting stage even if one happens to be nested deeper.
-    const steps = computeSteps(flow.nodes, flow.edges.filter((e) => e.kind === "depends"));
-    const byStep = new Map<number, TaskFlowNode[]>();
-    for (const n of flow.nodes) {
-      const s = steps.get(n.id) ?? 0;
-      (byStep.get(s) ?? byStep.set(s, []).get(s)!).push(n);
-    }
-
+  const { rfNodes, rfEdges, steps, stats, cols } = useMemo(() => {
+    // The column is a SCHEDULE position — "what real work has to finish
+    // before this can start", nothing else — and the server decides it once,
+    // for every view (flow.ts): from the EFFECTIVE dependencies, and never
+    // for a group, which is not developed and so is not scheduled. Reading
+    // the raw edges here instead is what used to put a task a stage too
+    // early and draw a group into the columns.
+    const shown = mode === "hier" ? flow.nodes : flow.nodes.filter((n) => !n.isGroup);
+    const steps = new Map(shown.map((n) => [n.id, n.stage ?? 0]));
     const pos = new Map<string, { x: number; y: number }>();
-    for (const [s, list] of byStep) list.forEach((n, i) => pos.set(n.id, { x: s * COL_W, y: i * ROW_H }));
+    // What sits above each column — a schedule position in one view, a group in the other.
+    const cols: string[] = [];
+    if (mode === "hier") {
+      // Composition: a column per group, its sub-tasks under it, and whatever belongs to no group first.
+      const groups = [null, ...shown.filter((n) => n.isGroup).map((n) => n.id)];
+      let col = 0;
+      for (const g of groups) {
+        const members = shown.filter((n) => (g === null ? !n.parentTaskId && !n.isGroup : n.id === g || n.parentTaskId === g))
+          .sort((a, b) => (a.isGroup ? -1 : 0) - (b.isGroup ? -1 : 0) || a.seq - b.seq);
+        if (!members.length) continue;
+        members.forEach((n, i) => pos.set(n.id, { x: col * COL_W, y: i * ROW_H }));
+        for (const n of members) steps.set(n.id, col);
+        const head = g === null ? null : shown.find((n) => n.id === g);
+        cols.push(head ? `#${head.seq} ${head.intent}` : "ללא קבוצה");
+        col++;
+      }
+    } else {
+      const byStep = new Map<number, TaskFlowNode[]>();
+      for (const n of shown) {
+        const s = n.stage ?? 0;
+        (byStep.get(s) ?? byStep.set(s, []).get(s)!).push(n);
+      }
+      for (const [s, list] of byStep) list.forEach((n, i) => pos.set(n.id, { x: s * COL_W, y: i * ROW_H }));
+      for (let s = 0; s <= Math.max(...byStep.keys(), 0); s++) cols.push(`שלב ${s + 1}`);
+    }
 
     // Computed once, shared by card tone AND arrow color — an arrow into a
     // blocked task must be red for exactly the tasks whose card is red,
@@ -351,8 +381,9 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
       flow.nodes.filter((n) => blockersOf(n, byId, flow.edges).length > 0 || n.state === "blocked").map((n) => n.id),
     );
 
-    const rfNodes: Node[] = flow.nodes.map((n) => {
+    const rfNodes: Node[] = shown.map((n) => {
       const tone = toneOf(n, blockedSet.has(n.id));
+      const mark = selectedId === n.id ? "sel" : relatedIds?.has(n.id) ? "rel" : "";
       return {
         id: n.id,
         position: pos.get(n.id) ?? { x: 0, y: 0 },
@@ -364,7 +395,7 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
         // cards instead of a flat S-curve between them.
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        data: { label: <Card node={n} tone={tone} onClick={() => setOpenId(n.id)} /> },
+        data: { label: <Card node={n} tone={tone} mark={mark} onClick={() => (onSelect ? onSelect(n.id) : setOpenId(n.id))} /> },
         style: { width: LAYER_W, padding: 0, border: "none", background: "transparent" },
       };
     });
@@ -377,9 +408,15 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
     // (source, target) pair, and only when both ends actually have a card
     // rendered — a dependency on a folded-in "check" node, or on anything
     // filtered out of `flow.nodes`, draws nothing rather than a ghost edge.
+    // In the hierarchy view the arrows are the belonging itself (group → sub-task);
+    // in the schedule view they are what the server says each task really waits for.
+    const drawn = new Set(shown.map((n) => n.id));
+    const wires = mode === "hier"
+      ? shown.filter((n) => n.parentTaskId && drawn.has(n.parentTaskId)).map((n) => ({ from: n.parentTaskId!, to: n.id, kind: "parent" as const, reason: null }))
+      : shown.flatMap((n) => n.dependsOn.filter((d) => drawn.has(d)).map((d) => ({ from: d, to: n.id, kind: "depends" as const, reason: null })));
     const seenPairs = new Set<string>();
-    const rfEdges: Edge[] = flow.edges
-      .filter((e) => e.kind === "depends" && byId.has(e.from) && byId.has(e.to))
+    const rfEdges: Edge[] = wires
+      .filter((e) => byId.has(e.from) && byId.has(e.to))
       .filter((e) => {
         const key = `${e.from}->${e.to}`;
         if (seenPairs.has(key)) return false;
@@ -408,10 +445,10 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
       deps: flow.edges.filter((e) => e.kind === "depends").length,
     };
 
-    return { rfNodes, rfEdges, steps, stats };
-  }, [flow, byId]);
+    return { rfNodes, rfEdges, steps, stats, cols };
+  }, [flow, byId, mode, selectedId, relatedIds, onSelect]);
 
-  const colCount = Math.max(...steps.values(), 0) + 1;
+  const colCount = Math.max(cols.length, Math.max(...steps.values(), 0) + 1);
   const open = openId ? byId.get(openId) : null;
 
   const chips = (
@@ -470,14 +507,21 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
                 page's RTL layout — forced explicitly, not inherited. */}
             <div style={{ display: "flex", marginTop: 10, marginBottom: 4, direction: "ltr" }}>
               {Array.from({ length: colCount }, (_, i) => (
-                <div key={i} className="flow-layer-label" style={{ width: COL_W }}>שלב {i + 1}</div>
+                <div key={i} className="flow-layer-label" style={{ width: COL_W }} title={cols[i] ?? ""}>{cols[i] ?? `שלב ${i + 1}`}</div>
               ))}
             </div>
 
             <div className="flow-canvas" style={{ position: "relative", height, direction: "ltr", border: "1px solid #e5e8ef", borderRadius: 12, overflow: "hidden" }}>
               <ReactFlow
                 nodes={rfNodes} edges={rfEdges} edgeTypes={edgeTypes} nodesDraggable={false} nodesConnectable={false}
-                onNodeClick={(_, n) => setOpenId(n.id)}
+                // The card's own handler is what answers a click — React Flow's
+                // onNodeClick does not fire for these cards. Where the cards sit
+                // beside the spec the card selects instead of opening the detail
+                // panel, which would cover the answer; the empty canvas clears
+                // the choice, and choosing is never a toggle, so a click that
+                // arrives twice still leaves that task chosen.
+                onNodeClick={(_, n) => { if (!onSelect) setOpenId(n.id); }}
+                onPaneClick={() => onSelect?.("")}
                 panOnDrag zoomOnScroll={!!zoomable} zoomOnPinch={!!zoomable} zoomOnDoubleClick={!!zoomable}
                 proOptions={{ hideAttribution: true }}
                 defaultViewport={{ x: 20, y: 20, zoom: 1 }}

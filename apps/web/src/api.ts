@@ -353,9 +353,39 @@ export type TaskFlowNode = {
   prompt: string | null; origin: "ai" | "human"; approvedAt: string | null; adoSyncedAt: string | null;
   checks: { id: string; seq: number; intent: string; state: string; checkKind: string | null; status: TaskStatus | null }[];
   status: TaskStatus | null;
-  /** A task with sub-tasks — its work is theirs; it is never developed itself. */
+  /** A task with sub-tasks — its work is theirs; it is never developed itself, and never scheduled. */
   isGroup: boolean;
+  /** What it really waits for (ids) — through a group, a check, or its own group. Empty on a group. */
+  dependsOn: string[];
+  /** How many rounds of work must finish before it can start. Null on a group. */
+  stage: number | null;
 };
+
+/** One addressable piece of the requirement's spec, and who implements it. */
+export type SpecSection = {
+  anchor: string;
+  kind: "heading" | "field" | "rule" | "mapping" | "decision";
+  parentAnchor: string | null;
+  title: string;
+  body: string;
+  /** A decision that overrules what the document says here. */
+  correction: { text: string; gapId: string; question: string } | null;
+  tasks: { id: string; seq: number; intent: string; source: string }[];
+};
+export type SpecView = {
+  /** The spec has been read into pieces. Until it has, there is nothing to show beside the tasks. */
+  read: boolean;
+  source: { attachmentId: string; name: string } | null;
+  sections: SpecSection[];
+  /** Anchors no task implements. */
+  uncovered: string[];
+};
+export const getSpec = (workitemId: string) => get<SpecView>(`/workitems/${workitemId}/spec`);
+export const previewSpecMap = (workitemId: string) =>
+  get<{ prompt: string; promptHe: string; doc: string | null; tasks: number; decisions: number }>(`/workitems/${workitemId}/spec/preview`);
+export const mapSpec = (workitemId: string) =>
+  post<{ sections: number; links: number; uncovered: number; lostManual: number }>(`/workitems/${workitemId}/spec/map`, {});
+export const getTaskSpec = (taskId: string) => get<{ anchor: string; title: string; kind: string }[]>(`/tasks/${taskId}/spec`);
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] };
 export const getTaskFlow = (id: string) => get<TaskFlow>(`/workitems/${id}/task-flow`);

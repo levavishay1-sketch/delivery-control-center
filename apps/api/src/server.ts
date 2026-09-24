@@ -115,6 +115,11 @@ import {
   latestDevelopment,
   checkOutcomesOf,
   resyncTaskStates,
+  specFor,
+  specForTask,
+  setTaskSpecLinks,
+  mapSpecToTasks,
+  buildSpecMapPrompt,
   ensureStandardChecks,
   ChecksNotPassed,
   setTaskActive,
@@ -1054,10 +1059,36 @@ app.get("/workitems/:id/task-flow", async (req) => {
   const { id } = req.params as { id: string };
   const wi = await locateWorkItem({ id });
   const [flow, statuses] = await Promise.all([taskFlowFor(wi.clientId, id), taskStatusesFor(wi.clientId, id)]);
-  // Each card says the task's status as a person reads it (task-status.ts), and each folded check its own;
-  // and whether it is a group (task-relations.ts) — opened to follow its sub-tasks, never to develop it.
-  const groups = new Set(flow.nodes.filter((n) => n.kind === "task" && n.active && n.parentTaskId).map((n) => n.parentTaskId));
-  return { ...flow, nodes: flow.nodes.map((n) => ({ ...n, isGroup: groups.has(n.id), status: statuses[n.id] ?? null, checks: n.checks.map((c) => ({ ...c, status: statuses[c.id] ?? null })) })) };
+  // Each card says the task's status as a person reads it (task-status.ts), and each folded check its own.
+  // Whether it is a group, what it waits for and which stage it sits in are decided in flow.ts — once, for every view.
+  return { ...flow, nodes: flow.nodes.map((n) => ({ ...n, status: statuses[n.id] ?? null, checks: n.checks.map((c) => ({ ...c, status: statuses[c.id] ?? null })) })) };
+});
+
+/* ── the requirement's spec, as pieces a task points at ───────────── */
+
+// What the screen draws beside the tasks: the spec in sections, who implements each, and what nothing implements.
+app.get("/workitems/:id/spec", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return specFor(wi.clientId, id);
+});
+
+// The exact prompt the reading would send — the same preview gate every other Claude action goes through.
+app.get("/workitems/:id/spec/preview", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  const built = await buildSpecMapPrompt(wi.clientId, id);
+  return { prompt: built.prompt, promptHe: built.promptHe, doc: built.input.doc?.name ?? null, tasks: built.input.tasks.length, decisions: built.input.decisions.length };
+});
+
+// Read the spec into sections and map the tasks onto it. One Claude call; costs money.
+app.post("/workitems/:id/spec/map", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const wi = await locateWorkItem({ id });
+  return mapSpecToTasks({ clientId: wi.clientId, workitemId: id, by: { userId: dev.id } });
 });
 
 // approval done → create the tasks in TFS with their hierarchy + links.
@@ -1125,6 +1156,20 @@ app.post("/tasks/:id/implement", async (req) => {
   const d = await taskDetail(clientId, id);
   // The registry's `allowed` is the approval gate; the button and the chat's proposal pass through the same one.
   return runAction("implement", {}, { kind: "task", id, clientId, workitemId: d.requirement.id }, { userId: dev.id }, "button");
+});
+
+// what one task implements, and setting it by hand
+app.get("/tasks/:id/spec", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  return specForTask(await taskClient(id), id);
+});
+
+app.put("/tasks/:id/spec", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ anchors: z.array(z.string()) }).parse(req.body);
+  return { linked: await setTaskSpecLinks(await taskClient(id), id, b.anchors) };
 });
 
 app.get("/tasks/:id/flow-run", async (req) => {

@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withTenant, appendEvent } from "@dcc/db";
 import { client, gap, task, taskDependency, workitem, workitemDependency } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
+import { taskRelations } from "./task-relations.ts";
 
 /**
  * WorkItem-level dependencies and the project Flow graph (architecture
@@ -159,6 +160,12 @@ export type TaskFlowNode = {
   adoSyncedAt: string | null;
   /** check-kind children folded into this node (never their own flow node — see the FLOW screen). */
   checks: { id: string; seq: number; intent: string; state: string; checkKind: string | null }[];
+  /** It has sub-tasks: a group, never developed and never scheduled (task-relations.ts). */
+  isGroup: boolean;
+  /** What it really waits for — through a group, a check, or its own group. Empty on a group. */
+  dependsOn: string[];
+  /** How many rounds of work must finish first. Null on a group, which is not scheduled. */
+  stage: number | null;
 };
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 
@@ -210,6 +217,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       approvedAt: r.approvedAt ? r.approvedAt.toISOString() : null,
       adoSyncedAt: r.adoSyncedAt ? r.adoSyncedAt.toISOString() : null,
       checks: (checksByParent.get(r.id) ?? []).sort((a, b) => a.seq - b.seq),
+      isGroup: false, dependsOn: [], stage: null,
     }));
 
     // an inactive node still gets a (greyed) card, but never participates
@@ -223,6 +231,37 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       ...deps.filter((d) => activeIdSet.has(d.dependsOnTaskId) && activeIdSet.has(d.taskId))
         .map((d) => ({ from: d.dependsOnTaskId, to: d.taskId, kind: "depends" as const, reason: d.reason })),
     ];
+
+    /*
+     * The schedule, decided once here so every view answers the same way.
+     * A GROUP is not scheduled — it is never developed, its sub-tasks are
+     * (task-relations.ts), so it gets no stage and no dependency of its own.
+     * What a task waits for is its EFFECTIVE dependencies: a dependency on a
+     * group means each of its sub-tasks, and a sub-task also waits for
+     * whatever its group waits for. Reading the raw edges instead is what
+     * put a task one stage too early and drew a group into the columns.
+     */
+    const rel = taskRelations(
+      rows.map((r) => ({ id: r.id, seq: r.seq, kind: r.kind, parentTaskId: r.parentTaskId, active: r.active, state: r.state })),
+      deps.map((d) => ({ taskId: d.taskId, dependsOnTaskId: d.dependsOnTaskId })),
+    );
+    for (const n of nodes) {
+      n.isGroup = rel.isGroup(n.id);
+      n.dependsOn = n.isGroup ? [] : rel.effectiveDeps(n.id).map((d) => d.id).filter((id) => activeIdSet.has(id));
+    }
+    const byIdNode = new Map(nodes.map((n) => [n.id, n]));
+    const stageOf = (id: string, seen = new Set<string>()): number => {
+      const n = byIdNode.get(id);
+      if (!n || n.isGroup || seen.has(id)) return 0;
+      if (n.stage != null) return n.stage;
+      seen.add(id);
+      const s = n.dependsOn.length ? Math.max(...n.dependsOn.map((d) => stageOf(d, seen))) + 1 : 0;
+      seen.delete(id);
+      n.stage = s;
+      return s;
+    };
+    for (const n of nodes) if (!n.isGroup) stageOf(n.id);
+
     return { depth, nodes, edges };
   });
 }

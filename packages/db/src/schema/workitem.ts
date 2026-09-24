@@ -13,6 +13,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -680,3 +681,74 @@ export const flowRun = pgTable(
     index("flow_run_task_idx").on(t.taskId, t.startedAt),
   ],
 );
+
+/**
+ * One addressable piece of a requirement's specification — a field, a
+ * rule, a line of a mapping, a closed decision. The spec itself stays
+ * where it is (the attachment's `extracted_text`, the `gap` rows); this
+ * is the INDEX over it, so a task can say which pieces it implements and
+ * the screen can mark them. `anchor` is the stable id everything else
+ * refers to; it is DCC's own, never a line number, so re-reading the
+ * same document does not move what was already mapped.
+ */
+export const specSection = pgTable(
+  "spec_section",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
+    /** Stable within the requirement: "f20", "r3a", "d.<gap id>". */
+    anchor: text("anchor").notNull(),
+    /** Reading order on the screen. */
+    ordinal: integer("ordinal").notNull().default(0),
+    /** heading | field | rule | mapping | decision */
+    kind: text("kind").notNull(),
+    /** The heading it sits under, for grouping — an anchor of a `heading` section. */
+    parentAnchor: text("parent_anchor"),
+    /** Short name, as the spec words it. */
+    title: text("title").notNull(),
+    /** What it says. Empty on a heading. */
+    body: text("body").notNull().default(""),
+    /** Where it came from: the attachment it was read out of, or null for a decision. */
+    attachmentId: uuid("attachment_id").references(() => attachment.id, { onDelete: "cascade" }),
+    /** Decisions only: the gap this section is. */
+    gapId: uuid("gap_id").references(() => gap.id, { onDelete: "cascade" }),
+    /**
+     * A decision that CORRECTS this section — the spec's own words stay in
+     * `body`, and the screen shows them struck through beside the correction.
+     */
+    correctedByGapId: uuid("corrected_by_gap_id").references(() => gap.id, { onDelete: "set null" }),
+    /** What the correction says instead, in the spec's own terms. */
+    correction: text("correction"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("spec_section_anchor_idx").on(t.workitemId, t.anchor),
+    tenantPolicy("spec_section_tenant_isolation"),
+  ],
+).enableRLS();
+
+/**
+ * A task implements a piece of the spec. Written by the breakdown (which
+ * already reads the spec) or by the mapping run over a requirement broken
+ * down before this existed; `source` says which, so a person can tell a
+ * mapping that was decided with the task apart from one inferred later.
+ */
+export const taskSpecLink = pgTable(
+  "task_spec_link",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    clientId: uuid("client_id").notNull().references(() => client.id, { onDelete: "cascade" }),
+    workitemId: uuid("workitem_id").notNull().references(() => workitem.id, { onDelete: "cascade" }),
+    taskId: uuid("task_id").notNull().references(() => task.id, { onDelete: "cascade" }),
+    anchor: text("anchor").notNull(),
+    /** breakdown | mapping | manual */
+    source: text("source").notNull().default("mapping"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("task_spec_link_idx").on(t.taskId, t.anchor),
+    index("task_spec_link_workitem_idx").on(t.workitemId),
+    tenantPolicy("task_spec_link_tenant_isolation"),
+  ],
+).enableRLS();
