@@ -123,6 +123,7 @@ import {
   ensureStandardChecks,
   ChecksNotPassed,
   setTaskActive,
+  setTaskManual, reportManualDevelopment, cancelManualReport, setCheckManually,
   checkAdoRemovedState,
   OnboardingError,
   startOnboardingRun,
@@ -1555,6 +1556,35 @@ app.post("/tasks/:id/progress", async (req, reply) => {
     if (e instanceof ChecksNotPassed) return reply.code(409).send({ error: e.message, unresolved: e.unresolved });
     throw e;
   }
+});
+
+// A task developed by a person, not by Claude: the mark, the report of what was done, and each check by hand.
+app.put("/tasks/:id/manual", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ manual: z.boolean() }).parse(req.body);
+  return setTaskManual(await taskClient(id), id, b.manual, { userId: dev.id });
+});
+
+app.post("/tasks/:id/manual-report", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ summary: z.string(), customisation: z.string().optional(), components: z.string().optional(), reference: z.string().optional() }).parse(req.body);
+  return reportManualDevelopment({ clientId: await taskClient(id), taskId: id, by: { userId: dev.id }, ...b });
+});
+
+app.delete("/tasks/:id/manual-report", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  return cancelManualReport(await taskClient(id), id, { userId: dev.id });
+});
+
+// the id is the CHECK's
+app.post("/tasks/:id/manual-result", async (req) => {
+  const dev = await actingUser(req);
+  const { id } = req.params as { id: string };
+  const b = z.object({ result: z.enum(["passed", "failed", "not_run"]), note: z.string().optional() }).parse(req.body);
+  return setCheckManually({ clientId: await taskClient(id), checkId: id, ...b, by: { userId: dev.id } });
 });
 
 // Toggle a task or check in/out of play — drops it from (or returns it

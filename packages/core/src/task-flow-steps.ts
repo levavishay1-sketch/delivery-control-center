@@ -24,7 +24,11 @@ export type FlowCycle = {
   buildVerified: boolean;
   buildFailed: boolean;
   /** The checks after the build — tests, regression, E2E. */
-  checks: { ran: number; passed: number; failed: number; waiting: number };
+  /**
+   * `notRun` — active checks with no result yet. Read live, after the checks have been set one at a time
+   * (by a rerun, or by hand on a task a person developed): the step is not done while one is still to do.
+   */
+  checks: { ran: number; passed: number; failed: number; waiting: number; notRun?: number };
   /** It was pushed, or the task was closed on it. */
   reviewed: boolean;
 };
@@ -73,6 +77,7 @@ export function liveCycleState(checks: { kind: string | null; result: string | n
       ran: after.length, passed: after.filter((c) => c.result === "passed").length,
       failed: after.filter((c) => c.result === "failed" && c.cause !== "dependency_missing").length,
       waiting: after.filter((c) => c.result === "waiting").length,
+      notRun: checks.filter((c) => c.kind !== "build" && c.result == null).length,
     },
   };
 }
@@ -141,6 +146,7 @@ export function flowSteps(cycles: FlowCycle[], now: FlowNow): FlowStep[] {
       : !last || last.checks.ran === 0 ? "current"
       : last.checks.failed ? "failed"
       : last.checks.waiting ? "waiting"
+      : (last.checks.notRun ?? 0) > 0 ? "current"
       : "done";
     const review: FlowStepState = now.closed ? "done" : checks === "done" || checks === "waiting" ? "current" : "todo";
     steps.push({ kind: workKind, state: work, round, past: false, deps, at, note: baseNote(last?.base) });

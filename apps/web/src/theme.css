@@ -1105,3 +1105,24 @@ tr.sd-a:hover > td { background: var(--surface-muted); }
 .flow-arrow { font-size: 12px; line-height: 1; color: var(--ink-500); padding: 2px 5px; border-radius: 5px; cursor: pointer; margin-inline-start: auto; }
 .flow-arrow:hover { background: var(--color-accent-muted); color: var(--color-accent); }
 .flow-brief { position: absolute; z-index: 20; inset-inline: 12px; bottom: 12px; max-height: 70%; overflow: auto; }
+
+/* a task developed by a person, not by Claude */
+.mw-switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.mw-cap { font-size: 11px; font-weight: 650; letter-spacing: .05em; color: var(--ink-500); display: inline-flex; align-items: center; }
+.mw-locked { font-size: 11.5px; color: var(--ink-500); }
+.mw-form { display: flex; flex-direction: column; gap: 4px; }
+.mw-form textarea, .mw-form input { width: 100%; }
+.mw-hint { margin: 3px 0 0; font-size: 11.5px; color: var(--ink-500); }
+.mw-err { margin: 6px 0 0; font-size: 12px; color: var(--status-critical); white-space: pre-wrap; }
+.mw-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.mw-card { background: var(--surface); border: 1.5px solid var(--border-hairline); border-inline-start: 4px solid var(--color-accent); border-radius: 12px; padding: 12px 14px; margin-top: 12px; }
+.mw-title { margin: 0 0 6px; font-size: 12.5px; font-weight: 650; color: var(--ink-900); display: flex; align-items: center; }
+.mw-summary { margin: 0 0 10px; font-size: 13px; line-height: 1.65; white-space: pre-wrap; color: var(--ink-700); }
+.mw-facts { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.mw-k { display: inline-block; min-width: 110px; font-family: var(--mono); font-size: 11px; font-weight: 650; color: var(--ink-500); }
+.mw-v { color: var(--ink-900); }
+.mw-none { color: var(--ink-400); }
+.mw-check { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--divider); }
+.mw-check .mw-k { display: flex; align-items: center; margin: 0 0 4px; font-family: var(--font); }
+.mw-ask { margin-top: 8px; }
+.mw-ask textarea { width: 100%; }

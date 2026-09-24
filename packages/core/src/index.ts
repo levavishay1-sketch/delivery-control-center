@@ -12,6 +12,8 @@ export { repoBranches, type RepoBranches, type BranchHealth } from "./repo-branc
 export { pullRequestDetail, pullRequestFile, type FileVersions, pullRequestQuick, type PullRequestQuick, type PullRequestDetail, type Blocker, type NextStep, type FileGroup, type TimelineItem, type ConflictFile, type ConflictView } from "./pull-request-detail.ts";
 export { codeMapForTask, codeMapForWorkspace, codeMapFrom, readCodeMapFacts, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapArrow, type CodeMapPlace, type CodeMapFacts } from "./code-map.ts";
 export { proposeGap, verifyGap } from "./gaps.ts";
+export { setTaskManual, reportManualDevelopment, cancelManualReport, setCheckManually } from "./manual-work.ts";
+export { CUSTOMISATION_TEMPLATE, CUSTOMISATION_HEADING } from "./manual-report.ts";
 export { proposeTasks, progressTask, tasksFor, taskDetail, clientOfTask, ChecksNotPassed, setTaskActive, checkAdoRemovedState, syncTaskStateAfterCheckChange, resyncTaskStates, type TaskInput, type TaskDetail } from "./tasks.ts";
 export { raiseBlocker, answerBlocker, blockersFor } from "./blockers.ts";
 export { regenerateBrief } from "./brief/generate.ts";

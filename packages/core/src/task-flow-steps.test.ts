@@ -106,6 +106,14 @@ describe("liveCycleState", () => {
     expect(liveCycleState([{ kind: "build", result: null, cause: null }])).toMatchObject({ buildVerified: false, buildFailed: false, checks: { ran: 0 } });
   });
 
+  it("a check still to do keeps the checks step open — checks set one at a time, by hand or by a rerun", () => {
+    const live = [{ kind: "build", result: "passed", cause: null }, { kind: "tests", result: "passed", cause: null }, { kind: "regression", result: null, cause: null }];
+    expect(liveCycleState(live)).toMatchObject({ checks: { ran: 1, passed: 1, notRun: 1 } });
+    expect(shape(flowSteps([{ ...run(), ...liveCycleState(live) }], now()))).toEqual(["develop:done", "checks:current", "review:todo"]);
+    const all = live.map((c) => ({ ...c, result: "passed" }));
+    expect(shape(flowSteps([{ ...run(), ...liveCycleState(all) }], now()))).toEqual(["develop:done", "checks:done", "review:current"]);
+  });
+
   it("does not count a check waiting on a dependency as failed", () => {
     const live = [{ kind: "build", result: "passed", cause: null }, { kind: "tests", result: "waiting", cause: "dependency_missing" }];
     expect(liveCycleState(live)).toMatchObject({ checks: { ran: 1, passed: 0, failed: 0, waiting: 1 } });

@@ -63,7 +63,7 @@ async function openGap(e: ActionEntity, p: ActionParams) {
 const gapQuote = (d: string) => `"${d.length > 110 ? `${d.slice(0, 110)}…` : d}"`;
 
 async function taskRow(id: string) {
-  const [t] = await db.select({ id: task.id, seq: task.seq, intent: task.intent, approvedAt: task.approvedAt, kind: task.kind, linkedAdoId: task.linkedAdoId }).from(task).where(eq(task.id, id)).limit(1);
+  const [t] = await db.select({ id: task.id, seq: task.seq, intent: task.intent, approvedAt: task.approvedAt, kind: task.kind, linkedAdoId: task.linkedAdoId, parentTaskId: task.parentTaskId, developedManually: task.developedManually }).from(task).where(eq(task.id, id)).limit(1);
   return t ?? null;
 }
 
@@ -97,6 +97,9 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
       // The TFS item is what the work is tracked on; a check carries its task's.
       if (t.linkedAdoId == null) return { ok: false, reason: "המשימה עוד לא הוקמה ב-TFS — אי אפשר לפתח לפני שיש לה work item. נסו שוב להקים אותה במסך המשימה" };
       if (t.kind === "task" && (await isGroupTask(e.clientId, t.id))) return { ok: false, reason: GROUP_NOT_DEVELOPED };
+      // A task developed by a person is reported, never run: nor are its checks — the code is not in DCC's copy.
+      const owner = t.kind === "check" && t.parentTaskId ? await taskRow(t.parentTaskId) : t;
+      if (owner?.developedManually) return { ok: false, reason: "המשימה מסומנת כמפותחת ידנית — מי שמפתח אותה מדווח על העבודה במסך המשימה ומסמן את הבדיקות בעצמו. Claude לא מריץ אותה ולא את הבדיקות שלה" };
       return { ok: true };
     },
     estimate: async () => typical("execution", { input: 60_000, output: 6_000 }),

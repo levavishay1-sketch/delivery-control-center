@@ -59,6 +59,8 @@ export type Task = {
   origin: "ai" | "human"; approvedAt: string | null; affectedPaths: string[]; compiledComponents: string[];
   parentTaskId: string | null; adoType: string | null; linkedAdoId: number | null; adoUrl: string | null;
   prompt: string | null;
+  /** A person develops it, not Claude — its development is reported and its checks set by hand. */
+  developedManually: boolean;
   /** Check-kind rows only — false when toggled out of play (see
    *  `setCheckActive`): dropped from its parent's prompt and the
    *  completion gate, but its row and history stay. */
@@ -613,7 +615,20 @@ export type ImplementResult = {
   checks?: { seq: number; passed: boolean; detail: string; likelyCause: "implementation" | "requirement_ambiguity" | "dependency_missing" | "environment" | null; kind?: string | null }[];
   /** Checks that did not run because the build did not pass. */
   skipped?: number[];
+  /** Present when a person reported the task as developed by hand: no branch or commit then — this is what they said instead. */
+  manual?: { customisations: string[]; components: string[]; reference: string | null; reportedBy: string; reportedAt: string };
 };
+
+/* ── a task developed by a person, not by Claude ─────────────────── */
+/** What the customisation box starts with — the person writes under it. */
+export const CUSTOMISATION_TEMPLATE = "CUSTOMISATION:\n";
+export const setTaskManual = (id: string, manual: boolean) => put<{ manual: boolean }>(`/tasks/${id}/manual`, { manual });
+export const reportManualWork = (id: string, body: { summary: string; customisation?: string; components?: string; reference?: string }) =>
+  post<{ reported: true }>(`/tasks/${id}/manual-report`, body);
+export const cancelManualReport = (id: string) => del<{ cancelled: true }>(`/tasks/${id}/manual-report`);
+/** The id is the CHECK's. */
+export const setCheckManually = (checkId: string, body: { result: "passed" | "failed" | "not_run"; note?: string }) =>
+  post<{ result: string }>(`/tasks/${checkId}/manual-result`, body);
 
 /* ── Bug ↔ Task links (bug-change-request-lifecycle) ─────────────── */
 export type LinkedTaskRow = { id: string; intent: string; requirementId: string; requirementTitle: string };
