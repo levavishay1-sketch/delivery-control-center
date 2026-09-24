@@ -185,7 +185,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   // What the branch actually changed, live from git — not the last saved run's own
   // list, which a check-only rerun since then can leave stale (see #50, #51).
   const [taskFiles, setTaskFiles] = useState<ChangedFile[] | "none" | null>(null);
-  const [openFile, setOpenFile] = useState<string | null>(null);
+  // Which changed files are open — any number, each shown whole.
+  const [openFiles, setOpenFiles] = useState<Set<string>>(new Set());
   const [delReport, setDelReport] = useState<TaskDeletePrecheck | null>(null);
   const [delLoading, setDelLoading] = useState(false);
   const [delAckSubtree, setDelAckSubtree] = useState(false);
@@ -235,7 +236,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   }, [id]);
   const loadPrompt = useCallback(() => { previewImplement(id).then(setPromptPreview).catch(() => setPromptPreview(null)); }, [id]);
   const loadCodeMap = useCallback(() => { getTaskCodeMap(id).then(setCodeMap).catch(() => setCodeMap(null)); }, [id]);
-  const loadFiles = useCallback(() => { setOpenFile(null); getTaskFiles(id).then((f) => setTaskFiles(f.length ? f : "none")).catch(() => setTaskFiles(null)); }, [id]);
+  const loadFiles = useCallback(() => { setOpenFiles(new Set()); getTaskFiles(id).then((f) => setTaskFiles(f.length ? f : "none")).catch(() => setTaskFiles(null)); }, [id]);
   const refreshRun = useCallback(async () => {
     try {
       const r = await getTaskRun(id);
@@ -619,18 +620,24 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       <label>קבצים שהשתנו{Array.isArray(taskFiles) ? ` (${taskFiles.length})` : ""}<Info k="files_changed" /></label>
       {taskFiles === null && <p className="ob-sub">טוען…</p>}
       {taskFiles === "none" && <p className="ob-sub">המשימה לא שינתה אף קובץ (מול מה שהיא נבנתה עליו).</p>}
+      {Array.isArray(taskFiles) && taskFiles.length > 0 && (
+        <div className="files-all">
+          <a className="link" onClick={() => setOpenFiles(new Set(taskFiles.map((f) => f.path)))}>▾ פתח את כל הקבצים במלואם</a>
+          {openFiles.size > 0 && <a className="link" onClick={() => setOpenFiles(new Set())}>▴ סגור את כולם</a>}
+        </div>
+      )}
       {Array.isArray(taskFiles) && (
         <div className="rowlist" style={{ marginTop: 4 }}>
           {taskFiles.map((fl) => (
             <div key={fl.path}>
-              <div className="row" style={{ cursor: "pointer" }} onClick={() => setOpenFile(openFile === fl.path ? null : fl.path)}>
+              <div className="row" style={{ cursor: "pointer" }} onClick={() => setOpenFiles((prev) => { const next = new Set(prev); next.has(fl.path) ? next.delete(fl.path) : next.add(fl.path); return next; })}>
                 <span className="title" style={{ fontFamily: "var(--mono)", fontSize: 12, direction: "ltr", textAlign: "left" }}>
-                  {openFile === fl.path ? "▾" : "▸"} {fl.path}
+                  {openFiles.has(fl.path) ? "▾" : "▸"} {fl.path}
                 </span>
                 <span className="spacer" />
                 <span style={{ fontSize: 11, color: "var(--ink-500)" }}>{fl.status} · +{fl.additions} −{fl.deletions}</span>
               </div>
-              {openFile === fl.path && <div style={{ margin: "4px 0 10px" }}><FileCompare load={() => getTaskFile(id, fl.path)} /></div>}
+              {openFiles.has(fl.path) && <div style={{ margin: "4px 0 10px" }}><FileCompare full load={() => getTaskFile(id, fl.path)} /></div>}
             </div>
           ))}
         </div>

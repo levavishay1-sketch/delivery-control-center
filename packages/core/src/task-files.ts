@@ -25,7 +25,8 @@ import { eq } from "drizzle-orm";
 import { existingCheckout, firstRepo, git, taskBaseSha, taskBranchName } from "./ai-assist.ts";
 import type { ChangedFile } from "./repo-onboarding/types.ts";
 
-const MAX_FILE_BYTES = 400_000;
+// Big enough for the whole of a large source file — the task screen shows files in full.
+const MAX_FILE_BYTES = 1_500_000;
 
 /** The checkout dir and the two commits every file question below compares — null while the task has no branch of its own (not developed). */
 async function taskGitContext(clientId: string, taskId: string) {
