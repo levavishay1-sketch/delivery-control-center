@@ -9,6 +9,7 @@ import { CardTitle, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { errText } from "./onboarding/labels.ts";
 import { TaskGraph } from "./TaskGraph.tsx";
+import { TaskViewChoice } from "./RequirementMap.tsx";
 import { AddNote } from "../forms.tsx";
 
 /**
@@ -665,13 +666,18 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 </div>
                 <Err />
                 {taskFlow && nodes.length > 0 && (
-                  <TaskGraph
-                    flow={taskFlow} nav={nav}
-                    title="ההיררכיה שהוצעה"
-                    subtitle={`עומק ${taskFlow.depth} (${ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})`}
-                    onApprove={approve} approvingId={approvingId}
-                    onToggleActive={toggleActive} togglingActiveId={togglingActiveId}
-                    workitemId={wi.id}
+                  <TaskViewChoice
+                    id={wi.id} flow={taskFlow} nav={nav}
+                    classic={
+                      <TaskGraph
+                        flow={taskFlow} nav={nav}
+                        title="ההיררכיה שהוצעה"
+                        subtitle={`עומק ${taskFlow.depth} (${ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})`}
+                        onApprove={approve} approvingId={approvingId}
+                        onToggleActive={toggleActive} togglingActiveId={togglingActiveId}
+                        workitemId={wi.id}
+                      />
+                    }
                   />
                 )}
               </div>
@@ -724,13 +730,18 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 {materialized && <p style={{ fontSize: 12, color: "var(--status-healthy)", marginTop: -8, marginBottom: 12 }}>{materialized.detail}</p>}
                 <Err />
 
-                <TaskGraph
-                  flow={taskFlow} height={340} nav={nav}
-                  title="ההיררכיה"
-                  subtitle={`עומק ${taskFlow.depth} (${ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})`}
-                  onApprove={approve} approvingId={approvingId}
-                  onToggleActive={toggleActive} togglingActiveId={togglingActiveId}
-                  workitemId={wi.id}
+                <TaskViewChoice
+                  id={wi.id} flow={taskFlow} nav={nav}
+                  classic={
+                    <TaskGraph
+                      flow={taskFlow} height={340} nav={nav}
+                      title="ההיררכיה"
+                      subtitle={`עומק ${taskFlow.depth} (${ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})`}
+                      onApprove={approve} approvingId={approvingId}
+                      onToggleActive={toggleActive} togglingActiveId={togglingActiveId}
+                      workitemId={wi.id}
+                    />
+                  }
                 />
 
                 <div style={{ display: "grid", gap: 8, marginTop: 16 }}>

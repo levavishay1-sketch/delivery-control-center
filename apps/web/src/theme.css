@@ -1069,3 +1069,12 @@ tr.sd-a:hover > td { background: var(--surface-muted); }
 /* a FLOW card the requirement screen has chosen, or that answers the chosen line */
 .flow-node.sel { outline: 2.5px solid var(--color-accent); outline-offset: 1px; }
 .flow-node.rel { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+
+/* the requirement's map, drawn inside its own steps as well as on its own screen */
+.rq-body { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.rq-embed { display: flex; flex-direction: column; gap: 10px; height: 640px; }
+.rq-body > .rq-switches, .rq-embed > .rq-switches { align-items: flex-end; }
+.rq-full { align-self: flex-end; margin-inline-start: auto; }
+.rq-choice { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.rq-choice .rq-cap { padding: 0; }
+@media (max-width: 1000px) { .rq-embed { height: auto; } .rq-embed .rq-split { min-height: 0; } }
