@@ -1,3 +1,4 @@
+import { openInNewTab } from "../openTab.ts";
 import { useMemo, useState } from "react";
 import { BaseEdge, Controls, MarkerType, Position, ReactFlow, type Edge, type EdgeProps, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -165,9 +166,9 @@ function Card({ node, tone, onClick, onDetails, mark = "" }: { node: TaskFlowNod
   );
 }
 
-function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onApprove, approving, onToggleActive, togglingActive }: {
+function Detail({ node, tone, blockers, downstream, onClose, onJump, onApprove, approving, onToggleActive, togglingActive }: {
   node: TaskFlowNode; tone: Tone; blockers: { node: TaskFlowNode; reason: string | null }[]; downstream: number;
-  nav: (h: string) => void; onClose: () => void; onJump: (id: string) => void;
+  onClose: () => void; onJump: (id: string) => void;
   onApprove?: (id: string) => void; approving?: boolean;
   onToggleActive?: (id: string, active: boolean) => void; togglingActive?: boolean;
 }) {
@@ -294,7 +295,7 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
               {approving ? "מאשר…" : "✓ אישור הקמת משימה"}
             </button>
           )}
-          <button className={node.approved || !onApprove ? "btn btn-primary" : "btn btn-secondary"} onClick={() => nav(`#/task/${node.id}`)}>{node.isGroup ? "פתח את מסך הקבוצה ←" : "פתח את מסך המשימה ←"}</button>
+          <button className={node.approved || !onApprove ? "btn btn-primary" : "btn btn-secondary"} onClick={() => openInNewTab(`#/task/${node.id}`)}>{node.isGroup ? "פתח את מסך הקבוצה ←" : "פתח את מסך המשימה ←"}</button>
           {onToggleActive && (
             <button className="btn btn-secondary" disabled={togglingActive} onClick={() => onToggleActive(node.id, !node.active)}>
               {togglingActive ? "מעדכן…" : node.active ? "◻ השבת" : "☐ הפעל מחדש"}
@@ -307,8 +308,8 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
   );
 }
 
-export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove, approvingId, onToggleActive, togglingActiveId, zoomable, workitemId, mode = "dep", selectedId = null, relatedIds, onSelect, implementedBy = null }: {
-  flow: TaskFlow; height?: number; nav: (h: string) => void; title?: string; subtitle?: string;
+export function TaskGraph({ flow, height = 420, title, subtitle, onApprove, approvingId, onToggleActive, togglingActiveId, zoomable, workitemId, mode = "dep", selectedId = null, relatedIds, onSelect, implementedBy = null }: {
+  flow: TaskFlow; height?: number; title?: string; subtitle?: string;
   /** Reachable from the floating Detail popup — same "אישור הקמת משימה"
    *  action as the approve step's own row list, so approving doesn't
    *  require leaving the popup first. */
@@ -540,7 +541,7 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
                     node={byId.get(briefId)!}
                     waitsFor={byId.get(briefId)!.dependsOn.map((d) => byId.get(d)).filter((d): d is TaskFlowNode => !!d)}
                     implemented={implementedBy ? implementedBy(briefId) : null}
-                    onOpen={() => nav(`#/task/${briefId}`)}
+                    onOpen={() => openInNewTab(`#/task/${briefId}`)}
                     onClose={() => setBriefId(null)}
                   />
                 </div>
@@ -549,7 +550,7 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
                 <Detail
                   node={open} tone={toneOf(open, blockersOf(open, byId, flow.edges).length > 0)}
                   blockers={blockersOf(open, byId, flow.edges)} downstream={downstreamCount(open.id, flow.edges)}
-                  nav={nav} onClose={() => setOpenId(null)} onJump={(id) => setOpenId(id)}
+                  onClose={() => setOpenId(null)} onJump={(id) => setOpenId(id)}
                   onApprove={onApprove} approving={approvingId === open.id}
                   onToggleActive={onToggleActive} togglingActive={togglingActiveId === open.id}
                 />

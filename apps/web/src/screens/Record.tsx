@@ -552,7 +552,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
           {/* the guided workflow: stepper + step content, one unit */}
           <div style={{ marginBottom: 20 }}>
-            <WorkflowTab d={d} reload={reload} nav={nav} gapsPanel={gapsPanel} />
+            <WorkflowTab d={d} reload={reload} gapsPanel={gapsPanel} />
           </div>
 
           <div className="section">

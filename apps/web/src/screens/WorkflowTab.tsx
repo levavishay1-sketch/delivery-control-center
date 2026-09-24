@@ -1,3 +1,4 @@
+import { openInNewTab } from "../openTab.ts";
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import {
   approveTask, assignRequirement, finishResearchWork, getFlowRun, getTaskFlow, getUsers, materializeTasks,
@@ -133,8 +134,8 @@ function ApproveTasksModal({ nodes, onApprove, onClose }: {
   );
 }
 
-export function WorkflowTab({ d, reload, nav, gapsPanel }: {
-  d: WorkItemDetail; reload: () => void; nav: (h: string) => void; gapsPanel: React.ReactNode;
+export function WorkflowTab({ d, reload, gapsPanel }: {
+  d: WorkItemDetail; reload: () => void; gapsPanel: React.ReactNode;
 }) {
   const wi = d.workitem;
   const clientId = wi.clientId;
@@ -631,7 +632,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 ) : (
                   <>
                     {taskFlow && (
-                      <TaskGraph flow={taskFlow} height={220} nav={nav} title="משימת המעקב" workitemId={wi.id} />
+                      <TaskGraph flow={taskFlow} height={220} title="משימת המעקב" workitemId={wi.id} />
                     )}
                     <div style={{ display: "flex", gap: 8, margin: "14px 0" }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => setResearchNoteOpen(true)}>+ הוסף ממצא</button>
@@ -676,10 +677,10 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 <Err />
                 {taskFlow && nodes.length > 0 && (
                   <TaskViewChoice
-                    id={wi.id} flow={taskFlow} nav={nav}
+                    id={wi.id} flow={taskFlow}
                     classic={
                       <TaskGraph
-                        flow={taskFlow} nav={nav}
+                        flow={taskFlow}
                         title="ההיררכיה שהוצעה"
                         subtitle={structureLine(taskFlow)}
                         onApprove={approve} approvingId={approvingId}
@@ -740,10 +741,10 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                 <Err />
 
                 <TaskViewChoice
-                  id={wi.id} flow={taskFlow} nav={nav}
+                  id={wi.id} flow={taskFlow}
                   classic={
                     <TaskGraph
-                      flow={taskFlow} height={340} nav={nav}
+                      flow={taskFlow} height={340}
                       title="ההיררכיה"
                       subtitle={structureLine(taskFlow)}
                       onApprove={approve} approvingId={approvingId}
@@ -782,7 +783,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                           <>
                             <div style={{ fontSize: 12.5, marginBottom: 6 }}>{n.intent}</div>
                             {n.kind !== "check" && (
-                              <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => nav(`#/task/${n.id}`)}>
+                              <a style={{ fontSize: 11.5, color: "#584EF3", fontWeight: 600, cursor: "pointer" }} onClick={() => openInNewTab(`#/task/${n.id}`)}>
                                 {n.isGroup ? "פתח את הקבוצה — העבודה בתת-המשימות שלה ←" : "פתח את המשימה ותן ל-Claude לפתח ←"}
                               </a>
                             )}
