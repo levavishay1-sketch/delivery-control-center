@@ -1,6 +1,8 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { Pill, TaskStatusPill } from "../ui.tsx";
 import type { TaskFlow, TaskFlowNode } from "../api.ts";
+import { Info } from "../claude/Info.tsx";
+import { TaskBrief } from "./TaskBrief.tsx";
 
 /**
  * The requirement's tasks as a nested list — one line each, so a whole
@@ -32,7 +34,7 @@ export function gateOf(n: TaskFlowNode, byId: Map<string, TaskFlowNode>): string
     .sort((a, b) => (b.stage ?? 0) - (a.stage ?? 0) || a.seq - b.seq)[0]?.id ?? null;
 }
 
-export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick, onOpenTask, covers }: {
+export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick, onOpenTask, covers, implementedBy }: {
   flow: TaskFlow;
   mode: TreeMode;
   selected: string | null;
@@ -44,10 +46,27 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
   onOpenTask: (id: string) => void;
   /** How many requirements in the spec each task implements — null until the spec has been marked, when nobody knows yet. */
   covers: Map<string, number> | null;
+  /** The requirements in the spec a task carries out — null when the spec has not been marked yet. */
+  implementedBy: ((taskId: string) => { anchor: string; title: string }[]) | null;
 }) {
+  // Which rows have their details open — a row opens in place, under itself, and closes the same way.
+  const [details, setDetails] = useState<Set<string>>(new Set());
+  const toggleDetails = (id: string) => setDetails((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
   const byId = new Map(flow.nodes.map((n) => [n.id, n]));
   const work = flow.nodes.filter((n) => !n.isGroup);
   const focused = selected != null || related.size > 0;
+
+  const brief = (n: TaskFlowNode) => details.has(n.id) && (
+    <div className="tt-brief">
+      <TaskBrief
+        node={n}
+        waitsFor={n.dependsOn.map((d) => byId.get(d)).filter((d): d is TaskFlowNode => !!d)}
+        implemented={implementedBy ? implementedBy(n.id) : null}
+        onOpen={() => onOpenTask(n.id)}
+        onClose={() => toggleDetails(n.id)}
+      />
+    </div>
+  );
 
   const row = (n: TaskFlowNode, kids: TaskFlowNode[], extra?: string) => {
     const kind = n.isGroup ? "group" : "task";
@@ -72,11 +91,12 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
         <span className="tt-name">{n.intent}</span>
         <span className="tt-end">
           {extra && <span className="tt-extra">{extra}</span>}
+          {mode === "hier" && n.adoType && <span className="tt-type" title="הסוג ב-TFS — נקבע לפי התפקיד של המשימה בעץ">{n.adoType}</span>}
           {n.isGroup
             ? <span className="tt-prog" title="תת-משימות שהסתיימו"><span className="tt-bar"><i style={{ width: `${subs ? (done / subs) * 100 : 0}%` }} /></span>{done}/{subs}</span>
             : covers && <span className="tt-lines" title="דרישות באפיון שהמשימה מממשת">{lines === 0 ? "לא באפיון" : lines === 1 ? "שורה אחת" : `${lines} שורות`}</span>}
           {n.status ? <TaskStatusPill status={n.status} /> : <Pill tone="inactive">{n.state}</Pill>}
-          <a className="tt-open" title="פתח את מסך המשימה" onClick={(e) => { e.stopPropagation(); onOpenTask(n.id); }}>←</a>
+          <a className={`tt-open${details.has(n.id) ? " on" : ""}`} role="button" aria-expanded={details.has(n.id)} title="פרטי המשימה" onClick={(e) => { e.stopPropagation(); toggleDetails(n.id); }}>{details.has(n.id) ? "▾" : "◂"}</a>
         </span>
       </div>
     );
@@ -91,6 +111,7 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
       return (
         <div className="tt-node" key={n.id}>
           {row(n, [...kids, ...checks.map(() => n)])}
+          {brief(n)}
           {open.has(n.id) && (kids.length > 0 || checks.length > 0) && (
             <div className="tt-kids">
               {kids.map((k) => <div className="tt-kid" key={k.id}>{branch(k)}</div>)}
@@ -109,7 +130,21 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
         </div>
       );
     };
-    return <div className={`tt${focused ? " focused" : ""}`}>{roots.map(branch)}</div>;
+    const rung = flow.requirementRung;
+    return (
+      <div className={`tt${focused ? " focused" : ""}`}>
+        {rung && (
+          <div className="tt-req">
+            <span className="tt-type">{rung.type}</span>
+            <span>הדרישה עצמה — מעל {rung.over} {rung.of === "User Story" ? "סיפורי משתמש" : rung.of}</span>
+            <Info k="requirement_rung" />
+          </div>
+        )}
+        {rung
+          ? <div className="tt-kids tt-under">{roots.map((n) => <div className="tt-kid" key={n.id}>{branch(n)}</div>)}</div>
+          : roots.map(branch)}
+      </div>
+    );
   }
 
   /* dependencies: each task under the one that unblocks it */
@@ -121,6 +156,7 @@ export function TaskTree({ flow, mode, selected, related, open, onToggle, onPick
     return (
       <div className="tt-node" key={n.id}>
         {row(n, kids, group ? `קבוצה #${group.seq}` : undefined)}
+        {brief(n)}
         {also.length > 0 && <div className="tt-also">תלויה גם ב-{also.map((a) => `#${a.seq}`).join(", ")}</div>}
         {open.has(n.id) && kids.length > 0 && (
           <>

@@ -397,7 +397,9 @@ export const mapSpec = (workitemId: string) =>
   post<{ requirements: number; links: number; unsupported: number; uncovered: number; lostManual: number }>(`/workitems/${workitemId}/spec/map`, {});
 export const getTaskSpec = (taskId: string) => get<{ anchor: string; title: string; kind: string }[]>(`/tasks/${taskId}/spec`);
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
-export type TaskFlow = { depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] };
+/** The type the requirement itself takes above its top-level tasks — a Feature over several User Stories — or null when it takes none. */
+export type RequirementRung = { type: string; over: number; of: string };
+export type TaskFlow = { depth: number; requirementRung: RequirementRung | null; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] };
 export const getTaskFlow = (id: string) => get<TaskFlow>(`/workitems/${id}/task-flow`);
 export type AdoTaskRow = {
   id: string; requirementId: string; requirementKey: string | null; requirementTitle: string;
@@ -417,8 +419,6 @@ export type AllAdoTasks = {
 export const getAllAdoTasks = () => get<AllAdoTasks>("/ado-tasks");
 export type MaterializeResult = { created: number; skipped: number; links: number; checksPosted: number; items: { taskId: string; seq: number; adoId: number; adoType: string; url: string }[]; detail: string };
 export const materializeTasks = (id: string) => post<MaterializeResult>(`/workitems/${id}/materialize`, {});
-/** Agile ladder — the breakdown depth picks the rungs, leaves are always Task. */
-export const ADO_LADDER = ["Epic", "Feature", "User Story", "Task"] as const;
 export const startAssess = (id: string, opts?: { promptKey?: string; customEmphasis?: string; model?: string }) =>
   post<{ runId: string; alreadyRunning: boolean }>(`/workitems/${id}/assess`, opts ?? {});
 export const previewAssess = (id: string, promptKey: string, customEmphasis?: string) =>

@@ -7,7 +7,8 @@ import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { appendEvent, db, recordClaudeCall, usd, withTenant, withoutTenant, type CallEntityKind, type CallOutcome, type CallTrigger } from "@dcc/db";
 import { attachment, claudeCall, flowRun, gap, repo, task, taskDependency, users, workitem } from "@dcc/db/schema";
 import { route, type Capability, type RoutingDecision, type RoutingSignals } from "./routing.ts";
-import { ADO_LADDER, MAX_TASK_DEPTH, adoTypeForLevel } from "./ado-map.ts";
+import { MAX_TASK_DEPTH } from "./ado-map.ts";
+import { requirementRung, structuralTypes } from "./task-types.ts";
 import { adoSend } from "./ado-http.ts";
 import { activeAdoConnection } from "./ado-sync.ts";
 import { materializeTasksToAdo } from "./task-ado-sync.ts";
@@ -1110,7 +1111,7 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
   });
   pushLine(input.runId, "בונה את היררכיית המשימות…");
 
-  // resolve the tree: level per node, then the depth that picks TFS types.
+  // resolve the tree: the level of every node, and from the tree the TFS type of each.
   // A "check" is always a leaf — if the model gave one children anyway,
   // it must really be work (a check can't be a parent), so promote it.
   const bySeq = new Map(proposed.map((p) => [p.seq, p]));
@@ -1125,14 +1126,16 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
     return levelOf(parent, seen) + 1;
   };
   const levels = new Map(proposed.map((p) => [p.seq, Math.min(levelOf(p.seq), MAX_TASK_DEPTH - 1)]));
-  // depth (→ the TFS ladder) is driven only by "task" nodes — a check never
-  // gets a rung of its own and never stretches the ladder.
-  const depth = Math.min(
-    Math.max(0, ...proposed.filter((p) => kindOf(p.seq) === "task").map((p) => levels.get(p.seq) ?? 0)) + 1,
-    MAX_TASK_DEPTH,
-  );
+  // A node's TFS type is the role it plays — a leaf is a Task, what holds
+  // Tasks is a User Story, and so on up (task-types.ts) — never its depth.
+  // A check is not a work item of its own and takes no rung.
+  const work = proposed.filter((p) => kindOf(p.seq) === "task").map((p) => ({ id: String(p.seq), parentId: p.parentSeq != null ? String(p.parentSeq) : null }));
+  const depth = Math.min(Math.max(0, ...proposed.filter((p) => kindOf(p.seq) === "task").map((p) => levels.get(p.seq) ?? 0)) + 1, MAX_TASK_DEPTH);
+  const typeOfSeq = structuralTypes(work);
+  const rung = requirementRung(work);
   const checkCount = proposed.filter((p) => kindOf(p.seq) === "check").length;
-  pushLine(input.runId, `עומק ${depth} → ${ADO_LADDER.slice(MAX_TASK_DEPTH - depth).join(" › ")}${checkCount ? ` · ${checkCount} בדיקות (לא ב-TFS בנפרד)` : ""}`);
+  const counts = [...typeOfSeq.values()].reduce((m, t) => m.set(t, (m.get(t) ?? 0) + 1), new Map<string, number>());
+  pushLine(input.runId, `${[...counts].map(([t, n]) => `${n} ${t}`).join(" · ")}${rung ? ` · הדרישה עצמה היא ${rung.type} מעל ${rung.over} ${rung.of}` : ""}${checkCount ? ` · ${checkCount} בדיקות (לא ב-TFS בנפרד)` : ""}`);
 
   const out = await withTenant(input.clientId, async (tx) => {
     // Re-running a breakdown REPLACES the previous proposal — otherwise
@@ -1151,7 +1154,7 @@ async function runBreakdown(input: { clientId: string; workitemId: string; by: D
       const appetite = ["small", "standard", "large"].includes(p.appetite) ? p.appetite : "standard";
       const level = levels.get(p.seq) ?? 0;
       const kind = kindOf(p.seq);
-      const adoType = kind === "task" ? adoTypeForLevel(level, depth) : null;
+      const adoType = kind === "task" ? typeOfSeq.get(String(p.seq)) ?? "Task" : null;
       const parentId = p.parentSeq != null ? seqToId.get(p.parentSeq) ?? null : null;
       const [t] = await tx.insert(task).values({
         clientId: input.clientId, workitemId: input.workitemId, seq: p.seq, kind,

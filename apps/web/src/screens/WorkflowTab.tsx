@@ -3,7 +3,7 @@ import {
   approveTask, assignRequirement, finishResearchWork, getFlowRun, getTaskFlow, getUsers, materializeTasks,
   rejectTask, startAssess, startBreakdown, startBuilding, startResearchWork, getPrompts, previewAssess, previewBreakdown, stopFlowRun, sendRunMessage,
   setTaskActive,
-  ADO_LADDER, type FlowRun, type MaterializeResult, type PromptTemplate, type StartBuildResult, type TaskFlow, type WorkItemDetail,
+  type FlowRun, type MaterializeResult, type PromptTemplate, type StartBuildResult, type TaskFlow, type WorkItemDetail,
 } from "../api.ts";
 import { CardTitle, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
@@ -16,9 +16,9 @@ import { AddNote } from "../forms.tsx";
  * The gated wizard for one requirement, embedded in its Overview tab.
  *
  * A requirement is a DCC-ONLY pre-stage; it is never pushed to TFS. Its
- * TASKS are the tracked work items, and the depth of the approved task
- * tree picks their types off the Agile ladder (Epic > Feature > User
- * Story > Task) when step 4 materialises them.
+ * TASKS are the tracked work items, and the role each plays in the approved
+ * tree picks its type (a leaf is a Task, what holds Tasks a User Story, and
+ * so on up) when step 4 materialises them.
  *
  * Steps unlock in order — you cannot break down while blocking gaps are
  * open, and you cannot start work before the tasks exist in TFS.
@@ -42,6 +42,15 @@ const STEPS_RESEARCH = [
   { key: "gaps", label: "פערים" },
   { key: "work", label: "עבודה" },
 ] as const;
+
+/** What the tree holds, in words: how many of each TFS type, and the rung the requirement itself takes. */
+function structureLine(f: TaskFlow): string {
+  const counts = new Map<string, number>();
+  for (const n of f.nodes) counts.set(n.adoType ?? "Task", (counts.get(n.adoType ?? "Task") ?? 0) + 1);
+  const order = ["Epic", "Feature", "User Story", "Task"].filter((t) => counts.has(t));
+  const held = order.map((t) => `${counts.get(t)} ${t}`).join(" · ");
+  return f.requirementRung ? `${held} · הדרישה עצמה היא ${f.requirementRung.type}` : held;
+}
 
 const Transcript = ({ lines }: { lines: string[] }) => {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -657,7 +666,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
               <div>
                 <CardTitle as="h3" info="breakdown" style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4, color: "#1B1741" }}>פירוק למשימות</CardTitle>
                 <p style={{ fontSize: 12.5, color: "#6b6d8c", marginBottom: 12 }}>
-                  Claude יפרק את הדרישה להיררכיה של משימות עם תלויות. <b>עומק ההיררכיה קובע את הטיפוסים ב-TFS</b> ({ADO_LADDER.join(" › ")}).
+                  Claude יפרק את הדרישה להיררכיה של משימות עם תלויות. <b>התפקיד של כל משימה קובע את הטיפוס שלה ב-TFS</b>: עלה הוא Task, מה שמחזיק Tasks הוא User Story, ומעליו Feature. כשיש בדרישה יותר מסיפור אחד, הדרישה עצמה היא ה-Feature.
                 </p>
                 <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
                   <button className="btn btn-primary btn-sm" onClick={() => kick("breakdown")}>{nodes.length > 0 ? "פרק מחדש" : "פרק למשימות"}</button>
@@ -672,7 +681,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                       <TaskGraph
                         flow={taskFlow} nav={nav}
                         title="ההיררכיה שהוצעה"
-                        subtitle={`עומק ${taskFlow.depth} (${ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})`}
+                        subtitle={structureLine(taskFlow)}
                         onApprove={approve} approvingId={approvingId}
                         onToggleActive={toggleActive} togglingActiveId={togglingActiveId}
                         workitemId={wi.id}
@@ -736,7 +745,7 @@ export function WorkflowTab({ d, reload, nav, gapsPanel }: {
                     <TaskGraph
                       flow={taskFlow} height={340} nav={nav}
                       title="ההיררכיה"
-                      subtitle={`עומק ${taskFlow.depth} (${ADO_LADDER.slice(ADO_LADDER.length - taskFlow.depth).join(" › ")})`}
+                      subtitle={structureLine(taskFlow)}
                       onApprove={approve} approvingId={approvingId}
                       onToggleActive={toggleActive} togglingActiveId={togglingActiveId}
                       workitemId={wi.id}

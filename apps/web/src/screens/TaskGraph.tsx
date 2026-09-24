@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { BaseEdge, Controls, MarkerType, Position, ReactFlow, type Edge, type EdgeProps, type Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { TaskBrief } from "./TaskBrief.tsx";
 import type { TaskFlow, TaskFlowNode } from "../api.ts";
 import { CopyBtn, DependencyTagPill } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
@@ -128,7 +129,7 @@ function Badge({ tone }: { tone: Tone }) {
   return <span className={`flow-badge ${tone.key}`}><i />{tone.label}</span>;
 }
 
-function Card({ node, tone, onClick, mark = "" }: { node: TaskFlowNode; tone: Tone; onClick: () => void; mark?: string }) {
+function Card({ node, tone, onClick, onDetails, mark = "" }: { node: TaskFlowNode; tone: Tone; onClick: () => void; onDetails?: () => void; mark?: string }) {
   const idLabel = node.linkedAdoId ? `#${node.linkedAdoId}` : `הצעה #${node.seq}`;
   // Counted from each check's own status — the same one its row on the task screen shows; a check set aside is not counted.
   const activeChecks = node.checks.filter((c) => c.status?.key !== "inactive");
@@ -137,6 +138,7 @@ function Card({ node, tone, onClick, mark = "" }: { node: TaskFlowNode; tone: To
     <div className={`flow-node ${tone.key}${mark ? " " + mark : ""}`} onClick={onClick} style={{ width: LAYER_W, direction: "rtl", opacity: node.active ? 1 : 0.6, cursor: "pointer" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: node.status?.dependency ? 4 : 6, flexWrap: "wrap", gap: 4 }}>
         <Badge tone={tone} />
+        {onDetails && <a className="flow-arrow" role="button" title="פרטי המשימה" onClick={(e) => { e.stopPropagation(); onDetails(); }}>◂</a>}
         {node.adoUrl
           ? <a href={node.adoUrl} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} style={{ fontSize: 10.5, fontFamily: "var(--mono)", color: "var(--status-healthy)", direction: "ltr" }}>{idLabel} ↗</a>
           : <span style={{ fontSize: 10.5, fontFamily: "var(--mono)", color: "var(--ink-500)", direction: "ltr" }}>{idLabel}</span>}
@@ -305,7 +307,7 @@ function Detail({ node, tone, blockers, downstream, nav, onClose, onJump, onAppr
   );
 }
 
-export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove, approvingId, onToggleActive, togglingActiveId, zoomable, workitemId, mode = "dep", selectedId = null, relatedIds, onSelect }: {
+export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove, approvingId, onToggleActive, togglingActiveId, zoomable, workitemId, mode = "dep", selectedId = null, relatedIds, onSelect, implementedBy = null }: {
   flow: TaskFlow; height?: number; nav: (h: string) => void; title?: string; subtitle?: string;
   /** Reachable from the floating Detail popup — same "אישור הקמת משימה"
    *  action as the approve step's own row list, so approving doesn't
@@ -334,8 +336,12 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
   selectedId?: string | null;
   relatedIds?: Set<string>;
   onSelect?: (id: string) => void;
+  /** The requirements in the spec a task carries out — null when the spec has not been marked yet. */
+  implementedBy?: ((taskId: string) => { anchor: string; title: string }[]) | null;
 }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  // The small brief a card's arrow opens, over the canvas — beside the spec the full popup would cover the answer.
+  const [briefId, setBriefId] = useState<string | null>(null);
   const byId = useMemo(() => new Map(flow.nodes.map((n) => [n.id, n])), [flow.nodes]);
 
   const { rfNodes, rfEdges, steps, stats, cols } = useMemo(() => {
@@ -395,7 +401,7 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
         // cards instead of a flat S-curve between them.
         sourcePosition: Position.Right,
         targetPosition: Position.Left,
-        data: { label: <Card node={n} tone={tone} mark={mark} onClick={() => (onSelect ? onSelect(n.id) : setOpenId(n.id))} /> },
+        data: { label: <Card node={n} tone={tone} mark={mark} onClick={() => (onSelect ? onSelect(n.id) : setOpenId(n.id))} onDetails={onSelect ? () => setBriefId((cur) => (cur === n.id ? null : n.id)) : undefined} /> },
         style: { width: LAYER_W, padding: 0, border: "none", background: "transparent" },
       };
     });
@@ -528,6 +534,17 @@ export function TaskGraph({ flow, height = 420, nav, title, subtitle, onApprove,
               >
                 {zoomable && <Controls position="bottom-left" showInteractive={false} />}
               </ReactFlow>
+              {briefId && byId.get(briefId) && (
+                <div className="flow-brief">
+                  <TaskBrief
+                    node={byId.get(briefId)!}
+                    waitsFor={byId.get(briefId)!.dependsOn.map((d) => byId.get(d)).filter((d): d is TaskFlowNode => !!d)}
+                    implemented={implementedBy ? implementedBy(briefId) : null}
+                    onOpen={() => nav(`#/task/${briefId}`)}
+                    onClose={() => setBriefId(null)}
+                  />
+                </div>
+              )}
               {open && (
                 <Detail
                   node={open} tone={toneOf(open, blockersOf(open, byId, flow.edges).length > 0)}

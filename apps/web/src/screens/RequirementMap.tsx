@@ -65,6 +65,13 @@ export function RequirementMap({ id, flow, nav, embedded = false }: {
     return m;
   }, [spec, flow]);
 
+  /** What a task carries out of the spec — a group carries out what its sub-tasks do. */
+  const implementedBy = useCallback((tid: string) => {
+    const kids = flow.nodes.filter((k) => k.parentTaskId === tid).map((k) => k.id);
+    const mine = new Set([tid, ...kids]);
+    return (spec?.pieces ?? []).filter((s) => s.tasks.some((t) => mine.has(t.id))).map((s) => ({ anchor: s.anchor, title: s.title }));
+  }, [spec, flow]);
+
   const hit = useMemo(() => {
     if (!task || !spec) return new Set<string>();
     const kids = flow.nodes.filter((n) => n.parentTaskId === task).map((n) => n.id);
@@ -135,11 +142,13 @@ export function RequirementMap({ id, flow, nav, embedded = false }: {
               flow={flow} mode={mode} selected={task} related={related} open={open} covers={spec?.read ? covers : null}
               onToggle={(tid) => setOpen((p) => { const n = new Set(p); n.has(tid) ? n.delete(tid) : n.add(tid); return n; })}
               onPick={pickTask} onOpenTask={(tid) => nav(`#/task/${tid}`)}
+              implementedBy={spec?.read ? implementedBy : null}
             />
           : <TaskGraph
               flow={flow} nav={nav} mode={mode} zoomable
               height={embedded ? 420 : Math.max(420, (typeof window !== "undefined" ? window.innerHeight : 900) - 300)}
               selectedId={task} relatedIds={related} onSelect={selectTask}
+              implementedBy={spec?.read ? implementedBy : null}
             />}
       </div>
     </div>

@@ -1,26 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adoTypeForLevel, htmlToText, mapAdoState, mapAdoType } from "./ado-map.ts";
-
-describe("adoTypeForLevel", () => {
-  // The leaves are always Tasks; the depth of the tree picks the rungs above.
-  it.each([
-    [1, ["Task"]],
-    [2, ["User Story", "Task"]],
-    [3, ["Feature", "User Story", "Task"]],
-    [4, ["Epic", "Feature", "User Story", "Task"]],
-  ])("a tree %i deep maps level by level", (depth, expected) => {
-    expect(expected.map((_, level) => adoTypeForLevel(level, depth))).toEqual(expected);
-  });
-
-  it("clamps a tree deeper than the ladder and one shallower than 1", () => {
-    expect(adoTypeForLevel(0, 9)).toBe("Epic");
-    expect(adoTypeForLevel(0, 0)).toBe("Task");
-  });
-
-  it("never runs past Task for a level below the leaves", () => {
-    expect(adoTypeForLevel(7, 2)).toBe("Task");
-  });
-});
+import { htmlToText, mapAdoState, mapAdoType } from "./ado-map.ts";
 
 describe("mapAdoType / mapAdoState", () => {
   it("maps known types and states case-insensitively, ignoring padding", () => {

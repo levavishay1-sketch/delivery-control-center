@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { getAllAdoTasks, approveTask, ADO_LADDER, type AllAdoTasks, type AdoTaskRow } from "../api.ts";
+import { getAllAdoTasks, approveTask, type AllAdoTasks, type AdoTaskRow } from "../api.ts";
 import { PageHead, Pill, TaskStatusPill } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 
@@ -94,8 +94,8 @@ export function AdoTasks({ nav }: { nav: (h: string) => void }) {
           <p className="r">
             הדרישות נשארות ב-DCC ולא מגיעות ל-TFS. מה שמופיע כאן הן <b>המשימות</b> שיצאו מהן — הן פריטי העבודה של הצוות.
           </p>
-          <p className="meta" style={{ direction: "ltr", textAlign: "left", fontFamily: "var(--mono)" }}>
-            {ADO_LADDER.join(" › ")} — עומק הפירוק קובע מאיזו דרגה מתחילים
+          <p className="meta">
+            הסוג ב-TFS נקבע לפי התפקיד של המשימה: עלה הוא Task, משימה שמתחתיה משימות היא User Story, ומעליה Feature.
           </p>
         </div>
       </div>

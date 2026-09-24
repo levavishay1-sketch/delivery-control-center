@@ -3,6 +3,7 @@ import { db, withTenant, appendEvent } from "@dcc/db";
 import { client, gap, task, taskDependency, workitem, workitemDependency } from "@dcc/db/schema";
 import { regenerateBrief } from "./brief/generate.ts";
 import { taskRelations } from "./task-relations.ts";
+import { requirementRung, structuralTypes } from "./task-types.ts";
 
 /**
  * WorkItem-level dependencies and the project Flow graph (architecture
@@ -167,13 +168,15 @@ export type TaskFlowNode = {
   /** How many rounds of work must finish first. Null on a group, which is not scheduled. */
   stage: number | null;
 };
+/** The type the requirement itself takes above its top-level tasks — a Feature over several User Stories — or null when it takes none. */
+export type RequirementRung = { type: string; over: number; of: string };
 export type TaskFlowEdge = { from: string; to: string; kind: "parent" | "depends"; reason: string | null };
 
 /**
  * The proposed/approved task tree for a requirement: hierarchy edges plus
  * dependency edges. `depth` is what picked the TFS types off the ladder.
  */
-export async function taskFlowFor(clientId: string, workitemId: string): Promise<{ depth: number; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] }> {
+export async function taskFlowFor(clientId: string, workitemId: string): Promise<{ depth: number; requirementRung: RequirementRung | null; nodes: TaskFlowNode[]; edges: TaskFlowEdge[] }> {
   return withTenant(clientId, async (tx) => {
     const rows = await tx
       .select({
@@ -186,7 +189,7 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
       .from(task)
       .where(sql`${task.workitemId} = ${workitemId} and ${task.state} <> 'dropped'`)
       .orderBy(task.seq);
-    if (rows.length === 0) return { depth: 0, nodes: [], edges: [] };
+    if (rows.length === 0) return { depth: 0, requirementRung: null, nodes: [], edges: [] };
 
     const byId = new Map(rows.map((r) => [r.id, r]));
     const level = (id: string, seen = new Set<string>()): number => {
@@ -262,7 +265,13 @@ export async function taskFlowFor(clientId: string, workitemId: string): Promise
     };
     for (const n of nodes) if (!n.isGroup) stageOf(n.id);
 
-    return { depth, nodes, edges };
+    // The TFS type of a task follows the role it plays in the tree (task-types.ts).
+    // One that already exists in TFS keeps the type it was created with.
+    const work = nodes.filter((n) => n.active).map((n) => ({ id: n.id, parentId: n.parentTaskId }));
+    const types = structuralTypes(work);
+    for (const n of nodes) if (!n.linkedAdoId) n.adoType = types.get(n.id) ?? n.adoType;
+
+    return { depth, requirementRung: requirementRung(work), nodes, edges };
   });
 }
 

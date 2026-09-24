@@ -4,6 +4,7 @@ import { client, task, taskDependency, workitem } from "@dcc/db/schema";
 import { adoSend } from "./ado-http.ts";
 import { activeAdoConnection, adoWorkItemUrl } from "./ado-sync.ts";
 import { regenerateBrief } from "./brief/generate.ts";
+import { structuralTypes } from "./task-types.ts";
 
 /**
  * TASKS are what lives in TFS — a requirement is a DCC-only pre-stage and
@@ -11,10 +12,13 @@ import { regenerateBrief } from "./brief/generate.ts";
  * the tasks are the tracked work).
  *
  * On approval the task tree is materialised top-down: each "task"-kind
- * node becomes a work item whose TYPE came off the Agile ladder when the
- * breakdown chose its depth (Epic > Feature > User Story > Task), wired
- * to its parent with Hierarchy-Reverse and to its predecessors with
- * Dependency-Reverse.
+ * node becomes a work item whose TYPE is the role it plays in the tree — a
+ * leaf is a Task, what holds Tasks is a User Story, what holds Stories a
+ * Feature, what holds Features an Epic (task-types.ts) — wired to its parent
+ * with Hierarchy-Reverse and to its predecessors with Dependency-Reverse.
+ * The requirement itself is not written here: where it should be the Feature
+ * over several User Stories is shown on the map, and putting it into TFS is a
+ * separate, deliberate step.
  *
  * "check"-kind nodes (verification / regression / documentation the
  * parent task needs before it's done) never become their own work item —
@@ -81,13 +85,15 @@ export async function materializeTasksToAdo(input: { clientId: string; workitemI
   const tasksOnly = rows.filter((r) => r.kind !== "check");
   const ordered = [...tasksOnly].sort((a, b) => levelOf(a.id, byId) - levelOf(b.id, byId) || a.seq - b.seq);
 
+  // What a task is in TFS follows the role it plays in the tree (task-types.ts); one already in TFS keeps its type.
+  const types = structuralTypes(tasksOnly.map((r) => ({ id: r.id, parentId: r.parentTaskId })));
   const res: MaterializeResult = { created: 0, skipped: 0, links: 0, checksPosted: 0, items: [], detail: "" };
   const adoIdOf = new Map<string, number>(rows.filter((r) => r.linkedAdoId).map((r) => [r.id, r.linkedAdoId!]));
   const adoUrlOf = new Map<string, string>(rows.filter((r) => r.linkedAdoId && r.adoUrl).map((r) => [r.id, r.adoUrl!]));
 
   for (const t of ordered) {
     if (t.linkedAdoId) { res.skipped++; continue; }
-    const adoType = t.adoType || "Task";
+    const adoType = types.get(t.id) ?? t.adoType ?? "Task";
     const parentAdoId = t.parentTaskId ? adoIdOf.get(t.parentTaskId) ?? null : null;
 
     const descLines = [
@@ -116,7 +122,7 @@ export async function materializeTasksToAdo(input: { clientId: string; workitemI
     adoIdOf.set(t.id, adoId);
     adoUrlOf.set(t.id, url);
     await withTenant(input.clientId, (tx) =>
-      tx.update(task).set({ linkedAdoId: adoId, adoUrl: url, adoSyncedAt: new Date(), updatedAt: new Date() }).where(eq(task.id, t.id)),
+      tx.update(task).set({ linkedAdoId: adoId, adoUrl: url, adoType, adoSyncedAt: new Date(), updatedAt: new Date() }).where(eq(task.id, t.id)),
     );
     await appendEvent({
       clientId: input.clientId, workitemId: input.workitemId, source: "ado", type: "ado.synced",
