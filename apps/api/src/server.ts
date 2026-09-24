@@ -82,6 +82,8 @@ import {
   rollbackTask,
   pushTask,
   codeMapForTask,
+  taskChangedFiles,
+  taskFileVersions,
   listPullRequests,
   openLocalFolder,
   FolderRefused,
@@ -1135,6 +1137,20 @@ app.get("/tasks/:id/code-map", async (req) => {
   const clientId = await taskClient(id);
   const d = await taskDetail(clientId, id);
   return codeMapForTask({ clientId, workitemId: d.requirement.id, taskId: id });
+});
+
+// what a task's branch actually changed, and one of those files before/after —
+// same read-only comparison the pull-request screen and onboarding review use.
+app.get("/tasks/:id/files", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  return taskChangedFiles(await taskClient(id), id);
+});
+app.get("/tasks/:id/file", async (req) => {
+  await actingUser(req);
+  const { id } = req.params as { id: string };
+  const q = z.object({ path: z.string().min(1) }).parse(req.query);
+  return taskFileVersions(await taskClient(id), id, q.path);
 });
 
 app.post("/tasks/:id/push", async (req) => {
