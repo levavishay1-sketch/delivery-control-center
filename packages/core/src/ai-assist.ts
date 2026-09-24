@@ -1254,6 +1254,11 @@ export type ImplementResult = {
   skipped?: number[];
   /** What the run was built on and without — how the task's steps tell a dependency coming in from a plain run again. */
   base?: FlowBase;
+  /**
+   * Present when a person reported the task as developed by hand (manual-work.ts): there is no branch
+   * or commit then, and this says what they told DCC instead.
+   */
+  manual?: { customisations: string[]; components: string[]; reference: string | null; reportedBy: string; reportedAt: string };
   /** Set later, on the run the task's branch was pushed from / the task was closed on. */
   pushedAt?: string;
   closedAt?: string;

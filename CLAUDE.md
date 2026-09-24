@@ -70,6 +70,7 @@ npm run -w @dcc/core prove:routing    # routing proofs
 npm run -w @dcc/core prove:retention  # chat-retention proofs
 npm run -w @dcc/core prove:built-on   # a task developed before its dependency (own DB + git, safe with the API up)
 npm run -w @dcc/core prove:checks     # every task's checks (build → tests), its status, the done gate (same)
+npm run -w @dcc/core prove:manual     # a task developed by a person: the mark, the report, each check by hand (same)
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run -w @dcc/web build      # production build of the web app

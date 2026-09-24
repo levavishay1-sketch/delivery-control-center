@@ -288,6 +288,12 @@ export const task = pgTable(
      *  `done` on its own instead of sitting in `failed_checks` forever. */
     wasDone: boolean("was_done").notNull().default(false),
     /**
+     * Somebody develops this task themselves, not Claude. The task then goes through
+     * the same lifecycle, but its development is reported by a person (a run marked
+     * manual) and its checks can be set by hand — see manual-work.ts.
+     */
+    developedManually: boolean("developed_manually").notNull().default(false),
+    /**
      * What this task's branch was created from, recorded when it is created
      * (see `task-base.ts`). `baseTaskId` is the dependency whose branch it
      * starts from when that work is not in the default branch yet — null

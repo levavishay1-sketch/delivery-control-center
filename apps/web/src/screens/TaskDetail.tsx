@@ -3,6 +3,7 @@ import {
   getTask, getTaskRun, getTaskBuiltOn, implementTask, previewImplement, addE2ECheck, progressTask, editTask, rollbackTask, pushTask, getTaskCodeMap, type CodeMap,
   getTaskFiles, getTaskFile, type ChangedFile,
   precheckTaskDelete, deleteTask, DeleteBlocked, approveTask, ChecksNotPassed, setTaskActive, checkAdoRecheck,
+  setTaskManual, reportManualWork, cancelManualReport, setCheckManually, CUSTOMISATION_TEMPLATE,
   type FlowRun, type TaskBuiltOn, type TaskDetail as TD, type TaskDeletePrecheck, type TaskFlowStep,
 } from "../api.ts";
 import { CardTitle, PageHead, Pill, PromptPreviewModal, PromptText, TaskStatusPill, DependencyTagPill, CHECK_KIND_HE } from "../ui.tsx";
@@ -10,6 +11,8 @@ import { Info } from "../claude/Info.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { useClaudeContext } from "../claude/context.ts";
+import { errText } from "./onboarding/labels.ts";
+import { ManualCheckEditor, ManualReportCard, ManualReportForm, ManualSwitch } from "./ManualWork.tsx";
 
 /**
  * One task — the unit that actually reaches TFS and gets built. Its status in
@@ -219,6 +222,12 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [adoRechecking, setAdoRechecking] = useState(false);
   const [adoRecheckMsg, setAdoRecheckMsg] = useState<string | null>(null);
   const adoCheckedOnLoad = useRef(false);
+  // A task developed by a person: the switch, the report, and each check set by hand.
+  const [manualBusy, setManualBusy] = useState(false);
+  const [manualErr, setManualErr] = useState<string | null>(null);
+  const [editingReport, setEditingReport] = useState(false);
+  const [checkManualBusy, setCheckManualBusy] = useState<string | null>(null);
+  const [checkManualErr, setCheckManualErr] = useState<{ id: string; text: string } | null>(null);
 
   const load = useCallback(() => {
     getTask(id).then(setD).catch((e) => setErr(String(e)));
@@ -297,7 +306,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   // The server's facts, never this screen's own reading of the last run: a later
   // run that errored, or one check rerun on its own, does not undo development in place.
   const impl = d.development;
-  const hasCode = d.developed && !d.isGroup;
+  // Developed by a person: what they reported is the development, and there is no code in DCC's copy to show or run.
+  const manual = t.developedManually;
+  const reported = !!impl?.manual;
+  const hasCode = d.developed && !d.isGroup && !manual;
   const attempted = hasCode || (run?.kind === "implement" && run.state === "error");
   const groupReady = d.isGroup && d.subtasks.every((s) => s.developed || s.done);
   // While a run is going on the status follows it step by step; the rest of the time it is the server's.
@@ -492,6 +504,35 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const canRun = !!t.approvedAt && (inTfs || t.kind === "check") && t.active && !d.isGroup;
   const outcomeOf = (seq: number) => { const c = checks.find((x) => x.seq === seq); return c ? d.checkOutcomes[c.id] : undefined; };
 
+  /* ── a task developed by a person ─────────────────────────────────── */
+
+  const manualCall = async (fn: () => Promise<unknown>) => {
+    setManualBusy(true); setManualErr(null);
+    try { await fn(); load(); return true; }
+    catch (e) { setManualErr(errText(e)); return false; }
+    finally { setManualBusy(false); }
+  };
+  const manualLocked = t.kind !== "task" || d.isGroup ? null
+    : running ? "יש הרצה של Claude כרגע"
+    : manual && reported ? "יש דיווח ידני — בטלו אותו כדי לחזור ל-Claude"
+    : !manual && d.developed ? "Claude כבר פיתח את המשימה — Rollback, ואז אפשר לעבור לידני"
+    : null;
+  const manualSwitch = t.kind === "task" && !d.isGroup && t.active && t.state !== "done"
+    ? <ManualSwitch manual={manual} locked={manualLocked} busy={manualBusy} onChange={(v) => manualCall(() => setTaskManual(id, v))} />
+    : null;
+  const setCheckByHand = async (checkId: string, result: "passed" | "failed" | "not_run", note: string) => {
+    setCheckManualBusy(checkId); setCheckManualErr(null);
+    try { await setCheckManually(checkId, { result, note }); load(); }
+    catch (e) { setCheckManualErr({ id: checkId, text: errText(e) }); }
+    finally { setCheckManualBusy(null); }
+  };
+  const manualCheckEditor = (c: { id: string; checkResult?: "passed" | "failed" | "waiting" | null }) => (
+    <ManualCheckEditor
+      current={c.checkResult ?? null} busy={checkManualBusy === c.id} err={checkManualErr?.id === c.id ? checkManualErr.text : null}
+      onSet={(result, note) => setCheckByHand(c.id, result, note)}
+    />
+  );
+
   /* ── the panes, one per kind of step ─────────────────────────────── */
 
   const runControls = (label: string) => (
@@ -617,7 +658,49 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     </div>
   );
 
+  // The person's own development: they say what they did, and mark the build and the checks by hand.
+  const manualDevelopPane = (
+    <>
+      <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
+        המשימה מסומנת כמפותחת ידנית. מי שפיתח אותה מדווח כאן על מה שעשה, ואחר כך מסמן בעצמו את ה-Build ואת הבדיקות. Claude לא מריץ אותה.
+      </p>
+      {!canRun ? (
+        <div className="ob-note">
+          {!t.approvedAt ? "המשימה עדיין לא אושרה — קודם מאשרים אותה." : !inTfs ? "🔒 אפשר לדווח אחרי שהמשימה תוקם ב-TFS — על ה-work item שלה העבודה נעקבת." : "המשימה מושבתת."}
+        </div>
+      ) : reported && !editingReport ? (
+        <ManualReportCard impl={impl!} busy={manualBusy} onEdit={() => setEditingReport(true)} onCancel={() => manualCall(() => cancelManualReport(id))} />
+      ) : (
+        <ManualReportForm
+          key={editingReport ? "edit" : "new"}
+          initial={editingReport && impl?.manual ? { summary: impl.summary, customisation: `${CUSTOMISATION_TEMPLATE}${impl.manual.customisations.join("\n")}`, components: impl.manual.components.join("\n"), reference: impl.manual.reference ?? "" } : undefined}
+          busy={manualBusy} err={manualErr}
+          onCancel={editingReport ? () => { setEditingReport(false); setManualErr(null); } : undefined}
+          onSubmit={async (v) => { if (await manualCall(() => reportManualWork(id, v))) setEditingReport(false); }}
+        />
+      )}
+      {reported && buildCheck && d.checkStatuses[buildCheck.id] && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
+            <span style={{ color: "var(--ink-500)" }}>Build:</span>
+            <TaskStatusPill status={d.checkStatuses[buildCheck.id]!} />
+          </div>
+          {manualCheckEditor(buildCheck)}
+        </div>
+      )}
+      {instructionBlock}
+      {scopeFold}
+    </>
+  );
+
   const developPane = (s: TaskFlowStep) => (
+    <>
+      {manualSwitch}
+      {manual ? manualDevelopPane : claudeDevelopPane(s)}
+    </>
+  );
+
+  const claudeDevelopPane = (s: TaskFlowStep) => (
     <>
       <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
         קלוד כותב את הקוד ואת הבדיקות שלו בעותק מבודד של המאגר, על ענף משלה, ובסוף בונה (Build) את מה שהשינוי מתקמפל אליו. שום דבר לא נדחף ולא מתמזג לבד.
@@ -737,6 +820,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
                     </>
                   )}
                   {c.checkResolvedBy && <p style={{ color: "var(--status-warning)", marginBottom: 4 }}>✓ אושרה ידנית ע"י אדם — לא (רק) תוצאת הבדיקה של Claude.</p>}
+                  {manual && reported && manualCheckEditor(c)}
                   <a onClick={() => nav(`#/task/${c.id}`)} style={{ fontSize: 11.5, color: "var(--color-accent)", fontWeight: 600, cursor: "pointer" }}>לעריכת ההוראה של הבדיקה ולפרטים המלאים ←</a>
                 </div>
               )}
@@ -813,7 +897,13 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
 
   const reviewPane = (
     <>
-      {impl ? (
+      {impl?.manual ? (
+        <>
+          <CardTitle as="h3" info="manual_report" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה דווח</CardTitle>
+          <ManualReportCard impl={impl} busy={manualBusy} onEdit={() => { setEditingReport(true); setManualStep(0); }} onCancel={() => manualCall(() => cancelManualReport(id))} />
+          <p style={{ fontSize: 12, color: "var(--ink-500)", margin: "10px 0 0" }}>אין כאן קוד לסקור ואין push — העבודה נעשתה מחוץ ל-DCC. הבדיקות סומנו ידנית בשלב הבדיקות.</p>
+        </>
+      ) : impl ? (
         <>
           <CardTitle as="h3" info="task_result" style={{ fontSize: 14.5, fontWeight: 650, marginBottom: 6 }}>מה Claude עשה</CardTitle>
           <p style={{ fontSize: 12.5, color: "var(--ink-700)", whiteSpace: "pre-wrap", lineHeight: 1.65, marginBottom: 12 }}>{impl.summary}</p>
