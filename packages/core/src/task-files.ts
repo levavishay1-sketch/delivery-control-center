@@ -86,3 +86,13 @@ export async function taskFileVersions(clientId: string, taskId: string, filePat
   const binary = [before.text, after.text].some((v) => v?.includes("\u0000"));
   return { path: filePath, before: binary ? null : before.text, after: binary ? null : after.text, binary, tooLarge: false };
 }
+
+/** What a person's question about a task needs to read: the task's branch, the files it touched, and its whole diff — as text, since the reading tools have no git. Null when the branch cannot be found. */
+export async function taskChangesForReading(clientId: string, taskId: string): Promise<{ branch: string; files: ChangedFile[]; diff: string; cut: boolean } | null> {
+  const ctx = await taskGitContext(clientId, taskId);
+  if (!ctx) return null;
+  const files = (await taskChangedFiles(clientId, taskId)) ?? [];
+  const full = (await git(["-c", "core.quotepath=false", "diff", ctx.base, ctx.branch], ctx.dir, { timeoutMs: 60_000 })).out;
+  const LIMIT = 400_000;
+  return { branch: ctx.branch, files, diff: full.slice(0, LIMIT), cut: full.length > LIMIT };
+}

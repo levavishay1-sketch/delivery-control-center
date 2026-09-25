@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { eq } from "drizzle-orm";
 import { db, withTenant } from "@dcc/db";
@@ -6,6 +6,7 @@ import { claudeCall, conversation, conversationMessage, repositoryOnboardingRun 
 import { existingCheckout, firstRepo, git, runClaudeRaw } from "../ai-assist.ts";
 import { changedFiles } from "../repo-onboarding/changes.ts";
 import { writeChangesDiff } from "../repo-onboarding/change-diff.ts";
+import { taskChangesForReading } from "../task-files.ts";
 import { writePullRequestCode } from "../pull-request-detail.ts";
 import { ACTIONS, ActionRefused, actionEntityFor, runAction, type ActionKey } from "../actions/index.ts";
 import { recommend } from "../routing.ts";
@@ -99,10 +100,25 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
   // Which of the three code-reading prompts (Prompts screen) answers it.
   let systemKey = "chat.code_read.repo";
   const extraDirs: string[] = [];
-  if (topic.kind === "wi" && topic.workitemId) {
+  if ((topic.kind === "wi" || topic.kind === "task") && topic.workitemId) {
     const r = await firstRepo(topic.clientId, topic.workitemId);
     dir = r ? existingCheckout(r) : null;
     if (!dir) throw new ChatError(r ? `אין עותק מקומי של ${r.name} — הריצו קודם בחינת בשלות, שמביאה אותו` : "לדרישה הזו אין מאגר מקושר — אין קוד לקרוא");
+    // A task: besides the repository, what the task itself changed — put on disk, because the reading tools have no git.
+    if (topic.kind === "task" && topic.id) {
+      const t = await taskChangesForReading(topic.clientId, topic.id).catch(() => null);
+      if (t?.files.length) {
+        const changeDir = path.join(chatDir(c.id), "change");
+        mkdirSync(changeDir, { recursive: true });
+        const diffFile = path.join(changeDir, "task-changes.diff");
+        writeFileSync(diffFile, t.diff);
+        extraDirs.push(changeDir);
+        holds = [
+          `המשימה שינתה ${t.files.length} קבצים בענף \`${t.branch}\`: ${t.files.map((f) => `${f.status} ${f.path} (+${f.additions} −${f.deletions})`).join("; ")}.`,
+          `ה-diff שלהם ב-\`${diffFile}\`${t.cut ? " (קוצר — קראו את הקובץ עצמו)" : ""}.`,
+        ].join("\n");
+      }
+    }
   } else if (topic.kind === "run" && topic.id) {
     const [run] = await db.select({ workspacePath: repositoryOnboardingRun.workspacePath, baselineSha: repositoryOnboardingRun.baselineSha }).from(repositoryOnboardingRun).where(eq(repositoryOnboardingRun.id, topic.id)).limit(1);
     dir = run?.workspacePath ?? null;
@@ -135,7 +151,7 @@ export async function runCodeQuestion(messageId: string, userId: string): Promis
     try { holds = await writePullRequestCode(prRepoId, Number(num), dir); }
     catch (e) { throw new ChatError(e instanceof Error ? e.message : String(e)); }
   } else {
-    throw new ChatError("קריאה בקוד אפשרית רק משיחה על דרישה, על בקשת מיזוג או על הטמעת מאגר");
+    throw new ChatError("קריאה בקוד אפשרית רק משיחה על דרישה, על משימה, על בקשת מיזוג או על הטמעת מאגר");
   }
 
   await setPayload(m, { ...p, status: "running" });
@@ -174,6 +190,7 @@ export async function cancelCodeQuestion(messageId: string, userId: string): Pro
 /** What a reading on this topic will open, said on the card before the person approves it. */
 export function codeReads(topic: TopicKind): string {
   if (topic === "pr") return "קריאה בלבד: השינוי עצמו — ה-diff של הבקשה והקבצים ששונו כפי שהם אחריו, מהגיט־האוסט";
+  if (topic === "task") return "קריאה בלבד, בעותק המקומי של המאגר, וה-diff של מה שהמשימה עצמה שינתה";
   if (topic === "run") return "קריאה בלבד, בעותק המבודד של ההרצה: השינויים שנעשו בו מול נקודת ההתחלה, והמאגר עצמו";
   return "קריאה בלבד, בעותק המקומי של המאגר";
 }
