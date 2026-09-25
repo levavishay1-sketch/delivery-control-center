@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>כל הסטטוסים של משימה</title>
+<meta name="description" content="כל תרחיש שמשימה יכולה להיות בו: הסטטוס שהיא מציגה, התג הנפרד לתלות (מתי הוא מופיע ומתי לא), ומשפט אחד שאומר בדיוק מה זה אומר.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --color-accent: #584EF3; --color-accent-dark: #453AD1;
+    --color-sidebar-from: #221C5E; --color-sidebar-to: #1B1741; --color-sidebar-hover: #322a86; --color-sidebar-text: #c7c3e8;
+    --surface-page: #F5F4FA; --surface: #ffffff; --surface-muted: #F5F4FA; --surface-tint-2: #FBFAFE;
+    --border-hairline: #E1DFF0;
+    --ink-900: #1B1741; --ink-700: #2E2A54; --ink-500: #86829C; --ink-400: #B3B0C9;
+    --status-healthy: #1B9E5C; --status-healthy-bg: #E3F5EB;
+    --status-active: #2563eb; --status-active-bg: #eff6ff;
+    --status-warning: #E0912E; --status-warning-bg: #FDECD9;
+    --status-critical: #E14C6B; --status-critical-bg: #FCE8ED;
+    --status-inactive: #86829C; --status-inactive-bg: #eef0f5;
+    --status-neutral: #584EF3; --status-neutral-bg: #F0EFF7;
+    --radius-card: 12px; --shadow-panel: 0 2px 4px rgb(27 23 65 / 0.05), 0 8px 20px rgb(27 23 65 / 0.07);
+    --font: "Rubik", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--surface-page); color: var(--ink-900); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+  .shell { display: flex; align-items: stretch; min-height: 100vh; }
+  .sidebar { flex: 0 0 244px; background: linear-gradient(180deg, var(--color-sidebar-from), var(--color-sidebar-to)); padding: 22px 14px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+  .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(160deg, #7d76f0, var(--color-accent) 60%); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; }
+  .brand-word { color: #fff; font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+  .brand-word span { display: block; color: var(--color-sidebar-text); font-size: 11px; font-weight: 400; }
+  .canvas { flex: 1; padding: 22px 26px 40px; min-width: 0; }
+  .workspace { background: var(--surface-page); border-radius: 24px; padding: 30px 34px 38px; max-width: 900px; margin: 0 auto; }
+
+  h1 { font-size: 22px; font-weight: 650; margin: 0 0 6px; }
+  .lede { font-size: 13px; color: var(--ink-500); margin: 0 0 24px; line-height: 1.6; max-width: 62ch; }
+  .lede b { color: var(--ink-700); }
+
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+  .pill.warning { background: var(--status-warning-bg); color: var(--status-warning); }
+  .pill.critical { background: var(--status-critical-bg); color: var(--status-critical); }
+  .pill.active { background: var(--status-active-bg); color: var(--status-active); }
+  .pill.healthy { background: var(--status-healthy-bg); color: var(--status-healthy); }
+  .pill.neutral { background: var(--status-neutral-bg); color: var(--status-neutral); }
+  .pill.inactive { background: var(--status-inactive-bg); color: var(--status-inactive); }
+  .pill.ai { background: #f5f3ff; color: #7c3aed; }
+
+  .group-lbl { font-size: 11px; font-weight: 700; letter-spacing: .04em; color: var(--ink-400); text-transform: uppercase; margin: 26px 0 10px; }
+  .group-lbl:first-of-type { margin-top: 0; }
+
+  .row { background: var(--surface); border: 1.5px solid var(--border-hairline); border-radius: var(--radius-card); box-shadow: var(--shadow-panel); padding: 12px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 16px; }
+  .row .num { width: 22px; height: 22px; border-radius: 999px; background: var(--surface-muted); color: var(--ink-500); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .row .pills { display: flex; flex-direction: column; gap: 4px; min-width: 200px; flex-shrink: 0; }
+  .row .pills .maybe { opacity: .45; }
+  .row .text { font-size: 12.5px; color: var(--ink-700); line-height: 1.55; }
+  .row .text b { color: var(--ink-900); }
+  .blocks { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-inline-start: 8px; }
+  .blocks.yes { background: var(--status-critical-bg); color: var(--status-critical); }
+  .blocks.no { background: var(--status-inactive-bg); color: var(--status-inactive); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="sidebar">
+    <div class="brand"><div class="brand-mark">DC</div><div class="brand-word">Delivery Control<span>Center</span></div></div>
+  </nav>
+  <div class="canvas">
+    <div class="workspace">
+
+      <h1>כל הסטטוסים של משימה — כל התרחישים</h1>
+      <p class="lede">
+        שתי עובדות נפרדות: <b>הסטטוס</b> (איפה המשימה בשלב שלה — תמיד אחד, אף פעם לא שניים בו-זמנית) ו<b>תג התלות</b> (יש תלות פתוחה — כן/לא, מוצג רק לפני שמתחילים לפתח). אחריהן, לכל סטטוס: "חוסם?" אומר אם אפשר להמשיך בלעדיו.
+      </p>
+
+      <div class="group-lbl">לפני שמתחילים — כאן התג של התלות רלוונטי</div>
+
+      <div class="row">
+        <span class="num">1</span>
+        <div class="pills"><span class="pill warning"><span class="dot"></span> ממתינה להקמה ב-TFS</span></div>
+        <div class="text"><b>אין work item ב-Azure DevOps עדיין.</b> אי אפשר להתחיל לעבוד — אין על מה לעקוב.<span class="blocks yes">חוסם</span></div>
+      </div>
+      <div class="row">
+        <span class="num">1+</span>
+        <div class="pills">
+          <span class="pill warning"><span class="dot"></span> ממתינה להקמה ב-TFS</span>
+          <span class="pill critical">🔗 קיימת תלות</span>
+        </div>
+        <div class="text">אותו דבר, <b>וגם</b> יש תלות פתוחה שתחכה לתורה ברגע שה-TFS ייפתח.<span class="blocks yes">חוסם</span></div>
+      </div>
+      <div class="row">
+        <span class="num">2</span>
+        <div class="pills"><span class="pill neutral">מוכנה לפיתוח</span></div>
+        <div class="text">הוקמה ב-TFS, אין שום דבר שמחכה לו. <b>אפשר ללחוץ "תן ל-Claude לפתח" עכשיו.</b><span class="blocks no">לא חוסם</span></div>
+      </div>
+      <div class="row">
+        <span class="num">2+</span>
+        <div class="pills">
+          <span class="pill neutral">מוכנה לפיתוח</span>
+          <span class="pill critical">🔗 קיימת תלות</span>
+        </div>
+        <div class="text">הוקמה ב-TFS, <b>אבל</b> תלויה במשימה שעוד לא פותחה. <b>עדיין אפשר לפתח</b> — היא תיבנה בלעדיה, וחוזרים אליה אחר כך.<span class="blocks no">לא חוסם</span></div>
+      </div>
+
+      <div class="group-lbl">בזמן שהיא רצה</div>
+
+      <div class="row">
+        <span class="num">3</span>
+        <div class="pills"><span class="pill active"><span class="dot"></span> בעבודה · פיתוח</span></div>
+        <div class="text">קלוד כותב עכשיו את הקוד ואת הבדיקות שלו.<span class="blocks no">רץ</span></div>
+      </div>
+      <div class="row">
+        <span class="num">4</span>
+        <div class="pills"><span class="pill active"><span class="dot"></span> בעבודה · Build</span></div>
+        <div class="text">הקוד נכתב; עכשיו בונים את מה שהוא מתקמפל אליו.<span class="blocks no">רץ</span></div>
+      </div>
+      <div class="row">
+        <span class="num">5</span>
+        <div class="pills"><span class="pill active"><span class="dot"></span> בעבודה · בדיקות</span></div>
+        <div class="text">ה-Build עבר; עכשיו רצות בדיקות הפיתוח והרגרסיה.<span class="blocks no">רץ</span></div>
+      </div>
+      <div class="row">
+        <span class="num">6</span>
+        <div class="pills"><span class="pill active">בעבודה · בדיקות שלא רצו</span></div>
+        <div class="text">המשימה כבר פותחה בעבר, אבל <b>אף הרצה לא בדקה אותה עם הבדיקות הנוכחיות</b> (למשל: נוספו אחרי שהיא פותחה). לוחצים "הרץ שוב".<span class="blocks no">לא חוסם</span></div>
+      </div>
+
+      <div class="group-lbl">אחרי שהיא סיימה לרוץ</div>
+
+      <div class="row">
+        <span class="num">7</span>
+        <div class="pills"><span class="pill critical"><span class="dot"></span> נפלה — ה-Build נכשל</span></div>
+        <div class="text">הקוד לא נבנה. הבדיקות האחרות לא רצו בכלל — אין טעם לבדוק קוד שלא קם.<span class="blocks yes">חוסם סגירה</span></div>
+      </div>
+      <div class="row">
+        <span class="num">7+</span>
+        <div class="pills"><span class="pill critical"><span class="dot"></span> נפלה — בדיקות הפיתוח נכשלו</span></div>
+        <div class="text">ה-Build עבר, אבל בדיקה שקלוד כתב להיגיון החדש נכשלה. (באותו אופן: "נפלה — בדיקות רגרסיה", "נפלה — לא יכלה לרוץ כאן".)<span class="blocks yes">חוסם סגירה</span></div>
+      </div>
+      <div class="row">
+        <span class="num">8</span>
+        <div class="pills"><span class="pill warning"><span class="dot"></span> הסתיימה — ממתינה לתלות</span></div>
+        <div class="text">הכול עבר (Build + בדיקות) — <b>אבל</b> משימה שהיא תלויה בה עוד לא הושלמה, או שהיא הושלמה בינתיים ועדיין לא בנו עליה. "↩ Rollback" + "✦ הרץ שוב" כדי שהבדיקות ירוצו על הגרסה המלאה.<span class="blocks yes">חוסם סגירה</span></div>
+      </div>
+      <div class="row">
+        <span class="num">9</span>
+        <div class="pills"><span class="pill ai">ממתינה לסקירה וסגירה</span></div>
+        <div class="text">הכול עבר, <b>אין שום תלות פתוחה.</b> נשאר לכם רק לסקור, לדחוף ל-GitHub, ולסמן כהושלם.<span class="blocks no">לא חוסם</span></div>
+      </div>
+      <div class="row">
+        <span class="num">10</span>
+        <div class="pills"><span class="pill healthy"><span class="dot"></span> הושלם</span></div>
+        <div class="text">סוף הדרך. אם המשימה תלויה בה מישהו — עכשיו <b>הוא</b> יכול לבנות עליה.<span class="blocks no">—</span></div>
+      </div>
+
+      <div class="group-lbl">משימות שלא בתמונה</div>
+      <div class="row">
+        <span class="num">—</span>
+        <div class="pills"><span class="pill inactive">לא פעילה</span></div>
+        <div class="text">הושבתה ידנית — לא נספרת בשום מקום עד שמפעילים אותה מחדש.<span class="blocks no">—</span></div>
+      </div>
+      <div class="row">
+        <span class="num">—</span>
+        <div class="pills"><span class="pill inactive">נדחתה</span></div>
+        <div class="text">בוטלה. סוף.<span class="blocks no">—</span></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>
