@@ -346,7 +346,7 @@ export type TaskStatus = {
 export type TaskFlowStep = {
   kind: "develop" | "dependency" | "checks" | "review";
   state: "done" | "current" | "todo" | "failed" | "waiting";
-  round: number; past: boolean; deps?: number[]; at?: string; note?: string;
+  round: number; past: boolean; deps?: number[]; at?: string; note?: string; pending?: boolean;
   /** The development run of that round — its record is in the task's `history`. */
   runId?: string;
 };

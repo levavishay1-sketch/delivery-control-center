@@ -125,7 +125,7 @@ function stepLabel(steps: TaskFlowStep[], i: number): string {
   const s = steps[i]!;
   const again = steps.slice(0, i).some((p) => p.kind === s.kind);
   if (s.kind === "develop") return "פיתוח (כולל Build)";
-  if (s.kind === "dependency") return s.state === "current" ? `${refs(s.deps)} פותחה` : `נבנתה על ${refs(s.deps)}`;
+  if (s.kind === "dependency") return s.pending ? (s.state === "current" ? `${refs(s.deps)} פותחה` : `${refs(s.deps)} פותחה — בלי לבנות מחדש`) : `נבנתה על ${refs(s.deps)}`;
   if (s.kind === "checks") return again ? "בדיקות שוב" : "בדיקות";
   return again ? "סקירה שוב" : "סקירה והחלטה";
 }
@@ -195,6 +195,10 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   const [delCodeChoice, setDelCodeChoice] = useState<"rollback" | "orphan">("rollback");
   const [delErr, setDelErr] = useState<string | null>(null);
   const [manualStep, setManualStep] = useState<number | null>(null);
+  // "Continue to the checks" past a dependency that was not built in: remembered per task and per dependency set, so the screen
+  // stops treating that dependency as the step in progress — after a reload too.
+  const depAckKey = `dcc.depAck.${id}`;
+  const [depAck, setDepAck] = useState<string | null>(() => { try { return sessionStorage.getItem(depAckKey); } catch { return null; } });
   // mandatory gate — nothing reaches Claude except from the modal's confirm.
   const [sendOpen, setSendOpen] = useState(false);
   const [sendData, setSendData] = useState<{ prompt: string; promptHe: string; deterministic?: boolean } | null>(null);
@@ -257,6 +261,9 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
   // A step that came in or went away moves every index after it — go back to following the task.
   const stepCount = d?.flow.length ?? 0;
   useEffect(() => { setManualStep(null); }, [stepCount]);
+  useEffect(() => { try { setDepAck(sessionStorage.getItem(depAckKey)); } catch { setDepAck(null); } }, [depAckKey]);
+  // A run moving on — into the build, then the checks — takes the screen along with it, as it does through the development.
+  useEffect(() => { setManualStep(null); }, [run?.phase]);
 
   // On-demand TFS → DCC pull: is the real work item now "Removed"? DCC
   // has no poller/webhook — this is the only way it finds out, short of
@@ -320,7 +327,8 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     ? { ...d.status, label: `בעבודה · ${run.phase === "build" ? "מקמפלת" : run.phase === "test" ? "בבדיקות" : "בפיתוח"}`, tone: "active" as const, reason: undefined }
     : d.status;
 
-  const steps = d.flow;
+  // A dependency the person chose to go on without is no longer the step in progress: it shows as settled, and the rail moves on.
+  const steps: TaskFlowStep[] = d.flow.map((s) => (s.pending && depAck != null && depAck === (s.deps ?? []).join(",") ? { ...s, state: "done" as const } : s));
   const liveIdx = (() => {
     const i = steps.findIndex((s) => !s.past && (s.state === "current" || s.state === "failed" || s.state === "waiting"));
     if (i >= 0) return i;
@@ -763,8 +771,40 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
       )}
       {rollbackMsg && <p style={{ fontSize: 12, color: "var(--ink-500)", margin: "6px 0" }}>{rollbackMsg}</p>}
       <div style={{ marginTop: 8, ...(hasCode && !running ? { opacity: 0.55, pointerEvents: "none" as const } : {}) }}>{runControls("✦ הרץ שוב")}</div>
+      {!running && hasCode && (() => {
+        // The checks only mean something once the code builds: with a failed build there is nothing to go on to.
+        const nextChecks = steps.find((x, i) => i > activeIdx && x.kind === "checks");
+        const canGoOn = !!nextChecks && nextChecks.state !== "todo";
+        return (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--line, #e5e7eb)" }}>
+            {canGoOn ? (
+              <>
+                <p style={{ fontSize: 12.5, color: "var(--ink-600)", marginBottom: 8 }}>או — בלי לבנות מחדש: להמשיך לבדיקות על הקוד שיש. בדיקה שצריכה את {refs(s.deps)} תסומן "מחכה לתלות", לא "נכשלה".</p>
+                <button className="btn btn-primary" onClick={() => {
+                  const sig = (s.deps ?? []).join(",");
+                  try { sessionStorage.setItem(depAckKey, sig); } catch { /* the choice then lasts until the screen is left */ }
+                  setDepAck(sig);
+                  setManualStep(steps.findIndex((x, i) => i > activeIdx && x.kind === "checks"));
+                }}>המשך לבדיקות ←</button>
+              </>
+            ) : (
+              <p style={{ fontSize: 12.5, color: "var(--status-warning)" }}>אי אפשר להמשיך לבדיקות על הקוד הקיים: ה-Build שלו לא עבר, ובדיקות של קוד שלא נבנה לא אומרות כלום. Rollback והרצה חוזרת יבנו את המשימה על {refs(s.deps)} — לפעמים זה מה שחסר ל-Build.</p>
+            )}
+          </div>
+        );
+      })()}
       {instructionBlock}
       {promptFold}
+    </>
+  );
+
+  // A dependency step the task WAS built on: like the development it is — what it did, its files, the build — and running it again.
+  const dependencyBuiltPane = (s: TaskFlowStep) => (
+    <>
+      <p style={{ fontSize: 13, color: "var(--ink-700)", marginBottom: 12, lineHeight: 1.6 }}>
+        המשימה נבנתה מחדש על {refs(s.deps)} (Rollback והרצה חוזרת){s.note ? ` — ${s.note}` : ""}. מה שקלוד עשה בסבב הזה, והקבצים, למטה.
+      </p>
+      {claudeDevelopPane(s)}
     </>
   );
 
@@ -1076,7 +1116,7 @@ export function TaskDetail({ id, nav }: { id: string; nav: (h: string) => void }
     if (!s) return null;
     if (s.past) return pastPane(s);
     if (s.kind === "develop") return developPane(s);
-    if (s.kind === "dependency") return dependencyPane(s);
+    if (s.kind === "dependency") return s.pending ? dependencyPane(s) : dependencyBuiltPane(s);
     if (s.kind === "checks") return checksPane(s);
     return reviewPane;
   };
