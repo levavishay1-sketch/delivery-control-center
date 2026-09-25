@@ -68,7 +68,7 @@ npm run -w @dcc/db dev:prove   # 9 checks: RLS wall + append-only + validation
 npm run -w @dcc/api smoke      # 8 end-to-end checks against the API
 npm run -w @dcc/core prove:routing    # routing proofs
 npm run -w @dcc/core prove:retention  # chat-retention proofs
-npm run -w @dcc/core prove:built-on   # a task developed before its dependency (own DB + git, safe with the API up)
+npm run -w @dcc/core prove:built-on   # a task developed before its dependency, merging it in, two tasks on one file, a renamed key (own DB + git, safe with the API up)
 npm run -w @dcc/core prove:checks     # every task's checks (build → tests), its status, the done gate (same)
 npm run -w @dcc/core prove:manual     # a task developed by a person: the mark, the report, each check by hand (same)
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)

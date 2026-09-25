@@ -1309,7 +1309,7 @@ export function git(args: string[], cwd: string, opts?: { timeoutMs?: number; en
 }
 
 /** The repository's default branch in a clone, e.g. "main". */
-async function defaultBranch(dir: string): Promise<string> {
+export async function defaultBranch(dir: string): Promise<string> {
   return (await git(["symbolic-ref", "--short", "refs/remotes/origin/HEAD"], dir)).out.replace(/^origin\//, "") || "main";
 }
 
@@ -1324,7 +1324,7 @@ export async function taskBaseSha(dir: string, branch: string, t: { baseSha: str
 /** How many commits of its own a task's branch has — beyond what it was built
  *  on, never counting a dependency's work it started from. 0 means "never
  *  implemented" or "implemented but produced no changes". */
-async function taskCommitCount(dir: string, branch: string, t: { baseSha: string | null }): Promise<number> {
+export async function taskCommitCount(dir: string, branch: string, t: { baseSha: string | null }): Promise<number> {
   const exists = await git(["rev-parse", "--verify", "--quiet", branch], dir);
   if (exists.code !== 0) return 0;
   const from = await taskBaseSha(dir, branch, t);
@@ -1338,7 +1338,7 @@ async function taskCommitCount(dir: string, branch: string, t: { baseSha: string
 type TaskRow = typeof task.$inferSelect;
 
 /** Every row of a requirement and every dependency between them — what task-relations.ts decides by. */
-async function relationsOf(clientId: string, workitemId: string) {
+export async function relationsOf(clientId: string, workitemId: string) {
   const rows = await withTenant(clientId, (tx) => tx.select().from(task).where(eq(task.workitemId, workitemId)));
   const ids = rows.map((r) => r.id);
   const deps = ids.length ? await withTenant(clientId, (tx) => tx.select().from(taskDependency).where(inArray(taskDependency.taskId, ids))) : [];
