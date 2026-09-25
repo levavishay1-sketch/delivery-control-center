@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>מסך משימה — גרסה 4</title>
+<meta name="description" content="גרסה 4: ה-CSS האמיתי של DCC (theme.css) מועתק, לא משוער — Rubik, הצבעים, ה-sidebar, StepRail האמיתי (.ov-steps). אפשר ללחוץ בין שלבי פיתוח/בדיקות/סקירה, ולדמות הקמה ב-TFS.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* ── copied from apps/web/src/theme.css, not approximated ── */
+  :root {
+    --color-accent: #584EF3; --color-accent-dark: #453AD1; --color-accent-muted: #EDEBFC;
+    --color-sidebar-from: #221C5E; --color-sidebar-to: #1B1741; --color-sidebar-hover: #322a86;
+    --color-sidebar-text: #c7c3e8;
+    --surface-page: #F5F4FA; --surface: #ffffff; --surface-muted: #F5F4FA; --surface-tint-2: #FBFAFE;
+    --border-hairline: #E1DFF0; --border-soft: #EAE8F5;
+    --ink-900: #1B1741; --ink-700: #2E2A54; --ink-500: #86829C; --ink-400: #B3B0C9;
+    --status-healthy: #1B9E5C; --status-healthy-bg: #E3F5EB;
+    --status-active: #2563eb; --status-active-bg: #eff6ff;
+    --status-warning: #E0912E; --status-warning-bg: #FDECD9;
+    --status-critical: #E14C6B; --status-critical-bg: #FCE8ED;
+    --status-inactive: #86829C; --status-inactive-bg: #eef0f5;
+    --status-neutral: #584EF3; --status-neutral-bg: #F0EFF7;
+    --radius-card: 12px; --radius-md: 10px; --radius-sm: 9px;
+    --shadow-panel: 0 2px 4px rgb(27 23 65 / 0.05), 0 8px 20px rgb(27 23 65 / 0.07);
+    --font: "Rubik", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--surface-page); color: var(--ink-900); font-family: var(--font); font-size: 14px; line-height: 1.45; }
+  button { font-family: inherit; }
+
+  .shell { display: flex; align-items: stretch; min-height: 100vh; }
+  .sidebar { flex: 0 0 244px; background: linear-gradient(180deg, var(--color-sidebar-from), var(--color-sidebar-to)); display: flex; flex-direction: column; padding: 22px 14px; gap: 24px; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+  .brand-mark { width: 32px; height: 32px; border-radius: 9px; background: linear-gradient(160deg, #7d76f0, var(--color-accent) 60%); display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-size: 13px; flex-shrink: 0; }
+  .brand-word { color: #fff; font-size: 13.5px; font-weight: 600; line-height: 1.2; }
+  .brand-word span { display: block; color: var(--color-sidebar-text); font-size: 11px; font-weight: 400; }
+  .nav { display: flex; flex-direction: column; gap: 2px; }
+  .nav-item { display: flex; align-items: center; gap: 11px; padding: 9px 12px; border-radius: var(--radius-md); color: var(--color-sidebar-text); font-size: 13.5px; font-weight: 500; border: none; background: transparent; width: 100%; text-align: start; cursor: pointer; }
+  .nav-item.on { background: var(--color-accent); color: #fff; box-shadow: 0 4px 14px -4px rgb(79 70 229 / 0.55); }
+  .sidebar-spacer { flex: 1; }
+  .sidebar-foot { border-top: 1px solid rgb(255 255 255 / 0.09); padding-top: 14px; display: flex; align-items: center; gap: 10px; padding-inline: 8px; }
+  .avatar-chip { width: 30px; height: 30px; border-radius: 999px; background: var(--color-sidebar-hover); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .sidebar-foot .who p { color: #fff; font-size: 12.5px; font-weight: 500; margin: 0; }
+  .sidebar-foot .who span { color: var(--color-sidebar-text); font-size: 11px; }
+
+  .canvas { flex: 1; padding: 22px 26px 40px; min-width: 0; }
+  .workspace { background: var(--surface-page); border-radius: 24px; padding: 30px 34px 38px; min-height: calc(100vh - 44px); max-width: 860px; margin: 0 auto; }
+
+  .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
+  .page-head .titles h1 { font-size: 22px; font-weight: 650; letter-spacing: -0.01em; margin: 0 0 5px; display: flex; align-items: center; }
+  .page-head .titles p { margin: 0; color: var(--ink-500); font-size: 13px; }
+  .crumb { font-size: 12.5px; color: var(--ink-500); margin-bottom: 8px; }
+
+  .info-i { appearance: none; display: inline-flex; width: 17px; height: 17px; border-radius: 999px; border: 1px solid var(--border-hairline); background: var(--surface); color: var(--ink-500); font: italic 700 12px/1 Georgia, serif; align-items: center; justify-content: center; margin-inline-start: 6px; cursor: pointer; padding: 0; }
+
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+  .pill .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+  .pill.warning { background: var(--status-warning-bg); color: var(--status-warning); }
+  .pill.critical { background: var(--status-critical-bg); color: var(--status-critical); }
+  .pill.active { background: var(--status-active-bg); color: var(--status-active); }
+  .pill.healthy { background: var(--status-healthy-bg); color: var(--status-healthy); }
+  .pill.neutral { background: var(--status-neutral-bg); color: var(--status-neutral); }
+
+  .panel { background: var(--surface); border: 1.5px solid var(--border-hairline); border-radius: var(--radius-card); box-shadow: var(--shadow-panel); padding: 18px 20px; margin-bottom: 16px; }
+  .card-title { font-size: 13px; font-weight: 650; margin: 0 0 4px; }
+
+  .btn { appearance: none; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; font-weight: 600; font-size: 13px; padding: 9px 16px; border-radius: 10px; white-space: nowrap; }
+  .btn-primary { background: var(--color-accent); color: #fff; box-shadow: 0 6px 16px -6px rgb(79 70 229 / 0.55); }
+  .btn-secondary { background: var(--surface); color: var(--ink-700); border: 1px solid var(--border-hairline); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+
+  .ob-note { border-radius: 10px; padding: 10px 14px; font-size: 12.5px; line-height: 1.55; }
+  .ob-note.warn { background: var(--status-warning-bg); color: #7a4a10; }
+  .ob-note.crit { background: var(--status-critical-bg); color: #8d1f39; }
+  .ob-note.info { background: var(--status-active-bg); color: #1e3a8a; }
+
+  .field textarea { font-family: inherit; font-size: 12.5px; padding: 9px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-hairline); background: var(--surface); color: var(--ink-900); width: 100%; min-height: 90px; line-height: 1.65; resize: vertical; }
+
+  /* the real StepRail (WorkflowTab.tsx / .ov-steps) */
+  .ov-steps { display: flex; gap: 6px; padding: 4px 0 0; flex-wrap: wrap; align-items: center; }
+  .ov-step { flex: 1 1 140px; border: 1.5px solid #E1DFF0; background: #F5F4FA; border-radius: 10px; padding: 8px 10px; cursor: pointer; text-align: start; font: inherit; }
+  .ov-step:disabled { cursor: default; opacity: .55; }
+  .ov-step.active { border-color: #584EF3; background: #EDEBFC; }
+  .ov-step .n { font-size: 10.5px; color: var(--ink-500); display: flex; align-items: center; gap: 4px; }
+  .ov-step .n .ok { color: #1B9E5C; font-weight: 700; }
+  .ov-step .lbl { font-size: 12px; font-weight: 700; color: #1B1741; margin-top: 3px; }
+  .ov-arrow { color: #C7C4E3; align-self: center; font-size: 14px; }
+
+  /* mockup-only scaffolding (not DCC classes) */
+  .note-banner { background: #fffbe6; border: 1px solid #f0d97a; color: #6b5a00; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; margin-bottom: 22px; line-height: 1.7; }
+  .note-banner b { display: block; margin-bottom: 3px; }
+  .note-banner ul { margin: 6px 0 0; padding-inline-start: 18px; }
+  .sim-bar { display: flex; align-items: center; gap: 10px; background: #fff; border: 1px dashed var(--color-accent); border-radius: 10px; padding: 10px 14px; margin-bottom: 20px; }
+  .sim-bar span { font-size: 12px; color: var(--ink-700); }
+  .toggle { position: relative; width: 38px; height: 21px; border-radius: 999px; background: var(--border-hairline); cursor: pointer; flex-shrink: 0; }
+  .toggle .knob { position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 999px; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgb(0 0 0 / .2); }
+  .toggle.on { background: var(--color-accent); }
+  .toggle.on .knob { transform: translateX(-17px); }
+  .stage-pane { display: none; }
+  .stage-pane.on { display: block; }
+  .locked-pane { opacity: .55; pointer-events: none; }
+  .dep-item { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
+  .dep-item .b { width: 8px; height: 8px; border-radius: 99px; flex-shrink: 0; background: var(--status-critical); }
+  .dep-item .link { color: var(--status-critical); font-size: 13px; font-weight: 600; text-decoration: underline; cursor: pointer; flex-grow: 1; }
+  .dep-item .st { font-size: 11px; color: var(--ink-500); }
+  .check-row-head { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; background: var(--surface-tint-2); border: 1px solid var(--border-hairline); border-radius: 8px; cursor: pointer; margin-bottom: 4px; }
+  .check-row-head .t { font-size: 12.5px; font-weight: 650; color: var(--ink-700); }
+  .check-body { display: none; padding: 8px 2px 14px; }
+  .check-fold.open .check-body { display: block; }
+  .mono { font-family: var(--mono); font-size: 12px; direction: ltr; unicode-bidi: isolate; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <nav class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">DC</div>
+      <div class="brand-word">Delivery Control<span>Center</span></div>
+    </div>
+    <div class="nav">
+      <button class="nav-item">לוח בקרה</button>
+      <button class="nav-item">לקוחות</button>
+      <button class="nav-item on">דרישות</button>
+      <button class="nav-item">Azure DevOps</button>
+      <button class="nav-item">Repositories</button>
+      <button class="nav-item">בקשות מיזוג</button>
+      <button class="nav-item">קלוד</button>
+      <button class="nav-item">פרומפטים</button>
+      <button class="nav-item">הגדרות</button>
+    </div>
+    <div class="sidebar-spacer"></div>
+    <div class="sidebar-foot">
+      <div class="avatar-chip">LA</div>
+      <div class="who"><p>lev.avishay.1</p><span>Admin</span></div>
+    </div>
+  </nav>
+
+  <div class="canvas">
+    <div class="workspace">
+
+      <div class="note-banner">
+        <b>גרסה 4 — עכשיו ה-CSS האמיתי, לא משוער</b>
+        העתקתי ישירות מ-theme.css: הפונט (Rubik), הצבעים, ה-sidebar, וה-StepRail האמיתי מ-WorkflowTab.tsx (אותם עם אותם CSS class בדיוק — .ov-steps).
+        <ul>
+          <li>אפשר ללחוץ על כל שלב כדי לראות אותו</li>
+          <li>המתג למטה מדמה "הוקם ב-TFS" — משנה את מה שנעול</li>
+        </ul>
+      </div>
+
+      <div class="sim-bar">
+        <div class="toggle" id="tfsToggle" onclick="toggleTfs()"><div class="knob"></div></div>
+        <span id="tfsSimLabel">דימוי: המשימה עוד לא הוקמה ב-TFS</span>
+      </div>
+
+      <div class="crumb">← לדרישה</div>
+      <div class="page-head">
+        <div class="titles">
+          <h1>עדכון פרמטר גלובלי TradeOptionSetsValuesToRemove<span class="info-i">i</span></h1>
+          <p>משימה · standard · #4</p>
+          <p id="tfsLink" style="display:none;margin:4px 0 0;">
+            <a href="#" style="font-size:12.5px;color:var(--color-accent);text-decoration:underline;font-weight:600;">🔗 TFS #4821 ↗</a>
+          </p>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+          <span class="pill warning" id="statusPill"><span class="dot"></span> ממתינה להקמה ב-TFS</span>
+          <!-- separate from the phase status: "is there a dependency at all" — always visible, on its own, whenever one is open -->
+          <span class="pill critical" id="depTag" style="font-weight:700;">🔗 קיימת תלות (1)</span>
+        </div>
+      </div>
+
+      <div class="panel ob-note warn" id="gateNote" style="margin-bottom:16px;">
+        🔒 המשימה מאושרת אבל עוד לא הוקמה כ-work item ב-Azure DevOps — אי אפשר לפתוח את שלב הפיתוח בלעדיה.
+        <div style="margin-top:8px;font-size:11.5px;">הניסיון האחרון נכשל: אין חיבור Azure DevOps פעיל ללקוח.</div>
+        <div style="margin-top:10px;"><button class="btn btn-secondary btn-sm">נסה שוב לפתוח ב-TFS</button></div>
+      </div>
+
+      <div class="panel" style="margin-bottom:16px;">
+        <p class="card-title" style="margin-bottom:10px;">תלות (1)<span class="info-i">i</span></p>
+        <div class="dep-item">
+          <span class="b"></span>
+          <span class="link">#2 — הוספת שדות Alt_FormCancellationRequestBit ו-Alt_FormCancellationRequestReason</span>
+          <span class="st">עוד לא פותחה</span>
+        </div>
+      </div>
+
+      <!-- the real StepRail pattern -->
+      <div class="panel" style="padding-top:14px;padding-bottom:14px;">
+        <div class="ov-steps">
+          <span class="info-i" style="margin:0 2px 0 0;">i</span>
+          <button class="ov-step active" id="stepBtn0" onclick="showStage(0)" disabled>
+            <div class="n"><span>שלב 1</span></div>
+            <div class="lbl">פיתוח (כולל Build)</div>
+          </button>
+          <span class="ov-arrow">←</span>
+          <button class="ov-step" id="stepBtn1" onclick="showStage(1)" disabled>
+            <div class="n"><span>שלב 2</span></div>
+            <div class="lbl">בדיקות</div>
+          </button>
+          <span class="ov-arrow">←</span>
+          <button class="ov-step" id="stepBtn2" onclick="showStage(2)" disabled>
+            <div class="n"><span>שלב 3</span></div>
+            <div class="lbl">סקירה והחלטה</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- stage 1: development + build -->
+      <div class="stage-pane on" id="stage0">
+        <div class="panel locked-pane" id="stage0panel">
+          <p class="card-title">שלב 1 — פיתוח, ואז Build<span class="info-i">i</span></p>
+          <p style="font-size:12.5px;color:var(--ink-500);margin:0 0 12px;">קלוד כותב את הקוד ואת הבדיקות שלו; ברגע שהקוד נכתב, DCC בונה (Build) את מה שהשינוי מתקמפל אליו — שני חלקים של אותו שלב אחד.</p>
+
+          <div class="check-fold">
+            <div class="check-row-head" onclick="this.parentElement.classList.toggle('open')">
+              <span class="t">📝 ההוראה למשימה</span><span>▾</span>
+            </div>
+            <div class="check-body">
+              <div class="field"><textarea readonly>עדכן את הפרמטר הגלובלי TradeOptionSetsValuesToRemove כך שהערך 5 יוסתר מרשימת הבחירה הידנית.</textarea></div>
+              <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-primary btn-sm">שמור</button><button class="btn btn-secondary btn-sm">ביטול</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- stage 2: checks -->
+      <div class="stage-pane" id="stage1">
+        <div class="panel locked-pane" id="stage1panel">
+          <p class="card-title">שלב 2 — בדיקות<span class="info-i">i</span></p>
+          <p style="font-size:12.5px;color:var(--ink-500);margin:0 0 12px;">בדיקות לפיתוח ורגרסיה, בלי הרשאה לשנות קבצים — רצות אחרי שה-Build עבר.</p>
+          <div class="check-fold">
+            <div class="check-row-head" onclick="this.parentElement.classList.toggle('open')"><span class="t">📝 בדיקות לפיתוח <span class="pill neutral" style="margin-inline-start:6px;">#10</span></span><span>▾</span></div>
+            <div class="check-body">
+              <div class="field"><textarea readonly>מצא את הבדיקות שהפיתוח הוסיף להיגיון החדש והרץ אותן, יחד עם הבדיקות הקיימות של הקוד שהשתנה.</textarea></div>
+              <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-primary btn-sm">שמור</button><button class="btn btn-secondary btn-sm">ביטול</button></div>
+            </div>
+          </div>
+          <div class="check-fold">
+            <div class="check-row-head" onclick="this.parentElement.classList.toggle('open')"><span class="t">📝 בדיקות רגרסיה <span class="pill neutral" style="margin-inline-start:6px;">#11</span></span><span>▾</span></div>
+            <div class="check-body">
+              <div class="field"><textarea readonly>הרץ את הבדיקות הקיימות של מי שמשתמש בקוד שהשתנה, כדי לוודא ששום דבר שעבד לא נשבר.</textarea></div>
+              <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-primary btn-sm">שמור</button><button class="btn btn-secondary btn-sm">ביטול</button></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- stage 3: review -->
+      <div class="stage-pane" id="stage2">
+        <div class="panel locked-pane" id="stage2panel">
+          <p class="card-title">שלב 3 — סקירה והחלטה<span class="info-i">i</span></p>
+          <p style="font-size:12.5px;color:var(--ink-500);margin:0;">לסקור מה השתנה, לדחוף ל-GitHub, לסמן כהושלם. (העיצוב הפנימי של השלב הזה — בסבב נפרד.)</p>
+        </div>
+      </div>
+
+
+      <hr style="border:none;border-top:1px dashed var(--border-hairline);margin:30px 0;">
+      <h2 style="font-size:15px;margin:0 0 4px;">השלב הצף — "תלות" נכנס ל-FLOW לפי מתי היא נפתרה</h2>
+      <p style="font-size:12.5px;color:var(--ink-500);margin:0 0 16px;line-height:1.6;">
+        בדיוק כמו שתיארת: תלות שנפתרה לפני שהתחילו לעבוד — לא משאירה עקבות ב-FLOW. תלות שנפתרה תוך כדי — נכנסת כקוביה בעצמה, במקום שבו היא באמת קרתה, ומכפילה כל שלב שצריך לרוץ עליה מחדש. כל הכפלה כזו קורית רק על הרצה אמיתית שביקשתם (Rollback והרץ שוב) — לא תהליך ברקע — אז זו באמת ההיסטוריה של מה שנעשה, לא ניפוח מלאכותי.
+      </p>
+
+      <p style="font-size:12px;font-weight:650;color:var(--ink-700);margin:0 0 6px;">1. התלות נפתרה לפני שהתחילו לפתח</p>
+      <div class="panel" style="padding:14px 16px;">
+        <div class="ov-steps">
+          <div class="ov-step" style="flex:1 1 120px;"><div class="n"><span class="ok">✓</span><span>שלב 1</span></div><div class="lbl">פיתוח (כולל Build)</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step active" style="flex:1 1 120px;"><div class="n"><span>שלב 2</span></div><div class="lbl">בדיקות</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 120px;"><div class="n"><span>שלב 3</span></div><div class="lbl">סקירה והחלטה</div></div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--ink-400);margin:2px 0 22px;">בלי שום זכר לתלות — היא לא הייתה חלק מהסיפור של המשימה הזו.</p>
+
+      <p style="font-size:12px;font-weight:650;color:var(--ink-700);margin:0 0 6px;">2. נפתרה תוך כדי הפיתוח, לפני שהגיעו לבדיקות</p>
+      <div class="panel" style="padding:14px 16px;">
+        <div class="ov-steps">
+          <div class="ov-step" style="flex:1 1 120px;"><div class="n"><span class="ok">✓</span><span>שלב 1</span></div><div class="lbl">פיתוח (כולל Build)</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 105px;border-color:#584EF3;background:#F5F4FF;"><div class="n" style="color:#584EF3;"><span class="ok">✓</span><span>תלות</span></div><div class="lbl" style="color:#584EF3;font-size:11px;">#3 נפתרה</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step active" style="flex:1 1 120px;"><div class="n"><span>שלב 2</span></div><div class="lbl">בדיקות</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 120px;"><div class="n"><span>שלב 3</span></div><div class="lbl">סקירה והחלטה</div></div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--ink-400);margin:2px 0 22px;">הבדיקות עוד לא רצו בכלל — אז הן פשוט רצות פעם אחת, על הגרסה הנכונה. אין כפילות.</p>
+
+      <p style="font-size:12px;font-weight:650;color:var(--ink-700);margin:0 0 6px;">3. נפתרה אחרי שהבדיקות כבר רצו — הדוגמה של #6 ו-#3</p>
+      <div class="panel" style="padding:14px 16px;">
+        <div class="ov-steps">
+          <div class="ov-step" style="flex:1 1 105px;"><div class="n"><span class="ok">✓</span><span>שלב 1</span></div><div class="lbl">פיתוח</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 105px;"><div class="n"><span class="ok">✓</span><span>שלב 2</span></div><div class="lbl" style="font-size:11px;">בדיקות (בלי #3)</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 95px;border-color:#584EF3;background:#F5F4FF;"><div class="n" style="color:#584EF3;"><span class="ok">✓</span><span>תלות</span></div><div class="lbl" style="color:#584EF3;font-size:11px;">#3 נפתרה</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step active" style="flex:1 1 105px;"><div class="n"><span>שלב 2</span></div><div class="lbl" style="font-size:11px;">בדיקות שוב</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 120px;"><div class="n"><span>שלב 3</span></div><div class="lbl">סקירה והחלטה</div></div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--ink-400);margin:2px 0 22px;">
+        "בדיקות" מופיעה פעמיים — פעם ראשונה בלי #3 (2/3 עברו), אחרי הקוביה "תלות" — פעם שנייה, אחרי Rollback והרץ שוב, על גבי #3 (3/3 עברו). לוחצים על כל קוביה כדי לראות מה קרה בה.
+      </p>
+
+      <p style="font-size:12px;font-weight:650;color:var(--ink-700);margin:0 0 6px;">4. נפתרה אחרי שהגיעו לסקירה</p>
+      <div class="panel" style="padding:14px 16px;overflow-x:auto;">
+        <div class="ov-steps" style="flex-wrap:nowrap;">
+          <div class="ov-step" style="flex:1 1 88px;"><div class="n"><span class="ok">✓</span><span>1</span></div><div class="lbl" style="font-size:10.5px;">פיתוח</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 88px;"><div class="n"><span class="ok">✓</span><span>2</span></div><div class="lbl" style="font-size:10.5px;">בדיקות</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 88px;"><div class="n"><span class="ok">✓</span><span>3</span></div><div class="lbl" style="font-size:10.5px;">סקירה</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 78px;border-color:#584EF3;background:#F5F4FF;"><div class="n" style="color:#584EF3;"><span class="ok">✓</span><span>תלות</span></div><div class="lbl" style="color:#584EF3;font-size:10px;">נפתרה</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step" style="flex:1 1 88px;"><div class="n"><span>2</span></div><div class="lbl" style="font-size:10.5px;">בדיקות שוב</div></div>
+          <span class="ov-arrow">←</span>
+          <div class="ov-step active" style="flex:1 1 88px;"><div class="n"><span>3</span></div><div class="lbl" style="font-size:10.5px;">סקירה שוב</div></div>
+        </div>
+      </div>
+      <p style="font-size:11px;color:var(--ink-400);margin:2px 0;">
+        המקרה הכי נדיר — סוקרים או דוחפים משהו לפני שידעו שהוא נבנה בלי תלות. גם "סקירה" חוזרת, כי מה שנסקר קודם כבר לא הגרסה הנוכחית.
+      </p>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  var tfsOpen = false;
+  function toggleTfs() {
+    tfsOpen = !tfsOpen;
+    document.getElementById('tfsToggle').classList.toggle('on', tfsOpen);
+    document.getElementById('tfsSimLabel').textContent = tfsOpen ? 'דימוי: המשימה הוקמה ב-TFS' : 'דימוי: המשימה עוד לא הוקמה ב-TFS';
+    var pill = document.getElementById('statusPill');
+    pill.className = tfsOpen ? 'pill active' : 'pill warning';
+    pill.innerHTML = tfsOpen ? '<span class="dot"></span> בעבודה · פיתוח' : '<span class="dot"></span> ממתינה להקמה ב-TFS';
+    document.getElementById('gateNote').style.display = tfsOpen ? 'none' : 'block';
+    document.getElementById('tfsLink').style.display = tfsOpen ? 'block' : 'none';
+    document.getElementById('stage0panel').classList.toggle('locked-pane', !tfsOpen);
+    document.getElementById('stage1panel').classList.toggle('locked-pane', !tfsOpen);
+    document.getElementById('stage2panel').classList.toggle('locked-pane', !tfsOpen);
+    [0, 1, 2].forEach(function (i) { document.getElementById('stepBtn' + i).disabled = !tfsOpen; });
+  }
+  function showStage(i) {
+    if (!tfsOpen) return;
+    [0, 1, 2].forEach(function (j) {
+      document.getElementById('stage' + j).classList.toggle('on', j === i);
+      document.getElementById('stepBtn' + j).classList.toggle('active', j === i);
+    });
+  }
+</script>
+</body>
+</html>
