@@ -101,6 +101,57 @@ try {
   changed = await core.taskChangedFiles(clientId, B.id);
   check("...and the files show again", !!changed && changed.some((f) => f.path === "b.txt"), JSON.stringify(changed));
   check("running the repair again changes nothing", (await recordTaskBranches()).every((r) => r.seq !== B.seq));
+
+  // 9. Merging a dependency the task was developed without, and two tasks that changed the same file.
+  // The key was renamed above, so a branch is read from what the task recorded, never worked out.
+  const branchNow = async (t: { id: string }) => (await k.row(t.id)).branch!;
+  const E = await k.addTask("E", "write e.txt");
+  const D = await k.addTask("D", "write d.txt", { dependsOn: [E.id] });
+  const Dcheck = await k.addTask("Dchk", "D works", { parent: D.id });
+  await core.approveTask(clientId, E.id, by);
+  await core.approveTask(clientId, D.id, by);
+  await k.syncSeq();
+  await k.develop(D.id);
+  await k.develop(E.id);
+  const refusedNotDep = await core.mergeDependencyIntoTask({ clientId, taskId: E.id, dependencyId: D.id, by }).then(() => null, (e: Error) => e.message);
+  check("only a dependency of the task can be merged into it", !!refusedNotDep && refusedNotDep.includes("לא תלות"), String(refusedNotDep));
+  await k.dbm.withTenant(clientId, (tx) => tx.update(k.schema.task).set({ checkResult: "passed", state: "done" }).where(k.eq(k.schema.task.id, Dcheck.id)));
+  const merged = await core.mergeDependencyIntoTask({ clientId, taskId: D.id, dependencyId: E.id, by });
+  check("a clean merge is done", merged.merged === true && !(merged as { already: boolean }).already, JSON.stringify(merged));
+  check("D's branch holds E's work now, and its own", g(cache, "ls-tree", "--name-only", await branchNow(D)).split(String.fromCharCode(10)).includes("e.txt") && g(cache, "ls-tree", "--name-only", await branchNow(D)).split(String.fromCharCode(10)).includes("d.txt"));
+  const rd = await k.row(D.id);
+  check("D counts as built on E, with nothing left out", rd.baseTaskId === E.id && (rd.builtWithout as string[]).length === 0, JSON.stringify(rd));
+  check("D's own work is still only its own file", JSON.stringify((await core.taskChangedFiles(clientId, D.id))?.map((f) => f.path)) === JSON.stringify(["d.txt"]));
+  check("its checks ran on other code, so they are reset", (await k.row(Dcheck.id)).checkResult === null);
+  const again = await core.mergeDependencyIntoTask({ clientId, taskId: D.id, dependencyId: E.id, by });
+  check("merging again says it is already there", again.merged === true && (again as { already: boolean }).already === true, JSON.stringify(again));
+
+  // Two tasks that write the same file differently, tied by a dependency: the merge is refused, nothing changes.
+  const S = await k.addTask("S", "write shared.txt for S");
+  const R = await k.addTask("R", "write shared.txt for R", { dependsOn: [S.id] });
+  await core.approveTask(clientId, S.id, by);
+  await core.approveTask(clientId, R.id, by);
+  await k.syncSeq();
+  await k.develop(R.id);
+  await k.develop(S.id);
+  const tipBefore = g(cache, "rev-parse", await branchNow(R));
+  const clash = await core.mergeDependencyIntoTask({ clientId, taskId: R.id, dependencyId: S.id, by });
+  check("a conflict is reported with the file, and says what to do", clash.merged === false && (clash as { conflictFiles: string[] }).conflictFiles.includes("shared.txt") && (clash as { reason: string }).reason.includes("Rollback"), JSON.stringify(clash));
+  check("and changes nothing: R's branch and record are as they were", g(cache, "rev-parse", await branchNow(R)) === tipBefore && (await k.row(R.id)).baseTaskId === null);
+  const ovR = await core.taskOverlaps(clientId, R.id);
+  check("R is told S changed the same file, that R waits for S, and that they conflict", ovR.length === 1 && ovR[0]!.seq === S.seq && ovR[0]!.relation === "waits_for" && ovR[0]!.files.includes("shared.txt") && ovR[0]!.merge?.clean === false, JSON.stringify(ovR));
+
+  // Two tasks with no dependency on each other that changed the same file: told the same way.
+  const P = await k.addTask("P", "write clash.txt for P");
+  const Q = await k.addTask("Q", "write clash.txt for Q");
+  await core.approveTask(clientId, P.id, by);
+  await core.approveTask(clientId, Q.id, by);
+  await k.syncSeq();
+  await k.develop(P.id);
+  await k.develop(Q.id);
+  const ovP = await core.taskOverlaps(clientId, P.id);
+  check("two unrelated tasks on one file: told, with 'no dependency' and the conflict", ovP.length === 1 && ovP[0]!.seq === Q.seq && ovP[0]!.relation === "none" && ovP[0]!.merge?.clean === false, JSON.stringify(ovP));
+  check("tasks that touch different files are not told about each other", (await core.taskOverlaps(clientId, E.id)).every((o) => o.seq !== P.seq && o.seq !== Q.seq));
 } finally {
   await k.finish();
 }

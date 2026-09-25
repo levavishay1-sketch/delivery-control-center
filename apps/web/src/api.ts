@@ -730,6 +730,13 @@ export type CodeMapArrow = { from: string; to: string; label: string; state: "do
 export type CodeMap = { lanes: CodeMapLane[]; arrows: CodeMapArrow[]; caption?: string; problem?: { text: string; folder?: string } };
 export const getTaskCodeMap = (taskId: string) => get<{ codeMap: CodeMap | null; branch: string | null; reason?: string }>(`/tasks/${taskId}/code-map`);
 /** What a task's branch actually changed against what it was built on — same read-only comparison as a pull request's own file list. */
+export type TaskOverlap = {
+  id: string; seq: number; intent: string; relation: "waits_for" | "waited_on_by" | "none"; files: string[]; inOneLine: boolean;
+  merge: { clean: true } | { clean: false; conflictFiles: string[] } | null;
+};
+export const getTaskOverlaps = (taskId: string) => get<TaskOverlap[]>(`/tasks/${taskId}/overlaps`);
+export type MergeResult = { merged: true; already: boolean } | { merged: false; reason: string; conflictFiles: string[] };
+export const mergeDependency = (taskId: string, dependencyId: string) => post<MergeResult>(`/tasks/${taskId}/merge-dependency`, { dependencyId });
 export const getTaskFiles = (taskId: string) => get<{ files: ChangedFile[] | null }>(`/tasks/${taskId}/files`).then((r) => r.files);
 export const getTaskFile = (taskId: string, path: string) => get<FileVersionsData>(`/tasks/${taskId}/file?${new URLSearchParams({ path })}`);
 

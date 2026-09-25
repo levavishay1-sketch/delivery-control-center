@@ -59,5 +59,6 @@ export * from "./repo-onboarding/index.ts";
 export { taskStatus, type TaskStatus, type TaskStatusKey, type StatusTone, type CheckKind, type DependencyTag } from "./task-status.ts";
 export type { FlowStep, FlowStepKind, FlowStepState } from "./task-flow-steps.ts";
 export { taskChangedFiles, taskFileVersions } from "./task-files.ts";
+export { taskOverlaps, mergeDependencyIntoTask, type TaskOverlap, type MergeResult } from "./task-merge.ts";
 export { specFor, specForTask, setTaskSpecLinks, checkSpecRead, type SpecView, type SpecPiece, type SpecDecision, type SpecCorrection, type SpecRead } from "./spec-map.ts";
 export type { SpecDoc, DocBlock, DocRow, DocCell, DocLine } from "./spec-doc.ts";
