@@ -167,6 +167,19 @@ for (const c of concepts) {
 }
 bad.length ? fail(`the info registry is malformed (${bad.length})`, bad.slice(0, 20)) : ok(`the info registry is well-formed (${concepts.length} concepts)`);
 
+// A concept alias that is itself a generic Hebrew question word (the same
+// list the chat's own QUESTION_WORDS uses) hijacks step zero: any short
+// question of that shape — about anything — matches it and returns this
+// concept's one fixed explanation instead of asking the model with the
+// screen's real facts. Confirmed live 2026-09-27: "component_why" carried
+// "למה" as an alias, so every "why was this card proposed" question in the
+// onboarding chat answered with the same boilerplate definition of "כי
+// ראיתי" instead of that card's actual reason.
+const QUESTION_WORDS = new Set(["מה", "מהו", "מהי", "למה", "איך", "כמה", "האם", "הסבר", "תסביר", "מי", "איפה", "מתי"]);
+const genericAlias = [];
+for (const c of concepts) for (const a of c.aliases ?? []) if (QUESTION_WORDS.has(a.trim())) genericAlias.push(`${c.key}: alias "${a}" is a generic question word — any short question of that shape would hijack it`);
+genericAlias.length ? fail(`a concept alias is a generic question word (${genericAlias.length})`, genericAlias) : ok("no concept alias is a generic question word");
+
 const webSrc = [...text].filter(([f]) => /^apps\/web\/src\/.*\.tsx?$/.test(f));
 const used = [];
 for (const [f, t] of webSrc) for (const u of conceptsUsed(t)) used.push({ key: u.key, at: `${f}:${u.line}` });

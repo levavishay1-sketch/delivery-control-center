@@ -66,7 +66,7 @@ export const ONBOARDING_CONCEPTS: Concept[] = [
 
   /* the cards */
   { key: "component_card", kind: "term", title: "כרטיס רכיב", aliases: ["כרטיס", "רכיב"], screens: ["onboarding"], explain: "רכיב אחד שמוצע למאגר: למה (הראיה), מה הוא עושה, מקור, סיכון, עלות הקשר ואיך נבדוק. הכרטיס הוא מה שמאשרים — לא קובץ." },
-  { key: "component_why", kind: "field", title: "כי ראיתי", aliases: ["למה", "הראיה"], screens: ["onboarding"], explain: "העובדה מהפרופיל, מהניסיון או מהתהליך שהצדיקה את הרכיב. ריפו בלי העובדה הזאת לא היה מקבל את הרכיב." },
+  { key: "component_why", kind: "field", title: "כי ראיתי", aliases: ["הראיה"], screens: ["onboarding"], explain: "העובדה מהפרופיל, מהניסיון או מהתהליך שהצדיקה את הרכיב. ריפו בלי העובדה הזאת לא היה מקבל את הרכיב." },
   { key: "component_kind", kind: "field", title: "סוג הרכיב", aliases: ["hook", "skill", "סוכן", "MCP", "הרשאה", "שורת הנחיה"], screens: ["onboarding"], explain: "שורת הנחיה מלמדת; hook אוכף; הרשאה מונעת; skill הוא נוהל; סוכן הוא עוזר נפרד; MCP הוא חיבור למערכת; מסמך הוא ידע; דיווח הוא מידע לבעלים; מריץ הוא דרישה מהלקוח." },
   { key: "component_family", kind: "field", title: "משפחה", aliases: ["בטיחות", "אימות", "ידע", "חיבורים"], screens: ["onboarding"], explain: "המשפחות הן סדר הבנייה: בטיחות, אימות, ידע, חיבורים, skills, סוכנים, אכיפה, מדידה. כל משפחה מקבלת החלטה כתובה בשער המוכנות." },
   { key: "component_source", kind: "field", title: "מקור", aliases: ["מאיפה זה בא"], screens: ["onboarding"], explain: "כלל החלטה (מספר הכלל), כישלון בניסיון, צעד בתהליך, חיפוש רכיבים מוכנים, הסוקר, בקשה שלכם, או המאמן." },
