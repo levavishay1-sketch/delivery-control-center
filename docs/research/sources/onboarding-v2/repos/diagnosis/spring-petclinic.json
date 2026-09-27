@@ -1,0 +1,487 @@
+{
+ "name": "spring-petclinic",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/spring-petclinic",
+ "languages": [
+  {
+   "language": "Java",
+   "files": 50,
+   "lines": 4214
+  },
+  {
+   "language": "HTML",
+   "files": 12,
+   "lines": 0
+  },
+  {
+   "language": "YAML",
+   "files": 8,
+   "lines": 0
+  },
+  {
+   "language": "SQL",
+   "files": 7,
+   "lines": 344
+  },
+  {
+   "language": "SCSS",
+   "files": 4,
+   "lines": 0
+  },
+  {
+   "language": "XML",
+   "files": 3,
+   "lines": 0
+  },
+  {
+   "language": "JSON",
+   "files": 1,
+   "lines": 0
+  },
+  {
+   "language": "Markdown",
+   "files": 1,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "spring-boot"
+ ],
+ "package_managers": [
+  "gradle",
+  "maven"
+ ],
+ "build": {
+  "system": [
+   "maven",
+   "gradle"
+  ],
+  "commands": [
+   "./mvnw package",
+   "./gradlew build"
+  ]
+ },
+ "tests": {
+  "frameworks": [
+   "junit"
+  ],
+  "test_files": 20,
+  "test_dirs": [
+   [
+    "src",
+    20
+   ]
+  ]
+ },
+ "lint_format": [
+  "checkstyle",
+  "spring-javaformat",
+  ".editorconfig"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/deploy-and-test-cluster.yml",
+    "name": "Deploy and Test Cluster"
+   },
+   {
+    "file": ".github/workflows/gradle-build.yml",
+    "name": "Java CI with Gradle"
+   },
+   {
+    "file": ".github/workflows/maven-build.yml",
+    "name": "Java CI with Maven"
+   }
+  ],
+  "commands": [
+   "./gradlew build",
+   "./mvnw -B verify"
+  ],
+  "workflow_count": 3
+ },
+ "monorepo": {
+  "is_monorepo": false,
+  "workspaces": [],
+  "packages": []
+ },
+ "generated_code": {
+  "paths": [],
+  "header_marked_files": 2,
+  "header_sample": [
+   "src/main/resources/db/h2/schema.sql",
+   "src/main/resources/db/postgres/schema.sql"
+  ],
+  "header_dirs": [
+   {
+    "dir": "src/main/resources/db/h2",
+    "files": 1
+   },
+   {
+    "dir": "src/main/resources/db/postgres",
+    "files": 1
+   }
+  ]
+ },
+ "secrets": {
+  "total": 0,
+  "by_kind": {},
+  "files": [],
+  "sensitive_files": [],
+  "in_test_files": 0,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "MySQL/MariaDB": {
+   "count": 9,
+   "sample_files": [
+    "build.gradle",
+    "docker-compose.yml",
+    "pom.xml"
+   ]
+  },
+  "PostgreSQL": {
+   "count": 6,
+   "sample_files": [
+    "build.gradle",
+    "docker-compose.yml",
+    "pom.xml"
+   ]
+  },
+  "Docker": {
+   "count": 2,
+   "sample_files": [
+    ".devcontainer/Dockerfile",
+    "docker-compose.yml"
+   ]
+  },
+  "OAuth/OIDC/Identity": {
+   "count": 1,
+   "sample_files": [
+    "build.gradle"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": false,
+  "files": [],
+  "count": 0,
+  "kinds": [],
+  "sizes": {}
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 10541,
+  "docs_dir": false,
+  "docs_files": 0,
+  "adrs": [],
+  "contributing": [],
+  "architecture_docs": [],
+  "license": [
+   "LICENSE.txt"
+  ],
+  "changelog": [],
+  "license_kind": "Apache-2.0"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 0,
+  "bat_cmd": 2,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": true,
+  "dockerfile": [
+   ".devcontainer/Dockerfile"
+  ],
+  "docker_compose": [
+   "docker-compose.yml"
+  ],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": true,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 132,
+  "code_lines": 4558,
+  "bytes_on_disk_excl_git": 1402954,
+  "largest_files": [
+   {
+    "path": "src/main/resources/static/resources/fonts/varela_round-webfont.svg",
+    "bytes": 370273
+   },
+   {
+    "path": "src/main/resources/static/resources/css/petclinic.css",
+    "bytes": 278931
+   },
+   {
+    "path": "src/main/resources/static/resources/fonts/montserrat-webfont.svg",
+    "bytes": 84634
+   },
+   {
+    "path": "src/main/resources/static/resources/images/pets.png",
+    "bytes": 67721
+   },
+   {
+    "path": "src/main/resources/static/resources/fonts/varela_round-webfont.ttf",
+    "bytes": 63044
+   },
+   {
+    "path": "gradle/wrapper/gradle-wrapper.jar",
+    "bytes": 48462
+   },
+   {
+    "path": "src/main/resources/static/resources/fonts/montserrat-webfont.ttf",
+    "bytes": 42692
+   },
+   {
+    "path": "src/main/resources/static/resources/fonts/varela_round-webfont.woff",
+    "bytes": 32712
+   }
+  ],
+  "top_level_dirs": [
+   ".devcontainer",
+   ".github",
+   ".mvn",
+   "gradle",
+   "k8s",
+   "src"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "818c4136ea971c21674525f9053de0d9c7ad8cfe",
+  "tracked_files": 132,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 205,
+  "shallow": true,
+  "last_commit_date": "2026-08-26",
+  "first_commit_date_in_clone": "2023-02-24",
+  "authors_in_clone": 66,
+  "hot_files": [
+   {
+    "path": "pom.xml",
+    "changes": 49,
+    "authors": 7
+   },
+   {
+    "path": "build.gradle",
+    "changes": 41,
+    "authors": 8
+   },
+   {
+    "path": "README.md",
+    "changes": 21,
+    "authors": 9
+   },
+   {
+    "path": "src/test/java/org/springframework/samples/petclinic/owner/OwnerControllerTests.java",
+    "changes": 20,
+    "authors": 9
+   },
+   {
+    "path": "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+    "changes": 20,
+    "authors": 9
+   },
+   {
+    "path": "docker-compose.yml",
+    "changes": 18,
+    "authors": 4
+   },
+   {
+    "path": "src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java",
+    "changes": 18,
+    "authors": 6
+   },
+   {
+    "path": "src/test/java/org/springframework/samples/petclinic/owner/PetControllerTests.java",
+    "changes": 17,
+    "authors": 9
+   },
+   {
+    "path": "src/main/java/org/springframework/samples/petclinic/owner/Owner.java",
+    "changes": 16,
+    "authors": 13
+   },
+   {
+    "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+    "changes": 14,
+    "authors": 7
+   },
+   {
+    "path": "src/test/java/org/springframework/samples/petclinic/service/ClinicServiceTests.java",
+    "changes": 14,
+    "authors": 9
+   },
+   {
+    "path": "gradle/wrapper/gradle-wrapper.properties",
+    "changes": 14,
+    "authors": 5
+   },
+   {
+    "path": "src/test/java/org/springframework/samples/petclinic/MysqlTestApplication.java",
+    "changes": 13,
+    "authors": 2
+   },
+   {
+    "path": "src/main/java/org/springframework/samples/petclinic/owner/OwnerRepository.java",
+    "changes": 13,
+    "authors": 7
+   },
+   {
+    "path": ".mvn/wrapper/maven-wrapper.properties",
+    "changes": 12,
+    "authors": 4
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "src/main",
+    "changes": 330,
+    "authors": 40
+   },
+   {
+    "dir": ".",
+    "changes": 185,
+    "authors": 21
+   },
+   {
+    "dir": "src/test",
+    "changes": 175,
+    "authors": 24
+   },
+   {
+    "dir": "gradle/wrapper",
+    "changes": 24,
+    "authors": 5
+   },
+   {
+    "dir": ".mvn/wrapper",
+    "changes": 18,
+    "authors": 4
+   },
+   {
+    "dir": ".github/workflows",
+    "changes": 11,
+    "authors": 6
+   },
+   {
+    "dir": "k8s",
+    "changes": 7,
+    "authors": 2
+   },
+   {
+    "dir": ".devcontainer",
+    "changes": 7,
+    "authors": 3
+   },
+   {
+    "dir": "src/checkstyle",
+    "changes": 6,
+    "authors": 3
+   },
+   {
+    "dir": "config/nohttp",
+    "changes": 3,
+    "authors": 1
+   },
+   {
+    "dir": ".mvn",
+    "changes": 2,
+    "authors": 2
+   },
+   {
+    "dir": ".github",
+    "changes": 1,
+    "authors": 1
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "src/main/java/org/springframework/samples/petclinic/owner/OwnerController.java",
+     "src/main/java/org/springframework/samples/petclinic/owner/PetController.java",
+     "src/main/java/org/springframework/samples/petclinic/owner/VisitController.java"
+    ],
+    "times": 2
+   },
+   {
+    "files": [
+     "README.md",
+     "docker-compose.yml",
+     "k8s/db.yml",
+     "src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java",
+     "src/test/java/org/springframework/samples/petclinic/MysqlTestApplication.java"
+    ],
+    "times": 2
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "build.gradle",
+    "b": "pom.xml",
+    "times": 23
+   },
+   {
+    "a": "docker-compose.yml",
+    "b": "src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java",
+    "times": 8
+   },
+   {
+    "a": "docker-compose.yml",
+    "b": "src/test/java/org/springframework/samples/petclinic/MysqlTestApplication.java",
+    "times": 8
+   },
+   {
+    "a": "src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java",
+    "b": "src/test/java/org/springframework/samples/petclinic/MysqlTestApplication.java",
+    "times": 8
+   },
+   {
+    "a": "README.md",
+    "b": "docker-compose.yml",
+    "times": 7
+   },
+   {
+    "a": "pom.xml",
+    "b": "src/test/java/org/springframework/samples/petclinic/MySqlIntegrationTests.java",
+    "times": 7
+   },
+   {
+    "a": "README.md",
+    "b": "build.gradle",
+    "times": 6
+   },
+   {
+    "a": "README.md",
+    "b": "pom.xml",
+    "times": 6
+   }
+  ],
+  "commits_analyzed": 203,
+  "churn_by_ext": {
+   ".java": 347,
+   ".properties": 80,
+   ".xml": 58,
+   ".html": 51,
+   ".gradle": 42,
+   ".yml": 38,
+   ".md": 32,
+   "": 32
+  }
+ }
+}

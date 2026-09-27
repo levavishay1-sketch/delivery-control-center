@@ -1,0 +1,234 @@
+{
+ "name": "cline",
+ "rules_fired": [
+  "R01",
+  "R03",
+  "R04",
+  "R06",
+  "R07",
+  "R08",
+  "R09a",
+  "R10",
+  "R14",
+  "R15",
+  "R16",
+  "R20",
+  "R22a",
+  "R29"
+ ],
+ "component_count": 26,
+ "by_kind": {
+  "hook": 3,
+  "rule": 7,
+  "skill": 5,
+  "scaffold": 2,
+  "doc": 2,
+  "agent": 1,
+  "permission": 4,
+  "report": 2
+ },
+ "components": [
+  {
+   "rule": "R01",
+   "signal": "generated code present (path markers or 'auto-generated' headers)",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse deny Edit/Write under generated dirs"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: these paths are generated; change the source and regenerate"
+    }
+   ],
+   "reason": "generated code in apps/vscode/src/types, sdk/packages/llms/src/catalog, sdk/packages/llms/src/providers; editing it by hand is silently overwritten on the next build"
+  },
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (bun run test)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "package.json:test -> bun --parallel -F './sdk/packages/**' -F @cline/cli -F @cline/cline-hub -F @clin, vitest with 946 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 18 workflows) already encodes the project's definition of green: bun run build:sdk; NODE_FILE=\"node_modules/better-sqlite3/build/Release/better_sqlite3.node\"; npm install -g @vscode/vsce ovsx"
+  },
+  {
+   "rule": "R06",
+   "signal": "monorepo / multi-project layout",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "per-package CLAUDE.md / AGENTS.md (build+test per package)"
+    },
+    {
+     "kind": "skill",
+     "name": "which-package skill (maps a request to the owning package)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: run commands from the package dir, not the root"
+    }
+   ],
+   "reason": "sdk/packages/*; apps/* (24 packages) - one root instruction file cannot state the right build/test command for each"
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for sdk/packages"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to sdk/packages"
+    }
+   ],
+   "reason": "sdk/packages changed 1460 times by 14 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R08",
+   "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "change-recipe skill for: CHANGELOG.md + package.json + tauri.conf.json (12x)"
+    }
+   ],
+   "reason": "1 recurring file-sets in history - a recipe makes the agent touch all of them, not just the obvious one"
+  },
+  {
+   "rule": "R09a",
+   "signal": "secret-looking strings outside test files",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read on the flagged files until reviewed"
+    },
+    {
+     "kind": "hook",
+     "name": "PreToolUse secret-scan on Write/Edit and on git commit"
+    },
+    {
+     "kind": "report",
+     "name": "report to owner: 5 hits in "
+    }
+   ],
+   "reason": "5 credential-shaped hits outside tests (password_assignment, slack_token, aws_access_key) - an agent must neither read nor propagate them"
+  },
+  {
+   "rule": "R10",
+   "signal": "sensitive files tracked (.env, .snk, .pfx, .pem, app/web.config, appsettings.Development)",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read/Edit on 1 sensitive files (.env.example)"
+    }
+   ],
+   "reason": "1 sensitive-by-name files - out of the agent's context by default"
+  },
+  {
+   "rule": "R14",
+   "signal": "cloud SDK / IaC provider present",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny mutating cloud CLI (aws/az/gcloud create|delete|deploy)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: cloud credentials are never in the repo or the agent's env"
+    }
+   ],
+   "reason": "AWS SDK referenced - an agent with a shell must not be able to touch live infrastructure"
+  },
+  {
+   "rule": "R15",
+   "signal": "existing tool-specific AI config (cursor / clinerules / copilot-instructions)",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "merge clinerules, copilot into one AGENTS.md; CLAUDE.md = '@AGENTS.md' import"
+    },
+    {
+     "kind": "report",
+     "name": "report: do not duplicate - 70 AI files already exist"
+    }
+   ],
+   "reason": "clinerules, copilot present (70 files) - a second, disagreeing instruction file is worse than none"
+  },
+  {
+   "rule": "R16",
+   "signal": "AGENTS.md / CLAUDE.md already present",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "delta only: append diagnosis facts missing from the existing file (build/test commands, generated paths, external systems - whichever the file lacks)"
+    }
+   ],
+   "reason": "instruction file exists (.agents/skills/cline-sdk/SKILL.md, .agents/skills/cline-sdk/references/agent/REFERENCE.md) - generate only what the diagnosis proves and the file lacks"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run @biomejs/biome on the edited file"
+    }
+   ],
+   "reason": "@biomejs/biome, biome.json configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R22a",
+   "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: read apps/examples/desktop-app/sidecar/ARCHITECTURE.md before planning"
+    },
+    {
+     "kind": "skill",
+     "name": "docs-sync skill: a change that alters behaviour updates apps/examples/desktop-app/sidecar/ARCHITECTURE.md"
+    }
+   ],
+   "reason": "README 9.0 KB, 160 docs files, arch docs: apps/examples/desktop-app/sidecar/ARCHITECTURE.md, evals/ARCHITECTURE.md - the answers exist; the agent must be pointed at them"
+  },
+  {
+   "rule": "R29",
+   "signal": "LLM provider SDK in dependencies",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: tests never call live model APIs; provider keys are not in the agent's env"
+    },
+    {
+     "kind": "permission",
+     "name": "deny reading *_API_KEY env / .env"
+    }
+   ],
+   "reason": "OpenAI API, Anthropic API referenced - a test run that hits the real API costs money and is non-deterministic"
+  }
+ ]
+}

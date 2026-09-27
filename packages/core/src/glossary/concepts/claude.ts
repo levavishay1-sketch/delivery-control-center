@@ -2,6 +2,7 @@ import type { Concept } from "../index.ts";
 
 /** The Claude control center: the ledger, routing policy, chat, insights. */
 export const CLAUDE_CONCEPTS: Concept[] = [
+  { key: "model_effort", kind: "term", title: "מודל ומאמץ", aliases: ["מודל", "מאמץ", "effort"], screens: ["claude", "onboarding"], explain: "איזה מודל של Claude מריץ את הקריאה וכמה מאמץ חשיבה הוא משקיע. ברירת המחדל מהמדיניות לפי סוג הקריאה; אפשר לבחור אחרת להרצה אחת." },
   { key: "ledger", kind: "term", title: "יומן הקריאות", aliases: ["קריאות", "רשומה", "ledger"], screens: ["claude"], explain: "רשומה אחת לכל קריאה לקלוד, מכל מסלול: מתי, מי, על מה, איזו יכולת, מודל, מאמץ, טוקנים, עלות, זמן ותוצאה. זה המקור היחיד לכל מספר על עלות." },
   { key: "without_model", kind: "term", title: "נענו בלי מודל", aliases: ["בלי מודל", "מהמערכת"], screens: ["claude"], explain: "שאלות בצ'אט שהמערכת ענתה עליהן ישירות מהמילון או מהעובדות שעל המסך, בלי לפנות למודל. הן חינם ומיידיות." },
   { key: "unhelpful", kind: "term", title: "לא עזר", aliases: ["לא עזרה", "unhelpful"], screens: ["claude"], explain: "תשובה שאדם סימן שלא עזרה, או שאותה שאלה נשאלה שוב מיד אחריה. בלי הסימון הזה נדע כמה שאלנו, לא אם זה היה שווה." },

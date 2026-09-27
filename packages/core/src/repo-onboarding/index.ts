@@ -1,13 +1,17 @@
 export {
   OnboardingError,
-  startOnboardingRun, runOnboardingStage, resumeOnboardingSession, refreshReview, approveReview, cancelOnboardingRun,
-  updateOnboardingAutomation, updateOnboardingModelChoices, getOnboardingRunView, getOnboardingFileVersions, listOnboardingRuns, getLatestOnboardingRun,
-  onboardingStageCatalogue, authorizeOnboardingTerminal, recoverOnboardingRuns,
-  onboardingChatFacts, sendToOnboardingSession,
+  startOnboardingRun, runOnboardingStep, correctProfileFact, answerInterview, approveTrial, decideComponent, decideComponentSet, requestComponent, startBuild, deliverRun,
+  cancelOnboardingRun, updateOnboardingAutomation, startDraftSession, sendToOnboardingSession,
+  getOnboardingRunView, getOnboardingFileVersions, getOnboardingChangedFiles, listOnboardingRuns, getLatestOnboardingRun, onboardingStepCatalogue,
+  onboardingChatFacts, authorizeOnboardingTerminal, recoverOnboardingRuns,
 } from "./runs.ts";
+export { CoachError, coachView, decideProposal, recheckMarketplaceSources, scheduleCoach, acrossRepos } from "./coach.ts";
 export { subscribeTerminal, writeTerminalInput, resizeTerminal, killAllSessions, type TerminalMessage } from "./session.ts";
+export { diagnoseRepository } from "./diagnose.ts";
+export { applyRules, loadRules, stackTags } from "./rules.ts";
+export { profileFacts, profileSummary } from "./profile.ts";
 export {
-  STAGES as ONBOARDING_STAGES, presetPolicy, normalizePolicy, normalizeModelPolicy, policyNeedsConsent,
-  type StageKey as OnboardingStageKey, type RunStatus as OnboardingStatus, type AutomationPolicy, type AutomationPreset, type ModelChoice, type ModelPolicy,
-  type RunSession as OnboardingSession, type StageDefinition as OnboardingStageDefinition,
+  STEPS as ONBOARDING_STEPS, AUTOMATION_LEVELS, normalizeAutomation,
+  type StepKey as OnboardingStepKey, type RunStatus as OnboardingStatus, type Automation, type AutomationLevel, type RepoProfile, type Component as OnboardingComponent,
+  type RunSession as OnboardingSession, type StepDefinition as OnboardingStepDefinition, type HealthScore,
 } from "./types.ts";

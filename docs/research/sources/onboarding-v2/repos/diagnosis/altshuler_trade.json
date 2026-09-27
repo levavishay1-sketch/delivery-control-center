@@ -1,0 +1,540 @@
+{
+ "name": "altshuler_trade",
+ "path": "/home/user/altshuler_trade",
+ "languages": [
+  {
+   "language": "C#",
+   "files": 804,
+   "lines": 169379
+  },
+  {
+   "language": "JavaScript",
+   "files": 59,
+   "lines": 13106
+  },
+  {
+   "language": "JSON",
+   "files": 30,
+   "lines": 0
+  },
+  {
+   "language": "TypeScript",
+   "files": 26,
+   "lines": 1612
+  },
+  {
+   "language": "XML",
+   "files": 16,
+   "lines": 0
+  },
+  {
+   "language": "HTML",
+   "files": 1,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  ".NET",
+  ".NET Framework (legacy, msbuild)",
+  "MSTest",
+  "Microsoft.CrmSdk",
+  "Microsoft.PowerPlatform.Dataverse.Client",
+  "PowerApps PCF control",
+  "react (sub-package)"
+ ],
+ "package_managers": [
+  "nuget"
+ ],
+ "build": {
+  "system": [
+   "msbuild"
+  ],
+  "commands": [
+   "msbuild Altshuler.sln /t:Build   # requires Windows / Visual Studio build tools"
+  ],
+  "dotnet_target_frameworks": {
+   "netframework v4.6.2": 48,
+   "netframework v4.7.2": 21
+  }
+ },
+ "tests": {
+  "frameworks": [
+   "MSTest"
+  ],
+  "test_files": 6,
+  "test_dirs": [
+   [
+    "Test",
+    6
+   ]
+  ]
+ },
+ "lint_format": [],
+ "ci": {
+  "present": false,
+  "systems": [],
+  "workflows": [],
+  "commands": []
+ },
+ "monorepo": {
+  "is_monorepo": true,
+  "workspaces": [
+   "69 .NET projects in 1 solution(s)"
+  ],
+  "packages": [
+   "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm",
+   "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External",
+   "Client/Webresources/Alt.Client.Webresources",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.DownloadFile",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.FetchConfigurationManager",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.IncidentStatusChange",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.Logger",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.OTPManager",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.SearchFiles",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.TemplateGenerator",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.UploadFile",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.CrmApi",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.DigitalForm",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.SmsOutgoing",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Account",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AccountHolder",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.ArchiveDocumentSearch",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AuthorizationManagement",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AzureServiceBusIntegration",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.BlacklistsCheck",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Contact",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.CustomerOperationRequest",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Deposit",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.DigitalForm",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.DigitalFormVerification",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Document",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.DocumentSearchForEntity",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Email",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Incident",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.IncidentStatusLog",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.KYC",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Lead",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.MoneyLaunderingCalculation",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Opportunity",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.PhoneCall",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.PopulationRegistryCustomerVerification",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Portfolio",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.RepresentativeReward",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.SMS",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.ScheduledOperation",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Task",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.WithdrawalRequest",
+   "DataAccessLayer/Crm/Alt.DataAccessLayer.Crm",
+   "DataAccessLayer/Crm/Alt.DataAccessLayer.Crm.External",
+   "DataAccessLayer/ExternalServices/Alt.DataAccessLayer.ExternalServices",
+   "ExternalEntryPoints/Services/Alt.External.Services.CrmApi",
+   "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.ArchiveOutgoing",
+   "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.CrmOutgoing",
+   "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.DigitalForm",
+   "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.RelayListener",
+   "Pcf/DuplicateDetection",
+   "Pcf/JsonParser",
+   "Pcf/PopulationRegisterVerificationGrid",
+   "Shared/Framework/Alt.Framework",
+   "Shared/Framework/Alt.Framework.Azure.KeyVault",
+   "Shared/Framework/Alt.Framework.Azure.ServiceBus",
+   "Shared/Framework/Alt.Framework.Azure.Storage",
+   "Shared/Framework/Alt.Framework.EntryPoints.Crm",
+   "Shared/Framework/Alt.Framework.EntryPoints.External",
+   "Shared/Framework/Alt.Framework.External"
+  ],
+  "package_count": 67
+ },
+ "generated_code": {
+  "paths": [
+   {
+    "dir": "Shared/DataModel/Crm/Alt.DataModel.Crm.Core/Contracts",
+    "files": 1
+   }
+  ],
+  "header_marked_files": 3,
+  "header_sample": [
+   "Shared/DataModel/Crm/Alt.DataModel.Crm/EBG/Actions.cs",
+   "Shared/DataModel/Crm/Alt.DataModel.Crm/EBG/OptionSets.cs",
+   "Shared/DataModel/Crm/Alt.DataModel.Crm/Entities/Entities.cs"
+  ],
+  "header_dirs": [
+   {
+    "dir": "Shared/DataModel/Crm/Alt.DataModel.Crm/EBG",
+    "files": 2
+   },
+   {
+    "dir": "Shared/DataModel/Crm/Alt.DataModel.Crm/Entities",
+    "files": 1
+   }
+  ]
+ },
+ "secrets": {
+  "total": 2,
+  "by_kind": {
+   "connection_string_with_password": 2
+  },
+  "files": [
+   {
+    "path": "Stuff/OneTimeConsole/Program.cs",
+    "hits": 1
+   },
+   {
+    "path": "Test/ParserTester/Program.cs",
+    "hits": 1
+   }
+  ],
+  "sensitive_files": [
+   "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/Alt.BusinessLogicLayer.Crm.External.snk",
+   "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/app.config",
+   "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm/Alt.BusinessLogicLayer.Crm.snk",
+   "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm/app.config",
+   "Client/Webresources/Alt.Client.Webresources/Web.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.DownloadFile/Alt.Crm.Actions.DownloadFile.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.DownloadFile/app.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.FetchConfigurationManager/Alt.Crm.Actions.FetchConfigurationManager.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.FetchConfigurationManager/app.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.IncidentStatusChange/Alt.Crm.Actions.IncidentStatusChange.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.IncidentStatusChange/app.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.Logger/Alt.Crm.Actions.Logger.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.Logger/app.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.OTPManager/Alt.Crm.Actions.OTPManager.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.OTPManager/app.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.SearchFiles/Alt.Crm.Actions.SearchFiles.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.SearchFiles/app.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.TemplateGenerator/Alt.Crm.Actions.TemplateGenerator.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.TemplateGenerator/app.config",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.UploadFile/Alt.Crm.Actions.UploadFile.snk",
+   "CrmEntryPoints/Actions/Alt.Crm.Actions.UploadFile/app.config",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.CrmApi/Alt.Crm.CustomAPIs.CrmApi.snk",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.CrmApi/app.config",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.DigitalForm/Alt.Crm.CustomAPIs.DigitalForm.snk",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.DigitalForm/app.config",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.SmsOutgoing/Alt.Crm.CustomAPIs.SmsOutgoing.snk",
+   "CrmEntryPoints/CustomAPIs/Alt.Crm.CustomAPIs.SmsOutgoing/app.config",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Account/Alt.Crm.Plugins.Account.snk",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Account/app.config",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AccountHolder/Alt.Crm.Plugins.AccountHolder.snk",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AccountHolder/app.config",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Appointment/Alt.Crm.Plugins.Appointment/Alt.Crm.Plugins.Appointment.snk",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.Appointment/Alt.Crm.Plugins.Appointment/app.config",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.ArchiveDocumentSearch/Alt.Crm.Plugins.ArchiveDocumentSearch.snk",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.ArchiveDocumentSearch/app.config",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AuthorizationManagement/Alt.Crm.Plugins.AuthorizationManagement.snk",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AuthorizationManagement/app.config",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AzureServiceBusIntegration/Alt.Crm.Plugins.AzureServiceBusIntegration.snk",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.AzureServiceBusIntegration/app.config",
+   "CrmEntryPoints/Plugins/Alt.Crm.Plugins.BlacklistsCheck/Alt.Crm.Plugins.BlacklistsCheck.snk"
+  ],
+  "in_test_files": 1,
+  "outside_tests": 1,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "Dataverse/Dynamics 365": {
+   "count": 251,
+   "sample_files": [
+    "Test/ParserTester/ParserTester.csproj",
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.RelayListener/Alt.External.WebJobs.RelayListener.csproj",
+    "Shared/Framework/Alt.Framework.EntryPoints.External/Alt.Framework.EntryPoints.External.csproj",
+    "Shared/Framework/Alt.Framework.EntryPoints.Crm/Alt.Framework.EntryPoints.Crm.csproj"
+   ]
+  },
+  "SOAP/WCF web services": {
+   "count": 142,
+   "sample_files": [
+    "ExternalEntryPoints/Services/Alt.External.Services.CrmApi/Alt.External.Services.CrmApi.csproj",
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.RelayListener/Alt.External.WebJobs.RelayListener.csproj",
+    "Test/ParserTester/ParserTester.csproj",
+    "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm/Alt.BusinessLogicLayer.Crm.csproj"
+   ]
+  },
+  "Azure SDK": {
+   "count": 68,
+   "sample_files": [
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.ArchiveOutgoing/Alt.External.WebJobs.ArchiveOutgoing.csproj",
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.CrmOutgoing/Alt.External.WebJobs.CrmOutgoing.csproj",
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.DigitalForm/Alt.External.WebJobs.DigitalForm.csproj",
+    "Shared/Framework/Alt.Framework.Azure.ServiceBus/Alt.Framework.Azure.ServiceBus.csproj"
+   ]
+  },
+  "RabbitMQ/AMQP": {
+   "count": 40,
+   "sample_files": [
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.ArchiveOutgoing/Alt.External.WebJobs.ArchiveOutgoing.csproj",
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.CrmOutgoing/Alt.External.WebJobs.CrmOutgoing.csproj",
+    "ExternalEntryPoints/WebJobs/Alt.External.WebJobs.DigitalForm/Alt.External.WebJobs.DigitalForm.csproj",
+    "Shared/Framework/Alt.Framework.Azure.ServiceBus/Alt.Framework.Azure.ServiceBus.csproj"
+   ]
+  },
+  "OAuth/OIDC/Identity": {
+   "count": 4,
+   "sample_files": [
+    "ExternalEntryPoints/Services/Alt.External.Services.CrmApi/Alt.External.Services.CrmApi.csproj",
+    "ExternalEntryPoints/Services/Alt.External.Services.CrmApi/packages.config"
+   ]
+  },
+  "SharePoint/Office365": {
+   "count": 1,
+   "sample_files": [
+    "Test/Alt.Test.CrmApi/app.config"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": false,
+  "files": [],
+  "count": 0,
+  "kinds": [],
+  "sizes": {}
+ },
+ "docs": {
+  "readme": null,
+  "readme_bytes": 0,
+  "docs_dir": false,
+  "docs_files": 0,
+  "adrs": [],
+  "contributing": [],
+  "architecture_docs": [],
+  "license": [],
+  "changelog": [],
+  "license_kind": "none"
+ },
+ "windows_build": {
+  "sln": 1,
+  "csproj": 69,
+  "snk": 58,
+  "vbproj": 0,
+  "packages_config": 69,
+  "ps1": 0,
+  "bat_cmd": 0,
+  "legacy_netframework": true,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": true
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": false,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 1333,
+  "code_lines": 184097,
+  "bytes_on_disk_excl_git": 1689371129,
+  "largest_files": [
+   {
+    "path": "Shared/DataModel/Crm/Alt.DataModel.Crm/Entities/Entities.cs",
+    "bytes": 3462002
+   },
+   {
+    "path": "ExternalEntryPoints/SSIS/Alt.External.SSIS.General/DailyTradeImportData.dtsx",
+    "bytes": 1924847
+   },
+   {
+    "path": "ExternalEntryPoints/SSIS/Alt.External.SSIS.General/DailyTradeDepositsImportData.dtsx",
+    "bytes": 809946
+   },
+   {
+    "path": "Shared/DataModel/Crm/Alt.DataModel.Crm.Core/Errors/CrmErrorCodes.cs",
+    "bytes": 711034
+   },
+   {
+    "path": "Pcf/DuplicateDetection/package-lock.json",
+    "bytes": 407155
+   },
+   {
+    "path": "Pcf/PopulationRegisterVerificationGrid/package-lock.json",
+    "bytes": 372268
+   },
+   {
+    "path": "Pcf/JsonParser/package-lock.json",
+    "bytes": 362076
+   },
+   {
+    "path": "Shared/DataModel/Crm/Alt.DataModel.Crm/EBG/OptionSets.cs",
+    "bytes": 128650
+   }
+  ],
+  "top_level_dirs": [
+   "BusinessLogicLayer",
+   "Client",
+   "CrmEntryPoints",
+   "DataAccessLayer",
+   "ExternalEntryPoints",
+   "Pcf",
+   "Shared",
+   "Stuff",
+   "Test"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "3a3fcc489220dca31fed41ed05a7dcebe3d0828a",
+  "tracked_files": 8256,
+  "tracked_binaries_dll_exe_pdb": 3215,
+  "tracked_ide_junk": 1020,
+  "tracked_package_dirs": 2963,
+  "commits_in_clone": 1,
+  "shallow": true,
+  "last_commit_date": "2026-09-23",
+  "first_commit_date_in_clone": "2026-09-23",
+  "authors_in_clone": 1,
+  "hot_files": [
+   {
+    "path": ".vs/Altshuler/config/applicationhost.config",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": ".vs/Altshuler/v16/.suo",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "Altshuler.sln",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/AccountHolderBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/Alt.BusinessLogicLayer.Crm.External.csproj",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/Alt.BusinessLogicLayer.Crm.External.snk",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/ArchiveDocumentSearchBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/BankBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/BlacklistsCheckBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/BranchBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/CityBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/CommonBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/CountryBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/CustomerBL.cs",
+    "changes": 1,
+    "authors": 1
+   },
+   {
+    "path": "BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm.External/CustomerOperationRequestBL.cs",
+    "changes": 1,
+    "authors": 1
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "Shared/Framework",
+    "changes": 1680,
+    "authors": 1
+   },
+   {
+    "dir": "Shared/DataModel",
+    "changes": 806,
+    "authors": 1
+   },
+   {
+    "dir": "ExternalEntryPoints/WebJobs",
+    "changes": 689,
+    "authors": 1
+   },
+   {
+    "dir": "CrmEntryPoints/Plugins",
+    "changes": 678,
+    "authors": 1
+   },
+   {
+    "dir": "DataAccessLayer/Crm",
+    "changes": 430,
+    "authors": 1
+   },
+   {
+    "dir": "BusinessLogicLayer/Crm",
+    "changes": 356,
+    "authors": 1
+   },
+   {
+    "dir": "DataAccessLayer/ExternalServices",
+    "changes": 183,
+    "authors": 1
+   },
+   {
+    "dir": "ExternalEntryPoints/Services",
+    "changes": 117,
+    "authors": 1
+   },
+   {
+    "dir": "CrmEntryPoints/Actions",
+    "changes": 103,
+    "authors": 1
+   },
+   {
+    "dir": "packages/MSTest.TestFramework.2.1.2",
+    "changes": 93,
+    "authors": 1
+   },
+   {
+    "dir": "packages/Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1",
+    "changes": 93,
+    "authors": 1
+   },
+   {
+    "dir": "packages/System.Runtime.4.3.0",
+    "changes": 83,
+    "authors": 1
+   }
+  ],
+  "repeated_change_shapes": [],
+  "cochange_pairs": [],
+  "commits_analyzed": 1,
+  "churn_by_ext": {
+   ".dll": 2574,
+   ".xml": 1835,
+   ".cs": 942,
+   ".pdb": 475,
+   ".config": 427,
+   "._": 362,
+   ".cache": 227,
+   ".txt": 211
+  }
+ }
+}

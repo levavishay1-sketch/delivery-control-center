@@ -78,7 +78,18 @@ export const PROMPT_USES: Record<string, PromptUse> = {
     keeps: ['"requirements"', '"id"', '"title"', '"links"', '"seq"', '"evidence"', '"corrections"', '"decision"', '"from"', '"to"'],
   },
   "insights.clusters": { capability: "usage_insights", vars: [], keeps: ['"n"', '"finding"', '"recommendation"'] },
-  "onboarding.file_notes": { capability: "onboarding_file_notes", vars: [], keeps: ['"path"', '"note"'] },
+  // Repository onboarding as a coach (openspec/changes/repository-coach): the processes map, the trial task and its
+  // judge, the open marketplace search, the author of one file, the reviewer of the plan, and a person's request.
+  "onboarding.processes": {
+    capability: "onboarding_processes", vars: ["REPO_NAME", "PROFILE", "EVIDENCE", "INTERVIEW"],
+    keeps: ['"processes"', '"steps"', '"agentTest"', '"judgment"', '"externalInfo"', '"readsALot"', '"parallel"', '"failsToday"'],
+  },
+  "onboarding.trial": { capability: "onboarding_trial", vars: ["TASK"], keeps: ["RESULT: "] },
+  "onboarding.judge": { capability: "onboarding_judge", vars: ["TASK", "FACTS", "ANSWER"], keeps: ['"passed"', '"failureKind"', '"detail"'] },
+  "onboarding.marketplace": { capability: "onboarding_marketplace", vars: ["STACK", "PROFILE_SUMMARY", "KNOWN"], keeps: ['"sources"', '"kind"', '"url"', '"publisher"', '"official"'] },
+  "onboarding.author": { capability: "onboarding_author", vars: ["REPO_NAME", "PROFILE_SUMMARY", "COMPONENT", "FORMAT"], optional: ["PROCESS", "EVIDENCE"], keeps: [] },
+  "onboarding.review": { capability: "onboarding_review", vars: ["REPO_NAME", "PROFILE_SUMMARY", "PROCESSES", "TRIALS", "COMPONENTS"], keeps: ['"missing"', '"redundant"'] },
+  "onboarding.request": { capability: "onboarding_processes", vars: ["REPO_NAME", "REQUEST", "PROFILE_SUMMARY", "PROCESSES"], keeps: ['"kind"', '"title"', '"questions"'] },
 };
 
 const SECTION = /\{\{([#^])(\w+)\}\}([\s\S]*?)\{\{\/\2\}\}/g;

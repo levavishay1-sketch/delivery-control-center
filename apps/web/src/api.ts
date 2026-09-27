@@ -660,59 +660,78 @@ export const startResearchWork = (id: string) =>
 export const finishResearchWork = (id: string, conclusion: string) =>
   post<{ finished: boolean }>(`/workitems/${id}/research/finish`, { conclusion });
 
-/* ── repository onboarding — four stages around one live Claude Code
- * session (`repository-onboarding-native-init`). ── */
+/* ── repository onboarding as a coach (`repository-coach`): seven steps, a
+ * profile, processes, trials, component cards, the build, the delivery, and
+ * the coach that continues afterwards. ── */
 export type OnboardingStatus = "Pending" | "Running" | "WaitingForUser" | "Completed" | "Failed" | "Cancelled";
-export type OnboardingStageKey = "prepare" | "init" | "review" | "deliver";
-export type OnboardingStageDefinition = {
-  key: OnboardingStageKey; order: number; kind: "deterministic" | "ai" | "human"; gate: boolean;
-  title_he: string; short_he: string; why_he: string; what_he: string; output_he: string;
+export type OnboardingStepKey = "connect" | "diagnose" | "processes" | "trial" | "plan" | "build" | "deliver";
+export type OnboardingStepDefinition = {
+  key: OnboardingStepKey; order: number; kind: "deterministic" | "ai" | "human"; gate: boolean;
+  title_he: string; short_he: string; why_he: string; what_he: string; output_he: string; cost_he: string; you_he: string;
 };
-export type AutomationPreset = "step_by_step" | "guided" | "automatic" | "custom";
-export type StageAutomation = { run: "auto" | "manual"; gate?: "auto" | "human" };
-export type AutomationPolicy = { preset: AutomationPreset; stages: Record<OnboardingStageKey, StageAutomation> };
+export type AutomationLevel = "reversible_auto" | "all_approval" | "locked";
+export type Automation = { level: AutomationLevel };
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
-export type ModelChoice = { model?: string; effort?: Effort };
-export type ModelPolicy = Partial<Record<OnboardingStageKey, ModelChoice>>;
 export type SessionState = "none" | "live" | "ended" | "disconnected";
 export type OnboardingSession = {
-  id?: string; state: SessionState; startedAt?: string; endedAt?: string; exitCode?: number | null; model?: string; effort?: string;
-  apiCalls?: number;
+  id?: string; state: SessionState; startedAt?: string; endedAt?: string; exitCode?: number | null; model?: string; effort?: string; apiCalls?: number;
   status?: { costUsd: number; apiDurationMs: number; inputTokens: number; outputTokens: number; model: string | null; effort: string | null; linesAdded: number; linesRemoved: number };
 };
 export type ChangedFile = { path: string; status: string; additions: number; deletions: number };
-export type ExistingSetup = { claudeMdLines: number | null; agentsMd: boolean; rules: number; skills: number; hooks: number; agents: number; settings: boolean };
-export type PrepareResult = {
-  branch: string; baselineSha: string;
-  /** The main line the copy was cut from, and the one its request will target. */
-  defaultBranch: string | null;
-  /** Where that came from: the remote's main line, a local one, or the copy's current branch when neither was found. */
-  baseFrom: "remote" | "local" | "head";
-  fileCount: number; existing: ExistingSetup;
+export type ProfileFact = { path: string; concept: string; label_he: string; value_he: string; tone: "plain" | "warn" | "bad"; corrected: boolean };
+export type ProfileCorrection = { path: string; note: string | null; by: string; at: string };
+export type AgentTest = { judgment: boolean; externalInfo: boolean; readsALot: boolean; parallel: boolean; failsToday: boolean; why: string };
+export type ProcessStep = { key: string; title: string; what: string; agentTest: AgentTest; decision: "agent" | "skill" | "none"; reason: string };
+export type DiscoveredProcess = { key: string; title: string; source: string; evidence: string[]; steps: ProcessStep[]; trialTaskKey: string | null; impossible: string | null };
+export type InterviewQuestion = { key: string; question_he: string; why_he: string; options: { value: string; label_he: string }[]; default: string };
+export type InterviewAnswer = { key: string; value: string; assumed: boolean };
+export type FailureKind = "missing_fact" | "rule_violated" | "needs_external" | "cannot_verify" | "bad_judgment";
+export type TrialOutcome = { taskKey: string; title_he: string; phase: "baseline" | "after"; passed: boolean | null; failureKind: FailureKind | null; detail: string; costUsd: number; callId: string | null; judgedBy: string };
+export type TrialDelta = { before: { passed: number; total: number; costUsd: number }; after: { passed: number; total: number; costUsd: number }; costPerTaskChange: number | null };
+export type ComponentKind = "rule" | "hook" | "permission" | "skill" | "agent" | "mcp" | "plugin" | "lsp" | "scaffold" | "doc" | "report" | "runner" | "settings" | "gitattributes" | "gitignore" | "review" | "pr_template" | "devcontainer" | "script";
+export type ComponentFamily = "safety" | "verification" | "knowledge" | "connections" | "skills" | "agents" | "enforcement" | "measurement";
+export type ComponentGroup = "auto" | "approval" | "not_recommended";
+export type ComponentStatus = "proposed" | "approved" | "declined" | "installed" | "verified" | "failed" | "removed" | "deferred" | "reported";
+export type ClarifyingQuestion = { key: string; question_he: string; default: string; answer: string | null };
+export type OnboardingComponent = {
+  id: string; key: string; kind: ComponentKind; family: ComponentFamily; title_he: string; why_he: string; what_he: string;
+  source: "rule" | "trial" | "process" | "marketplace" | "reviewer" | "user" | "init" | "coach"; sourceRef: string | null;
+  group: ComponentGroup; risk: "reversible" | "significant" | "external"; contextTokens: number | null; verifyHow_he: string; status: ComponentStatus;
+  params: Record<string, unknown>; files: string[]; validation: { how: string; passed: boolean | null; detail: string; at: string } | null;
+  delta: { before: number; after: number; total: number; costPerTaskChange: number | null; verdict: string } | null;
+  questions: ClarifyingQuestion[]; decidedBy: string | null; decidedAt: string | null; declineReason: string | null;
 };
-export type InitResult = { sessionId: string; changedFiles: number; completedBy: string; auto?: boolean };
-export type ReviewResult = { changedFiles: ChangedFile[]; checkedAt: string; approvedBy?: string; approvedAt?: string; auto?: boolean; notes?: Record<string, { text: string; sig: string }> };
-export type DeliverResult = {
-  branch: string; base: string; commitSha: string | null; filesCommitted: number; remote: string | null; pushed: boolean;
-  prNumber: number | null; prUrl: string | null; compareUrl: string | null; localOnly: boolean; note?: string;
-};
+export type ReadinessItem = { key: string; title_he: string; ok: boolean; detail_he: string };
+export type Readiness = { ready: boolean; items: ReadinessItem[]; honesty: string[] };
 export type OnboardingRun = {
-  id: string; repoId: string; clientId: string; status: OnboardingStatus; currentStageKey: OnboardingStageKey | null;
+  id: string; repoId: string; clientId: string; kind: "onboarding" | "coach"; status: OnboardingStatus; currentStepKey: OnboardingStepKey | null;
   workspacePath: string | null; defaultBranch: string | null; baselineSha: string | null; branchName: string | null;
   session: OnboardingSession; triggeredBy: string; startedAt: string; completedAt: string | null; cancelledAt: string | null;
 };
-export type OnboardingStage = {
-  id: string; stageKey: OnboardingStageKey; stageOrder: number; status: OnboardingStatus;
-  startedAt: string | null; completedAt: string | null; result: unknown; errors: string[]; updatedAt: string;
-};
+export type OnboardingStep = { id: string; stepKey: OnboardingStepKey; stepOrder: number; status: OnboardingStatus; startedAt: string | null; completedAt: string | null; result: unknown; errors: string[]; updatedAt: string };
 export type OnboardingEvent = { id: string; type: string; payload: Record<string, unknown>; actorUserId: string | null; occurredAt: string };
+export type ConnectResult = { branch: string; baselineSha: string; defaultBranch: string | null; baseFrom: "remote" | "local" | "head"; fileCount: number; existing: { claudeMdLines: number | null; agentsMd: boolean; rules: number; skills: number; hooks: number; agents: number; settings: boolean }; level: AutomationLevel };
+export type DiagnoseResult = { profileId: string; facts: number; durationMs: number; corrections: number };
+export type ProcessesResult = { processes: number; steps: number; agents: number; skills: number; questions: number; answered: number; assumed: number; costUsd: number; reused?: boolean };
+export type TrialStepResult = { phase: "baseline"; tasks: number; passed: number; costUsd: number; byKind: Record<string, number>; reused?: boolean };
+export type PlanResult = {
+  rulesFired: string[]; rulesSuppressed: { rule: string; fact: string }[]; components: number; byGroup: Record<ComponentGroup, number>;
+  marketplace: { searched: boolean; found: number; remembered: number; skipped: string | null }; reviewer: { missing: number; redundant: number } | null; costUsd: number;
+  firings?: { rule: string; signal: string; reason_he: string; components: { key: string; title_he: string }[] }[]; suppressed?: { rule: string; fact: string; note: string | null }[];
+  approved?: number; declined?: number; deferred?: number; undecided?: number;
+};
+export type BuildResult = { installed: number; verified: number; failed: number; skipped: number; files: string[]; delta: TrialDelta | null; jointCheck: { duplicates: string[]; contradictions: string[]; alwaysLoadedTokens: number }; costUsd: number };
+export type DeliverResult = { branch: string; base: string; commitSha: string | null; filesCommitted: number; remote: string | null; pushed: boolean; prNumber: number | null; prUrl: string | null; compareUrl: string | null; localOnly: boolean; note?: string; report: string };
 export type OnboardingCost = {
-  /** Ledger rows for this run plus what the live process spent since the last slice (`liveUsd`, not yet recorded). */
-  totalCostUsd: number; liveUsd: number; apiCalls: number; inputTokens: number; outputTokens: number; apiDurationMs: number;
-  /** What the chat has cost on this run — its own ledger rows, not part of the session. */
-  chat: { costUsd: number; calls: number; inputTokens: number; outputTokens: number } | null;
-  byStage: { stageKey: string; model: string | null; effort: string | null; costUsd: number }[];
-  calls: ClaudeCallView[];
+  totalCostUsd: number; liveUsd: number; calls: number; inputTokens: number; outputTokens: number;
+  chat: { costUsd: number; calls: number } | null; byStep: { stepKey: string; costUsd: number; calls: number }[]; rows: ClaudeCallView[];
+};
+export type HealthScore = { firstPassRate: number | null; rerunsPerTask: number | null; costPerTaskUsd: number | null; mergedWithoutRewriteRate: number | null; tasks: number; windowDays: number; score: number | null; trend: "up" | "down" | "flat" | null };
+export type CoachProposal = { id: string; kind: "add" | "change" | "remove" | "new_in_world"; componentKey: string | null; title: string; why: string; evidence: Record<string, unknown>; measure: Record<string, unknown>; status: string; createdAt: string; decidedAt: string | null; runId: string | null };
+export type CoachView = {
+  health: HealthScore; proposals: CoachProposal[]; installed: { key: string; kind: string; title: string; contextTokens: number | null; status: string; runId: string }[];
+  lastRun: { id: string; completedAt: string | null; kind: string } | null; newInWorld: { name: string; kind: string; url: string; changedAt: string }[];
+  acrossRepos: { key: string; title: string; repos: number; improved: number }[];
 };
 export type CodeMapPlace = "cloud" | "local" | "both";
 export type CodeMapNodeKind = "other" | "ours" | "attention" | "current" | "merge" | "branchPoint" | "pr" | "uncommitted" | "empty";
@@ -834,32 +853,54 @@ export function getPullRequest(repoId: string, number: number, refresh?: boolean
 export const openFolder = (path: string) => post<{ opened: string }>("/open-folder", { path });
 
 export type OnboardingRunView = {
-  repo: { id: string; name: string }; run: OnboardingRun; stages: OnboardingStage[]; events: OnboardingEvent[];
-  definitions: OnboardingStageDefinition[]; automation: AutomationPolicy; modelChoices: ModelPolicy;
-  recommended: { init: { model: string; effort: Effort } }; codeMap: CodeMap | null; cost: OnboardingCost;
+  repo: { id: string; name: string }; run: OnboardingRun; steps: OnboardingStep[]; definitions: OnboardingStepDefinition[]; automation: Automation; levels: AutomationLevel[];
+  profile: { id: string; facts: ProfileFact[]; corrections: ProfileCorrection[]; summary: string; tags: string[]; raw: unknown } | null;
+  interview: { questions: InterviewQuestion[]; answers: InterviewAnswer[] };
+  processes: DiscoveredProcess[];
+  trials: { baseline: TrialOutcome[]; after: TrialOutcome[]; delta: TrialDelta | null; waiting: { tasks: { key: string; title_he: string; judge: string }[]; estimateUsd: number } | null };
+  components: OnboardingComponent[]; plan: PlanResult | null; readiness: Readiness | null; build: BuildResult | null; deliver: DeliverResult | null;
+  events: OnboardingEvent[]; codeMap: CodeMap | null; cost: OnboardingCost; recommended: { draft: { model: string; effort: Effort } }; coach: { openProposals: number };
 };
-export type OnboardingRunSummary = { id: string; status: OnboardingStatus; currentStageKey: OnboardingStageKey | null; startedAt: string; completedAt: string | null; branchName: string | null };
+export type OnboardingRunSummary = { id: string; kind: "onboarding" | "coach"; status: OnboardingStatus; currentStepKey: OnboardingStepKey | null; startedAt: string; completedAt: string | null; branchName: string | null };
 
 const ob = (repoId: string, runId: string) => `/repos/${repoId}/onboarding/runs/${runId}`;
-export const getOnboardingStages = () => get<{ stages: OnboardingStageDefinition[]; recommended: { init: { model: string; effort: Effort } } }>("/onboarding/stages");
-export const startOnboardingRun = (repoId: string, body: { automation?: AutomationPolicy | { preset: AutomationPreset }; modelChoices?: ModelPolicy; consent?: boolean }) =>
-  post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, body);
+export const getOnboardingSteps = () => get<{ steps: OnboardingStepDefinition[]; levels: AutomationLevel[]; recommended: { draft: { model: string; effort: Effort } } }>("/onboarding/steps");
+export const startOnboardingRun = (repoId: string, body: { automation?: Automation; kind?: "onboarding" | "coach"; proposalIds?: string[] }) => post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, body);
 export const getLatestOnboardingRun = (repoId: string) =>
-  get<{ runId: string; status: OnboardingStatus; currentStageKey: OnboardingStageKey | null; completedAt: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
+  get<{ runId: string; kind: string; status: OnboardingStatus; currentStepKey: OnboardingStepKey | null; completedAt: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
 export const listOnboardingRuns = (repoId: string) => get<{ runs: OnboardingRunSummary[] }>(`/repos/${repoId}/onboarding/runs`);
 export const getOnboardingRun = (repoId: string, runId: string) => get<OnboardingRunView>(ob(repoId, runId));
-export const runOnboardingStage = (repoId: string, runId: string, stageKey: OnboardingStageKey) => post<{ started: string }>(`${ob(repoId, runId)}/stages/${stageKey}/run`, {});
-export const resumeOnboardingSession = (repoId: string, runId: string) => post<{ resumed: boolean }>(`${ob(repoId, runId)}/session/resume`, {});
-export const refreshOnboardingReview = (repoId: string, runId: string) => post<{ changedFiles: ChangedFile[] }>(`${ob(repoId, runId)}/review/refresh`, {});
-export const approveOnboardingReview =(repoId: string, runId: string) => post<{ approved: boolean }>(`${ob(repoId, runId)}/review/approve`, {});
+export const runOnboardingStep = (repoId: string, runId: string, stepKey: OnboardingStepKey) => post<{ started: string }>(`${ob(repoId, runId)}/steps/${stepKey}/run`, {});
+export const correctProfileFact = (repoId: string, runId: string, body: { path: string; note?: string | null; undo?: boolean }) => post<{ corrections: ProfileCorrection[] }>(`${ob(repoId, runId)}/profile/correct`, body);
+export const answerInterview = (repoId: string, runId: string, answers: Record<string, string>) => post<{ answers: InterviewAnswer[] }>(`${ob(repoId, runId)}/interview`, { answers });
+export const approveTrial = (repoId: string, runId: string) => post<{ approved: boolean }>(`${ob(repoId, runId)}/trial/approve`, {});
+export const decideComponent = (repoId: string, runId: string, key: string, body: { decision: "approve" | "decline" | "defer" | "undo"; reason?: string | null; answers?: Record<string, string> }) =>
+  post<{ key: string; status: ComponentStatus }>(`${ob(repoId, runId)}/components/${encodeURIComponent(key)}/decide`, body);
+export const decideComponentSet = (repoId: string, runId: string, body: { decision: "approve" | "decline"; keys?: string[]; reason?: string | null }) => post<{ decided: number }>(`${ob(repoId, runId)}/components/decide-set`, body);
+export const requestOnboardingComponent = (repoId: string, runId: string, text: string) => post<{ key: string; kind: string; title: string; questions: ClarifyingQuestion[] }>(`${ob(repoId, runId)}/components/request`, { text });
+export const startOnboardingBuild = (repoId: string, runId: string) => post<{ building: number }>(`${ob(repoId, runId)}/build`, {});
+export const deliverOnboardingRun = (repoId: string, runId: string) => post<{ delivering: boolean }>(`${ob(repoId, runId)}/deliver`, {});
+export const startDraftSession = (repoId: string, runId: string, body: { resume?: boolean; model?: string; effort?: string } = {}) => post<{ started: boolean }>(`${ob(repoId, runId)}/draft/start`, body);
 export const cancelOnboardingRun = (repoId: string, runId: string) => post<{ cancelled: boolean }>(`${ob(repoId, runId)}/cancel`, {});
-export const updateOnboardingAutomation = (repoId: string, runId: string, automation: AutomationPolicy | { preset: AutomationPreset }, consent?: boolean) =>
-  patch<AutomationPolicy>(`${ob(repoId, runId)}/automation`, { automation, consent });
-export const updateOnboardingModelChoices = (repoId: string, runId: string, choices: ModelPolicy) => patch<ModelPolicy>(`${ob(repoId, runId)}/model-choices`, { choices });
-export const getOnboardingFile = (repoId: string, runId: string, path: string) =>
-  get<FileVersionsData>(`${ob(repoId, runId)}/file?${new URLSearchParams({ path })}`);
-/** The run's terminal socket, through the same `/api` proxy as every call. */
+export const updateOnboardingAutomation = (repoId: string, runId: string, automation: Automation) => patch<Automation>(`${ob(repoId, runId)}/automation`, { automation });
+export const getOnboardingFile = (repoId: string, runId: string, path: string) => get<FileVersionsData>(`${ob(repoId, runId)}/file?${new URLSearchParams({ path })}`);
+export const getOnboardingChangedFiles = (repoId: string, runId: string) => get<{ files: ChangedFile[] }>(`${ob(repoId, runId)}/files`);
+export const getCoach = (repoId: string) => get<CoachView>(`/repos/${repoId}/coach`);
+export const decideCoachProposal = (repoId: string, proposalId: string, body: { decision: "approve" | "decline"; reason?: string | null }) => post<{ id: string; status: string; runId?: string }>(`/repos/${repoId}/coach/proposals/${proposalId}/decide`, body);
+export const recheckCoachSources = () => post<{ checked: number; changed: number }>("/coach/recheck", {});
+/** The run's terminal socket (the `/init` draft session), through the same `/api` proxy as every call. */
 export const onboardingTerminalUrl = (repoId: string, runId: string) =>
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api${ob(repoId, runId)}/terminal`;
 /** A WebSocket cannot carry headers — its first message carries the same credentials. */
 export const terminalAuthMessage = () => JSON.stringify({ type: "auth", token: HOOK_TOKEN, email: DEV_EMAIL });
+
+/** The server refuses with `{ "error": "<message for the person>" }`. */
+export function errText(e: unknown): string {
+  const s = e instanceof Error ? e.message : String(e);
+  const body = s.replace(/^\d{3}\s+/, "");
+  try {
+    const j = JSON.parse(body) as { error?: unknown };
+    if (typeof j.error === "string") return j.error;
+  } catch { /* not JSON */ }
+  return body;
+}

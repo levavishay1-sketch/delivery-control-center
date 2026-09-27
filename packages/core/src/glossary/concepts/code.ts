@@ -13,9 +13,5 @@ export const CODE_CONCEPTS: Concept[] = [
   { key: "run_baseline", kind: "field", title: "נקודת התחלה", screens: ["onboarding"], explain: "מצב הקוד שממנו ההרצה יצאה. כך אפשר לדעת בדיוק מה היא הוסיפה, גם אם בינתיים נכנסו שינויים אחרים." },
   { key: "run_base_branch", kind: "field", title: "נוצר מהענף", aliases: ["מאיזה ענף", "ענף הבסיס"], screens: ["onboarding"], explain: "הענף הראשי של המאגר, שההרצה נגזרה ממנו ושאליו תחזור בקשת המיזוג בסוף. אם נגזרה מענף אחר, היא תישא איתה גם את העבודה שיש בו." },
   { key: "run_files", kind: "field", title: "קבצים בהרצה", aliases: ["קבצים"], screens: ["onboarding"], explain: "כמה קבצים יש במאגר שנסרק, וכמה מהם ההרצה שינתה בפועל. רק מה ששונה ייכנס לבקשת המיזוג." },
-  { key: "stage_cost", kind: "field", title: "עלות השלב", screens: ["onboarding"], explain: "כמה הוציא השלב הזה לבדו, מיומן הקריאות. סכום כל השלבים הוא עלות ההרצה." },
   { key: "run_pr", kind: "field", title: "Pull Request", aliases: ["בקשת המיזוג של ההרצה"], screens: ["onboarding"], explain: "בקשת המיזוג שנפתחה בסוף ההרצה. משם הקבצים נכנסים למאגר האמיתי, אחרי סקירה ומיזוג שאדם מאשר." },
-  { key: "what_gets_written", kind: "section", title: "מה ייכתב לריפו", screens: ["onboarding"], explain: "קובצי ההנחיה שההטמעה מוסיפה למאגר, כדי שקלוד יבין איך הוא בנוי. מה בדיוק — הוא מציע ואתם מחליטים בשיחה." },
-  { key: "what_youll_be_asked", kind: "section", title: "על מה תישאלו", screens: ["onboarding"], explain: "השאלות שקלוד לא יכול לענות עליהן מהקוד לבדו: מה לעשות עם הגדרות קיימות, ואיך דברים נהוגים אצלכם." },
-  { key: "stage_overview", kind: "section", title: "מה יקרה, בשלבים", screens: ["onboarding"], explain: "סקירה של כל שלבי ההטמעה לפי הסדר ומה כל אחד עושה, לפני שמתחילים. שום שלב לא רץ בלי שתאשרו, אלא אם בחרתם אחרת." },
 ];

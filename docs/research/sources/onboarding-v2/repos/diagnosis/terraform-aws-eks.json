@@ -1,0 +1,491 @@
+{
+ "name": "terraform-aws-eks",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/terraform-aws-eks",
+ "languages": [
+  {
+   "language": "HCL/Terraform",
+   "files": 90,
+   "lines": 16757
+  },
+  {
+   "language": "Markdown",
+   "files": 34,
+   "lines": 0
+  },
+  {
+   "language": "YAML",
+   "files": 11,
+   "lines": 0
+  },
+  {
+   "language": "Helm template",
+   "files": 8,
+   "lines": 0
+  },
+  {
+   "language": "Shell",
+   "files": 8,
+   "lines": 0
+  },
+  {
+   "language": "PowerShell",
+   "files": 7,
+   "lines": 0
+  },
+  {
+   "language": "JSON",
+   "files": 1,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "terraform"
+ ],
+ "package_managers": [],
+ "build": {
+  "system": [
+   "terraform"
+  ],
+  "commands": [
+   "terraform init && terraform validate   # no compile; plan needs cloud creds"
+  ]
+ },
+ "tests": {
+  "frameworks": [
+   "examples/ as integration checks (6)"
+  ],
+  "test_files": 20,
+  "test_dirs": [
+   [
+    "tests",
+    20
+   ]
+  ]
+ },
+ "lint_format": [
+  "pre-commit",
+  "terraform_fmt",
+  "terraform_validate",
+  "terraform_docs",
+  "tflint",
+  ".editorconfig",
+  ".pre-commit-config.yaml"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/lock.yml",
+    "name": "Lock Threads"
+   },
+   {
+    "file": ".github/workflows/pr-title.yml",
+    "name": "Validate PR title"
+   },
+   {
+    "file": ".github/workflows/pre-commit.yml",
+    "name": "Pre-Commit"
+   },
+   {
+    "file": ".github/workflows/publish-docs.yml",
+    "name": "Publish docs via GitHub Pages"
+   },
+   {
+    "file": ".github/workflows/release.yml",
+    "name": "Release"
+   },
+   {
+    "file": ".github/workflows/stale-actions.yaml",
+    "name": "Mark or close stale issues and PRs"
+   }
+  ],
+  "commands": [
+   "npm install \\"
+  ],
+  "workflow_count": 6
+ },
+ "monorepo": {
+  "is_monorepo": false,
+  "workspaces": [],
+  "packages": []
+ },
+ "generated_code": {
+  "paths": [],
+  "header_marked_files": 0,
+  "header_sample": [],
+  "header_dirs": []
+ },
+ "secrets": {
+  "total": 0,
+  "by_kind": {},
+  "files": [],
+  "sensitive_files": [],
+  "in_test_files": 0,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "OAuth/OIDC/Identity": {
+   "count": 87,
+   "sample_files": [
+    "main.tf",
+    "outputs.tf",
+    "examples/eks-auto-mode/outputs.tf",
+    "tests/eks-fargate-profile/outputs.tf"
+   ]
+  },
+  "AWS SDK": {
+   "count": 28,
+   "sample_files": [
+    "modules/hybrid-node-role/variables.tf",
+    "modules/karpenter/variables.tf",
+    "examples/eks-auto-mode/versions.tf",
+    "examples/eks-capabilities/versions.tf"
+   ]
+  },
+  "Kubernetes/Helm": {
+   "count": 10,
+   "sample_files": [
+    "examples/karpenter/main.tf",
+    "examples/eks-hybrid-nodes/remote.tf",
+    "examples/eks-hybrid-nodes/versions.tf",
+    "examples/karpenter/versions.tf"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": false,
+  "files": [],
+  "count": 0,
+  "kinds": [],
+  "sizes": {}
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 97939,
+  "docs_dir": true,
+  "docs_files": 17,
+  "adrs": [],
+  "contributing": [],
+  "architecture_docs": [],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [
+   "CHANGELOG.md"
+  ],
+  "license_kind": "Apache-2.0"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 7,
+  "bat_cmd": 0,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": true,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 185,
+  "code_lines": 16757,
+  "bytes_on_disk_excl_git": 1464075,
+  "largest_files": [
+   {
+    "path": "CHANGELOG.md",
+    "bytes": 144704
+   },
+   {
+    "path": "README.md",
+    "bytes": 97939
+   },
+   {
+    "path": ".github/images/security_groups.svg",
+    "bytes": 81802
+   },
+   {
+    "path": "docs/assets/aws-eks-workshop-830.png",
+    "bytes": 72363
+   },
+   {
+    "path": "variables.tf",
+    "bytes": 60439
+   },
+   {
+    "path": "modules/self-managed-node-group/README.md",
+    "bytes": 47897
+   },
+   {
+    "path": "modules/self-managed-node-group/main.tf",
+    "bytes": 45766
+   },
+   {
+    "path": "docs/assets/terraform-aws.png",
+    "bytes": 37726
+   }
+  ],
+  "top_level_dirs": [
+   ".github",
+   "docs",
+   "examples",
+   "modules",
+   "templates",
+   "tests"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "1b4508762bc622ca6deec75e9c9737c9830158cd",
+  "tracked_files": 185,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 200,
+  "shallow": true,
+  "last_commit_date": "2026-09-25",
+  "first_commit_date_in_clone": "2024-07-16",
+  "authors_in_clone": 58,
+  "hot_files": [
+   {
+    "path": "CHANGELOG.md",
+    "changes": 89,
+    "authors": 2
+   },
+   {
+    "path": "README.md",
+    "changes": 47,
+    "authors": 17
+   },
+   {
+    "path": "main.tf",
+    "changes": 34,
+    "authors": 12
+   },
+   {
+    "path": "modules/self-managed-node-group/README.md",
+    "changes": 31,
+    "authors": 12
+   },
+   {
+    "path": "variables.tf",
+    "changes": 30,
+    "authors": 12
+   },
+   {
+    "path": "modules/karpenter/README.md",
+    "changes": 30,
+    "authors": 15
+   },
+   {
+    "path": "modules/eks-managed-node-group/README.md",
+    "changes": 28,
+    "authors": 10
+   },
+   {
+    "path": "examples/karpenter/README.md",
+    "changes": 25,
+    "authors": 11
+   },
+   {
+    "path": "modules/fargate-profile/README.md",
+    "changes": 23,
+    "authors": 9
+   },
+   {
+    "path": "tests/eks-managed-node-group/README.md",
+    "changes": 23,
+    "authors": 9
+   },
+   {
+    "path": "tests/self-managed-node-group/README.md",
+    "changes": 23,
+    "authors": 9
+   },
+   {
+    "path": "modules/self-managed-node-group/main.tf",
+    "changes": 21,
+    "authors": 14
+   },
+   {
+    "path": "examples/karpenter/versions.tf",
+    "changes": 21,
+    "authors": 9
+   },
+   {
+    "path": "examples/eks-managed-node-group/versions.tf",
+    "changes": 20,
+    "authors": 8
+   },
+   {
+    "path": "examples/self-managed-node-group/versions.tf",
+    "changes": 20,
+    "authors": 8
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": ".",
+    "changes": 268,
+    "authors": 30
+   },
+   {
+    "dir": "modules/self-managed-node-group",
+    "changes": 87,
+    "authors": 19
+   },
+   {
+    "dir": "modules/karpenter",
+    "changes": 82,
+    "authors": 22
+   },
+   {
+    "dir": "modules/eks-managed-node-group",
+    "changes": 81,
+    "authors": 17
+   },
+   {
+    "dir": "examples/karpenter",
+    "changes": 63,
+    "authors": 14
+   },
+   {
+    "dir": "tests/eks-managed-node-group",
+    "changes": 61,
+    "authors": 10
+   },
+   {
+    "dir": "tests/self-managed-node-group",
+    "changes": 57,
+    "authors": 10
+   },
+   {
+    "dir": "modules/fargate-profile",
+    "changes": 49,
+    "authors": 9
+   },
+   {
+    "dir": "examples/eks-hybrid-nodes",
+    "changes": 44,
+    "authors": 9
+   },
+   {
+    "dir": "tests/user-data",
+    "changes": 44,
+    "authors": 3
+   },
+   {
+    "dir": "examples/eks-managed-node-group",
+    "changes": 43,
+    "authors": 9
+   },
+   {
+    "dir": "examples/self-managed-node-group",
+    "changes": 42,
+    "authors": 8
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "README.md",
+     "main.tf",
+     "variables.tf"
+    ],
+    "times": 5
+   },
+   {
+    "files": [
+     "modules/_user_data/main.tf",
+     "modules/eks-managed-node-group/main.tf",
+     "modules/self-managed-node-group/main.tf"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "modules/karpenter/README.md",
+     "modules/karpenter/main.tf",
+     "modules/karpenter/variables.tf"
+    ],
+    "times": 2
+   },
+   {
+    "files": [
+     "modules/self-managed-node-group/README.md",
+     "modules/self-managed-node-group/main.tf",
+     "modules/self-managed-node-group/variables.tf",
+     "node_groups.tf"
+    ],
+    "times": 2
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "README.md",
+    "b": "variables.tf",
+    "times": 15
+   },
+   {
+    "a": "main.tf",
+    "b": "variables.tf",
+    "times": 9
+   },
+   {
+    "a": "modules/eks-managed-node-group/main.tf",
+    "b": "modules/self-managed-node-group/main.tf",
+    "times": 9
+   },
+   {
+    "a": "README.md",
+    "b": "main.tf",
+    "times": 8
+   },
+   {
+    "a": "modules/self-managed-node-group/README.md",
+    "b": "modules/self-managed-node-group/variables.tf",
+    "times": 8
+   },
+   {
+    "a": "modules/self-managed-node-group/README.md",
+    "b": "modules/self-managed-node-group/main.tf",
+    "times": 7
+   },
+   {
+    "a": "modules/self-managed-node-group/main.tf",
+    "b": "modules/self-managed-node-group/variables.tf",
+    "times": 7
+   },
+   {
+    "a": "modules/self-managed-node-group/variables.tf",
+    "b": "node_groups.tf",
+    "times": 6
+   }
+  ],
+  "commits_analyzed": 200,
+  "churn_by_ext": {
+   ".tf": 663,
+   ".md": 484,
+   ".yaml": 26,
+   ".yml": 17,
+   ".tpl": 9,
+   "": 8,
+   ".txt": 8,
+   ".sh": 8
+  }
+ }
+}

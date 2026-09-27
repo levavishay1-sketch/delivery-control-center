@@ -1,0 +1,210 @@
+{
+ "name": "phpmyadmin",
+ "rules_fired": [
+  "R01",
+  "R03",
+  "R04",
+  "R07",
+  "R08",
+  "R09b",
+  "R13",
+  "R17",
+  "R20",
+  "R22a",
+  "R24",
+  "R28",
+  "R30"
+ ],
+ "component_count": 22,
+ "by_kind": {
+  "hook": 3,
+  "rule": 8,
+  "skill": 5,
+  "doc": 1,
+  "agent": 2,
+  "mcp": 1,
+  "scaffold": 1,
+  "permission": 1
+ },
+ "components": [
+  {
+   "rule": "R01",
+   "signal": "generated code present (path markers or 'auto-generated' headers)",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse deny Edit/Write under generated dirs"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: these paths are generated; change the source and regenerate"
+    }
+   ],
+   "reason": "generated code in src/Command; editing it by hand is silently overwritten on the next build"
+  },
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (composer run phpunit -- --testsuite unit --display-all-issues)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "package.json:test -> yarn node --experimental-vm-modules $(yarn bin jest), jest, phpunit with 494 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 12 workflows) already encodes the project's definition of green: yarn install --non-interactive; composer run phpunit -- --testsuite unit --display-all-issues; ./bin/internal/check-release-excludes.sh release/phpMyAdmin-${{ matrix.version }}+snapshot-all-langu"
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for libraries/classes"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to libraries/classes"
+    }
+   ],
+   "reason": "libraries/classes changed 12263 times by 53 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R08",
+   "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "change-recipe skill for: composer.lock + phpstan-baseline.neon + psalm-baseline.xml (9x)"
+    }
+   ],
+   "reason": "8 recurring file-sets in history - a recipe makes the agent touch all of them, not just the obvious one"
+  },
+  {
+   "rule": "R09b",
+   "signal": "secret-looking strings only in tests/fixtures",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: test fixtures contain fake keys - do not 'fix' or redact them"
+    },
+    {
+     "kind": "hook",
+     "name": "PreToolUse secret-scan on Write/Edit with a test-path allowlist"
+    }
+   ],
+   "reason": "6 hits, all in test files - fake keys; without an allowlist a naive scan hook blocks every test edit"
+  },
+  {
+   "rule": "R13",
+   "signal": "external system: relational database",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: schema changes go through the migration tool (MySQL/MariaDB); no ad-hoc SQL"
+    },
+    {
+     "kind": "mcp",
+     "name": "read-only DB MCP candidate - only if a local/compose DB exists (no compose - skip the MCP)"
+    }
+   ],
+   "reason": "MySQL/MariaDB referenced in manifests/compose"
+  },
+  {
+   "rule": "R17",
+   "signal": "no AI configuration at all",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "CLAUDE.md from the diagnosis: build=yarn run build   # -> webpack; composer install; test=composer run phpunit -- --testsuite unit --display-all-issues; lint=eslint, phpstan, psalm, .eslintrc.json; layout"
+    }
+   ],
+   "reason": "no CLAUDE.md/AGENTS.md/cursor/copilot - the agent starts from zero facts; the diagnosis provides them"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run eslint on the edited file"
+    }
+   ],
+   "reason": "eslint, phpstan, psalm, .eslintrc.json configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R22a",
+   "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: read docs/ before planning"
+    },
+    {
+     "kind": "skill",
+     "name": "docs-sync skill: a change that alters behaviour updates docs/"
+    }
+   ],
+   "reason": "README 1.5 KB, 43 docs files, arch docs: none - the answers exist; the agent must be pointed at them"
+  },
+  {
+   "rule": "R24",
+   "signal": "legacy web stack (PHP + vendored jQuery / Twig)",
+   "components": [
+    {
+     "kind": "agent",
+     "name": "security reviewer subagent (XSS / SQL injection / CSRF) on every PHP or JS change"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: no framework migrations or jQuery removal; smallest change that fits"
+    },
+    {
+     "kind": "permission",
+     "name": "deny edits under translation dirs (resources/po) - owned by the translation platform"
+    }
+   ],
+   "reason": "PHP (1235 files) with jQuery; hot dirs include resources/po (10834 changes) which is machine-synced"
+  },
+  {
+   "rule": "R28",
+   "signal": "large contributor base",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "contribution-style skill: PR format, commit convention, CONTRIBUTING (CONTRIBUTING.md)"
+    }
+   ],
+   "reason": "296 authors in the sample - output must look like everyone else's PR to be merged"
+  },
+  {
+   "rule": "R30",
+   "signal": "lock file churn / dependency-bump shape",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: dependency bumps = package.json + yarn.lock together; never edit a lock file by hand"
+    }
+   ],
+   "reason": "package.json + yarn.lock co-change 23 times - the most frequent change shape in history is a dependency bump"
+  }
+ ]
+}

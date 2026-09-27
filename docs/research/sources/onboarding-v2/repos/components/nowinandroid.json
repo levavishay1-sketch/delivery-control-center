@@ -1,0 +1,177 @@
+{
+ "name": "nowinandroid",
+ "rules_fired": [
+  "R03",
+  "R04",
+  "R06",
+  "R07",
+  "R08",
+  "R16",
+  "R20",
+  "R22a",
+  "R26",
+  "R28",
+  "R30"
+ ],
+ "component_count": 18,
+ "by_kind": {
+  "skill": 7,
+  "rule": 5,
+  "scaffold": 1,
+  "doc": 2,
+  "agent": 1,
+  "hook": 1,
+  "runner": 1
+ },
+ "components": [
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (./gradlew testDemoDebug :lint:test)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "junit, roborazzi-screenshot with 69 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 3 workflows) already encodes the project's definition of green: ./gradlew :build-logic:convention:check; ./gradlew :benchmarks:pixel6Api33Setup; ./gradlew spotlessCheck"
+  },
+  {
+   "rule": "R06",
+   "signal": "monorepo / multi-project layout",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "per-package CLAUDE.md / AGENTS.md (build+test per package)"
+    },
+    {
+     "kind": "skill",
+     "name": "which-package skill (maps a request to the owning package)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: run commands from the package dir, not the root"
+    }
+   ],
+   "reason": "36 gradle modules (36 packages) - one root instruction file cannot state the right build/test command for each"
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for core/designsystem"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to core/designsystem"
+    }
+   ],
+   "reason": "core/designsystem changed 1488 times by 44 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R08",
+   "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "change-recipe skill for: releaseRuntimeClasspath.txt + prodReleaseRuntimeClasspath.txt + libs.versions.toml (5x)"
+    }
+   ],
+   "reason": "6 recurring file-sets in history - a recipe makes the agent touch all of them, not just the obvious one"
+  },
+  {
+   "rule": "R16",
+   "signal": "AGENTS.md / CLAUDE.md already present",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "delta only: append diagnosis facts missing from the existing file (build/test commands, generated paths, external systems - whichever the file lacks)"
+    }
+   ],
+   "reason": "instruction file exists (AGENTS.md) - generate only what the diagnosis proves and the file lacks"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run spotless on the edited file"
+    }
+   ],
+   "reason": "spotless, ktlint, .editorconfig configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R22a",
+   "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: read docs/ArchitectureLearningJourney.md before planning"
+    },
+    {
+     "kind": "skill",
+     "name": "docs-sync skill: a change that alters behaviour updates docs/ArchitectureLearningJourney.md"
+    }
+   ],
+   "reason": "README 10.7 KB, 9 docs files, arch docs: docs/ArchitectureLearningJourney.md - the answers exist; the agent must be pointed at them"
+  },
+  {
+   "rule": "R26",
+   "signal": "Android / mobile app",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "emulator-free verification skill: JVM unit tests + screenshot tests (roborazzi-screenshot)"
+    },
+    {
+     "kind": "runner",
+     "name": "Android SDK on the runner; full ./gradlew build is minutes, not seconds"
+    }
+   ],
+   "reason": "mobile toolchain (android, jetpack-compose) - instrumented tests need a device; the agent verifies with what runs on JVM"
+  },
+  {
+   "rule": "R28",
+   "signal": "large contributor base",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "contribution-style skill: PR format, commit convention, CONTRIBUTING (CONTRIBUTING.md)"
+    }
+   ],
+   "reason": "180 authors in the sample - output must look like everyone else's PR to be merged"
+  },
+  {
+   "rule": "R30",
+   "signal": "lock file churn / dependency-bump shape",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: dependency bumps = build.gradle.kts + libs.versions.toml together; never edit a lock file by hand"
+    }
+   ],
+   "reason": "build.gradle.kts + libs.versions.toml co-change 28 times - the most frequent change shape in history is a dependency bump"
+  }
+ ]
+}

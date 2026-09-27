@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>המאמן של Trade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@400;500;700&display=swap">
+<style>
+:root{
+  --paper:#F4F6F9; --card:#FFFFFF; --ink:#1B2433; --ink-2:#4A5568; --ink-3:#7A8699;
+  --line:#D9DEE7; --accent:#0F766E; --accent-ink:#0B5B55; --accent-soft:#E6F4F1;
+  --ok:#2E7D32; --ok-soft:#E8F3E8; --warn:#B7791F; --warn-soft:#FBF3E3; --bad:#B3261E; --bad-soft:#F9E7E5;
+  --mono:"JetBrains Mono","Consolas","Menlo",monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --paper:#0F141C; --card:#171E29; --ink:#E7ECF3; --ink-2:#B3BDCC; --ink-3:#7F8BA0; --line:#2A3443;
+  --accent:#3FB8AA; --accent-ink:#8ADBD1; --accent-soft:#12302D; --ok:#7BC47F; --ok-soft:#15301A;
+  --warn:#E0B060; --warn-soft:#3A2D12; --bad:#EF8A84; --bad-soft:#3E1A18; color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --paper:#0F141C; --card:#171E29; --ink:#E7ECF3; --ink-2:#B3BDCC; --ink-3:#7F8BA0; --line:#2A3443;
+  --accent:#3FB8AA; --accent-ink:#8ADBD1; --accent-soft:#12302D; --ok:#7BC47F; --ok-soft:#15301A;
+  --warn:#E0B060; --warn-soft:#3A2D12; --bad:#EF8A84; --bad-soft:#3E1A18; color-scheme:dark; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:"Heebo",system-ui,Arial,sans-serif;font-size:15.5px;line-height:1.65;direction:rtl}
+.wrap{max-width:1080px;margin:0 auto;padding-inline:16px;padding-block:20px 48px}
+h1,h2,h3{font-family:"Frank Ruhl Libre","Heebo",serif;text-wrap:balance;margin:0}
+h1{font-size:1.9rem;font-weight:700;line-height:1.2}
+h2{font-size:1.35rem;font-weight:700}
+h3{font-size:1.05rem;font-weight:700;color:var(--ink-2)}
+p{margin:0 0 .6rem}
+.eyebrow{font-size:.78rem;letter-spacing:.06em;color:var(--ink-3);text-transform:uppercase;font-weight:500}
+header.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;margin-bottom:18px}
+header.top .sub{color:var(--ink-2);max-width:62ch}
+.rail{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 22px;padding:0;list-style:none}
+.rail li{flex:1 1 110px}
+.rail button{width:100%;text-align:right;border:1px solid var(--line);background:var(--card);color:var(--ink-2);border-radius:8px;padding:8px 10px;font:inherit;font-size:.85rem;cursor:pointer;display:flex;gap:8px;align-items:baseline}
+.rail button b{font-family:var(--mono);font-size:.8rem;color:var(--ink-3)}
+.rail button[aria-current="step"]{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-ink)}
+.rail button[aria-current="step"] b{color:var(--accent-ink)}
+.rail button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.step{display:grid;gap:18px}
+.step-head{display:grid;gap:6px}
+.step-head .who{display:inline-flex;gap:6px;flex-wrap:wrap}
+.chip{display:inline-block;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:500;border:1px solid var(--line);color:var(--ink-2);background:var(--card)}
+.chip.ok{background:var(--ok-soft);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-soft);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.chip.acc{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.cols{display:grid;grid-template-columns:1.15fr .85fr;gap:18px}
+@media (max-width:760px){.cols{grid-template-columns:1fr}}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.panel h3{margin-bottom:8px}
+.screen{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.screen .bar{background:var(--paper);border-bottom:1px solid var(--line);padding:6px 12px;font-size:.78rem;color:var(--ink-3);display:flex;justify-content:space-between}
+.screen .body{padding:12px 14px;display:grid;gap:10px}
+.row{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;flex-wrap:wrap}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:.92rem}
+.kv dt{color:var(--ink-3)}
+.kv dd{margin:0}
+ul.plain{margin:0;padding-inline-start:18px}
+ul.plain li{margin:2px 0}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap}
+.b{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;font-size:.88rem;cursor:pointer}
+.b.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.b.ghost{color:var(--ink-2)}
+.b:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.decide{background:var(--accent-soft);border:1px solid transparent;border-radius:12px;padding:14px 18px}
+.decide h3{color:var(--accent-ink)}
+.note{color:var(--ink-3);font-size:.85rem}
+.example{border-inline-start:3px solid var(--warn);padding-inline-start:10px;color:var(--ink-2);font-size:.9rem}
+code,pre{font-family:var(--mono);font-size:.84em}
+code{background:var(--paper);border:1px solid var(--line);border-radius:4px;padding:0 4px;direction:ltr;unicode-bidi:isolate}
+pre{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:10px 12px;overflow-x:auto;direction:ltr;text-align:left;margin:0}
+table{border-collapse:collapse;width:100%;font-size:.9rem}
+th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--ink-3);font-weight:500;font-size:.8rem}
+.tbl{overflow-x:auto}
+.comp{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:6px;background:var(--card)}
+.comp .t{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.comp .t b{font-size:.98rem}
+.comp .why{font-size:.9rem;color:var(--ink-2)}
+.comp .meta{display:flex;gap:6px;flex-wrap:wrap}
+.group{display:grid;gap:8px}
+.group>h3{margin-top:6px}
+.score{display:flex;gap:14px;flex-wrap:wrap}
+.tile{flex:1 1 140px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--card)}
+.tile .n{font-family:var(--mono);font-size:1.4rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.tile .l{font-size:.8rem;color:var(--ink-3)}
+nav.pager{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
+.pager .pos{font-family:var(--mono);font-size:.85rem;color:var(--ink-3)}
+.all-toggle{font-size:.85rem;color:var(--ink-3)}
+.all-toggle input{margin-inline-end:6px}
+[hidden]{display:none!important}
+.stepbox{scroll-margin-top:12px}
+body.show-all .stepbox+.stepbox{margin-top:36px;border-top:2px solid var(--line);padding-top:24px}
+@media (prefers-reduced-motion: no-preference){.stepbox{animation:fade .25s ease}}
+@keyframes fade{from{opacity:.6}to{opacity:1}}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+<header class="top">
+  <div>
+    <div class="eyebrow">הטמעת ריפו כמאמן אישי · הדגמה על ALTSHULER_TRADE</div>
+    <h1>המאמן של Trade</h1>
+    <p class="sub">שמונה צעדים קבועים, תוצאה שונה לכל ריפו. בכל צעד: מה קורה מאחורי הקלעים, מה המשתמש רואה, ומה הוא מחליט. הנתונים על Trade אמיתיים (מהאבחון); מה שמסומן "דוגמה" הוא הדגמה של איך זה ייראה, לא תוצאה שנמדדה.</p>
+  </div>
+  <label class="all-toggle"><input type="checkbox" id="showAll">הצג את כל הצעדים ברצף</label>
+</header>
+
+<ol class="rail" id="rail" aria-label="צעדים"></ol>
+
+<main id="steps">
+
+<!-- STEP 0 -->
+<section class="stepbox step" data-step="0" id="step0">
+  <div class="step-head">
+    <div class="eyebrow">צעד 0 · דקה אחת</div>
+    <h2>חיבור הריפו</h2>
+    <div class="who"><span class="chip acc">המשתמש מחליט: עד כמה אוטומטי</span><span class="chip">בלי מודל · חינם</span></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש רואה</h3>
+      <div class="screen">
+        <div class="bar"><span>DCC · הטמעה · ALTSHULER_TRADE</span><span>github.com/levavishay1-sketch/ALTSHULER_TRADE</span></div>
+        <div class="body">
+          <p><b>מה DCC יעשה:</b> יקרא את כל הריפו, יעבוד רק בענף משלו (<code>ai/onboarding/&lt;run&gt;</code>), ויציג כל שינוי לפני שהוא נכנס ל-PR. <b>מה לא יעשה:</b> לא ייגע ב-<code>main</code>, לא יריץ שום דבר מול הסביבות של הלקוח, לא יקרא קבצים שיסומנו כסודיים.</p>
+          <dl class="kv"><dt>אוטומציה</dt><dd><span class="chip ok">הפיך = עושה ומדווח</span> <span class="chip">הכול באישור</span> <span class="chip">נעול ללקוח רגיש</span></dd>
+          <dt>מי אחראי</dt><dd>אבישי (הפעולות ייחתמו בשמו)</dd></dl>
+          <div class="btnrow"><button class="b primary" type="button">התחל אבחון</button><button class="b ghost" type="button">מה זה "הפיך"?</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>שיבוט מבודד לתיקיית ההטמעות (<code>~/.dcc-repos-onboarding/</code>), ענף חדש מקומיט בסיס מתועד.</li>
+        <li>אירוע <code>onboarding.started</code> ביומן, עם מי, מתי, איזה preset.</li>
+        <li>שום קריאה למודל. שום כתיבה לריפו של הלקוח.</li>
+      </ul>
+      <p class="note">אם המשתמש לא בוחר: "הפיך = עושה ומדווח" (ברירת המחדל של ההתקשרות), אלא אם ההתקשרות נעולה על "הכול באישור".</p>
+    </div>
+  </div>
+</section>
+
+<!-- STEP 1 -->
+<section class="stepbox step" data-step="1" id="step1" hidden>
+  <div class="step-head">
+    <div class="eyebrow">צעד 1 · דקות</div>
+    <h2>אבחון — מה יש בריפו הזה</h2>
+    <div class="who"><span class="chip">דטרמיניסטי · בלי מודל · חינם</span><span class="chip acc">המשתמש מתקן עובדות</span></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש רואה — הפרופיל של Trade (אמיתי)</h3>
+      <div class="screen">
+        <div class="bar"><span>פרופיל הריפו</span><span>8,256 קבצים · ~1,330 קובצי מקור</span></div>
+        <div class="body">
+          <dl class="kv">
+            <dt>סוג</dt><dd>Dynamics 365 CE (online, crm4) · .NET Framework · C#</dd>
+            <dt>מבנה</dt><dd>69 פרויקטים בסגנון csproj ישן (48 × 4.6.2, 21 × 4.7.2) · פלאגינים · 4 WebJobs · Web API 2 · SSIS + KingswaySoft · 3 רכיבי PCF</dd>
+            <dt>build</dt><dd><span class="chip warn">Windows בלבד</span> MSBuild · ILMerge · 58 קובצי חתימה (.snk) · 3,215 קובצי dll/exe/pdb ו-<code>packages/</code> של 666MB בתוך git · אין <code>.gitignore</code> בשורש</dd>
+            <dt>בדיקות</dt><dd><span class="chip warn">6 בדיקות אינטגרציה (MSTest) בלבד</span> · אין CI · אין סקריפטים</dd>
+            <dt>מערכות חיצוניות</dt><dd>Dataverse (הפתרון הראשי לא בריפו; רישום צעדי פלאגין רק ב-Dataverse) · Azure Service Bus · Key Vault · Azure DevOps · סביבות <code>altshulerdev / altshulertest / altshulercrm</code></dd>
+            <dt>קוד מג'ונרט</dt><dd>early-bound (DLaB) — <code>Entities.cs</code>; PCF builds</dd>
+            <dt>סודות</dt><dd><span class="chip bad">נמצאו</span> ClientSecret ב-<code>Web.config</code> · משתמש/סיסמה של ייצור ב-<code>ParserTester/Program.cs</code> · מפתחות App Insights · סיסמאות ב-<code>.pubxml.user</code></dd>
+            <dt>מוסכמות</dt><dd><code>[System]{PreValidation|Pre|Post|Async}{Message}{Entity}</code> · כינויי <code>PreImage/PostImage</code> קבועים ב-<code>PluginBase</code> · קידומת <code>alt_</code> (PCF: <code>nau</code>) · BOM + CRLF · עברית בקוד</dd>
+            <dt>הגדרות AI קיימות</dt><dd>אין ב-<code>main</code> (הוסרו ב-PR #5/#6). בענף ישן: <code>CLAUDE.md</code> של 33 שורות מ-<code>/init</code> עם 3 טענות שגויות</dd>
+            <dt>תיעוד</dt><dd>אין README; אין מפת ארכיטקטורה; אין הוראות build</dd>
+            <dt>היסטוריה</dt><dd>קומיט אחד ("Replace repository with local version") — אין נקודות חמות ואין שינויים חוזרים לקרוא; האבחון אומר זאת במקום לנחש</dd>
+          </dl>
+          <div class="btnrow"><button class="b ghost" type="button">זה לא נכון…</button><button class="b primary" type="button">המשך לראיון</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>סקריפט אחד לכל הריפואים: manifests, קובצי build, מסגרות בדיקה, CI, סימני קוד מג'ונרט, סריקת סודות (מיקום בלבד), מחרוזות חיבור ו-SDKs, קבצי AI קיימים, תיעוד, היסטוריית git (נקודות חמות, שינויים חוזרים באותם קבצים).</li>
+        <li>אותו סקריפט רץ על 10 ריפואים ציבוריים שונים — ויצאו 10 פרופילים שונים (הראיה במסמך ההמלצה, סעיף 7).</li>
+        <li>כל שורה בפרופיל היא <b>אות</b> שיפעיל כלל בצעד 4. תיקון של המשתמש ("זה לא מג'ונרט, זה ידני") נרשם ומשנה את הכללים.</li>
+      </ul>
+      <p class="note">למה בלי מודל: כדי שהאבחון יהיה זהה בכל ריצה, זול, וניתן להסבר ("נמצא כי…").</p>
+    </div>
+  </div>
+</section>
+
+<!-- STEP 2 -->
+<section class="stepbox step" data-step="2" id="step2" hidden>
+  <div class="step-head">
+    <div class="eyebrow">צעד 2 · 2 דקות</div>
+    <h2>ראיון קצר — מה הקוד לא אומר</h2>
+    <div class="who"><span class="chip acc">המשתמש עונה על עד 4 שאלות</span><span class="chip">לכל שאלה ברירת מחדל</span></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש רואה</h3>
+      <div class="screen">
+        <div class="bar"><span>4 שאלות</span><span>אפשר לדלג — ההנחה נרשמת</span></div>
+        <div class="body">
+          <p><b>1. מי עובד על הריפו הזה עם AI?</b><br><span class="chip acc">רק Claude דרך DCC</span> <span class="chip">גם Cursor / Copilot</span> <span class="chip">לא יודע → נניח רק Claude</span></p>
+          <p><b>2. יש אזורים שאסור לגעת בהם?</b><br><span class="chip acc">Entities.cs (מג'ונרט)</span> <span class="chip acc">קובצי .snk</span> <span class="chip">SSIS</span> <span class="chip">אחר…</span></p>
+          <p><b>3. איך יודעים שעבודה נכונה כאן?</b><br><span class="chip">build עובר במכונה של הצוות</span> <span class="chip acc">בדיקה ידנית בסביבת test</span> <span class="chip">יש מריץ אוטומטי</span></p>
+          <p><b>4. מה הכי מפריע היום כשעובדים עם AI על הריפו?</b><br><span class="chip">מציע קוד שלא מתקמפל</span> <span class="chip acc">לא מכיר את המוסכמות</span> <span class="chip">נוגע במה שאסור</span></p>
+          <div class="btnrow"><button class="b primary" type="button">להמשך — ריצת ניסיון</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>השאלות נבחרות מהפרופיל: ל-Trade אין CI ואין מריץ — לכן שואלים "איך יודעים שעבודה נכונה". לריפו עם CI לא שואלים.</li>
+        <li>כל תשובה = אות: "גם Cursor" → <code>AGENTS.md</code> חובה ו-rules של Cursor נגזרות ממנו; "Entities.cs אסור" → hook חוסם, לא רק שורת הנחיה.</li>
+        <li>עד 4 שאלות, כל אחת עם ברירת מחדל (spec-kit, Codex, Claude Code מתכנסים לאותו מספר).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- STEP 3 -->
+<section class="stepbox step" data-step="3" id="step3" hidden>
+  <div class="step-head">
+    <div class="eyebrow">צעד 3 · 5–10 דקות · עלות מוצהרת</div>
+    <h2>ריצת ניסיון — ה-baseline</h2>
+    <div class="who"><span class="chip">מודל · ~$1–3</span><span class="chip acc">המשתמש מאשר את העלות</span></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש רואה — מה קרה בפועל על Trade</h3>
+      <div class="screen">
+        <div class="bar"><span>משימות ניסיון · בלי שום רכיב</span><span>Sonnet · $0.62 · 4 דק'</span></div>
+        <div class="body">
+          <div class="tbl"><table>
+            <tr><th>משימה</th><th>תוצאה</th><th>סוג הכישלון</th></tr>
+            <tr><td>איפה ממומשים צעדי הפלאגין של Lead, ואילו כינויי image מצפה PluginBase?</td><td><span class="chip ok">נכון</span> קבצים מדויקים, <code>PreImage/PostImage</code></td><td>—</td></tr>
+            <tr><td>תכנון: "SMS יוצא חייב לכבד שעות מותרות" — אילו קבצים, באיזה סדר, איך מוודאים build</td><td><span class="chip ok">מצא את השער הנכון</span> (<code>HandleSmsSendStatus</code>) · <span class="chip warn">לא ידע איך לבנות</span></td><td>לא יכול לאמת</td></tr>
+            <tr><td>לבנות את הפרויקט שהשתנה ולדווח</td><td><span class="chip bad">בלתי אפשרי</span> (MSBuild/ILMerge/.snk — רק Windows)</td><td>לא יכול לאמת</td></tr>
+            <tr><td>לרשום צעד פלאגין חדש למסר Update על alt_SMS</td><td><span class="chip bad">הציע קוד — אבל הרישום קורה רק ב-Dataverse</span></td><td>חסר מידע מחוץ לריפו</td></tr>
+          </table></div>
+          <p class="note">שתי המשימות הראשונות הן ריצות אמיתיות מהמחקר (n=1). השתיים האחרונות מסומנות כדוגמה למה שהריצה המלאה תבדוק.</p>
+          <div class="btnrow"><button class="b primary" type="button">להצעת הרכיבים</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>3–5 משימות נגזרות מהפרופיל: שאלת עובדה, תכנון שינוי אופייני, build, ומשימה שנוגעת במערכת החיצונית שזוהתה.</li>
+        <li>כל כישלון מסווג לאחת מחמש: <b>לא ידע עובדה</b> → שורת הנחיה · <b>ידע ועבר על כלל</b> → hook · <b>חסר מידע חיצוני</b> → MCP · <b>לא יכול לאמת</b> → סקריפט/מריץ · <b>שיפוט שגוי</b> → סוכן בודק.</li>
+        <li>זה המספר שכל רכיב יימדד מולו בצעד 5 ובצעד 7.</li>
+      </ul>
+      <p class="note">הראיות: קובצי הנחיה כמעט לא מזיזים נכונות; ב-Trade סוכן <b>בלי</b> קובץ מצא את נקודת הכניסה שהקובץ של <code>/init</code> פספס. לכן קודם מודדים, ואז מוסיפים.</p>
+    </div>
+  </div>
+</section>
+
+<!-- STEP 4 -->
+<section class="stepbox step" data-step="4" id="step4" hidden>
+  <div class="step-head">
+    <div class="eyebrow">צעד 4 · ההצעה</div>
+    <h2>תוכנית הרכיבים — "שמתי X כי ראיתי Y"</h2>
+    <div class="who"><span class="chip acc">המשתמש: אשר · שאל · דחה — לכל רכיב</span><span class="chip">חיפוש במקורות רשמיים</span></div>
+  </div>
+  <div class="panel">
+    <h3>מה המשתמש רואה — ההצעה ל-Trade</h3>
+    <p class="note">32 הכללים ירו 13 פעמים על Trade והפיקו 27 רכיבים; כאן הם מקובצים ל-11 כרטיסים לקריאה, ועוד 4 "לא מומלץ". הרשימה המלאה: <code>docs/research/sources/onboarding-v2/repos/report.md</code>.</p>
+    <div class="group">
+      <h3><span class="chip ok">נעשה ודווח</span> הפיך, זול, לא נוגע בייצור</h3>
+      <div class="comp"><div class="t"><b>קובץ <code>.gitignore</code> בשורש</b><div class="meta"><span class="chip">נוצר כאן</span><span class="chip ok">הפיך</span></div></div><div class="why"><b>כי ראיתי:</b> <code>bin/obj/packages</code> בתוך git (אלפי קבצים) — הסוכן קורא אותם ומתבלבל, וכל build "משנה" את הריפו.</div></div>
+      <div class="comp"><div class="t"><b>סימון קוד מג'ונרט ב-<code>.gitattributes</code></b><div class="meta"><span class="chip">נוצר כאן</span><span class="chip ok">הפיך</span></div></div><div class="why"><b>כי ראיתי:</b> <code>Entities.cs</code> (DLaB early-bound) ופלטי PCF. סקירות ו-diffs מסתירים אותם; הסוכן יודע שלא עורכים אותם ביד.</div></div>
+      <div class="comp"><div class="t"><b>איסור קריאה: <code>Web.config</code> של CrmApi, <code>ParserTester/Program.cs</code>, <code>*.pubxml.user</code></b><div class="meta"><span class="chip">permissions.deny</span><span class="chip ok">הפיך</span></div></div><div class="why"><b>כי ראיתי:</b> סודות אמיתיים בקבצים האלה. הסוכן לא קורא אותם, ולכן לא מדפיס ולא מעתיק אותם.</div></div>
+      <div class="comp"><div class="t"><b>hook סריקת סודות לפני קומיט</b><div class="meta"><span class="chip">PreToolUse · Bash git commit</span><span class="chip ok">הפיך</span></div></div><div class="why"><b>כי ראיתי:</b> סודות כבר בהיסטוריה — לפחות לא יתווספו חדשים.</div></div>
+    </div>
+    <div class="group">
+      <h3><span class="chip warn">מחכה לאישורך</span> משמעותי, או נוגע במערכת חיצונית</h3>
+      <div class="comp"><div class="t"><b><code>AGENTS.md</code> (≤150 שורות) + <code>CLAUDE.md</code> שמפנה אליו</b><div class="meta"><span class="chip">טיוטה: /init + אבחון · אומת מול הקוד</span><span class="chip">רשמי: תקן AGENTS.md</span></div></div><div class="why"><b>כי ראיתי:</b> מוסכמות שהסוכן לא מנחש: שמות הפלאגינים <code>[System]{PreValidation|Pre|Post|Async}{Message}{Entity}</code>, כינויי <code>PreImage/PostImage</code>, "לא עורכים Entities.cs — מריצים DLaB", קידומת <code>alt_</code>, BOM+CRLF, עברית בקוד, "build רק ב-Windows". <b>מה לא נכנס:</b> כל מה שהסוכן מגלה לבד (מבנה תיקיות, רשימת פרויקטים). <b>איך נבדוק:</b> מוחקים שורה ← מריצים את משימות הניסיון ← אם אין הבדל, השורה יוצאת.</div></div>
+      <div class="comp"><div class="t"><b>Rules לפי נתיב: <code>Plugins/</code>, <code>WebJobs/</code>, <code>PCF/</code>, <code>SSIS/</code></b><div class="meta"><span class="chip">.claude/rules · נוצר כאן</span></div></div><div class="why"><b>כי ראיתי:</b> ארבע משפחות עם כללים שונים (פלאגין = ללא I/O ארוך, שלב מותר; WebJob = תור; PCF = <code>nau</code>; SSIS = לא נוגעים). שורה שנטענת רק כשנוגעים בתיקייה — במקום קובץ ראשי ארוך.</div></div>
+      <div class="comp"><div class="t"><b>hook שחוסם עריכה של <code>Entities.cs</code> ו-<code>*.snk</code></b><div class="meta"><span class="chip">PreToolUse · Edit/Write</span><span class="chip warn">חוסם</span></div></div><div class="why"><b>כי ראיתי:</b> קוד מג'ונרט + תשובתך בראיון. שורת הנחיה מלמדת; hook אוכף. <b>איך נבדוק:</b> נבקש מהסוכן לערוך את הקובץ ונראה שנחסם.</div></div>
+      <div class="comp"><div class="t"><b>Skill: "הוספת שדה לישות"</b><div class="meta"><span class="chip">נוצר כאן מהיסטוריית git</span></div></div><div class="why"><b>כי ראיתי:</b> אותו שינוי חוזר ונוגע כל פעם באותם קבצים: הפתרון ב-Dataverse → הרצת DLaB → <code>Entities.cs</code> → BL → טופס. <b>מה זה נותן:</b> נוהל אחד נכון במקום שהסוכן ימציא סדר. <b>איך נבדוק:</b> <code>claude plugin eval</code> עם ובלי ה-skill על משימת "הוסף שדה".</div></div>
+      <div class="comp"><div class="t"><b>Dataverse MCP (רשמי, Microsoft) — מצומצם ל-<code>describe / read_query / search</code></b><div class="meta"><span class="chip">רשמי · GA · 13 כלים → 3</span><span class="chip warn">דורש הסכמת אדמין + חיוב Copilot Credits</span></div></div><div class="why"><b>כי ראיתי:</b> הפתרון הראשי לא בריפו, וצעדי פלאגין רשומים רק ב-Dataverse — הסוכן לא יכול לדעת מה קיים בלי לשאול את המערכת (כישלון #4). <b>למה מצומצם:</b> כל כלי עולה הקשר; קריאה בלבד, אין כתיבה לסביבה. <b>סביבה:</b> <code>altshulerdev</code> בלבד.</div></div>
+      <div class="comp"><div class="t"><b>Plugin <code>dataverse</code> (Microsoft, 9 skills) + <code>pac</code> CLI MCP ל-PCF</b><div class="meta"><span class="chip">marketplace רשמי · MIT</span></div></div><div class="why"><b>כי ראיתי:</b> Dataverse, PCF, מחזור חיים של solution. עדיף מוכן של היצרן על פני skill שנכתוב. <b>איך נבדוק:</b> <code>claude plugin validate</code> + eval על משימת PCF.</div></div>
+      <div class="comp"><div class="t"><b>Azure DevOps MCP (רשמי) עם <code>-d work-items repositories</code></b><div class="meta"><span class="chip">רשמי · מ-GitHub של Microsoft</span></div></div><div class="why"><b>כי ראיתי:</b> המשימות של הלקוח חיות ב-ADO (DCC משקף לשם). מצומצם לשני תחומים מתוך תשעה.</div></div>
+      <div class="comp"><div class="t"><b><code>csharp-lsp</code> + <code>dotnet/skills</code> (core, testing)</b><div class="meta"><span class="chip">רשמי · Anthropic / צוות .NET</span></div></div><div class="why"><b>כי ראיתי:</b> 69 פרויקטים C#, חיפוש-מחרוזת מפספס הפניות בין פרויקטים. LSP נותן "מי קורא לזה" מדויק.</div></div>
+      <div class="comp"><div class="t"><b><code>docs/</code>: מפת ארכיטקטורה (נקודות כניסה: פלאגינים, WebJobs, Custom APIs, Service Bus), מפת אינטגרציות, מילון מונחים עסקיים בעברית</b><div class="meta"><span class="chip">טיוטה מהאבחון · אדם מאשר</span></div></div><div class="why"><b>כי ראיתי:</b> אין מפה, והסוכן חיפש נקודת כניסה בכל משימה. <b>מה לא:</b> תיעוד שלא יתוחזק — כל מסמך מקבל בדיקת התיישנות.</div></div>
+      <div class="comp"><div class="t"><b>סוכן סוקר + <code>REVIEW.md</code></b><div class="meta"><span class="chip">subagent · read-only</span></div></div><div class="why"><b>כי ראיתי:</b> אין מי שיתפוס טעות (אין בדיקות, אין CI). סוקר בהקשר טרי שבודק את המוסכמות ואת "לא נגעת במג'ונרט".</div></div>
+    </div>
+    <div class="group">
+      <h3><span class="chip">לא מומלץ כאן — ולמה</span></h3>
+      <div class="comp"><div class="t"><b>סוכן שכותב בדיקות</b></div><div class="why">אין מסגרת בדיקות ואין מריץ; בדיקות שאי אפשר להריץ הן טקסט. קודם מריץ (כרטיס הכנות).</div></div>
+      <div class="comp"><div class="t"><b>GitHub MCP (35 כלים ≈ 26k טוקנים)</b></div><div class="why"><code>gh</code> קיים ועושה את אותה עבודה בזול.</div></div>
+      <div class="comp"><div class="t"><b>Playwright / דפדפן</b></div><div class="why">אין ממשק web לבדוק (Dynamics עצמו לא נבנה כאן).</div></div>
+      <div class="comp"><div class="t"><b>Dataverse MCP קהילתי (73 כלים)</b></div><div class="why">לא רשמי, עלות הקשר גדולה, הרשאות כתיבה.</div></div>
+    </div>
+    <div class="decide" style="margin-top:12px">
+      <h3>כרטיס כנות</h3>
+      <p>בריפו הזה <b>אי אפשר להריץ build ובדיקות</b> מהמכונה של DCC (Windows, MSBuild, ILMerge, חתימות). עד שיהיה מריץ Windows אצל Trade, כל משימה תסומן "לא אומת כאן" והסוקר יעבוד review-only. <b>מה צריך:</b> מכונת Windows אחת עם Claude Code ו-Visual Studio Build Tools, שרק מריצה build ובדיקות.</p>
+    </div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש מחליט</h3>
+      <div class="btnrow"><button class="b primary" type="button">אשר את הסט (11)</button><button class="b" type="button">שאל על רכיב…</button><button class="b ghost" type="button">דחה — למה?</button></div>
+      <p class="note" style="margin-top:8px">"שאל" פותח את הצ'אט על הכרטיס: תשובה מהכרטיס עצמו בלי מודל ("מה זה MCP? מה יקרה אם אאשר?"), או קריאת קוד בעלות מוצהרת ("תראה לי את 17 הקומיטים").</p>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>כללי ההחלטה גלויים: כל רכיב מצביע על האות שהפעיל אותו. ריפו בלי קוד מג'ונרט לא היה מקבל את ה-hook; ריפו עם CI לא היה מקבל "כרטיס כנות".</li>
+        <li>חיפוש: marketplace רשמי של Claude (314 plugins) → מרחב-שמות של Microsoft ברישום MCP → קטלוג Docker לרשימת כלים. סינון: יצרן, sha, read-only, עלות הקשר.</li>
+        <li><code>/init</code> רץ כאן פעם אחת כמחולל טיוטה. כל טענה בטיוטה שאפשר לבדוק מול הקוד — נבדקת לפני שהיא מוצגת.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- STEP 5 -->
+<section class="stepbox step" data-step="5" id="step5" hidden>
+  <div class="step-head">
+    <div class="eyebrow">צעד 5 · 10–20 דקות</div>
+    <h2>התקנה ואימות — האם זה עזר?</h2>
+    <div class="who"><span class="chip">אימות לכל רכיב</span><span class="chip acc">המשתמש רואה לפני/אחרי</span></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש רואה <span class="chip warn">דוגמה</span></h3>
+      <div class="screen">
+        <div class="bar"><span>אימות</span><span>ריצת ניסיון חוזרת · $0.71</span></div>
+        <div class="body">
+          <div class="score">
+            <div class="tile"><div class="n">2/4 → 3/4</div><div class="l">משימות שעברו</div></div>
+            <div class="tile"><div class="n">−22%</div><div class="l">עלות למשימה</div></div>
+            <div class="tile"><div class="n">1</div><div class="l">"לא אומת כאן" (build)</div></div>
+          </div>
+          <div class="tbl"><table>
+            <tr><th>רכיב</th><th>איך אומת</th><th>תוצאה</th></tr>
+            <tr><td>hook חוסם Entities.cs</td><td>ניסיון עריכה</td><td><span class="chip ok">נחסם</span></td></tr>
+            <tr><td>Dataverse MCP (3 כלים)</td><td>חיבור ל-altshulerdev, ספירת טוקנים</td><td><span class="chip ok">מחובר · +2.1k טוקנים</span></td></tr>
+            <tr><td>Skill "הוספת שדה"</td><td><code>plugin eval --ablation with-without</code></td><td><span class="chip ok">Δ +1 משימה</span></td></tr>
+            <tr><td>AGENTS.md — שורה "BOM+CRLF"</td><td>eval עם/בלי</td><td><span class="chip warn">לא הוכח — מוצע להסרה</span></td></tr>
+            <tr><td>מפת ארכיטקטורה</td><td>ציטוט בסשן</td><td><span class="chip ok">צוטטה ב-3/4</span></td></tr>
+          </table></div>
+          <p class="note">המספרים כאן הם הדגמה של הפורמט; הם ייקבעו רק כשהריצה תתבצע על Trade עם מריץ.</p>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>ההתקנה בענף המבודד בלבד.</li>
+        <li>לכל סוג רכיב יש מאמת משלו: hook — פעולה אסורה; skill/plugin — <code>claude plugin validate</code> + eval עם/בלי (המנגנון הרשמי היחיד שמודד תרומה); MCP — חיבור + טוקנים; שורת הנחיה — eval עם/בלי; docs — ציטוט.</li>
+        <li>רכיב שלא שיפר מסומן "לא הוכח" ומוצע להסרה מיד — כך הריפו לא מצטבר בקבצים שאיש לא יודע אם עוזרים.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- STEP 6 -->
+<section class="stepbox step" data-step="6" id="step6" hidden>
+  <div class="step-head">
+    <div class="eyebrow">צעד 6</div>
+    <h2>מסירה — PR עם דו"ח שאדם מבין</h2>
+    <div class="who"><span class="chip acc">המשתמש ממזג (או לא)</span><span class="chip">בזהות של אדם</span></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש רואה</h3>
+      <div class="screen">
+        <div class="bar"><span>PR · ai/onboarding/9c02a09e → main</span><span>11 רכיבים · 14 קבצים</span></div>
+        <div class="body">
+<pre>הטמעת AI ל-ALTSHULER_TRADE — סבב ראשון
+
+התקנתי:
+- AGENTS.md (118 שורות) — כי: 6 מוסכמות שהסוכן לא ניחש; אומת מול הקוד.
+- .claude/rules/{plugins,webjobs,pcf,ssis}.md — כי: 4 משפחות עם כללים שונים.
+- hook: אין עריכה ל-Entities.cs / *.snk — כי: קוד מג'ונרט; נבדק: נחסם.
+- skill: הוספת שדה לישות — כי: שינוי חוזר; eval: +1 משימה.
+- Dataverse MCP (3 כלים, altshulerdev בלבד) — כי: הפתרון לא בריפו.
+- Azure DevOps MCP (work-items, repositories) — כי: המשימות חיות שם.
+- csharp-lsp, dotnet/skills — כי: 69 פרויקטים C#.
+- docs/architecture.md, docs/integrations.md, docs/glossary.md — כי: אין מפה.
+- reviewer agent + REVIEW.md — כי: אין CI ואין בדיקות.
+
+לא התקנתי: סוכן בדיקות (אין מריץ), GitHub MCP (יש gh), Playwright (אין UI).
+לא אומת כאן: build ובדיקות — צריך מריץ Windows (ראה כרטיס כנות).
+לפני/אחרי: 2/4 → 3/4 משימות · עלות למשימה −22%.
+הכול נרשם ביומן ההטמעה; אף קובץ לא נכתב מחוץ לענף הזה.</pre>
+          <div class="btnrow"><button class="b primary" type="button">פתח את ה-PR</button><button class="b ghost" type="button">מה עוד נדרש ממני?</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>קומיט ו-push בזהות המשתמש; PR או קישור השוואה. ה-PR מכיל רק מה שאושר.</li>
+        <li>הדו"ח נכתב מהכרטיסים — אותם נימוקים, אותן תוצאות. שום ניסוח חופשי של המודל.</li>
+        <li>הריפו מקבל "כרטיס מוכנות": מה יש, מה חסר, מה צריך מהלקוח.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- STEP 7 -->
+<section class="stepbox step" data-step="7" id="step7" hidden>
+  <div class="step-head">
+    <div class="eyebrow">צעד 7 · תמיד</div>
+    <h2>המאמן ממשיך — מהעבודה האמיתית</h2>
+    <div class="who"><span class="chip">אותות מכל סשן</span><span class="chip acc">המשתמש מאשר הצעות, כשנוח לו</span></div>
+  </div>
+  <div class="cols">
+    <div class="panel">
+      <h3>מה המשתמש רואה <span class="chip warn">דוגמה</span></h3>
+      <div class="screen">
+        <div class="bar"><span>ALTSHULER_TRADE · בריאות AI</span><span>30 הימים האחרונים</span></div>
+        <div class="body">
+          <div class="score">
+            <div class="tile"><div class="n">71%</div><div class="l">משימות שעברו בניסיון ראשון</div></div>
+            <div class="tile"><div class="n">1.4</div><div class="l">תיקוני אדם למשימה</div></div>
+            <div class="tile"><div class="n">$0.93</div><div class="l">עלות למשימה</div></div>
+            <div class="tile"><div class="n">6/8</div><div class="l">PRs שנמזגו בלי שכתוב</div></div>
+          </div>
+          <h3 style="margin-top:6px">הצעות (3)</h3>
+          <div class="comp"><div class="t"><b>הוסף כלל: "בפלאגין Async אין קריאה סינכרונית ל-CrmApi"</b><div class="meta"><span class="chip warn">שורת הנחיה + hook</span></div></div><div class="why"><b>כי ראיתי:</b> אותו תיקון של אדם ב-3 סשנים (11.9, 18.9, 24.9). <b>צפוי:</b> פחות סבבי סקירה. <b>מדד:</b> תיקונים למשימה בפלאגינים.</div></div>
+          <div class="comp"><div class="t"><b>הסר: כלי <code>search</code> מ-Dataverse MCP</b><div class="meta"><span class="chip">הסרה</span></div></div><div class="why"><b>כי ראיתי:</b> לא נקרא אף פעם ב-40 סשנים; עולה הקשר בכל סשן.</div></div>
+          <div class="comp"><div class="t"><b>חדש בעולם: <code>dataverse</code> plugin עודכן (skill חדש ל-solution import)</b><div class="meta"><span class="chip acc">נסה על ריפו אחד</span></div></div><div class="why"><b>כי ראיתי:</b> אתם עושים import ידני; ב-2 ריפואי Dynamics אחרים שלכם ה-skill קיצר 30% מהזמן.</div></div>
+          <div class="btnrow"><button class="b primary" type="button">אשר</button><button class="b" type="button">שאל</button><button class="b ghost" type="button">דחה — למה?</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>מאחורי הקלעים</h3>
+      <ul class="plain">
+        <li>ה-hooks שכבר קיימים ב-DCC (תחילת סשן, כל פעולה, סוף סשן) אוספים: תיקונים חוזרים של אדם, דחיות עריכה, כישלונות build/רגרסיה, חיפושים ארוכים, כלים שלא נקראו, שורות הנחיה שאף סשן לא נזקק להן.</li>
+        <li><b>ספים יחסיים</b>, לא אבסולוטיים: אותו תיקון ב-≥2 סשנים; מדד גרוע מהממוצע של הריפו עצמו. אף הצעה על אירוע בודד. אף הפרעה באמצע משימה — תיבה וסיכום שבועי.</li>
+        <li>כל הצעה נמדדת אחרי אישור (לפני/אחרי על המדד שהצית אותה); שלא הוכיחה — מוצעת להסרה.</li>
+        <li>שבועי: "חדש בעולם" — מודל חדש → eval מחדש; plugin/MCP חדש לסטאק. ולמידה בין ריפואים: מספרים מצטברים בלבד, בלי תוכן של לקוח.</li>
+      </ul>
+      <p class="note">זה החלק שאף מוצר לא עושה במלואו: Cursor/Devin/Copilot מציעים מהעבודה אבל לא מודדים; Factory מודד מוכנות אבל לא תוצאות. השילוב הוא הבידול.</p>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<nav class="pager" aria-label="ניווט">
+  <button class="b" type="button" id="prev">→ הקודם</button>
+  <span class="pos" id="pos"></span>
+  <button class="b primary" type="button" id="next">הבא ←</button>
+</nav>
+</div>
+
+<script>
+(function(){
+  var names=["חיבור","אבחון","ראיון","ניסיון","הצעה","אימות","מסירה","מאמן"];
+  var steps=[].slice.call(document.querySelectorAll(".stepbox"));
+  var rail=document.getElementById("rail"), pos=document.getElementById("pos");
+  var prev=document.getElementById("prev"), next=document.getElementById("next"), showAll=document.getElementById("showAll");
+  var cur=0;
+  names.forEach(function(n,i){
+    var li=document.createElement("li"), b=document.createElement("button");
+    b.type="button"; b.innerHTML="<b>"+i+"</b>"+n; b.addEventListener("click",function(){go(i)});
+    li.appendChild(b); rail.appendChild(li);
+  });
+  function go(i){
+    cur=Math.max(0,Math.min(steps.length-1,i));
+    var all=showAll.checked;
+    steps.forEach(function(s,j){ s.hidden = all ? false : j!==cur; });
+    [].slice.call(rail.querySelectorAll("button")).forEach(function(b,j){ if(j===cur) b.setAttribute("aria-current","step"); else b.removeAttribute("aria-current"); });
+    pos.textContent=(cur+1)+" / "+steps.length;
+    prev.disabled=cur===0; next.disabled=cur===steps.length-1;
+    try{ history.replaceState(null,"","#step"+cur); }catch(e){}
+    if(all){ steps[cur].scrollIntoView({behavior:"smooth",block:"start"}); } else { window.scrollTo({top:0,behavior:"smooth"}); }
+  }
+  prev.addEventListener("click",function(){go(cur-1)});
+  next.addEventListener("click",function(){go(cur+1)});
+  showAll.addEventListener("change",function(){ document.body.classList.toggle("show-all",showAll.checked); go(cur); });
+  document.addEventListener("keydown",function(e){ if(e.key==="ArrowLeft") go(cur+1); if(e.key==="ArrowRight") go(cur-1); });
+  var m=(location.hash||"").match(/^#step(\d)$/); var start=m?+m[1]:0;
+  try{ var saved=localStorage.getItem("trade-walkthrough-step"); if(!m && saved!==null) start=+saved; }catch(e){}
+  go(start);
+  window.addEventListener("beforeunload",function(){ try{ localStorage.setItem("trade-walkthrough-step",String(cur)); }catch(e){} });
+})();
+</script>
+
+</body>
+</html>

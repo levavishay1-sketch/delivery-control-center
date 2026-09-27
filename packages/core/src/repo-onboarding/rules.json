@@ -1,0 +1,312 @@
+{
+  "_about": "Decision rules of repository onboarding (openspec/changes/repository-coach): a signal in the profile → components, each with the evidence that justified it. `when` is a condition over the profile (`path` is a dotted path; `fn` a named helper in rules.ts). `{name}` in a Hebrew text is filled from the context rules.ts computes; a param `{\"$ctx\": \"name\"}` takes the raw value. A rule that relies on a fact the person marked wrong does not fire. Data, not code: a new rule is a row here.",
+  "rules": [
+    {
+      "id": "R01", "signal": "generated code present (path markers or auto-generated headers)",
+      "when": { "fn": "gen_dirs", "truthy": true },
+      "reason_he": "קוד מג'ונרט ב-{gen_dirs}; עריכה ידנית שלו נדרסת בשקט ב-build הבא.",
+      "components": [
+        { "key": "generated_paths_guard", "kind": "hook", "family": "safety", "risk": "reversible", "title_he": "hook שחוסם עריכה של קוד מג'ונרט", "what_he": "לפני כל Edit או Write, בודק אם הקובץ בתיקייה מג'ונרטת וחוסם. הסוכן מקבל הסבר: שנה את המקור וג'נרט מחדש.", "verify_he": "מבקשים מהסוכן לערוך קובץ מג'ונרט ורואים שנחסם.", "params": { "template": "block-paths", "paths": { "$ctx": "gen_dirs_arr" }, "reason": "generated — change the source and regenerate" } },
+        { "key": "generated_paths_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: הנתיבים האלה מג'ונרטים", "what_he": "שורה ב-AGENTS.md שאומרת אילו נתיבים מג'ונרטים ומה מייצר אותם, כדי שהסוכן ישנה את המקור.", "verify_he": "השורה נטענת בכל סשן; ה-hook אוכף אותה בפועל.", "params": { "text": "These paths are generated and must not be edited by hand: {gen_dirs}. Change the source and regenerate." } },
+        { "key": "generated_gitattributes", "kind": "gitattributes", "family": "safety", "risk": "reversible", "title_he": "סימון קוד מג'ונרט ב-.gitattributes", "what_he": "מסמן את הנתיבים המג'ונרטים כ-linguist-generated, כך ש-diffs וסקירות מקפלים אותם.", "verify_he": "הקובץ נכתב עם השורות; git מקפל את הנתיבים ב-diff.", "params": { "paths": { "$ctx": "gen_dirs_arr" } } }
+      ]
+    },
+    {
+      "id": "R02", "signal": "no test framework detected",
+      "when": { "path": "tests.frameworks", "empty": true },
+      "reason_he": "לא נמצאה מסגרת בדיקות ({test_files} קבצים שנראים כמו בדיקות). סוכן ש\"מוסיף בדיקות\" היה ממציא מסגרת.",
+      "components": [
+        { "key": "first_tests_scaffold", "kind": "scaffold", "family": "verification", "risk": "significant", "title_he": "בדיקה ראשונה במסגרת של השפה", "what_he": "בדיקת עשן אחת במסגרת הטבעית של השפה, כדי שיהיה מה להריץ. הסוכן מרחיב ממנה במקום להמציא.", "verify_he": "הבדיקה רצה ועוברת בעותק המבודד, כשיש מריץ.", "params": { "template": "first-test", "languages": { "$ctx": "top_langs_arr" } } },
+        { "key": "build_gate_hook", "kind": "hook", "family": "verification", "risk": "reversible", "title_he": "hook: build עובר לפני \"סיימתי\"", "what_he": "כשהסוכן מסיים תור, ה-hook מריץ את ה-build ומחזיר לו את השגיאות אם יש. אין שער בדיקות עדיין — אין בדיקות.", "verify_he": "מריצים את ה-hook על העותק ורואים שהוא מריץ את פקודת ה-build.", "params": { "template": "build-gate", "command": "{build_cmd_raw}" } },
+        { "key": "no_test_writer_agent", "kind": "report", "family": "agents", "risk": "reversible", "notRecommended": true, "title_he": "לא: סוכן שכותב בדיקות", "what_he": "אין מסגרת בדיקות ואין מריץ. בדיקות שאי אפשר להריץ הן טקסט.", "verify_he": "", "params": {} }
+      ]
+    },
+    {
+      "id": "R03", "signal": "test framework present with a real corpus",
+      "when": { "all": [{ "path": "tests.frameworks", "empty": false }, { "path": "tests.test_files", "gte": 10 }] },
+      "reason_he": "{test_frameworks} עם {test_files} קובצי בדיקה. הסוכן צריך להריץ את מה שיש, לא לכתוב מסגרת חדשה.",
+      "components": [
+        { "key": "run_affected_tests_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: הרצת הבדיקות של מה ששונה", "what_he": "נוהל אחד: איך מריצים את הבדיקות כאן ({test_cmd}), איפה הן, ואיך מצמצמים לקבצים שהשתנו.", "verify_he": "ה-skill עובר validate; מבקשים מהסוכן להריץ בדיקות ורואים שהוא משתמש בפקודה הנכונה.", "params": { "template": "run-affected-tests", "command": "{test_cmd}", "dirs": { "$ctx": "test_dirs_arr" }, "frameworks": { "$ctx": "test_frameworks_arr" } } },
+        { "key": "tests_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: פקודת הבדיקות ואיפה הן", "what_he": "שורה ב-AGENTS.md עם פקודת הבדיקות והתיקיות.", "verify_he": "נבדק בריצת הניסיון: משימת \"איך מריצים בדיקות\" עוברת.", "params": { "text": "Tests: run `{test_cmd}`; they live in {test_dirs}." } }
+      ]
+    },
+    {
+      "id": "R04", "signal": "CI present",
+      "when": { "all": [{ "path": "ci.present", "truthy": true }, { "path": "ci.commands", "empty": false }] },
+      "reason_he": "CI ({ci_systems}, {ci_n} workflows) כבר מגדיר מה \"ירוק\": {ci_cmds}.",
+      "components": [
+        { "key": "verify_like_ci_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: אימות כמו ב-CI, מקומית", "what_he": "הפקודות שה-CI מריץ, בסדר שלו, להרצה לפני שהסוכן אומר \"סיימתי\".", "verify_he": "validate; ה-skill מונה את הפקודות מקובצי ה-CI עצמם.", "params": { "template": "verify-like-ci", "commands": { "$ctx": "ci_cmds_arr" }, "systems": { "$ctx": "ci_systems_arr" } } },
+        { "key": "ci_green_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: \"סיימתי\" = פקודות ה-CI עוברות", "what_he": "שורה ב-AGENTS.md: העבודה גמורה כשהפקודות של ה-CI עוברות מקומית.", "verify_he": "השורה נטענת; ה-skill נותן את הפקודות.", "params": { "text": "Done means the CI commands pass locally: {ci_cmds}." } }
+      ]
+    },
+    {
+      "id": "R05", "signal": "no CI",
+      "when": { "path": "ci.present", "truthy": false },
+      "reason_he": "לא נמצאה הגדרת CI — שום דבר לא מגדיר \"ירוק\". צריך שער מקומי לפני שסוכן משנה קוד.",
+      "components": [
+        { "key": "local_gate_script", "kind": "script", "family": "verification", "risk": "significant", "title_he": "סקריפט אימות מקומי (build + בדיקות)", "what_he": "סקריפט אחד שמריץ את ה-build ואת הבדיקות שיש — השער היחיד עד שיהיה CI.", "verify_he": "הסקריפט רץ בעותק המבודד; אם ה-build אפשרי רק במקום אחר, הוא אומר זאת.", "params": { "template": "local-gate", "build": "{build_cmd_raw}", "test": "{test_cmd}" } },
+        { "key": "no_ci_report", "kind": "report", "family": "measurement", "risk": "reversible", "title_he": "דיווח: אין CI", "what_he": "בלי CI, תוצר של סוכן לא נבדק במכונה לפני מיזוג. עד שיהיה — השער המקומי.", "verify_he": "", "params": {} }
+      ]
+    },
+    {
+      "id": "R06", "signal": "monorepo / multi-project layout",
+      "when": { "path": "monorepo.is_monorepo", "truthy": true },
+      "reason_he": "{mono_ws} ({mono_n} חבילות). קובץ הנחיות אחד בשורש לא יכול לתת את פקודת ה-build וה-test הנכונה לכל חבילה.",
+      "components": [
+        { "key": "per_package_instructions", "kind": "scaffold", "family": "knowledge", "risk": "significant", "title_he": "הנחיות לכל חבילה (build ובדיקות שלה)", "what_he": "קובץ CLAUDE.md קצר בכל חבילה ראשית עם הפקודות שלה; נטען רק כשעובדים בה.", "verify_he": "כל קובץ מצביע על פקודות שקיימות בחבילה שלו.", "params": { "template": "per-package", "packages": { "$ctx": "mono_packages_arr" } } },
+        { "key": "which_package_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: איזו חבילה", "what_he": "ממפה בקשה לחבילה שאחראית עליה, לפי מבנה הריפו, לפני שהסוכן מחפש בכל הריפו.", "verify_he": "validate; משימת \"איפה מוסיפים X\" בריצת הניסיון.", "params": { "template": "which-package", "packages": { "$ctx": "mono_packages_arr" }, "workspaces": "{mono_ws}" } },
+        { "key": "monorepo_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: פקודות מתיקיית החבילה, לא מהשורש", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "This is a multi-package repository ({mono_ws}, {mono_n} packages): run build and test commands from the package's own folder, not from the root, unless the root script says otherwise." } }
+      ]
+    },
+    {
+      "id": "R07", "signal": "hot-spot directory with many contributors",
+      "when": { "fn": "hot_multi_author", "truthy": true },
+      "reason_he": "{hot_dir} השתנה {hot_changes} פעמים על ידי {hot_authors} מחברים בהיסטוריה שנדגמה — סיכון הרגרסיה הגבוה ביותר, בלי בעלים יחיד.",
+      "components": [
+        { "key": "hot_dir_architecture_note", "kind": "doc", "family": "knowledge", "risk": "significant", "title_he": "מסמך ארכיטקטורה ל-{hot_dir}", "what_he": "מה יש שם, מי תלוי במה, ומה נשבר בעבר — לפי ההיסטוריה.", "verify_he": "המסמך מצטט קבצים שקיימים; נבדק בציטוט בסשן.", "params": { "template": "hot-dir-doc", "dir": "{hot_dir}", "changes": "{hot_changes}", "authors": "{hot_authors}" } },
+        { "key": "hot_dir_reviewer_agent", "kind": "agent", "family": "agents", "risk": "significant", "title_he": "סוכן סוקר ל-{hot_dir}", "what_he": "סוקר בהקשר טרי, קריאה בלבד, עם רשימת בדיקה שנגזרת מההיסטוריה של התיקייה.", "verify_he": "מריצים את הסוקר על שינוי שמכניס באג ידוע ורואים שהוא תופס אותו.", "params": { "template": "scoped-reviewer", "dir": "{hot_dir}", "changes": "{hot_changes}", "authors": "{hot_authors}" } }
+      ]
+    },
+    {
+      "id": "R08", "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+      "when": { "fn": "shapes", "truthy": true },
+      "reason_he": "{shape_n} סטים חוזרים של קבצים בהיסטוריה — מתכון גורם לסוכן לגעת בכולם, לא רק בברור.",
+      "components": [
+        { "key": "change_recipe_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: מתכון לשינוי חוזר ({shape_example})", "what_he": "הקבצים שמשתנים יחד בכל פעם, בסדר, כנוהל אחד.", "verify_he": "validate; eval עם ובלי על משימה מהסוג הזה.", "params": { "template": "change-recipe", "shapes": { "$ctx": "shapes_arr" } } }
+      ]
+    },
+    {
+      "id": "R09a", "signal": "secret-looking strings outside test files",
+      "when": { "path": "secrets.outside_tests", "gt": 0 },
+      "reason_he": "{sec_outside} מחרוזות בצורת סוד מחוץ לבדיקות ({sec_kinds}) — סוכן לא צריך לקרוא אותן ולא להעתיק אותן.",
+      "components": [
+        { "key": "deny_read_secret_files", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור קריאה על הקבצים שנמצאו בהם סודות", "what_he": "permissions.deny ב-.claude/settings.json על {sec_files_outside}. הסוכן לא קורא, ולכן לא מדפיס ולא מעתיק.", "verify_he": "ההגדרה נפרסת; ניסיון קריאה נחסם.", "params": { "deny": { "$ctx": "sec_files_outside_arr" } } },
+        { "key": "secret_scan_hook", "kind": "hook", "family": "safety", "risk": "reversible", "title_he": "hook סריקת סודות לפני כתיבה ולפני commit", "what_he": "לפני Write/Edit ולפני git commit, סורק את התוכן ומחזיר את השורה החשודה במקום לתת לה להיכנס.", "verify_he": "מבקשים לכתוב קובץ עם מחרוזת חיבור מזויפת ורואים שנחסם.", "params": { "template": "secret-scan", "allowTests": false } },
+        { "key": "secrets_report", "kind": "report", "family": "measurement", "risk": "reversible", "title_he": "דיווח לבעלים: סודות בקוד", "what_he": "{sec_outside} מחרוזות ב-{sec_files_outside}. מי אומר ללקוח ומתי — החלטה של אדם; DCC לא מעתיק את הערכים.", "verify_he": "", "params": {} }
+      ]
+    },
+    {
+      "id": "R09b", "signal": "secret-looking strings only in tests/fixtures",
+      "when": { "all": [{ "path": "secrets.total", "gt": 0 }, { "path": "secrets.outside_tests", "eq": 0 }] },
+      "reason_he": "{sec_total} מחרוזות, כולן בקובצי בדיקה — מפתחות מזויפים; בלי allowlist, hook סריקה נאיבי היה חוסם כל עריכה של בדיקה.",
+      "components": [
+        { "key": "fixture_secrets_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: המפתחות בבדיקות מזויפים", "what_he": "שורה ב-AGENTS.md: לא \"לתקן\" ולא להשחיר אותם.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Test fixtures contain fake credentials on purpose ({sec_total} in test files). Do not redact, rotate or 'fix' them." } },
+        { "key": "secret_scan_hook_tests_allowed", "kind": "hook", "family": "safety", "risk": "reversible", "title_he": "hook סריקת סודות עם allowlist לבדיקות", "what_he": "סורק כתיבות מחוץ לתיקיות בדיקה; בתוכן — לא.", "verify_he": "כתיבה עם סוד מזויף לבדיקה עוברת; לקוד — נחסמת.", "params": { "template": "secret-scan", "allowTests": true } }
+      ]
+    },
+    {
+      "id": "R10", "signal": "sensitive files tracked (.env, .snk, .pfx, .pem, app/web.config, appsettings.Development)",
+      "when": { "path": "secrets.sensitive_files", "empty": false },
+      "reason_he": "{sens_n} קבצים רגישים לפי השם ({sens_sample}) — מחוץ להקשר של הסוכן כברירת מחדל.",
+      "components": [
+        { "key": "deny_sensitive_files", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור קריאה ועריכה על {sens_n} קבצים רגישים", "what_he": "permissions.deny על קובצי חתימה, תעודות, .env ו-config עם הגדרות סביבה.", "verify_he": "ניסיון קריאה נחסם.", "params": { "deny": { "$ctx": "sens_files_arr" } } }
+      ]
+    },
+    {
+      "id": "R11", "signal": "Windows-only build (.NET Framework / msbuild / .snk)",
+      "when": { "path": "windows_build.windows_only_build", "truthy": true },
+      "reason_he": "{sln_n} .sln, מטרות {tfm}, {snk_n} .snk — msbuild רק ב-Windows; סוכן על Linux חייב לומר זאת במקום לנחש.",
+      "components": [
+        { "key": "cannot_build_here_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: \"את הריפו הזה אי אפשר לבנות כאן\"", "what_he": "שורה ב-AGENTS.md: בלי מריץ Windows אין טענות build ואין טענות בדיקות.", "verify_he": "משימת ה-build בריצת הניסיון: הסוכן אומר שאי אפשר במקום להמציא.", "params": { "text": "This repository builds only on Windows (msbuild, {tfm}, signed assemblies). If you are not on a Windows build runner, say so: do not claim a build or a test run." } },
+        { "key": "windows_runner", "kind": "runner", "family": "verification", "risk": "external", "title_he": "מריץ Windows ל-build ולבדיקות", "what_he": "מכונת Windows אחת עם Claude Code ו-Visual Studio Build Tools, שרק בונה ומריצה בדיקות. עד אז — review-only.", "verify_he": "ה-build רץ עליה דרך ה-skill.", "params": {} },
+        { "key": "build_on_runner_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: build על המריץ", "what_he": "שולח build למריץ, ממתין, מביא את הלוג. כשאין מריץ — אומר זאת.", "verify_he": "validate; בלי מריץ ה-skill מחזיר \"לא אומת כאן\".", "params": { "template": "build-on-runner", "solution": "{sln_first}" } }
+      ]
+    },
+    {
+      "id": "R12", "signal": "external system: Dataverse / Dynamics 365",
+      "when": { "path": "external_systems", "hasKey": "Dataverse/Dynamics 365" },
+      "reason_he": "{dv_n} הפניות ל-SDK של Dataverse/CRM — הסכמה חיה בסביבה, לא בריפו.",
+      "components": [
+        { "key": "dataverse_mcp", "kind": "mcp", "family": "connections", "risk": "external", "title_he": "Dataverse MCP (רשמי, Microsoft) — קריאה בלבד", "what_he": "מחבר את הסוכן לסביבת Dataverse כדי לקרוא ישויות ושדות במקום לנחש. מצומצם לכלי קריאה; דורש הסכמת אדמין של הלקוח וחיוב Copilot Credits.", "verify_he": "חיבור לסביבת הפיתוח וספירת הטוקנים שהכלים מוסיפים.", "params": { "server": "dataverse", "url": "https://{org}.crm.dynamics.com/api/mcp", "tools": ["describe_table", "read_query", "search"], "readOnly": true, "needs": ["org", "admin consent"] } },
+        { "key": "dataverse_names_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: שמות ישויות ושדות מ-Dataverse, לא מניחוש", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Entity and attribute names come from Dataverse metadata (the early-bound classes or the live environment), never from guessing." } },
+        { "key": "deny_plugin_registration", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור על רישום פלאגין וייבוא solution", "what_he": "permissions.deny על פקודות שמשנות סביבת Dataverse (pac solution import, PluginRegistration).", "verify_he": "ההגדרה נפרסת.", "params": { "deny": ["Bash(pac solution import*)", "Bash(pac plugin push*)", "Bash(PluginRegistration*)"] } }
+      ]
+    },
+    {
+      "id": "R13", "signal": "external system: relational database",
+      "when": { "path": "external_systems", "hasAnyKey": ["PostgreSQL", "MySQL/MariaDB", "SQL Server"] },
+      "reason_he": "{db_kinds} מוזכר ב-manifests או ב-compose.",
+      "components": [
+        { "key": "migrations_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: שינויי סכמה דרך כלי המיגרציות", "what_he": "שורה ב-AGENTS.md: אין SQL ידני על הסכמה.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Schema changes go through the migration tool ({db_kinds}); never ad-hoc SQL against the schema." } },
+        { "key": "db_readonly_mcp", "kind": "mcp", "family": "connections", "risk": "external", "title_he": "MCP קריאה בלבד למסד הנתונים", "what_he": "רק אם יש מסד מקומי (compose) — {compose}. מאפשר לסוכן לבדוק סכמה בפועל.", "verify_he": "חיבור למסד המקומי וספירת טוקנים.", "params": { "server": "database-readonly", "kinds": "{db_kinds}", "onlyIf": "compose", "readOnly": true } }
+      ]
+    },
+    {
+      "id": "R14", "signal": "cloud SDK / IaC provider present",
+      "when": { "path": "external_systems", "hasAnyKey": ["AWS SDK", "Azure SDK", "GCP SDK"] },
+      "reason_he": "{cloud} מוזכר — סוכן עם shell לא צריך להיות מסוגל לגעת בתשתית חיה.",
+      "components": [
+        { "key": "deny_cloud_mutations", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור על פקודות ענן שמשנות", "what_he": "permissions.deny על aws/az/gcloud create, delete, deploy.", "verify_he": "ההגדרה נפרסת.", "params": { "deny": ["Bash(aws * create*)", "Bash(aws * delete*)", "Bash(aws * deploy*)", "Bash(az * create*)", "Bash(az * delete*)", "Bash(az deployment*)", "Bash(gcloud * create*)", "Bash(gcloud * delete*)", "Bash(gcloud * deploy*)"] } },
+        { "key": "cloud_credentials_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: אישורי ענן לעולם לא בריפו ולא בסביבת הסוכן", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Cloud credentials ({cloud}) are never in the repository or in the agent's environment; infrastructure changes are a person's." } }
+      ]
+    },
+    {
+      "id": "R15", "signal": "existing tool-specific AI config (cursor / clinerules / copilot-instructions)",
+      "when": { "path": "ai_config.kinds", "includesAny": ["cursor", "clinerules", "copilot", "windsurf", "kiro"] },
+      "reason_he": "{ai_kinds} קיימים ({ai_n} קבצים) — קובץ הנחיות שני שסותר גרוע מכלום.",
+      "components": [
+        { "key": "merge_ai_configs", "kind": "scaffold", "family": "knowledge", "risk": "significant", "title_he": "מיזוג {ai_kinds} ל-AGENTS.md אחד", "what_he": "AGENTS.md אחד שמאחד את ההנחיות הקיימות; CLAUDE.md מפנה אליו; הנחיות Cursor/Copilot נגזרות ממנו.", "verify_he": "אין סתירה בין הקבצים; כל טענה שנבדקת מול הפרופיל — נבדקה.", "params": { "template": "agents-md", "mergeFrom": { "$ctx": "ai_files_arr" } } },
+        { "key": "no_duplicate_ai_files_report", "kind": "report", "family": "measurement", "risk": "reversible", "title_he": "דיווח: לא להכפיל — {ai_n} קובצי AI כבר קיימים", "what_he": "ההטמעה מוסיפה רק מה שחסר בהם.", "verify_he": "", "params": {} }
+      ]
+    },
+    {
+      "id": "R16", "signal": "AGENTS.md / CLAUDE.md already present",
+      "when": { "path": "ai_config.kinds", "includesAny": ["AGENTS.md", "CLAUDE.md"] },
+      "reason_he": "קובץ הנחיות קיים ({ai_files}) — נוצר רק מה שהאבחון מוכיח ושהקובץ חסר.",
+      "components": [
+        { "key": "delta_to_existing_instructions", "kind": "doc", "family": "knowledge", "risk": "significant", "title_he": "דלתא בלבד מעל ההנחיות הקיימות", "what_he": "עובדות מהאבחון שחסרות בקובץ הקיים ({ai_missing}) נוספות בקטע משלהן; שום דבר לא נדרס.", "verify_he": "הקובץ הקיים נשאר; הקטע החדש מצטט עובדות מהפרופיל בלבד.", "params": { "template": "agents-md-delta", "existing": { "$ctx": "ai_md_arr" } } }
+      ]
+    },
+    {
+      "id": "R17", "signal": "no AI configuration at all",
+      "when": { "path": "ai_config.present", "truthy": false },
+      "reason_he": "אין CLAUDE.md, AGENTS.md, Cursor או Copilot — הסוכן מתחיל מאפס עובדות; האבחון מספק אותן.",
+      "components": [
+        { "key": "agents_md_from_profile", "kind": "scaffold", "family": "knowledge", "risk": "significant", "title_he": "AGENTS.md מהאבחון + CLAUDE.md שמפנה אליו", "what_he": "עד 150 שורות: build ({build_cmd}), בדיקות ({test_cmd}), lint ({lint}), מבנה, מערכות חיצוניות, וכללי ההנחיה שאושרו. CLAUDE.md = שורה אחת @AGENTS.md.", "verify_he": "כל טענה שנבדקת דטרמיניסטית מול הפרופיל — נבדקה; מוחקים שורה ← ריצת ניסיון ← אם אין הבדל, השורה יוצאת.", "params": { "template": "agents-md" } }
+      ]
+    },
+    {
+      "id": "R18", "signal": "Jupyter notebooks",
+      "when": { "fn": "lang_files", "arg": "Jupyter", "gte": 3 },
+      "reason_he": "{nb_n} נוטבוקים — עריכה ברמת JSON משחיתה אותם וה-diff לא קריא.",
+      "components": [
+        { "key": "notebook_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: תאים ב-NotebookEdit, לא ה-JSON", "what_he": "שורה ב-AGENTS.md: לערוך תאים עם NotebookEdit; להשאיר outputs כפי שהם ב-git.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Edit notebook cells with NotebookEdit, never the raw .ipynb JSON; keep outputs as committed." } },
+        { "key": "nbformat_validate_hook", "kind": "hook", "family": "enforcement", "risk": "reversible", "title_he": "hook: אימות nbformat אחרי כל כתיבה ל-.ipynb", "what_he": "PostToolUse שמריץ nbformat validate על הקובץ ומחזיר שגיאה אם הנוטבוק נשבר.", "verify_he": "כותבים נוטבוק שבור ורואים את השגיאה.", "params": { "template": "post-validate", "match": "\\.ipynb$", "command": "python -m nbformat --validate" } },
+        { "key": "deny_bulk_notebook_reformat", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור על פורמט גורף של נוטבוקים", "what_he": "permissions.deny על black/nbstripout על תיקיות נוטבוקים.", "verify_he": "ההגדרה נפרסת.", "params": { "deny": ["Bash(black *notebooks*)", "Bash(nbstripout *)"] } }
+      ]
+    },
+    {
+      "id": "R19", "signal": "Terraform",
+      "when": { "path": "frameworks", "includes": "terraform" },
+      "reason_he": "{tf_n} קובצי .tf; pre-commit מריץ {tf_lint}; README ו-variables משתנים יחד {tf_pair} פעמים.",
+      "components": [
+        { "key": "terraform_plan_only_hook", "kind": "hook", "family": "safety", "risk": "reversible", "title_he": "hook: terraform fmt/validate/plan מותר, apply/destroy/import/state אסור", "what_he": "PreToolUse על Bash שחוסם פקודות terraform שמשנות תשתית.", "verify_he": "מבקשים terraform apply ורואים שנחסם.", "params": { "template": "block-commands", "patterns": ["terraform apply", "terraform destroy", "terraform import", "terraform state ", "terraform taint"], "reason": "plan is the deliverable; apply is a person's" } },
+        { "key": "terraform_docs_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: ג'נרוט terraform-docs", "what_he": "טבלאות ה-README נוצרות מ-variables.tf — הנוהל להריץ אחרי כל שינוי במשתנים.", "verify_he": "validate.", "params": { "template": "terraform-docs" } },
+        { "key": "terraform_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: plan הוא התוצר, apply של אדם", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Terraform: `terraform plan` is the deliverable; `apply` is a person's decision. README tables are generated by terraform-docs from variables.tf." } }
+      ]
+    },
+    {
+      "id": "R20", "signal": "formatter / linter configured",
+      "when": { "path": "lint_format", "empty": false },
+      "reason_he": "{lint} מוגדר — סגנון הוא מכני; hook מוציא אותו מהסקירה.",
+      "components": [
+        { "key": "format_on_edit_hook", "kind": "hook", "family": "enforcement", "risk": "reversible", "title_he": "hook: {formatter} על כל קובץ שנערך", "what_he": "PostToolUse שמריץ את הפורמטר על הקובץ שנערך, כדי שהסקירה תעסוק במהות.", "verify_he": "עורכים קובץ לא מפורמט ורואים שהוא מפורמט.", "params": { "template": "post-format", "formatter": "{formatter}" } }
+      ]
+    },
+    {
+      "id": "R21", "signal": "no formatter / linter",
+      "when": { "path": "lint_format", "empty": true },
+      "reason_he": "אין הגדרת lint או פורמט — hook פורמט היה מפרמט קבצים שאיש לא פרמט.",
+      "components": [
+        { "key": "match_style_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: להתאים לסגנון הסביבה, בלי לפרמט שורות שלא נגעת בהן", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "There is no formatter or linter here: match the surrounding style exactly and never reformat lines you did not change." } },
+        { "key": "no_lint_report", "kind": "report", "family": "measurement", "risk": "reversible", "title_he": "דיווח: אין lint — סחיפת סגנון לא נבדקת במכונה", "what_he": "אפשר להוסיף פורמטר כפרויקט נפרד; לא בהטמעה הזאת.", "verify_he": "", "params": {} },
+        { "key": "no_format_hook", "kind": "report", "family": "enforcement", "risk": "reversible", "notRecommended": true, "title_he": "לא: hook פורמט", "what_he": "בלי פורמטר מוגדר, hook פורמט היה משנה קבצים שאף אחד לא פרמט.", "verify_he": "", "params": {} }
+      ]
+    },
+    {
+      "id": "R22a", "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+      "when": { "any": [{ "path": "docs.readme_bytes", "gte": 8000 }, { "path": "docs.docs_files", "gte": 5 }, { "path": "docs.architecture_docs", "empty": false }] },
+      "reason_he": "README {readme_kb} KB, {docs_files} קובצי תיעוד, ארכיטקטורה: {arch} — התשובות קיימות; צריך להצביע עליהן.",
+      "components": [
+        { "key": "read_docs_first_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: לקרוא את {doc_pointer} לפני שמתכננים", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Before planning a change, read {doc_pointer}: the answers to how this repository is built and organised are there." } },
+        { "key": "docs_sync_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: עדכון התיעוד כששינוי משנה התנהגות", "what_he": "נוהל: שינוי שמשנה התנהגות מעדכן את {doc_pointer} באותו PR.", "verify_he": "validate.", "params": { "template": "docs-sync", "pointer": "{doc_pointer}" } }
+      ]
+    },
+    {
+      "id": "R22b", "signal": "thin docs (no README or < 2 KB, no docs/)",
+      "when": { "all": [{ "path": "docs.readme_bytes", "lt": 2000 }, { "path": "docs.docs_files", "eq": 0 }] },
+      "reason_he": "README {readme_kb} KB ואין docs/ — אין מה לקרוא, לא לסוכן ולא לעובד חדש.",
+      "components": [
+        { "key": "onboarding_docs", "kind": "doc", "family": "knowledge", "risk": "significant", "title_he": "docs/: ארכיטקטורה, אינטגרציות, הרצה ובנייה", "what_he": "שלושה מסמכים קצרים מהאבחון ומהקוד: מבנה ונקודות כניסה, מערכות חיצוניות, איך בונים ומריצים. אדם מאשר; כל מסמך מקבל בדיקת התיישנות.", "verify_he": "כל נתיב ופקודה במסמכים קיימים; ציטוט בסשן.", "params": { "template": "docs-set", "docs": ["architecture", "integrations", "build-and-run"] } }
+      ]
+    },
+    {
+      "id": "R23", "signal": "devcontainer / Dockerfile / compose",
+      "when": { "any": [{ "path": "environment.devcontainer", "truthy": true }, { "path": "environment.dockerfile", "empty": false }, { "path": "environment.docker_compose", "empty": false }] },
+      "reason_he": "{env_kind} קיים — הסביבה המשוחזרת כבר קיימת.",
+      "components": [
+        { "key": "run_in_environment", "kind": "runner", "family": "verification", "risk": "reversible", "title_he": "להריץ את הסוכן בתוך {env_kind}", "what_he": "אותו toolchain כמו ב-CI; שורה ב-AGENTS.md אומרת איך מעלים את הסביבה.", "verify_he": "הסביבה עולה בעותק המבודד.", "params": { "env": "{env_kind}" } }
+      ]
+    },
+    {
+      "id": "R24", "signal": "legacy web stack (PHP + vendored jQuery / Twig)",
+      "when": { "all": [{ "fn": "lang_files", "arg": "PHP", "gte": 1 }, { "any": [{ "path": "frameworks", "includes": "jquery" }, { "path": "frameworks", "includes": "jQuery (vendored)" }] }] },
+      "reason_he": "PHP ({php_files} קבצים) עם jQuery; תיקיות חמות כוללות {i18n_dir} ({i18n_changes} שינויים) שמסונכרנת ממכונה.",
+      "components": [
+        { "key": "security_reviewer_agent", "kind": "agent", "family": "agents", "risk": "significant", "title_he": "סוכן סקירת אבטחה (XSS / SQL injection / CSRF)", "what_he": "סוקר בהקשר טרי כל שינוי ב-PHP או ב-JS מול רשימת בדיקה של OWASP.", "verify_he": "מריצים על שינוי עם XSS ידוע ורואים שנתפס.", "params": { "template": "security-reviewer", "languages": ["PHP", "JavaScript"] } },
+        { "key": "smallest_change_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: בלי מיגרציות framework או הסרת jQuery", "what_he": "שורה ב-AGENTS.md: השינוי הקטן ביותר שמתאים.", "verify_he": "נטענת בכל סשן.", "params": { "text": "No framework migrations and no jQuery removal: make the smallest change that fits the existing code." } },
+        { "key": "deny_translation_dirs", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור עריכה על תיקיות תרגום ({i18n_dir})", "what_he": "הן בבעלות פלטפורמת התרגום; עריכה ידנית נדרסת.", "verify_he": "ההגדרה נפרסת.", "params": { "deny": ["Edit({i18n_dir}/**)", "Write({i18n_dir}/**)"] } }
+      ]
+    },
+    {
+      "id": "R25", "signal": "binaries / package caches / IDE state tracked in git",
+      "when": { "any": [{ "path": "git.tracked_binaries_dll_exe_pdb", "gt": 20 }, { "path": "git.tracked_package_dirs", "gt": 50 }, { "path": "git.tracked_ide_junk", "gt": 20 }] },
+      "reason_he": "{bin_n} dll/exe/pdb, {pkg_n} קובצי package cache, {ide_n} קובצי IDE ב-git — הסוכן היה קורא אותם כקוד.",
+      "components": [
+        { "key": "deny_binary_dirs", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור קריאה ועריכה תחת packages/, bin/, obj/, .vs/", "what_he": "permissions.deny — הקבצים האלה לא נכנסים להקשר.", "verify_he": "ניסיון קריאה נחסם.", "params": { "deny": ["Read(**/packages/**)", "Read(**/bin/**)", "Read(**/obj/**)", "Read(**/.vs/**)", "Edit(**/packages/**)", "Edit(**/bin/**)", "Edit(**/obj/**)"] } },
+        { "key": "gitignore_hygiene", "kind": "gitignore", "family": "safety", "risk": "reversible", "title_he": "קובץ .gitignore לתוצרי build ולמטמון חבילות", "what_he": "מוסיף bin/, obj/, packages/, .vs/ ל-.gitignore כדי שהם לא יחזרו. מה שכבר ב-git נשאר עד שאדם יחליט.", "verify_he": "הקובץ נכתב; git status נקי אחרי build.", "params": { "entries": ["bin/", "obj/", "packages/", ".vs/", "*.user", "*.suo"] } },
+        { "key": "hygiene_report", "kind": "report", "family": "measurement", "risk": "reversible", "title_he": "דיווח: היגיינת הריפו", "what_he": "בינאריים ב-git מנפחים כל הקשר וכל clone. הסרה מההיסטוריה — פרויקט נפרד להחלטת הבעלים.", "verify_he": "", "params": {} }
+      ]
+    },
+    {
+      "id": "R26", "signal": "Android / mobile app",
+      "when": { "path": "frameworks", "includesAny": ["android", "flutter/dart", "react-native (sub-package)"] },
+      "reason_he": "toolchain מובייל ({mobile}) — בדיקות instrumented צריכות מכשיר; הסוכן מאמת עם מה שרץ על JVM.",
+      "components": [
+        { "key": "emulator_free_verify_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: אימות בלי אמולטור (JVM + screenshot)", "what_he": "בדיקות יחידה ב-JVM ובדיקות screenshot ({screenshot}) — מה שאפשר להריץ בלי מכשיר.", "verify_he": "validate.", "params": { "template": "emulator-free-verify", "screenshot": "{screenshot}" } },
+        { "key": "android_sdk_runner", "kind": "runner", "family": "verification", "risk": "external", "title_he": "Android SDK על המריץ", "what_he": "./gradlew build מלא לוקח דקות; צריך מריץ עם SDK.", "verify_he": "ה-build רץ על המריץ.", "params": {} }
+      ]
+    },
+    {
+      "id": "R27", "signal": "several build systems in one repo",
+      "when": { "fn": "build_systems_count", "gte": 2 },
+      "reason_he": "{build_systems} קיימים יחד — תלות שנוספה לאחד ולא לשני שוברת CI בשני.",
+      "components": [
+        { "key": "build_systems_sync_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: לשמור {build_systems} מסונכרנים", "what_he": "שורה ב-AGENTS.md ({build_pair_times} שינויים משותפים בהיסטוריה).", "verify_he": "נטענת בכל סשן.", "params": { "text": "Keep {build_systems} in sync: a dependency added to one must be added to the other in the same change." } }
+      ]
+    },
+    {
+      "id": "R28", "signal": "large contributor base",
+      "when": { "path": "git.authors_in_clone", "gte": 50 },
+      "reason_he": "{authors} מחברים בדגימה — התוצר חייב להיראות כמו PR של כולם כדי להתמזג.",
+      "components": [
+        { "key": "contribution_style_skill", "kind": "skill", "family": "skills", "risk": "reversible", "title_he": "skill: סגנון תרומה (PR, commit, {contrib})", "what_he": "פורמט ה-PR, מוסכמת ה-commit ומה CONTRIBUTING דורש — כנוהל אחד.", "verify_he": "validate; ה-skill מצטט את CONTRIBUTING.", "params": { "template": "contribution-style", "contributing": { "$ctx": "contrib_arr" } } }
+      ]
+    },
+    {
+      "id": "R29", "signal": "LLM provider SDK in dependencies",
+      "when": { "path": "external_systems", "hasAnyKey": ["OpenAI API", "Anthropic API"] },
+      "reason_he": "{llm} מוזכר — ריצת בדיקות שפוגעת ב-API האמיתי עולה כסף ולא דטרמיניסטית.",
+      "components": [
+        { "key": "no_live_llm_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: בדיקות לא קוראות ל-API של מודל חי", "what_he": "שורה ב-AGENTS.md: מפתחות ספק לא בסביבת הסוכן.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Tests never call a live model API ({llm}); provider keys are not in the agent's environment. Use the recorded fixtures or mocks the repository already has." } },
+        { "key": "deny_api_key_env", "kind": "permission", "family": "safety", "risk": "reversible", "title_he": "איסור קריאה של קובצי .env ומפתחות API", "what_he": "permissions.deny על .env* ועל קריאת משתני *_API_KEY.", "verify_he": "ניסיון קריאה נחסם.", "params": { "deny": ["Read(**/.env)", "Read(**/.env.*)", "Bash(printenv *API_KEY*)", "Bash(echo $*API_KEY*)"] } }
+      ]
+    },
+    {
+      "id": "R30", "signal": "lock file churn / dependency-bump shape",
+      "when": { "fn": "dep_bump_shape", "truthy": true },
+      "reason_he": "{dep_files} משתנים יחד {dep_times} פעמים — צורת השינוי הכי שכיחה בהיסטוריה היא עדכון תלויות.",
+      "components": [
+        { "key": "dependency_bump_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: עדכון תלויות = {dep_files} יחד; לא לערוך lock ביד", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "A dependency bump changes {dep_files} together: run the package manager; never edit a lock file by hand." } }
+      ]
+    },
+    {
+      "id": "R31", "signal": "Aspire / orchestrated multi-service .NET",
+      "when": { "path": "frameworks", "includes": "Aspire" },
+      "reason_he": "Aspire AppHost מתזמר {containers}; `dotnet run` על שירות אחד הוא לא המערכת.",
+      "components": [
+        { "key": "aspire_apphost_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: להריץ דרך פרויקט ה-AppHost", "what_he": "שורה ב-AGENTS.md: שירותים לא מופעלים בנפרד.", "verify_he": "נטענת בכל סשן.", "params": { "text": "Run the system through the Aspire AppHost project; services are not started individually." } },
+        { "key": "docker_runner", "kind": "runner", "family": "verification", "risk": "external", "title_he": "Docker על המריץ (מכולות Aspire: {containers})", "what_he": "בלי Docker המערכת לא עולה.", "verify_he": "המערכת עולה על המריץ.", "params": {} }
+      ]
+    },
+    {
+      "id": "R32", "signal": "PCF control / web resources beside a CRM backend",
+      "when": { "path": "frameworks", "includes": "PowerApps PCF control" },
+      "reason_he": "שני toolchains בפתרון אחד — build של node עובד כאן, ה-.NET לא.",
+      "components": [
+        { "key": "pcf_toolchain_rule", "kind": "rule", "family": "knowledge", "risk": "reversible", "title_he": "שורת הנחיה: PCF נבנה עם npm run build בתיקייה שלו; פלאגיני CRM לא", "what_he": "שורה ב-AGENTS.md.", "verify_he": "נטענת בכל סשן.", "params": { "text": "PCF controls build with `npm run build` in their own folder (pac pcf); CRM plugins build with msbuild only. Do not mix the two toolchains." } },
+        { "key": "per_area_instructions", "kind": "scaffold", "family": "knowledge", "risk": "significant", "title_he": "הנחיות לכל אזור: PCF (node) מול פלאגינים (msbuild)", "what_he": "CLAUDE.md קצר בתיקיית ה-PCF ובתיקיית הפלאגינים עם הפקודות של כל אחת.", "verify_he": "כל קובץ מצביע על פקודות שקיימות באזור שלו.", "params": { "template": "per-area", "areas": { "$ctx": "pcf_areas_arr" } } }
+      ]
+    }
+  ]
+}

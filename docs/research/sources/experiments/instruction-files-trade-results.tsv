@@ -1,0 +1,7 @@
+cond	task	turns	usd	ms	input_total	output	answer_head
+A-none	T1	1	0.537	26751	49088	1566	## קבצים/פרויקטים לשינוי (בלי לערוך כלום כרגע) **1. סכימה — הוספת שדה "שעות מותרות" ל-Contact (Dataverse solution, לא קוד):** הוספת attribut
+A-none	T2	5	0.081	10883	131287	710	Lead entity plugin steps: `CrmEntryPoints/Plugins/Alt.Crm.Plugins.Lead/` — files: `PreCreateLead.cs`, `PreUpdateLead.cs`, `PreValidationUpda
+B-init	T1	1	0.345	33782	48943	1907	## קבצים ופרויקטים לשינוי (לפי סדר) **1. מודל נתונים — שדה "שעות מותרות" בלקוח** - `Shared/DataModel/Crm/Alt.DataModel.Crm/Entities/Entities
+B-init	T2	4	0.083	10272	137591	799	Lead plugin steps: `CrmEntryPoints/Plugins/Alt.Crm.Plugins.Lead/` — `PreCreateLead.cs`, `PreUpdateLead.cs`, `PreValidationUpdateLead.cs`, `P
+C-dcc	T1	1	0.901	28639	53681	1460	## קבצים לשינוי (לפי סדר יישום) **1. סכימת CRM — הוספת שדה "שעות מותרות" ללקוח** `Shared/DataModel/Crm/Alt.DataModel.Crm/Entities/Entities.c
+C-dcc	T2	4	0.085	10065	140742	776	Lead plugin steps live in `CrmEntryPoints/Plugins/Alt.Crm.Plugins.Lead/`: - `PreValidationUpdateLead.cs` - `PreCreateLead.cs`, `PreUpdateLea

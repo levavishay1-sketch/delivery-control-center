@@ -341,6 +341,8 @@ export type RunClaudeOpts = {
   timeoutMs?: number; maxTurns?: number; runId?: string; write?: boolean; model?: string;
   /** Without write access, may still run commands (a build, tests) — the checks. `write` wins. */
   commands?: boolean;
+  /** The exact `--allowed-tools` list for this call (the open marketplace search needs WebSearch and WebFetch); wins over `write`/`commands`. */
+  tools?: string;
   /** `--effort <level>` — reasoning effort, independent of `--model`. */
   effort?: string;
   onMeta?: (meta: RunMeta) => void;
@@ -432,6 +434,7 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
         "--allowed-tools", opts.commands ? "Read,Grep,Glob,Bash" : "Read,Grep,Glob",
         "--max-turns", String(opts.maxTurns ?? (opts.commands ? 80 : 40)),
       ];
+  if (opts.tools) args[args.indexOf("--allowed-tools") + 1] = opts.tools;
   if (steerable) args.push("--input-format", "stream-json");
   // The policy decides model and effort for EVERY call (claude-in-dcc
   // §8.3); a person's explicit choice wins per field. What it decided, and

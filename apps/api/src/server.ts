@@ -126,16 +126,27 @@ import {
   setTaskManual, reportManualDevelopment, cancelManualReport, setCheckManually,
   checkAdoRemovedState,
   OnboardingError,
+  CoachError,
   startOnboardingRun,
-  runOnboardingStage,
-  resumeOnboardingSession,
-  refreshReview,
-  approveReview,
+  runOnboardingStep,
+  correctProfileFact,
+  answerInterview,
+  approveTrial,
+  decideComponent,
+  decideComponentSet,
+  requestComponent,
+  startBuild,
+  deliverRun,
+  startDraftSession,
   cancelOnboardingRun,
   updateOnboardingAutomation,
-  updateOnboardingModelChoices,
   getOnboardingRunView,
   getOnboardingFileVersions,
+  getOnboardingChangedFiles,
+  coachView,
+  decideProposal,
+  recheckMarketplaceSources,
+  scheduleCoach,
   pullRequestFile,
   submitReview,
   mergeRequest,
@@ -147,7 +158,7 @@ import {
   repoBranches,
   listOnboardingRuns,
   getLatestOnboardingRun,
-  onboardingStageCatalogue,
+  onboardingStepCatalogue,
   authorizeOnboardingTerminal,
   recoverOnboardingRuns,
   recoverFlowRuns,
@@ -203,7 +214,7 @@ app.setErrorHandler((err, _req, reply) => {
   if (err instanceof NotFound) return reply.code(404).send({ error: err.message });
   // Onboarding refuses with a message meant for the person ("the previous
   // stage has not finished", "a run is already live") — show it, not a 500.
-  if (err instanceof OnboardingError) return reply.code(409).send({ error: err.message });
+  if (err instanceof OnboardingError || err instanceof CoachError) return reply.code(409).send({ error: err.message });
   if (err instanceof FolderRefused) return reply.code(400).send({ error: err.message });
   // The registry refuses with a sentence for the person ("the task is not approved yet") — show it, not a 500.
   if (err instanceof ActionRefused || err instanceof ChatError || err instanceof PolicyError) return reply.code(409).send({ error: err.message });
@@ -346,22 +357,23 @@ app.get("/repos/:id/branches", async (req) => {
   return repoBranches((req.params as { id: string }).id, { refresh: q.refresh === "1" });
 });
 
-/* ── repository onboarding — four stages around one live Claude Code
- * session (`openspec/changes/repository-onboarding-native-init`). Each
- * stage starts from its own button (or by the run's automation policy);
- * the session itself is reached over the terminal socket below. */
+/* ── repository onboarding as a coach (`openspec/changes/repository-coach`):
+ * seven steps, the same for every repository, a different result for each.
+ * A step that costs money or writes outside the copy waits for a person;
+ * the `/init` draft session inside the plan step is reached over the
+ * terminal socket below. */
 
 type RunParams = { id: string; runId: string };
 
-app.get("/onboarding/stages", async (req) => {
+app.get("/onboarding/steps", async (req) => {
   await actingUser(req);
-  return onboardingStageCatalogue();
+  return onboardingStepCatalogue();
 });
 
 app.post("/repos/:id/onboarding/runs", async (req) => {
   const dev = await actingUser(req);
   const { id } = req.params as { id: string };
-  const b = z.object({ automation: z.unknown().optional(), modelChoices: z.unknown().optional(), consent: z.boolean().optional() }).parse(req.body ?? {});
+  const b = z.object({ automation: z.unknown().optional(), kind: z.enum(["onboarding", "coach"]).optional(), proposalIds: z.array(z.string().uuid()).optional() }).parse(req.body ?? {});
   return startOnboardingRun(id, { userId: dev.id }, b);
 });
 
@@ -381,28 +393,70 @@ app.get("/repos/:id/onboarding/runs/:runId", async (req) => {
   return getOnboardingRunView(id, runId);
 });
 
-app.post("/repos/:id/onboarding/runs/:runId/stages/:stageKey/run", async (req) => {
+app.post("/repos/:id/onboarding/runs/:runId/steps/:stepKey/run", async (req) => {
   const dev = await actingUser(req);
-  const { id, runId, stageKey } = req.params as RunParams & { stageKey: string };
-  return runOnboardingStage(id, runId, stageKey, { userId: dev.id });
+  const { id, runId, stepKey } = req.params as RunParams & { stepKey: string };
+  return runOnboardingStep(id, runId, stepKey, { userId: dev.id });
 });
 
-app.post("/repos/:id/onboarding/runs/:runId/session/resume", async (req) => {
+app.post("/repos/:id/onboarding/runs/:runId/profile/correct", async (req) => {
   const dev = await actingUser(req);
   const { id, runId } = req.params as RunParams;
-  return resumeOnboardingSession(id, runId, { userId: dev.id });
+  const b = z.object({ path: z.string().min(1).max(200), note: z.string().max(500).nullish(), undo: z.boolean().optional() }).parse(req.body);
+  return correctProfileFact(id, runId, { userId: dev.id }, b);
 });
 
-app.post("/repos/:id/onboarding/runs/:runId/review/refresh", async (req) => {
-  await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  return refreshReview(id, runId);
-});
-
-app.post("/repos/:id/onboarding/runs/:runId/review/approve", async (req) => {
+app.post("/repos/:id/onboarding/runs/:runId/interview", async (req) => {
   const dev = await actingUser(req);
   const { id, runId } = req.params as RunParams;
-  return approveReview(id, runId, { userId: dev.id });
+  const b = z.object({ answers: z.record(z.string().max(200)).default({}) }).parse(req.body ?? {});
+  return answerInterview(id, runId, { userId: dev.id }, b.answers);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/trial/approve", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return approveTrial(id, runId, { userId: dev.id });
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/components/:key/decide", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId, key } = req.params as RunParams & { key: string };
+  const b = z.object({ decision: z.enum(["approve", "decline", "defer", "undo"]), reason: z.string().max(1000).nullish(), answers: z.record(z.string().max(500)).optional() }).parse(req.body);
+  return decideComponent(id, runId, { userId: dev.id }, { key, ...b });
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/components/decide-set", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  const b = z.object({ decision: z.enum(["approve", "decline"]), keys: z.array(z.string()).optional(), reason: z.string().max(1000).nullish() }).parse(req.body);
+  return decideComponentSet(id, runId, { userId: dev.id }, b);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/components/request", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  const b = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
+  return requestComponent(id, runId, { userId: dev.id }, b);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/build", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return startBuild(id, runId, { userId: dev.id });
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/deliver", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return deliverRun(id, runId, { userId: dev.id });
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/draft/start", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  const b = z.object({ resume: z.boolean().optional(), model: z.string().max(60).optional(), effort: z.string().max(20).optional() }).parse(req.body ?? {});
+  return startDraftSession(id, runId, { userId: dev.id }, b);
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/cancel", async (req) => {
@@ -414,15 +468,8 @@ app.post("/repos/:id/onboarding/runs/:runId/cancel", async (req) => {
 app.patch("/repos/:id/onboarding/runs/:runId/automation", async (req) => {
   const dev = await actingUser(req);
   const { id, runId } = req.params as RunParams;
-  const b = z.object({ automation: z.unknown(), consent: z.boolean().optional() }).parse(req.body);
-  return updateOnboardingAutomation(id, runId, b.automation, !!b.consent, { userId: dev.id });
-});
-
-app.patch("/repos/:id/onboarding/runs/:runId/model-choices", async (req) => {
-  const dev = await actingUser(req);
-  const { id, runId } = req.params as RunParams;
-  const b = z.object({ choices: z.unknown() }).parse(req.body);
-  return updateOnboardingModelChoices(id, runId, b.choices, { userId: dev.id });
+  const b = z.object({ automation: z.unknown() }).parse(req.body);
+  return updateOnboardingAutomation(id, runId, b.automation, { userId: dev.id });
 });
 
 app.get("/repos/:id/onboarding/runs/:runId/file", async (req) => {
@@ -430,6 +477,37 @@ app.get("/repos/:id/onboarding/runs/:runId/file", async (req) => {
   const { id, runId } = req.params as RunParams;
   const q = z.object({ path: z.string().min(1) }).parse(req.query);
   return getOnboardingFileVersions(id, runId, q.path);
+});
+
+app.get("/repos/:id/onboarding/runs/:runId/files", async (req) => {
+  await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return getOnboardingChangedFiles(id, runId);
+});
+
+/* ── the coach: what continues after the run ── */
+
+app.get("/repos/:id/coach", async (req) => {
+  await actingUser(req);
+  return coachView((req.params as { id: string }).id);
+});
+
+app.post("/repos/:id/coach/proposals/:proposalId/decide", async (req) => {
+  const dev = await actingUser(req);
+  const { id, proposalId } = req.params as { id: string; proposalId: string };
+  const b = z.object({ decision: z.enum(["approve", "decline"]), reason: z.string().max(1000).nullish() }).parse(req.body);
+  const decided = await decideProposal(id, proposalId, { userId: dev.id }, b);
+  // An approved proposal is applied the only way the repository is ever written to: a run, on its own branch, delivered as a pull request.
+  if (b.decision === "approve") {
+    const run = await startOnboardingRun(id, { userId: dev.id }, { kind: "coach", proposalIds: [proposalId] });
+    return { ...decided, runId: run.runId };
+  }
+  return decided;
+});
+
+app.post("/coach/recheck", async (req) => {
+  await actingUser(req);
+  return recheckMarketplaceSources();
 });
 
 /* ── the one chat (claude-in-dcc §4–§7): one dock over every screen, a conversation per topic ── */
@@ -1788,6 +1866,8 @@ if (import.meta.main) {
   // Retention (claude-in-dcc §9.10): expired conversations lose their text
   // once a day, inside this process — never a second process on the database.
   scheduleRetention(app.log);
+  // The coach's weekly "new in the world": every remembered marketplace source is looked at again.
+  scheduleCoach(app.log);
 
   // Graceful shutdown — PGlite's embedded Postgres can leave .pgdata
   // un-openable if the process is killed mid-write, so always close it.

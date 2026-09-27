@@ -1,0 +1,361 @@
+{
+ "name": "pydatasci-handbook",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/pydatasci-handbook",
+ "languages": [
+  {
+   "language": "Jupyter",
+   "files": 136,
+   "lines": 120795
+  },
+  {
+   "language": "Python",
+   "files": 10,
+   "lines": 637
+  },
+  {
+   "language": "HTML",
+   "files": 10,
+   "lines": 0
+  },
+  {
+   "language": "Markdown",
+   "files": 4,
+   "lines": 0
+  },
+  {
+   "language": "CSS",
+   "files": 4,
+   "lines": 0
+  },
+  {
+   "language": "YAML",
+   "files": 1,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "jupyter",
+  "jupyter notebooks (136)",
+  "notebook",
+  "numpy",
+  "pandas",
+  "scikit-learn"
+ ],
+ "package_managers": [
+  "conda",
+  "pip"
+ ],
+ "build": {
+  "system": [
+   "python packaging"
+  ],
+  "commands": []
+ },
+ "tests": {
+  "frameworks": [],
+  "test_files": 0,
+  "test_dirs": []
+ },
+ "lint_format": [],
+ "ci": {
+  "present": false,
+  "systems": [],
+  "workflows": [],
+  "commands": []
+ },
+ "monorepo": {
+  "is_monorepo": false,
+  "workspaces": [],
+  "packages": []
+ },
+ "generated_code": {
+  "paths": [],
+  "header_marked_files": 0,
+  "header_sample": [],
+  "header_dirs": []
+ },
+ "secrets": {
+  "total": 0,
+  "by_kind": {},
+  "files": [],
+  "sensitive_files": [],
+  "in_test_files": 0,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {},
+ "ai_config": {
+  "present": false,
+  "files": [],
+  "count": 0,
+  "kinds": [],
+  "sizes": {}
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 3699,
+  "docs_dir": false,
+  "docs_files": 0,
+  "adrs": [],
+  "contributing": [],
+  "architecture_docs": [],
+  "license": [],
+  "changelog": [],
+  "license_kind": "none"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 0,
+  "bat_cmd": 0,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": false,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 264,
+  "code_lines": 121432,
+  "bytes_on_disk_excl_git": 38521992,
+  "largest_files": [
+   {
+    "path": "notebooks_v1/04.13-Geographic-Data-With-Basemap.ipynb",
+    "bytes": 2737742
+   },
+   {
+    "path": "notebooks_v1/05.11-K-Means.ipynb",
+    "bytes": 2107550
+   },
+   {
+    "path": "notebooks_v1/06.00-Figure-Code.ipynb",
+    "bytes": 1846017
+   },
+   {
+    "path": "notebooks/05.11-K-Means.ipynb",
+    "bytes": 1750202
+   },
+   {
+    "path": "notebooks/06.00-Figure-Code.ipynb",
+    "bytes": 1681315
+   },
+   {
+    "path": "notebooks_v1/05.10-Manifold-Learning.ipynb",
+    "bytes": 1558332
+   },
+   {
+    "path": "notebooks_v1/05.12-Gaussian-Mixtures.ipynb",
+    "bytes": 1135277
+   },
+   {
+    "path": "notebooks_v1/04.14-Visualization-With-Seaborn.ipynb",
+    "bytes": 1071842
+   }
+  ],
+  "top_level_dirs": [
+   "notebooks",
+   "notebooks_v1",
+   "notebooks_v2",
+   "tools",
+   "website"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "d66231454ef753818dc9213c9b5942e067266966",
+  "tracked_files": 264,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 235,
+  "shallow": false,
+  "last_commit_date": "2023-05-05",
+  "first_commit_date_in_clone": "2016-08-10",
+  "authors_in_clone": 18,
+  "hot_files": [
+   {
+    "path": "README.md",
+    "changes": 40,
+    "authors": 4
+   },
+   {
+    "path": "notebooks/00.00-Preface.ipynb",
+    "changes": 13,
+    "authors": 2
+   },
+   {
+    "path": "notebooks/01.08-More-IPython-Resources.ipynb",
+    "changes": 12,
+    "authors": 2
+   },
+   {
+    "path": "notebooks/02.06-Boolean-Arrays-and-Masks.ipynb",
+    "changes": 12,
+    "authors": 3
+   },
+   {
+    "path": "notebooks/05.02-Introducing-Scikit-Learn.ipynb",
+    "changes": 12,
+    "authors": 3
+   },
+   {
+    "path": "notebooks/01.06-Errors-and-Debugging.ipynb",
+    "changes": 11,
+    "authors": 2
+   },
+   {
+    "path": "notebooks/03.05-Hierarchical-Indexing.ipynb",
+    "changes": 11,
+    "authors": 1
+   },
+   {
+    "path": "notebooks/05.05-Naive-Bayes.ipynb",
+    "changes": 11,
+    "authors": 3
+   },
+   {
+    "path": "notebooks/01.00-IPython-Beyond-Normal-Python.ipynb",
+    "changes": 10,
+    "authors": 1
+   },
+   {
+    "path": "notebooks/01.02-Shell-Keyboard-Shortcuts.ipynb",
+    "changes": 10,
+    "authors": 1
+   },
+   {
+    "path": "notebooks/01.03-Magic-Commands.ipynb",
+    "changes": 10,
+    "authors": 1
+   },
+   {
+    "path": "notebooks/01.04-Input-Output-History.ipynb",
+    "changes": 10,
+    "authors": 1
+   },
+   {
+    "path": "notebooks/01.05-IPython-And-Shell-Commands.ipynb",
+    "changes": 10,
+    "authors": 1
+   },
+   {
+    "path": "notebooks/01.07-Timing-and-Profiling.ipynb",
+    "changes": 10,
+    "authors": 1
+   },
+   {
+    "path": "notebooks/03.13-Further-Resources.ipynb",
+    "changes": 10,
+    "authors": 1
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "notebooks",
+    "changes": 595,
+    "authors": 13
+   },
+   {
+    "dir": "code_listings",
+    "changes": 110,
+    "authors": 1
+   },
+   {
+    "dir": "notebooks_v1",
+    "changes": 70,
+    "authors": 1
+   },
+   {
+    "dir": "notebooks/figures",
+    "changes": 67,
+    "authors": 1
+   },
+   {
+    "dir": ".",
+    "changes": 64,
+    "authors": 6
+   },
+   {
+    "dir": "notebooks_v1/figures",
+    "changes": 36,
+    "authors": 1
+   },
+   {
+    "dir": "website",
+    "changes": 25,
+    "authors": 2
+   },
+   {
+    "dir": "website/theme",
+    "changes": 22,
+    "authors": 1
+   },
+   {
+    "dir": "tools",
+    "changes": 16,
+    "authors": 1
+   },
+   {
+    "dir": "website/content",
+    "changes": 14,
+    "authors": 1
+   },
+   {
+    "dir": "notebooks/data",
+    "changes": 9,
+    "authors": 1
+   },
+   {
+    "dir": "notebooks_v1/data",
+    "changes": 8,
+    "authors": 1
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "notebooks/00.00-Preface.ipynb",
+     "notebooks/01.00-IPython-Beyond-Normal-Python.ipynb",
+     "notebooks/01.01-Help-And-Documentation.ipynb",
+     "notebooks/01.02-Shell-Keyboard-Shortcuts.ipynb",
+     "notebooks/01.03-Magic-Commands.ipynb",
+     "notebooks/01.04-Input-Output-History.ipynb",
+     "notebooks/01.05-IPython-And-Shell-Commands.ipynb",
+     "notebooks/01.06-Errors-and-Debugging.ipynb",
+     "notebooks/01.07-Timing-and-Profiling.ipynb",
+     "notebooks/01.08-More-IPython-Resources.ipynb"
+    ],
+    "times": 2
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "README.md",
+    "b": "notebooks/Index.ipynb",
+    "times": 4
+   }
+  ],
+  "commits_analyzed": 207,
+  "churn_by_ext": {
+   ".ipynb": 772,
+   ".png": 103,
+   ".md": 52,
+   ".py": 35,
+   ".csv": 24,
+   "": 17,
+   ".html": 12,
+   ".jpg": 11
+  }
+ }
+}

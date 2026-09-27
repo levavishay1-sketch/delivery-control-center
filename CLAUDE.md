@@ -71,6 +71,7 @@ npm run -w @dcc/core prove:retention  # chat-retention proofs
 npm run -w @dcc/core prove:built-on   # a task developed before its dependency, merging it in, two tasks on one file, a renamed key (own DB + git, safe with the API up)
 npm run -w @dcc/core prove:checks     # every task's checks (build → tests), its status, the done gate (same)
 npm run -w @dcc/core prove:manual     # a task developed by a person: the mark, the report, each check by hand (same)
+npm run -w @dcc/core prove:onboarding # the whole onboarding run on the kit's repository: diagnosis, rules, trial, cards, build with real hook checks, delivery (same)
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run -w @dcc/web build      # production build of the web app
@@ -86,12 +87,16 @@ its own file, never `@dcc/core`'s index or `@dcc/db`** — that opens the PGlite
 directory, which is unsafe while the API is up. Anything that needs the database
 stays a `dev:prove` / `smoke` / `prove:*` script.
 
-Repository onboarding (`openspec/changes/repository-onboarding-native-init`)
-runs the real, interactive Claude Code (`/init` with `CLAUDE_CODE_NEW_INIT=1`)
-in a pseudo-terminal on the DCC machine, through `@lydell/node-pty`'s prebuilt
-binary; the screen reaches it over a WebSocket on the same `/api` proxy.
-Restarting the API disconnects a live session — the run's screen reopens the
-same conversation (`--resume`).
+Repository onboarding (`openspec/changes/repository-coach`) is one fixed
+process — connect, diagnose (no model), processes and the agent test, a trial
+run, component cards with their evidence, a verified build, delivery — whose
+result differs per repository, and a coach that keeps proposing afterwards.
+The rules are data (`packages/core/src/repo-onboarding/rules.json`); the
+reusable templates are the operator catalog (`.../repo-onboarding/catalog/`).
+The `/init` draft session inside the plan step is the real, interactive Claude
+Code in a pseudo-terminal (`@lydell/node-pty`); the screen reaches it over a
+WebSocket on the same `/api` proxy, and an API restart disconnects it — the
+run's screen reopens the same conversation (`--resume`).
 
 ## Git flow — one project branch, task branches under it
 

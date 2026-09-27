@@ -19,7 +19,7 @@ import { Repositories } from "./screens/Repositories.tsx";
 import { PullRequests } from "./screens/PullRequests.tsx";
 import { PullRequestDetailScreen, type Tab } from "./screens/PullRequestDetail.tsx";
 import { PullRequestConflictScreen } from "./screens/PullRequestConflict.tsx";
-import { OnboardingScreen } from "./screens/onboarding/OnboardingScreen.tsx";
+import { RepoDossier } from "./screens/repo/RepoDossier.tsx";
 import { ClaudeCenter, type CenterTab } from "./screens/ClaudeCenter.tsx";
 import { ClaudeChat } from "./claude/ClaudeChat.tsx";
 import { Stub } from "./screens/Stub.tsx";
@@ -73,7 +73,7 @@ export function App() {
       ? <PullRequestConflictScreen repoId={repoId!} number={Number(num)} back={() => nav(`#/pull-requests/${repoId}/${num}`)} />
       : <PullRequestDetailScreen repoId={repoId!} number={Number(num)} tab={(tab as Tab) || "overview"} nav={nav} query={hash.split("?")[1] ?? ""} />;
   }
-  else if (path.startsWith("/repo/")) screen = <OnboardingScreen id={path.slice(6)} nav={nav} />;
+  else if (path.startsWith("/repo/")) screen = <RepoDossier id={path.slice(6)} nav={nav} />;
   else if (path === "/work") screen = <WorkList nav={nav} query={hash.split("?")[1] ?? ""} />;
   else if (path === "/alerts") screen = <Alerts nav={nav} />;
   else if (path === "/budgets") screen = <Budgets />;

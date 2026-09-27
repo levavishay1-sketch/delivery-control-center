@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { cancelCodeQuestion, cancelProposal, getProposalPreview, runCodeQuestion, runProposal, type ChatMessage, type DeclaredCostPayload, type ProposalPayload } from "../api.ts";
 import { PromptPreviewModal } from "../ui.tsx";
-import { errText } from "../screens/onboarding/labels.ts";
+import { errText } from "../api.ts";
 import { chatChanged } from "./context.ts";
 import { capabilityLabel, effortLabel, fmtUsd, modelLabel } from "./labels.ts";
 

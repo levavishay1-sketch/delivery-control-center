@@ -14,7 +14,7 @@ const STATUS_HE: Record<OnboardingStatus, { label: string; tone: "inactive" | "w
 };
 
 type RepoRow = { id: string; name: string; adoRepoRef: string | null; clientId: string | null; clientName: string | null; linkedClients: number };
-type Latest = { status: OnboardingStatus } | "NONE";
+type Latest = { status: OnboardingStatus; kind: string } | "NONE";
 
 /**
  * Top-level Repositories screen — every repo across every client, one
@@ -31,7 +31,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
       setRows(r.repos);
       for (const repo of r.repos) {
         if (!repo.clientId) continue;
-        getLatestOnboardingRun(repo.id).then((v) => setStates((s) => ({ ...s, [repo.id]: v ? { status: v.status } : "NONE" }))).catch(() => {});
+        getLatestOnboardingRun(repo.id).then((v) => setStates((s) => ({ ...s, [repo.id]: v ? { status: v.status, kind: v.kind } : "NONE" }))).catch(() => {});
       }
     });
   };
@@ -49,7 +49,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
       {modal && <NewRepo onClose={() => setModal(false)} onDone={() => { setModal(false); reload(); }} />}
       <div className="panel" style={{ padding: 0, overflow: "hidden" }}>
         <table className="wtable">
-          <thead><tr><th>Repository<Info k="repository" /></th><th>לקוח</th><th>הטמעת AI<Info k="onboarding_status" /></th><th>Git<Info k="git_connection" /></th></tr></thead>
+          <thead><tr><th>Repository<Info k="repository" /></th><th>לקוח</th><th>התיק של הריפו<Info k="onboarding_status" /></th><th>Git<Info k="git_connection" /></th></tr></thead>
           <tbody>
             {rows.map((r) => {
               const st = r.clientId ? states[r.id] : undefined;
@@ -70,7 +70,7 @@ export function Repositories({ nav }: { nav: (h: string) => void }) {
                     {!r.clientId
                       ? <span style={{ fontSize: 11, color: "var(--ink-400)" }}>לא זמין ל-repo משותף</span>
                       : info
-                        ? <Pill tone={info.tone}>{info.label}</Pill>
+                        ? <><Pill tone={info.tone}>{info.label}</Pill>{st && st !== "NONE" && st.kind === "coach" && <span className="rd-chip det" style={{ marginInlineStart: 6 }}>מאמן</span>}</>
                         : st === "NONE" ? <span style={{ fontSize: 11, color: "var(--ink-400)" }}>לא התחיל</span>
                         : <span style={{ fontSize: 11, color: "var(--ink-400)" }}>טוען…</span>}
                   </td>

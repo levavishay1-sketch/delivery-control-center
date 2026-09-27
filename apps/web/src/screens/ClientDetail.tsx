@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { checkConnection, deleteClient, deleteConnection, deleteRepo, getClient, getClientAdoTasks, unlinkClientRepo, approveTask, REQ_TYPE_HE, type AdoTasks, type ClientDetail as CD, type Requirement } from "../api.ts";
 import { PageHead, Pill, TaskStatusPill } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 import { ConnectAdo, EditClient, EditRepo, ImportCsv, LinkRepo, NewRequirement } from "../forms.tsx";
 
 const PH: Record<string, { label: string; tone: string }> = {

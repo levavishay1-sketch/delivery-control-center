@@ -1,0 +1,158 @@
+{
+ "name": "spring-petclinic",
+ "rules_fired": [
+  "R03",
+  "R04",
+  "R07",
+  "R13",
+  "R17",
+  "R20",
+  "R22a",
+  "R23",
+  "R27",
+  "R28"
+ ],
+ "component_count": 15,
+ "by_kind": {
+  "skill": 4,
+  "rule": 5,
+  "doc": 1,
+  "agent": 1,
+  "mcp": 1,
+  "scaffold": 1,
+  "hook": 1,
+  "runner": 1
+ },
+ "components": [
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (./mvnw -B verify)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "junit with 20 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 3 workflows) already encodes the project's definition of green: ./gradlew build; ./mvnw -B verify"
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for src/main"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to src/main"
+    }
+   ],
+   "reason": "src/main changed 330 times by 40 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R13",
+   "signal": "external system: relational database",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: schema changes go through the migration tool (PostgreSQL, MySQL/MariaDB); no ad-hoc SQL"
+    },
+    {
+     "kind": "mcp",
+     "name": "read-only DB MCP candidate - only if a local/compose DB exists (compose present)"
+    }
+   ],
+   "reason": "PostgreSQL, MySQL/MariaDB referenced in manifests/compose"
+  },
+  {
+   "rule": "R17",
+   "signal": "no AI configuration at all",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "CLAUDE.md from the diagnosis: build=./mvnw package; ./gradlew build; test=./mvnw -B verify; lint=checkstyle, spring-javaformat, .editorconfig; layout"
+    }
+   ],
+   "reason": "no CLAUDE.md/AGENTS.md/cursor/copilot - the agent starts from zero facts; the diagnosis provides them"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run spring-javaformat on the edited file"
+    }
+   ],
+   "reason": "checkstyle, spring-javaformat, .editorconfig configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R22a",
+   "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: read README.md before planning"
+    },
+    {
+     "kind": "skill",
+     "name": "docs-sync skill: a change that alters behaviour updates README.md"
+    }
+   ],
+   "reason": "README 10.3 KB, 0 docs files, arch docs: none - the answers exist; the agent must be pointed at them"
+  },
+  {
+   "rule": "R23",
+   "signal": "devcontainer / Dockerfile / compose",
+   "components": [
+    {
+     "kind": "runner",
+     "name": "run the agent inside devcontainer, Dockerfile, compose; same toolchain as CI"
+    }
+   ],
+   "reason": "devcontainer, Dockerfile, compose present - the reproducible environment already exists"
+  },
+  {
+   "rule": "R27",
+   "signal": "several build systems in one repo",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: keep maven + gradle in sync (23 co-changes in history)"
+    }
+   ],
+   "reason": "maven + gradle both present - a dependency added to one and not the other breaks CI on the other"
+  },
+  {
+   "rule": "R28",
+   "signal": "large contributor base",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "contribution-style skill: PR format, commit convention, CONTRIBUTING (no CONTRIBUTING)"
+    }
+   ],
+   "reason": "66 authors in the sample - output must look like everyone else's PR to be merged"
+  }
+ ]
+}

@@ -9,7 +9,7 @@ import { CostLine } from "../claude/CostLine.tsx";
 import { Info } from "../claude/Info.tsx";
 import { chatCommand, useClaudeContext } from "../claude/context.ts";
 import { CAPABILITY_HE, EFFORTS, EFFORT_HE, MODEL_OPTIONS, OUTCOME_HE, capabilityLabel, effortLabel, fmtInt, fmtUsd, fmtWhen, modelLabel, outcomeOf, screenLabel } from "../claude/labels.ts";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 
 /**
  * Claude's control center (claude-in-dcc §9): the one place with every

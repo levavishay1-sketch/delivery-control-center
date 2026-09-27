@@ -20,7 +20,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const FAKE = `
-import { existsSync, writeFileSync, appendFileSync } from "node:fs";
+import { existsSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 let raw = "", done = false;
 // A run DCC can steer sends its prompt as one stream-json line and keeps stdin open.
 process.stdin.on("data", (d) => {
@@ -28,9 +28,13 @@ process.stdin.on("data", (d) => {
   const first = raw.split("\\n")[0];
   if (!done && raw.includes("\\n") && first.startsWith("{")) { done = true; answer(JSON.parse(first).message.content[0].text); }
 }).on("end", () => { if (!done) { done = true; answer(raw); } });
-function answer(input) {
+function answer(rawInput) {
+  // A lean call carries its whole instruction as the system prompt file; the stdin message is only "answer now".
+  const sysIdx = process.argv.indexOf("--system-prompt-file");
+  const input = sysIdx >= 0 ? readFileSync(process.argv[sysIdx + 1], "utf8") + "\\n" + rawInput : rawInput;
   appendFileSync(process.env.FAKE_CLAUDE_LOG, JSON.stringify({ args: process.argv.slice(2), prompt: input }) + "\\n");
   let out;
+  let plain = null;
   if (input.includes("You are VERIFYING a change in this repository")) {
     const block = input.split("do not skip any:\\n")[1]?.split("\\n\\n")[0] ?? "";
     const checks = block.split("\\n").map((l) => l.match(/^#(\\d+)(?: \\[(\\w+)\\])?: (.*)$/)).filter(Boolean).map((m) => {
@@ -41,13 +45,46 @@ function answer(input) {
       return { seq, passed: true, detail: "ok" + (kind ? " (" + kind + ")" : ""), likelyCause: null };
     });
     out = { summary: "checked", checks };
+  } else if (input.includes("You are mapping how work is actually done in the repository")) {
+    // The onboarding's processes call: two processes, one step that needs external information, one recurring procedure.
+    out = { processes: [
+      { key: "release", title: "Release a version", source: "docs", evidence: ["package.json build script"], steps: [
+        { key: "build", title: "Build the package", what: "run npm run build, then check the output", agentTest: { judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "a fixed procedure" } },
+        { key: "publish", title: "Publish", what: "publish to the registry", agentTest: { judgment: false, externalInfo: true, readsALot: false, parallel: false, failsToday: false, why: "needs registry credentials" } } ] },
+      { key: "edit_base", title: "Change base.txt", source: "git", evidence: ["base.txt in every commit"], steps: [
+        { key: "edit", title: "Edit base.txt", what: "edit the file", agentTest: { judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "one action" } } ] } ] };
+  } else if (input.includes("You are working in this repository with no instructions")) {
+    // A trial task: honest about tests, right about the build, lost on entry points (so one failure reaches the plan).
+    const task = input.split("TASK:\\n")[1]?.split("\\n")[0] ?? "";
+    plain = /automated tests/.test(task) ? "I looked for a test runner. There is no test framework in this repository.\\nRESULT: there are no automated tests"
+      : /built\\?/.test(task) || /build/.test(task) ? "package.json has a build script.\\nRESULT: npm run build"
+      : /entry points/.test(task) ? "I could not find any entry point.\\nRESULT: could not find"
+      : "Looked around.\\nRESULT: done";
+  } else if (input.includes("You judge whether an AI coding agent did a task correctly")) {
+    out = /could not find/.test(input) ? { passed: false, failureKind: "missing_fact", detail: "הסוכן לא מצא את נקודת הכניסה" } : { passed: true, failureKind: null, detail: "עבר" };
+  } else if (input.includes("You search the web for ready-made components")) {
+    out = { sources: [{ kind: "lsp", name: "typescript-lsp", url: "https://github.com/anthropics/claude-plugins-official/tree/main/plugins/typescript-lsp", publisher: "Anthropic", description: "Language server plugin", tags: ["npm", "typescript"], official: true, why: "navigation", toolCount: null, readOnly: null, license: "MIT", lastActivity: "2026-09" },
+      { kind: "mcp", name: "Random MCP", url: "https://github.com/someone/random-mcp", publisher: "someone", description: "73 tools", tags: ["npm"], official: true, why: "everything", toolCount: 73, readOnly: false, license: null, lastActivity: "2020-01" }] };
+  } else if (input.includes("You review a plan for setting up an AI coding agent")) {
+    out = { missing: [{ kind: "doc", title: "מסמך הרצה", why: "אין README ואין הוראות הרצה" }], redundant: [] };
+  } else if (input.includes("A person asked, in their own words, for a helper")) {
+    out = { kind: "skill", title: "skill: עדכון base.txt", what: "נוהל לעדכון הקובץ", questions: [{ key: "when", question_he: "מתי מריצים?", default: "אחרי כל שינוי" }] };
+  } else if (input.includes("You write ONE file for an AI coding agent's setup")) {
+    const format = input.split("FORMAT REQUIRED:\\n")[1] ?? "";
+    plain = /SKILL\\.md/.test(format) ? "---\\nname: update-base\\ndescription: Updates base.txt the way this repository does it. Use whenever base.txt must change.\\nallowed-tools: Read, Grep, Glob, Bash\\n---\\n\\n# Update base.txt\\n\\n1. Open \`base.txt\`.\\n2. Change the line.\\n3. Run \`npm run build\` and make sure it passes.\\n4. Do not touch \`package.json\`.\\n\\nThis skill exists because base.txt is in every commit of the history, and the build is the only gate.\\n"
+      : /subagent definition/.test(format) ? "---\\nname: publish-checker\\ndescription: Checks a release before it is published; call it when a version is about to go out.\\ntools: Glob, Grep, Read, Bash\\nmodel: sonnet\\n---\\n\\nYou check a release.\\n\\n- [ ] \`package.json\` version bumped\\n- [ ] \`npm run build\` passes\\n- [ ] \`base.txt\` unchanged\\n- [ ] no \`broken.txt\` present\\n\\nOutput: a JSON array of findings {file, line, severity, note}.\\n"
+      : /One paragraph/.test(format) ? "A small package used to prove DCC's onboarding: one file, base.txt, and a build script that fails while broken.txt exists."
+      : /body of the Markdown document/.test(format) ? "## Layout\\n\\n- \`base.txt\` — the one file\\n- \`package.json\` — the build script\\n\\n## Run\\n\\n\`npm run build\`\\n"
+      : /checklist/.test(format) ? "- [ ] \`base.txt\` unchanged unless the task says so\\n- [ ] \`npm run build\` passes\\n- [ ] no \`broken.txt\`\\n- [ ] \`package.json\` version bumped when releasing\\n- [ ] the change is small\\n- [ ] no secrets"
+      : "content";
   } else {
     const task = input.split("TASK — this is the instruction, follow it exactly:\\n")[1]?.split("\\n")[0] ?? "";
     const file = task.match(/write (\\S+)/)?.[1];
     if (file) writeFileSync(file, "made by " + task + "\\n");
     out = { summary: "did " + task, filesChanged: file ? [file] : [], testsRun: null, followUps: [], affectedConsumers: [] };
   }
-  process.stdout.write(JSON.stringify({ type: "result", result: JSON.stringify(out), total_cost_usd: 0, usage: { input_tokens: 1, output_tokens: 1 } }) + "\\n", () => process.exit(0));
+  const result = plain ?? JSON.stringify(out);
+  process.stdout.write(JSON.stringify({ type: "result", result, total_cost_usd: 0.01, usage: { input_tokens: 10, output_tokens: 5 } }) + "\\n", () => process.exit(0));
 }
 `;
 

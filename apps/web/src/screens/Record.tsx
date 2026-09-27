@@ -9,7 +9,7 @@ import {
   getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, verifyGap,
   type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 import { CardTitle, Pill, TypeChip } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";

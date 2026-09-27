@@ -1,0 +1,117 @@
+{
+ "name": "pydatasci-handbook",
+ "rules_fired": [
+  "R02",
+  "R05",
+  "R07",
+  "R17",
+  "R18",
+  "R21"
+ ],
+ "component_count": 13,
+ "by_kind": {
+  "scaffold": 3,
+  "hook": 2,
+  "report": 3,
+  "doc": 1,
+  "agent": 1,
+  "rule": 2,
+  "permission": 1
+ },
+ "components": [
+  {
+   "rule": "R02",
+   "signal": "no test framework detected",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "first-tests scaffold (one smoke test in the native framework)"
+    },
+    {
+     "kind": "hook",
+     "name": "Stop hook: build/compile gate (no test gate yet)"
+    },
+    {
+     "kind": "report",
+     "name": "explicitly NOT a test-writer agent: nothing to run it against"
+    }
+   ],
+   "reason": "no test framework found (0 test-like files) - an agent that 'adds tests' would invent a harness"
+  },
+  {
+   "rule": "R05",
+   "signal": "no CI",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "local verify script (build + tests) as the only gate"
+    },
+    {
+     "kind": "report",
+     "name": "report: no CI - agent output cannot be machine-checked before merge"
+    }
+   ],
+   "reason": "no CI config found - nothing defines green, so a minimal local gate must be created before agents change code"
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for notebooks"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to notebooks"
+    }
+   ],
+   "reason": "notebooks changed 595 times by 13 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R17",
+   "signal": "no AI configuration at all",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "CLAUDE.md from the diagnosis: build=(none inferable); test=-; lint=-; layout"
+    }
+   ],
+   "reason": "no CLAUDE.md/AGENTS.md/cursor/copilot - the agent starts from zero facts; the diagnosis provides them"
+  },
+  {
+   "rule": "R18",
+   "signal": "Jupyter notebooks",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: edit cells with NotebookEdit, never the raw .ipynb JSON; keep outputs as committed"
+    },
+    {
+     "kind": "hook",
+     "name": "PostToolUse: nbformat validate on any .ipynb write"
+    },
+    {
+     "kind": "permission",
+     "name": "deny bulk reformatters over notebooks/"
+    }
+   ],
+   "reason": "136 notebooks - a JSON-level edit corrupts them and the diff is unreviewable"
+  },
+  {
+   "rule": "R21",
+   "signal": "no formatter / linter",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: match the surrounding style; no reformatting of untouched lines"
+    },
+    {
+     "kind": "report",
+     "name": "report: no lint config - style drift is not machine-checked"
+    }
+   ],
+   "reason": "no lint/format config - a formatter hook would reformat files nobody formatted before"
+  }
+ ]
+}

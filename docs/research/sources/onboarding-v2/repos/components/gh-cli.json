@@ -1,0 +1,184 @@
+{
+ "name": "gh-cli",
+ "rules_fired": [
+  "R01",
+  "R03",
+  "R04",
+  "R07",
+  "R08",
+  "R09b",
+  "R16",
+  "R20",
+  "R22a",
+  "R23",
+  "R28",
+  "R30"
+ ],
+ "component_count": 18,
+ "by_kind": {
+  "hook": 3,
+  "rule": 6,
+  "skill": 5,
+  "doc": 2,
+  "agent": 1,
+  "runner": 1
+ },
+ "components": [
+  {
+   "rule": "R01",
+   "signal": "generated code present (path markers or 'auto-generated' headers)",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse deny Edit/Write under generated dirs"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: these paths are generated; change the source and regenerate"
+    }
+   ],
+   "reason": "generated code in internal/codespaces/rpc/codespace, internal/codespaces/rpc/jupyter, internal/codespaces/rpc/ssh, internal/barista/observability, internal/gh/mock, pkg/cmd/codespace; editing it by hand is silently overwritten on the next build"
+  },
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (go test -tags=acceptance ./acceptance)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "go test with 422 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 15 workflows) already encodes the project's definition of green: make; go test -tags=acceptance ./acceptance; echo \"GOROOT=$(go env GOROOT)\" >> \"$GITHUB_ENV\""
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for pkg/cmd"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to pkg/cmd"
+    }
+   ],
+   "reason": "pkg/cmd changed 18773 times by 121 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R08",
+   "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "change-recipe skill for: third-party-licenses.darwin.md + third-party-licenses.linux.md + third-party-licenses.windows.md (32x)"
+    }
+   ],
+   "reason": "8 recurring file-sets in history - a recipe makes the agent touch all of them, not just the obvious one"
+  },
+  {
+   "rule": "R09b",
+   "signal": "secret-looking strings only in tests/fixtures",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: test fixtures contain fake keys - do not 'fix' or redact them"
+    },
+    {
+     "kind": "hook",
+     "name": "PreToolUse secret-scan on Write/Edit with a test-path allowlist"
+    }
+   ],
+   "reason": "23 hits, all in test files - fake keys; without an allowlist a naive scan hook blocks every test edit"
+  },
+  {
+   "rule": "R16",
+   "signal": "AGENTS.md / CLAUDE.md already present",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "delta only: append diagnosis facts missing from the existing file (build/test commands, generated paths, external systems - whichever the file lacks)"
+    }
+   ],
+   "reason": "instruction file exists (AGENTS.md, CLAUDE.md) - generate only what the diagnosis proves and the file lacks"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run golangci-lint on the edited file"
+    }
+   ],
+   "reason": "golangci-lint, .golangci.yml configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R22a",
+   "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: read docs/ before planning"
+    },
+    {
+     "kind": "skill",
+     "name": "docs-sync skill: a change that alters behaviour updates docs/"
+    }
+   ],
+   "reason": "README 6.1 KB, 70 docs files, arch docs: none - the answers exist; the agent must be pointed at them"
+  },
+  {
+   "rule": "R23",
+   "signal": "devcontainer / Dockerfile / compose",
+   "components": [
+    {
+     "kind": "runner",
+     "name": "run the agent inside devcontainer; same toolchain as CI"
+    }
+   ],
+   "reason": "devcontainer present - the reproducible environment already exists"
+  },
+  {
+   "rule": "R28",
+   "signal": "large contributor base",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "contribution-style skill: PR format, commit convention, CONTRIBUTING (.github/CONTRIBUTING.md)"
+    }
+   ],
+   "reason": "173 authors in the sample - output must look like everyone else's PR to be merged"
+  },
+  {
+   "rule": "R30",
+   "signal": "lock file churn / dependency-bump shape",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: dependency bumps = go.mod + go.sum together; never edit a lock file by hand"
+    }
+   ],
+   "reason": "go.mod + go.sum co-change 211 times - the most frequent change shape in history is a dependency bump"
+  }
+ ]
+}

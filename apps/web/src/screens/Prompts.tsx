@@ -3,7 +3,7 @@ import { getPrompts, updatePromptTemplate, type PromptTemplate } from "../api.ts
 import { CardTitle, PageHead, PromptText } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
 import { effortLabel, modelLabel } from "../claude/labels.ts";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 
 /**
  * The system's own prompt library — every instruction DCC sends to Claude is

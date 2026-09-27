@@ -1,0 +1,940 @@
+{
+ "name": "cline",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/cline",
+ "languages": [
+  {
+   "language": "TypeScript",
+   "files": 3195,
+   "lines": 981961
+  },
+  {
+   "language": "Markdown",
+   "files": 195,
+   "lines": 0
+  },
+  {
+   "language": "JSON",
+   "files": 173,
+   "lines": 0
+  },
+  {
+   "language": "JavaScript",
+   "files": 44,
+   "lines": 8554
+  },
+  {
+   "language": "CSS",
+   "files": 32,
+   "lines": 0
+  },
+  {
+   "language": "YAML",
+   "files": 25,
+   "lines": 0
+  },
+  {
+   "language": "Protobuf",
+   "files": 24,
+   "lines": 0
+  },
+  {
+   "language": "Shell",
+   "files": 17,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "@biomejs/biome",
+  "@playwright/test (sub-package)",
+  "@tauri-apps/api (sub-package)",
+  "mocha (sub-package)",
+  "next (sub-package)",
+  "react (sub-package)",
+  "tailwindcss (sub-package)",
+  "vite (sub-package)",
+  "vitest",
+  "vitest (sub-package)"
+ ],
+ "package_managers": [
+  "bun"
+ ],
+ "build": {
+  "system": [
+   "package.json scripts"
+  ],
+  "commands": [
+   "bun run build   # -> bun run clean && bun install && bun run build:sdk && bun -F @cline/cli build"
+  ]
+ },
+ "tests": {
+  "frameworks": [
+   "package.json:test -> bun --parallel -F './sdk/packages/**' -F @cline/cli -F @cline/cline-hub -F @clin",
+   "vitest"
+  ],
+  "test_files": 946,
+  "test_dirs": [
+   [
+    ".github",
+    1
+   ],
+   [
+    "apps",
+    601
+   ],
+   [
+    "evals",
+    4
+   ],
+   [
+    "sdk",
+    340
+   ]
+  ]
+ },
+ "lint_format": [
+  "@biomejs/biome",
+  "biome.json"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/cli-publish.yml",
+    "name": "cli-publish"
+   },
+   {
+    "file": ".github/workflows/desktop-publish.yml",
+    "name": "desktop-publish"
+   },
+   {
+    "file": ".github/workflows/desktop-test.yml",
+    "name": "desktop-test"
+   },
+   {
+    "file": ".github/workflows/ext-jb-test-integration.yml",
+    "name": "ext-jb-test-integration"
+   },
+   {
+    "file": ".github/workflows/ext-vscode-ab-package.yml",
+    "name": "ext-vscode-ab-package"
+   },
+   {
+    "file": ".github/workflows/ext-vscode-publish-legacy.yml",
+    "name": "ext-vscode-publish-legacy"
+   },
+   {
+    "file": ".github/workflows/ext-vscode-publish-nightly.yml",
+    "name": "ext-vscode-publish-nightly"
+   },
+   {
+    "file": ".github/workflows/ext-vscode-publish-stable.yml",
+    "name": "ext-vscode-publish-stable"
+   },
+   {
+    "file": ".github/workflows/ext-vscode-publish.yml",
+    "name": "ext-vscode-publish"
+   },
+   {
+    "file": ".github/workflows/ext-vscode-test-e2e.yml",
+    "name": "ext-vscode-test-e2e"
+   },
+   {
+    "file": ".github/workflows/ext-vscode-test.yml",
+    "name": "ext-vscode-test"
+   },
+   {
+    "file": ".github/workflows/repo-delete-agent-promo-comments.yml",
+    "name": "repo-delete-agent-promo-comments"
+   },
+   {
+    "file": ".github/workflows/repo-label-issues.yml",
+    "name": "repo-label-issues"
+   },
+   {
+    "file": ".github/workflows/repo-stale-issues.yml",
+    "name": "repo-stale-issues"
+   },
+   {
+    "file": ".github/workflows/repo-strip-agent-badges.yml",
+    "name": "repo-strip-agent-badges"
+   },
+   {
+    "file": ".github/workflows/sdk-publish.yml",
+    "name": "sdk-publish"
+   },
+   {
+    "file": ".github/workflows/sdk-test.yml",
+    "name": "sdk-test"
+   },
+   {
+    "file": ".github/workflows/ui-publish.yml",
+    "name": "ui-publish"
+   }
+  ],
+  "commands": [
+   "bun run build:sdk",
+   "NODE_FILE=\"node_modules/better-sqlite3/build/Release/better_sqlite3.node\"",
+   "npm install -g @vscode/vsce ovsx",
+   "NPM_VERSION=$(npm --version)",
+   "bun run test",
+   "bun test scripts/desktop-startup.test.ts",
+   "npm --prefix apps/vscode install --include=optional",
+   "bun script/build.ts --install-native-variants --skip-sdk-build",
+   "npm --prefix apps/vscode ci",
+   "npm --prefix apps/vscode/webview-ui ci",
+   "npm run ci:check-all",
+   "npm run ci:build",
+   "npm run test:unit",
+   "xvfb-run -a npm run test:coverage",
+   "npm run package"
+  ],
+  "workflow_count": 18
+ },
+ "monorepo": {
+  "is_monorepo": true,
+  "workspaces": [
+   "sdk/packages/*",
+   "apps/*",
+   "apps/vscode/webview-ui",
+   "apps/vscode/testing-platform",
+   "apps/cline-hub/src/webview",
+   "apps/examples/*",
+   "apps/examples/vscode/src/webview",
+   "sdk/examples",
+   "sdk/examples/plugins/*"
+  ],
+  "packages": [
+   "apps/cli",
+   "apps/cline-hub",
+   "apps/examples/cli-agent",
+   "apps/examples/cline-core-cli-agent",
+   "apps/examples/code-review-bot",
+   "apps/examples/desktop-app",
+   "apps/examples/menubar",
+   "apps/examples/multi-agent",
+   "apps/examples/quickstart",
+   "apps/examples/vscode",
+   "apps/vscode",
+   "apps/vscode-rollout",
+   "apps/vscode/testing-platform",
+   "apps/vscode/webview-ui",
+   "docs",
+   "evals",
+   "evals/analysis",
+   "sdk/examples",
+   "sdk/packages/agents",
+   "sdk/packages/core",
+   "sdk/packages/llms",
+   "sdk/packages/sdk",
+   "sdk/packages/shared",
+   "sdk/packages/ui"
+  ],
+  "package_count": 24
+ },
+ "generated_code": {
+  "paths": [
+   {
+    "dir": "apps/vscode/src/types",
+    "files": 2
+   },
+   {
+    "dir": "sdk/packages/llms/src/catalog",
+    "files": 2
+   },
+   {
+    "dir": "sdk/packages/llms/src/providers",
+    "files": 2
+   },
+   {
+    "dir": "apps/cli/src/tui/components",
+    "files": 1
+   },
+   {
+    "dir": "apps/examples/desktop-app",
+    "files": 1
+   },
+   {
+    "dir": "apps/vscode/src/exports",
+    "files": 1
+   },
+   {
+    "dir": "apps/vscode/webview-ui/src",
+    "files": 1
+   }
+  ],
+  "header_marked_files": 8,
+  "header_sample": [
+   "apps/vscode/src/shared/storage/__tests__/state-keys.test.ts",
+   "apps/vscode/standalone/runtime-files/vscode/vscode-stubs.js",
+   "sdk/packages/llms/src/catalog/catalog.generated.ts",
+   "sdk/packages/llms/src/catalog/cline-recommended.generated.ts",
+   "sdk/packages/llms/src/providers/provider-ids.generated.ts",
+   "sdk/packages/llms/src/providers/providers.generated.ts",
+   "sdk/packages/llms/src/providers/stream.ts",
+   "sdk/packages/ui/scripts/generate-theme.ts"
+  ],
+  "header_dirs": [
+   {
+    "dir": "sdk/packages/llms/src/providers",
+    "files": 3
+   },
+   {
+    "dir": "sdk/packages/llms/src/catalog",
+    "files": 2
+   },
+   {
+    "dir": "apps/vscode/src/shared/storage/__tests__",
+    "files": 1
+   },
+   {
+    "dir": "apps/vscode/standalone/runtime-files/vscode",
+    "files": 1
+   },
+   {
+    "dir": "sdk/packages/ui/scripts",
+    "files": 1
+   }
+  ]
+ },
+ "secrets": {
+  "total": 301,
+  "by_kind": {
+   "password_assignment": 277,
+   "slack_token": 2,
+   "aws_access_key": 22
+  },
+  "files": [
+   {
+    "path": "sdk/packages/llms/src/providers/gateway.test.ts",
+    "hits": 48
+   },
+   {
+    "path": "apps/vscode/src/sdk/model-catalog/store.test.ts",
+    "hits": 23
+   },
+   {
+    "path": "apps/vscode/src/sdk/model-catalog/effective-config.test.ts",
+    "hits": 17
+   },
+   {
+    "path": "sdk/packages/core/src/services/providers/local-provider-service.test.ts",
+    "hits": 14
+   },
+   {
+    "path": "apps/vscode/src/sdk/cline-session-factory.test.ts",
+    "hits": 12
+   },
+   {
+    "path": "apps/vscode/src/shared/remote-config/__tests__/schema.test.ts",
+    "hits": 12
+   },
+   {
+    "path": "apps/examples/desktop-app/sidecar/remote-session-credentials.test.ts",
+    "hits": 10
+   },
+   {
+    "path": "sdk/packages/core/src/runtime/host/local-runtime-host.test.ts",
+    "hits": 10
+   },
+   {
+    "path": "sdk/packages/core/src/services/storage/provider-settings-legacy-migration.test.ts",
+    "hits": 10
+   },
+   {
+    "path": "sdk/packages/llms/src/transcription.test.ts",
+    "hits": 10
+   },
+   {
+    "path": "sdk/packages/shared/src/remote-config/schema.test.ts",
+    "hits": 9
+   },
+   {
+    "path": "apps/vscode/src/core/controller/models/__tests__/providerCatalogHandlers.test.ts",
+    "hits": 8
+   },
+   {
+    "path": "sdk/packages/core/src/services/storage/provider-settings-manager.test.ts",
+    "hits": 8
+   },
+   {
+    "path": "apps/cli/src/commands/rpc-runtime/provider-registry.test.ts",
+    "hits": 6
+   },
+   {
+    "path": "sdk/packages/core/src/extensions/context/compaction.test.ts",
+    "hits": 6
+   },
+   {
+    "path": "sdk/packages/core/src/extensions/mcp/oauth.test.ts",
+    "hits": 6
+   },
+   {
+    "path": "apps/vscode/src/sdk/model-catalog/fingerprint.test.ts",
+    "hits": 5
+   },
+   {
+    "path": "sdk/packages/core/src/services/llms/provider-defaults.test.ts",
+    "hits": 5
+   },
+   {
+    "path": "sdk/packages/llms/src/providers/vendors/bedrock.test.ts",
+    "hits": 5
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/lib/streaming-transcription.test.ts",
+    "hits": 4
+   },
+   {
+    "path": "apps/vscode/webview-ui/src/components/settings/providers/GenericProviderSettings.test.tsx",
+    "hits": 4
+   },
+   {
+    "path": "sdk/packages/core/src/auth/provider-auth-registry.test.ts",
+    "hits": 4
+   },
+   {
+    "path": "sdk/packages/core/src/extensions/tools/executors/bash.test.ts",
+    "hits": 4
+   },
+   {
+    "path": "sdk/packages/shared/src/vcr.test.ts",
+    "hits": 4
+   },
+   {
+    "path": "apps/cli/src/commands/auth.test.ts",
+    "hits": 3
+   }
+  ],
+  "sensitive_files": [
+   "apps/vscode/.env.example"
+  ],
+  "in_test_files": 296,
+  "outside_tests": 5,
+  "dotenv_examples": [
+   "apps/vscode/.env.example"
+  ]
+ },
+ "external_systems": {
+  "gRPC/Protobuf": {
+   "count": 27,
+   "sample_files": [
+    "apps/vscode/package.json",
+    "apps/vscode/.env.example",
+    "apps/vscode/standalone/runtime-files/package.json",
+    "package.json"
+   ]
+  },
+  "SAP": {
+   "count": 6,
+   "sample_files": [
+    "package.json",
+    "sdk/packages/llms/package.json"
+   ]
+  },
+  "OpenAI API": {
+   "count": 5,
+   "sample_files": [
+    "apps/vscode/package.json",
+    "sdk/packages/llms/package.json",
+    "apps/examples/desktop-app/package.json"
+   ]
+  },
+  "OAuth/OIDC/Identity": {
+   "count": 4,
+   "sample_files": [
+    "apps/vscode/package.json"
+   ]
+  },
+  "Anthropic API": {
+   "count": 3,
+   "sample_files": [
+    "apps/vscode/package.json",
+    "sdk/packages/llms/package.json"
+   ]
+  },
+  "AWS SDK": {
+   "count": 3,
+   "sample_files": [
+    "sdk/packages/llms/package.json"
+   ]
+  },
+  "SMTP/email": {
+   "count": 1,
+   "sample_files": [
+    "apps/vscode/package.json"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": true,
+  "files": [
+   ".agents/skills/cline-sdk/SKILL.md",
+   ".agents/skills/cline-sdk/references/agent/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/agent/api.md",
+   ".agents/skills/cline-sdk/references/agent/gotchas.md",
+   ".agents/skills/cline-sdk/references/agent/patterns.md",
+   ".agents/skills/cline-sdk/references/clinecore/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/clinecore/api.md",
+   ".agents/skills/cline-sdk/references/clinecore/gotchas.md",
+   ".agents/skills/cline-sdk/references/clinecore/patterns.md",
+   ".agents/skills/cline-sdk/references/events/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/multi-agent/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/plugins/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/production/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/providers/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/scheduling/REFERENCE.md",
+   ".agents/skills/cline-sdk/references/tools/REFERENCE.md",
+   ".agents/skills/create-pull-request/SKILL.md",
+   ".agents/skills/opentui/SKILL.md",
+   ".agents/skills/opentui/references/animation/REFERENCE.md",
+   ".agents/skills/opentui/references/components/REFERENCE.md",
+   ".agents/skills/opentui/references/components/code-diff.md",
+   ".agents/skills/opentui/references/components/containers.md",
+   ".agents/skills/opentui/references/components/inputs.md",
+   ".agents/skills/opentui/references/components/text-display.md",
+   ".agents/skills/opentui/references/core/REFERENCE.md",
+   ".agents/skills/opentui/references/core/api.md",
+   ".agents/skills/opentui/references/core/configuration.md",
+   ".agents/skills/opentui/references/core/gotchas.md",
+   ".agents/skills/opentui/references/core/patterns.md",
+   ".agents/skills/opentui/references/keyboard/REFERENCE.md",
+   ".agents/skills/opentui/references/layout/REFERENCE.md",
+   ".agents/skills/opentui/references/layout/patterns.md",
+   ".agents/skills/opentui/references/react/REFERENCE.md",
+   ".agents/skills/opentui/references/react/api.md",
+   ".agents/skills/opentui/references/react/configuration.md",
+   ".agents/skills/opentui/references/react/gotchas.md",
+   ".agents/skills/opentui/references/react/patterns.md",
+   ".agents/skills/opentui/references/solid/REFERENCE.md",
+   ".agents/skills/opentui/references/solid/api.md",
+   ".agents/skills/opentui/references/solid/configuration.md",
+   ".agents/skills/opentui/references/solid/gotchas.md",
+   ".agents/skills/opentui/references/solid/patterns.md",
+   ".agents/skills/opentui/references/testing/REFERENCE.md",
+   ".claude/commands/hotfix-release.md",
+   ".claude/commands/release.md",
+   ".claude/hooks/claude-code-for-web-setup.sh",
+   ".claude/settings.json",
+   ".clinerules/bun-and-node.md",
+   ".clinerules/cline-overview.md",
+   ".clinerules/debug-harness.md",
+   ".clinerules/general.md",
+   ".clinerules/hooks/README.md",
+   ".clinerules/network.md",
+   ".clinerules/protobuf-development.md",
+   ".clinerules/sdk-migration.md",
+   ".clinerules/storage.md",
+   ".clinerules/workflows/address-pr-comments.md",
+   ".clinerules/workflows/find-pr-reviewers.md",
+   ".clinerules/workflows/git-branch-analysis.md",
+   ".clinerules/workflows/hotfix-release.md"
+  ],
+  "count": 70,
+  "kinds": [
+   ".agents/",
+   ".claude/",
+   "AGENTS.md",
+   "clinerules",
+   "copilot",
+   "other"
+  ],
+  "sizes": {
+   ".agents/skills/cline-sdk/SKILL.md": 8790,
+   ".agents/skills/cline-sdk/references/agent/REFERENCE.md": 3573,
+   ".agents/skills/cline-sdk/references/agent/api.md": 5214,
+   ".agents/skills/cline-sdk/references/agent/gotchas.md": 4363,
+   ".agents/skills/cline-sdk/references/agent/patterns.md": 5728,
+   ".agents/skills/cline-sdk/references/clinecore/REFERENCE.md": 4381,
+   ".agents/skills/cline-sdk/references/clinecore/api.md": 7111,
+   ".agents/skills/cline-sdk/references/clinecore/gotchas.md": 4988,
+   ".agents/skills/cline-sdk/references/clinecore/patterns.md": 6164,
+   ".agents/skills/cline-sdk/references/events/REFERENCE.md": 7743,
+   ".agents/skills/cline-sdk/references/multi-agent/REFERENCE.md": 4304,
+   ".agents/skills/cline-sdk/references/plugins/REFERENCE.md": 23366,
+   ".agents/skills/cline-sdk/references/production/REFERENCE.md": 5495,
+   ".agents/skills/cline-sdk/references/providers/REFERENCE.md": 5421,
+   ".agents/skills/cline-sdk/references/scheduling/REFERENCE.md": 5114,
+   ".agents/skills/cline-sdk/references/tools/REFERENCE.md": 7144,
+   ".agents/skills/create-pull-request/SKILL.md": 6224,
+   ".agents/skills/opentui/SKILL.md": 7603,
+   ".agents/skills/opentui/references/animation/REFERENCE.md": 8547,
+   ".agents/skills/opentui/references/components/REFERENCE.md": 4129,
+   ".agents/skills/opentui/references/components/code-diff.md": 13412,
+   ".agents/skills/opentui/references/components/containers.md": 7529,
+   ".agents/skills/opentui/references/components/inputs.md": 10288,
+   ".agents/skills/opentui/references/components/text-display.md": 7079,
+   ".agents/skills/opentui/references/core/REFERENCE.md": 4334,
+   ".agents/skills/opentui/references/core/api.md": 14485,
+   ".agents/skills/opentui/references/core/configuration.md": 4636,
+   ".agents/skills/opentui/references/core/gotchas.md": 7789,
+   ".agents/skills/opentui/references/core/patterns.md": 8769,
+   ".agents/skills/opentui/references/keyboard/REFERENCE.md": 14145,
+   ".agents/skills/opentui/references/layout/REFERENCE.md": 6173,
+   ".agents/skills/opentui/references/layout/patterns.md": 8422,
+   ".agents/skills/opentui/references/react/REFERENCE.md": 4504,
+   ".agents/skills/opentui/references/react/api.md": 8864,
+   ".agents/skills/opentui/references/react/configuration.md": 5890,
+   ".agents/skills/opentui/references/react/gotchas.md": 8432,
+   ".agents/skills/opentui/references/react/patterns.md": 9854,
+   ".agents/skills/opentui/references/solid/REFERENCE.md": 5161,
+   ".agents/skills/opentui/references/solid/api.md": 10934,
+   ".agents/skills/opentui/references/solid/configuration.md": 5744,
+   ".agents/skills/opentui/references/solid/gotchas.md": 8010,
+   ".agents/skills/opentui/references/solid/patterns.md": 11104,
+   ".agents/skills/opentui/references/testing/REFERENCE.md": 12625,
+   ".claude/commands/hotfix-release.md": 5587,
+   ".claude/commands/release.md": 1492,
+   ".clinerules/bun-and-node.md": 2867,
+   ".clinerules/cline-overview.md": 27191,
+   ".clinerules/debug-harness.md": 6945,
+   ".clinerules/general.md": 12639,
+   ".clinerules/hooks/README.md": 14573,
+   ".clinerules/network.md": 2725,
+   ".clinerules/protobuf-development.md": 3526,
+   ".clinerules/sdk-migration.md": 1264,
+   ".clinerules/storage.md": 2863,
+   ".clinerules/workflows/address-pr-comments.md": 1020,
+   ".clinerules/workflows/find-pr-reviewers.md": 2644,
+   ".clinerules/workflows/git-branch-analysis.md": 4024,
+   ".clinerules/workflows/hotfix-release.md": 5587,
+   ".clinerules/workflows/pr-review.md": 12783,
+   ".clinerules/workflows/release.md": 1492,
+   ".clinerules/workflows/writing-documentation.md": 21763,
+   ".github/copilot-instructions.md": 3776,
+   "AGENTS.md": 5263,
+   "sdk/AGENTS.md": 5400,
+   "sdk/packages/llms/AGENTS.md": 1725
+  }
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 9236,
+  "docs_dir": true,
+  "docs_files": 160,
+  "adrs": [],
+  "contributing": [
+   "CONTRIBUTING.md"
+  ],
+  "architecture_docs": [
+   "apps/examples/desktop-app/sidecar/ARCHITECTURE.md",
+   "evals/ARCHITECTURE.md",
+   "sdk/ARCHITECTURE.md"
+  ],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [
+   "CHANGELOG.md"
+  ],
+  "license_kind": "Apache-2.0"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 3,
+  "bat_cmd": 0,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": false,
+  "tool_versions": [
+   ".tool-versions",
+   ".nvmrc"
+  ]
+ },
+ "size": {
+  "files": 4135,
+  "code_lines": 995537,
+  "bytes_on_disk_excl_git": 70065177,
+  "largest_files": [
+   {
+    "path": "docs/assets/jupyter-explain-improve-cell.gif",
+    "bytes": 9359793
+   },
+   {
+    "path": "docs/assets/jupyter-generate-cell.gif",
+    "bytes": 6417247
+   },
+   {
+    "path": "sdk/packages/llms/src/catalog/catalog.generated.ts",
+    "bytes": 4263417
+   },
+   {
+    "path": "apps/examples/desktop-app/src-tauri/app-icon.png",
+    "bytes": 1363141
+   },
+   {
+    "path": "apps/examples/desktop-app/src-tauri/icons/icon.icns",
+    "bytes": 1172295
+   },
+   {
+    "path": "docs/assets/free-models/free-models-cli-clinepass-provider.png",
+    "bytes": 1139156
+   },
+   {
+    "path": "docs/assets/free-models/free-models-cli-cline-provider.png",
+    "bytes": 1127386
+   },
+   {
+    "path": "apps/examples/desktop-app/src-tauri/icons/ios/AppIcon-512@2x.png",
+    "bytes": 1068060
+   }
+  ],
+  "top_level_dirs": [
+   ".agents",
+   ".changeset",
+   ".claude",
+   ".cline",
+   ".clinerules",
+   ".codex",
+   ".github",
+   ".greptile",
+   ".husky",
+   ".kanban",
+   ".vscode",
+   "apps",
+   "assets",
+   "docs",
+   "evals",
+   "patches",
+   "sdk"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "252082b9e93b4f91253876391e35b4c13326f5e6",
+  "tracked_files": 4151,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 200,
+  "shallow": true,
+  "last_commit_date": "2026-09-26",
+  "first_commit_date_in_clone": "2026-09-09",
+  "authors_in_clone": 18,
+  "hot_files": [
+   {
+    "path": "apps/examples/desktop-app/package.json",
+    "changes": 24,
+    "authors": 5
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.tsx",
+    "changes": 22,
+    "authors": 3
+   },
+   {
+    "path": "apps/examples/desktop-app/sidecar/commands.ts",
+    "changes": 19,
+    "authors": 3
+   },
+   {
+    "path": "sdk/ARCHITECTURE.md",
+    "changes": 17,
+    "authors": 5
+   },
+   {
+    "path": "apps/examples/desktop-app/src-tauri/tauri.conf.json",
+    "changes": 17,
+    "authors": 2
+   },
+   {
+    "path": "bun.lock",
+    "changes": 17,
+    "authors": 7
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.test.tsx",
+    "changes": 17,
+    "authors": 3
+   },
+   {
+    "path": "apps/examples/desktop-app/CHANGELOG.md",
+    "changes": 15,
+    "authors": 2
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/app/page.tsx",
+    "changes": 15,
+    "authors": 3
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/components/agent-sidebar.tsx",
+    "changes": 12,
+    "authors": 3
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/hooks/use-chat-session.ts",
+    "changes": 12,
+    "authors": 3
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/components/views/settings/settings-view.tsx",
+    "changes": 11,
+    "authors": 4
+   },
+   {
+    "path": "sdk/packages/shared/src/index.ts",
+    "changes": 11,
+    "authors": 7
+   },
+   {
+    "path": "apps/examples/desktop-app/webview/hooks/use-chat-session.test.tsx",
+    "changes": 11,
+    "authors": 3
+   },
+   {
+    "path": "apps/examples/desktop-app/README.md",
+    "changes": 10,
+    "authors": 2
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "sdk/packages",
+    "changes": 1460,
+    "authors": 14
+   },
+   {
+    "dir": "apps/vscode",
+    "changes": 1450,
+    "authors": 11
+   },
+   {
+    "dir": "apps/examples",
+    "changes": 1281,
+    "authors": 8
+   },
+   {
+    "dir": "apps/cli",
+    "changes": 501,
+    "authors": 7
+   },
+   {
+    "dir": "apps/cline-hub",
+    "changes": 176,
+    "authors": 3
+   },
+   {
+    "dir": "sdk/examples",
+    "changes": 64,
+    "authors": 1
+   },
+   {
+    "dir": ".agents/skills",
+    "changes": 48,
+    "authors": 2
+   },
+   {
+    "dir": ".",
+    "changes": 46,
+    "authors": 7
+   },
+   {
+    "dir": "sdk",
+    "changes": 44,
+    "authors": 5
+   },
+   {
+    "dir": "docs/assets",
+    "changes": 41,
+    "authors": 4
+   },
+   {
+    "dir": ".github/workflows",
+    "changes": 35,
+    "authors": 6
+   },
+   {
+    "dir": "docs/enterprise-solutions",
+    "changes": 24,
+    "authors": 1
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "apps/examples/desktop-app/CHANGELOG.md",
+     "apps/examples/desktop-app/package.json",
+     "apps/examples/desktop-app/src-tauri/tauri.conf.json"
+    ],
+    "times": 12
+   },
+   {
+    "files": [
+     "CHANGELOG.md",
+     "apps/vscode/package.json",
+     "bun.lock"
+    ],
+    "times": 2
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "apps/examples/desktop-app/CHANGELOG.md",
+    "b": "apps/examples/desktop-app/package.json",
+    "times": 13
+   },
+   {
+    "a": "apps/examples/desktop-app/CHANGELOG.md",
+    "b": "apps/examples/desktop-app/src-tauri/tauri.conf.json",
+    "times": 13
+   },
+   {
+    "a": "apps/examples/desktop-app/package.json",
+    "b": "apps/examples/desktop-app/src-tauri/tauri.conf.json",
+    "times": 13
+   },
+   {
+    "a": "apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.test.tsx",
+    "b": "apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.tsx",
+    "times": 11
+   },
+   {
+    "a": "bun.lock",
+    "b": "sdk/packages/llms/package.json",
+    "times": 5
+   },
+   {
+    "a": "apps/examples/desktop-app/webview/app/page.tsx",
+    "b": "apps/examples/desktop-app/webview/components/views/chat/chat-input-bar.tsx",
+    "times": 5
+   },
+   {
+    "a": "sdk/packages/ui/README.md",
+    "b": "sdk/packages/ui/package.json",
+    "times": 4
+   },
+   {
+    "a": "apps/examples/desktop-app/webview/hooks/chat-session/helpers.test.ts",
+    "b": "apps/examples/desktop-app/webview/hooks/chat-session/helpers.ts",
+    "times": 4
+   }
+  ],
+  "commits_analyzed": 200,
+  "churn_by_ext": {
+   ".ts": 3157,
+   ".tsx": 939,
+   ".md": 297,
+   ".json": 268,
+   ".png": 265,
+   ".mdx": 126,
+   "": 73,
+   ".yml": 39
+  }
+ }
+}
