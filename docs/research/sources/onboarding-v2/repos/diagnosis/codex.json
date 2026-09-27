@@ -1,0 +1,902 @@
+{
+ "name": "codex",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/codex",
+ "languages": [
+  {
+   "language": "Rust",
+   "files": 4903,
+   "lines": 1941276
+  },
+  {
+   "language": "TypeScript",
+   "files": 758,
+   "lines": 11477
+  },
+  {
+   "language": "JSON",
+   "files": 367,
+   "lines": 0
+  },
+  {
+   "language": "Python",
+   "files": 192,
+   "lines": 62054
+  },
+  {
+   "language": "Markdown",
+   "files": 175,
+   "lines": 0
+  },
+  {
+   "language": "SQL",
+   "files": 73,
+   "lines": 881
+  },
+  {
+   "language": "YAML",
+   "files": 58,
+   "lines": 0
+  },
+  {
+   "language": "Shell",
+   "files": 26,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "jest (sub-package)",
+  "jupyter notebooks (1)",
+  "prettier"
+ ],
+ "package_managers": [
+  "cargo",
+  "pnpm",
+  "uv"
+ ],
+ "build": {
+  "system": [
+   "package.json scripts",
+   "python packaging",
+   "cargo"
+  ],
+  "commands": [
+   "cargo build   # in codex-rs/"
+  ]
+ },
+ "tests": {
+  "frameworks": [
+   "cargo test"
+  ],
+  "test_files": 1955,
+  "test_dirs": [
+   [
+    ".github",
+    11
+   ],
+   [
+    "bazel",
+    2
+   ],
+   [
+    "codex-rs",
+    1888
+   ],
+   [
+    "scripts",
+    12
+   ],
+   [
+    "sdk",
+    30
+   ],
+   [
+    "third_party",
+    10
+   ]
+  ]
+ },
+ "lint_format": [
+  "prettier",
+  "ruff",
+  "rustfmt/clippy (toolchain pinned)",
+  "ruff.toml"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/bazel.yml",
+    "name": "Bazel"
+   },
+   {
+    "file": ".github/workflows/blob-size-policy.yml",
+    "name": "blob-size-policy"
+   },
+   {
+    "file": ".github/workflows/blocking-ci.yml",
+    "name": "blocking-ci"
+   },
+   {
+    "file": ".github/workflows/cargo-deny.yml",
+    "name": "cargo-deny"
+   },
+   {
+    "file": ".github/workflows/cla.yml",
+    "name": "CLA Assistant"
+   },
+   {
+    "file": ".github/workflows/close-stale-contributor-prs.yml",
+    "name": "Close stale contributor PRs"
+   },
+   {
+    "file": ".github/workflows/codespell.yml",
+    "name": "Codespell"
+   },
+   {
+    "file": ".github/workflows/issue-deduplicator.yml",
+    "name": "Issue Deduplicator"
+   },
+   {
+    "file": ".github/workflows/issue-labeler.yml",
+    "name": "Issue Labeler"
+   },
+   {
+    "file": ".github/workflows/issue-translator.yml",
+    "name": "Issue Translator"
+   },
+   {
+    "file": ".github/workflows/postmerge-ci.yml",
+    "name": "postmerge-ci"
+   },
+   {
+    "file": ".github/workflows/python-runtime-build.yml",
+    "name": "python-runtime-build"
+   },
+   {
+    "file": ".github/workflows/python-runtime-release.yml",
+    "name": "python-runtime-release"
+   },
+   {
+    "file": ".github/workflows/python-sdk-build.yml",
+    "name": "python-sdk-build"
+   },
+   {
+    "file": ".github/workflows/python-sdk-cli-release.yml",
+    "name": "python-sdk-cli-release"
+   },
+   {
+    "file": ".github/workflows/python-sdk-release.yml",
+    "name": "python-sdk-release"
+   },
+   {
+    "file": ".github/workflows/r2-release.yml",
+    "name": "publish-r2-release"
+   },
+   {
+    "file": ".github/workflows/repo-checks.yml",
+    "name": "repo-checks"
+   },
+   {
+    "file": ".github/workflows/rust-ci-full-nextest-platform.yml",
+    "name": "rust-ci-full nextest platform"
+   },
+   {
+    "file": ".github/workflows/rust-ci-full.yml",
+    "name": "rust-ci-full"
+   },
+   {
+    "file": ".github/workflows/rust-ci.yml",
+    "name": "rust-ci"
+   },
+   {
+    "file": ".github/workflows/rust-release-argument-comment-lint.yml",
+    "name": "rust-release-argument-comment-lint"
+   },
+   {
+    "file": ".github/workflows/rust-release-provisioned-macos.yml",
+    "name": "Provisioned macOS CLI candidate"
+   },
+   {
+    "file": ".github/workflows/rust-release-windows.yml",
+    "name": "rust-release-windows"
+   },
+   {
+    "file": ".github/workflows/rust-release-zsh.yml",
+    "name": "rust-release-zsh"
+   },
+   {
+    "file": ".github/workflows/rust-release.yml",
+    "name": "rust-release"
+   },
+   {
+    "file": ".github/workflows/rusty-v8-release.yml",
+    "name": "rusty-v8-release"
+   },
+   {
+    "file": ".github/workflows/sdk.yml",
+    "name": "sdk"
+   },
+   {
+    "file": ".github/workflows/v8-canary.yml",
+    "name": "v8-canary"
+   }
+  ],
+  "commands": [
+   "pnpm install --frozen-lockfile",
+   "cargo fmt -- --config imports_granularity=Item --check",
+   "cargo shear --deny-warnings",
+   "cargo install --locked cargo-dylint --version \"$CARGO_DYLINT_VERSION\"",
+   "python3 -m py_compile tools/argument-comment-lint/wrapper_common.py tools/argument-comment-lint/run.",
+   "python3 -m unittest discover -s tools/argument-comment-lint -p 'test_*.py'",
+   "cargo test",
+   "bash \"${GITHUB_WORKSPACE}/.github/scripts/install-musl-build-tools.sh\"",
+   "\"${GITHUB_WORKSPACE}/.github/scripts/build-zsh-release-artifact.sh\" \\",
+   "cargo +1.91.0 build --locked --release --target \"${TARGET}\" --features v8_enable_sandbox",
+   "python3 .github/scripts/rusty_v8_bazel.py check-module-bazel",
+   "./scripts/check-module-bazel-lock.sh",
+   "if [[ \"${{ needs.test-windows-shard.result }}\" != \"success\" ]]; then",
+   "just fmt-check",
+   "pnpm run format"
+  ],
+  "workflow_count": 29
+ },
+ "monorepo": {
+  "is_monorepo": true,
+  "workspaces": [
+   "pnpm-workspace.yaml",
+   "cargo workspace: codex-rs/Cargo.toml"
+  ],
+  "packages": [
+   "codex-cli",
+   "codex-rs",
+   "codex-rs/agent-graph-store",
+   "codex-rs/agent-identity",
+   "codex-rs/agent-message-board-client",
+   "codex-rs/agent-roles",
+   "codex-rs/analytics",
+   "codex-rs/ansi-escape",
+   "codex-rs/app-server",
+   "codex-rs/app-server-client",
+   "codex-rs/app-server-daemon",
+   "codex-rs/app-server-protocol",
+   "codex-rs/app-server-protocol-noop-macros",
+   "codex-rs/app-server-test-client",
+   "codex-rs/app-server-transport",
+   "codex-rs/apply-patch",
+   "codex-rs/arg0",
+   "codex-rs/async-utils",
+   "codex-rs/attachment-store",
+   "codex-rs/aws-auth",
+   "codex-rs/backend-client",
+   "codex-rs/build-info",
+   "codex-rs/bwrap",
+   "codex-rs/chatgpt",
+   "codex-rs/cli",
+   "codex-rs/cloud-config",
+   "codex-rs/cloud-tasks",
+   "codex-rs/cloud-tasks-client",
+   "codex-rs/cloud-tasks-mock-client",
+   "codex-rs/code-mode",
+   "codex-rs/code-mode-host",
+   "codex-rs/code-mode-protocol",
+   "codex-rs/code-mode-runtime",
+   "codex-rs/codex-api",
+   "codex-rs/codex-backend-openapi-models",
+   "codex-rs/codex-client",
+   "codex-rs/codex-experimental-api-macros",
+   "codex-rs/codex-home",
+   "codex-rs/codex-mcp",
+   "codex-rs/collaboration-mode-templates",
+   "codex-rs/config",
+   "codex-rs/config-schema",
+   "codex-rs/connectors",
+   "codex-rs/context-fragments",
+   "codex-rs/core",
+   "codex-rs/core-api",
+   "codex-rs/core-plugin-common",
+   "codex-rs/core-plugins",
+   "codex-rs/diagnostics",
+   "codex-rs/exec",
+   "codex-rs/exec-server",
+   "codex-rs/exec-server-protocol",
+   "codex-rs/execpolicy",
+   "codex-rs/ext/agent",
+   "codex-rs/ext/agent-message-board",
+   "codex-rs/ext/connectors",
+   "codex-rs/ext/extension-api",
+   "codex-rs/ext/git-attribution",
+   "codex-rs/ext/goal",
+   "codex-rs/ext/guardian-reviewer"
+  ],
+  "package_count": 164
+ },
+ "generated_code": {
+  "paths": [
+   {
+    "dir": "codex-rs/tui/src/chatwidget/snapshots",
+    "files": 316
+   },
+   {
+    "dir": "codex-rs/tui/src/bottom_pane/snapshots",
+    "files": 260
+   },
+   {
+    "dir": "codex-rs/tui/src/snapshots",
+    "files": 190
+   },
+   {
+    "dir": "codex-rs/tui/src/history_cell/snapshots",
+    "files": 90
+   },
+   {
+    "dir": "codex-rs/tui/src/app/snapshots",
+    "files": 75
+   },
+   {
+    "dir": "codex-rs/tui/src/chatwidget/tests/snapshots",
+    "files": 70
+   },
+   {
+    "dir": "codex-rs/tui/src/app/tests/snapshots",
+    "files": 63
+   },
+   {
+    "dir": "codex-rs/core/tests/suite/snapshots",
+    "files": 55
+   },
+   {
+    "dir": "codex-rs/tui/src/transcript_view/snapshots",
+    "files": 34
+   },
+   {
+    "dir": "codex-rs/tui/src/bottom_pane/chat_composer/snapshots",
+    "files": 28
+   },
+   {
+    "dir": "codex-rs/tui/src/analytics/snapshots",
+    "files": 27
+   },
+   {
+    "dir": "codex-rs/tui/src/markdown_render/snapshots",
+    "files": 26
+   },
+   {
+    "dir": "codex-rs/tui/src/status/snapshots",
+    "files": 24
+   },
+   {
+    "dir": "codex-rs/hooks/schema/generated",
+    "files": 23
+   },
+   {
+    "dir": "codex-rs/tui/src/bottom_pane/request_user_input/snapshots",
+    "files": 16
+   }
+  ],
+  "header_marked_files": 764,
+  "header_sample": [
+   "codex-rs/app-server-protocol/schema/typescript/AbsolutePathBuf.ts",
+   "codex-rs/app-server-protocol/schema/typescript/AgentMessageInputContent.ts",
+   "codex-rs/app-server-protocol/schema/typescript/AgentPath.ts",
+   "codex-rs/app-server-protocol/schema/typescript/ApplyPatchApprovalParams.ts",
+   "codex-rs/app-server-protocol/schema/typescript/ApplyPatchApprovalResponse.ts",
+   "codex-rs/app-server-protocol/schema/typescript/AuthMode.ts",
+   "codex-rs/app-server-protocol/schema/typescript/AutoCompactTokenLimitScope.ts",
+   "codex-rs/app-server-protocol/schema/typescript/ClientInfo.ts",
+   "codex-rs/app-server-protocol/schema/typescript/ClientNotification.ts",
+   "codex-rs/app-server-protocol/schema/typescript/ClientRequest.ts"
+  ],
+  "header_dirs": [
+   {
+    "dir": "codex-rs/app-server-protocol/schema/typescript/v2",
+    "files": 639
+   },
+   {
+    "dir": "codex-rs/app-server-protocol/schema/typescript",
+    "files": 94
+   },
+   {
+    "dir": "codex-rs/codex-backend-openapi-models/src/models",
+    "files": 21
+   },
+   {
+    "dir": "sdk/python/src/openai_codex/generated",
+    "files": 3
+   },
+   {
+    "dir": "codex-rs/app-server-protocol/schema/typescript/serde_json",
+    "files": 1
+   },
+   {
+    "dir": "codex-rs/app-server-protocol/src",
+    "files": 1
+   },
+   {
+    "dir": "codex-rs/config/src/thread_config/proto",
+    "files": 1
+   },
+   {
+    "dir": "codex-rs/exec-server/src/proto",
+    "files": 1
+   },
+   {
+    "dir": "codex-rs/prompts/src",
+    "files": 1
+   },
+   {
+    "dir": "codex-rs/tui/src/app/tests",
+    "files": 1
+   }
+  ]
+ },
+ "secrets": {
+  "total": 84,
+  "by_kind": {
+   "private_key_block": 3,
+   "password_assignment": 38,
+   "openai_key": 3,
+   "aws_access_key": 2,
+   "github_token": 38
+  },
+  "files": [
+   {
+    "path": "codex-rs/network-proxy/src/credential_broker/configured_tests.rs",
+    "hits": 27
+   },
+   {
+    "path": "codex-rs/network-proxy/src/credential_broker_tests.rs",
+    "hits": 14
+   },
+   {
+    "path": "codex-rs/shell-command/src/shell_snapshot_tests.rs",
+    "hits": 7
+   },
+   {
+    "path": "codex-rs/core/src/shell_snapshot_tests.rs",
+    "hits": 4
+   },
+   {
+    "path": "codex-rs/core/tests/suite/approvals.rs",
+    "hits": 3
+   },
+   {
+    "path": "codex-rs/app-server-protocol/src/protocol/item_builders_tests.rs",
+    "hits": 2
+   },
+   {
+    "path": "codex-rs/app-server/tests/suite/v2/account.rs",
+    "hits": 2
+   },
+   {
+    "path": "codex-rs/core/src/tools/runtimes/mod_tests.rs",
+    "hits": 2
+   },
+   {
+    "path": "codex-rs/ext/guardian-v2/src/async_scorer/sampler_routing_tests.rs",
+    "hits": 2
+   },
+   {
+    "path": "codex-rs/memories/write/src/phase1.rs",
+    "hits": 2
+   },
+   {
+    "path": "codex-rs/model-provider/src/amazon_bedrock/mod.rs",
+    "hits": 2
+   },
+   {
+    "path": "codex-rs/agent-identity/src/lib.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/app-server/tests/suite/v2/gateway_oauth_tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/cli/src/doctor/desktop/windows_security_tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/cli/src/doctor/output.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/cli/tests/exec_server_websocket_auth.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/config/src/loader/tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/core/src/shell_snapshot_sandbox_tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/core/tests/suite/unified_exec_zsh_fork_approvals.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/http-client/src/route_aware_client_pool_tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/login/src/auth/agent_identity.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/login/src/auth/auth_tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/login/src/gateway_auth_tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/memories/write/src/startup_tests.rs",
+    "hits": 1
+   },
+   {
+    "path": "codex-rs/model-provider/src/amazon_bedrock/auth.rs",
+    "hits": 1
+   }
+  ],
+  "sensitive_files": [
+   ".npmrc",
+   "codex-rs/http-client/tests/fixtures/test-ca-trusted.pem",
+   "codex-rs/http-client/tests/fixtures/test-ca.pem",
+   "codex-rs/http-client/tests/fixtures/test-intermediate.pem"
+  ],
+  "in_test_files": 74,
+  "outside_tests": 10,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "OpenAI API": {
+   "count": 27,
+   "sample_files": [
+    "sdk/python/pyproject.toml",
+    "codex-rs/Cargo.toml",
+    "sdk/python-runtime/pyproject.toml",
+    "codex-cli/package.json"
+   ]
+  },
+  "OAuth/OIDC/Identity": {
+   "count": 4,
+   "sample_files": [
+    "codex-rs/rmcp-client/Cargo.toml"
+   ]
+  },
+  "Sentry": {
+   "count": 2,
+   "sample_files": [
+    "codex-rs/Cargo.toml",
+    "codex-rs/feedback/Cargo.toml"
+   ]
+  },
+  "gRPC/Protobuf": {
+   "count": 2,
+   "sample_files": [
+    "codex-rs/code-mode-protocol/Cargo.toml",
+    "codex-rs/otel/Cargo.toml"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": true,
+  "files": [
+   ".codex/environments/environment.toml",
+   ".codex/skills/babysit-pr/SKILL.md",
+   ".codex/skills/babysit-pr/agents/openai.yaml",
+   ".codex/skills/babysit-pr/references/github-api-notes.md",
+   ".codex/skills/babysit-pr/references/heuristics.md",
+   ".codex/skills/babysit-pr/scripts/gh_pr_watch.py",
+   ".codex/skills/babysit-pr/scripts/test_gh_pr_watch.py",
+   ".codex/skills/code-review-breaking-changes/SKILL.md",
+   ".codex/skills/code-review-change-size/SKILL.md",
+   ".codex/skills/code-review-context/SKILL.md",
+   ".codex/skills/code-review-testing/SKILL.md",
+   ".codex/skills/code-review/SKILL.md",
+   ".codex/skills/codex-pr-body/SKILL.md",
+   ".codex/skills/path-types/SKILL.md",
+   ".codex/skills/remote-tests/SKILL.md",
+   ".codex/skills/test-tui/SKILL.md",
+   ".codex/skills/update-v8-version/SKILL.md",
+   ".codex/skills/update-v8-version/agents/openai.yaml",
+   "AGENTS.md",
+   "codex-rs/tui/src/bottom_pane/AGENTS.md"
+  ],
+  "count": 20,
+  "kinds": [
+   "AGENTS.md",
+   "other"
+  ],
+  "sizes": {
+   ".codex/skills/babysit-pr/SKILL.md": 16858,
+   ".codex/skills/babysit-pr/references/github-api-notes.md": 2343,
+   ".codex/skills/babysit-pr/references/heuristics.md": 3306,
+   ".codex/skills/code-review-breaking-changes/SKILL.md": 324,
+   ".codex/skills/code-review-change-size/SKILL.md": 467,
+   ".codex/skills/code-review-context/SKILL.md": 661,
+   ".codex/skills/code-review-testing/SKILL.md": 604,
+   ".codex/skills/code-review/SKILL.md": 652,
+   ".codex/skills/codex-pr-body/SKILL.md": 4437,
+   ".codex/skills/path-types/SKILL.md": 2420,
+   ".codex/skills/remote-tests/SKILL.md": 3367,
+   ".codex/skills/test-tui/SKILL.md": 531,
+   ".codex/skills/update-v8-version/SKILL.md": 3378,
+   "AGENTS.md": 22363,
+   "codex-rs/tui/src/bottom_pane/AGENTS.md": 564
+  }
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 3334,
+  "docs_dir": true,
+  "docs_files": 15,
+  "adrs": [],
+  "contributing": [],
+  "architecture_docs": [],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [
+   "CHANGELOG.md"
+  ],
+  "license_kind": "Apache-2.0"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 8,
+  "bat_cmd": 1,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [
+   ".github/workflows/Dockerfile.bazel"
+  ],
+  "docker_compose": [],
+  "makefile": true,
+  "nix_flake": true,
+  "editorconfig": false,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 8609,
+  "code_lines": 2017043,
+  "bytes_on_disk_excl_git": 85931355,
+  "largest_files": [
+   {
+    "path": "MODULE.bazel.lock",
+    "bytes": 1634382
+   },
+   {
+    "path": ".github/codex-cli-splash.png",
+    "bytes": 838131
+   },
+   {
+    "path": "codex-rs/tui/tests/fixtures/oss-story.jsonl",
+    "bytes": 838071
+   },
+   {
+    "path": "codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.schemas.json",
+    "bytes": 712442
+   },
+   {
+    "path": "codex-rs/app-server-protocol/schema/json/codex_app_server_protocol.v2.schemas.json",
+    "bytes": 611306
+   },
+   {
+    "path": "codex-rs/tui/src/bottom_pane/chat_composer.rs",
+    "bytes": 511919
+   },
+   {
+    "path": "codex-rs/core/src/session/tests.rs",
+    "bytes": 470909
+   },
+   {
+    "path": "codex-rs/core/src/config/config_tests.rs",
+    "bytes": 427998
+   }
+  ],
+  "top_level_dirs": [
+   ".cargo",
+   ".codex",
+   ".github",
+   ".vscode",
+   "bazel",
+   "codex-cli",
+   "codex-rs",
+   "docs",
+   "patches",
+   "scripts",
+   "sdk",
+   "third_party",
+   "tools"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "41f9084b30812db321a0b592def4f500d1e79cf4",
+  "tracked_files": 8683,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 200,
+  "shallow": true,
+  "last_commit_date": "2026-09-27",
+  "first_commit_date_in_clone": "2026-09-23",
+  "authors_in_clone": 54,
+  "hot_files": [
+   {
+    "path": "codex-rs/tui/src/app.rs",
+    "changes": 13,
+    "authors": 3
+   },
+   {
+    "path": "codex-rs/core/config.schema.json",
+    "changes": 13,
+    "authors": 9
+   },
+   {
+    "path": "codex-rs/core/src/session/tests.rs",
+    "changes": 13,
+    "authors": 11
+   },
+   {
+    "path": "codex-rs/core/src/config/config_tests.rs",
+    "changes": 12,
+    "authors": 9
+   },
+   {
+    "path": "codex-rs/Cargo.lock",
+    "changes": 12,
+    "authors": 9
+   },
+   {
+    "path": "codex-rs/tui/src/app/event_dispatch.rs",
+    "changes": 11,
+    "authors": 3
+   },
+   {
+    "path": "codex-rs/tui/src/app/tests.rs",
+    "changes": 11,
+    "authors": 4
+   },
+   {
+    "path": "codex-rs/core/tests/suite/scenarios.rs",
+    "changes": 11,
+    "authors": 8
+   },
+   {
+    "path": "codex-rs/app-server-protocol/schema/precomputed/app-server-exports-stable.json.zst",
+    "changes": 11,
+    "authors": 8
+   },
+   {
+    "path": "codex-rs/tui/src/bottom_pane/mod.rs",
+    "changes": 10,
+    "authors": 4
+   },
+   {
+    "path": "codex-rs/core/src/client.rs",
+    "changes": 10,
+    "authors": 6
+   },
+   {
+    "path": "codex-rs/tui/src/app/session_lifecycle.rs",
+    "changes": 9,
+    "authors": 4
+   },
+   {
+    "path": "codex-rs/features/src/lib.rs",
+    "changes": 9,
+    "authors": 6
+   },
+   {
+    "path": "codex-rs/core/src/session/mod.rs",
+    "changes": 9,
+    "authors": 6
+   },
+   {
+    "path": "codex-rs/core/tests/suite/code_mode.rs",
+    "changes": 9,
+    "authors": 5
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "codex-rs/tui",
+    "changes": 2863,
+    "authors": 14
+   },
+   {
+    "dir": "codex-rs/core",
+    "changes": 1426,
+    "authors": 37
+   },
+   {
+    "dir": "codex-rs/app-server-protocol",
+    "changes": 1199,
+    "authors": 8
+   },
+   {
+    "dir": "codex-rs/ext",
+    "changes": 406,
+    "authors": 15
+   },
+   {
+    "dir": "codex-rs/app-server",
+    "changes": 398,
+    "authors": 24
+   },
+   {
+    "dir": "codex-rs/exec-server",
+    "changes": 250,
+    "authors": 8
+   },
+   {
+    "dir": "codex-rs/utils",
+    "changes": 188,
+    "authors": 7
+   },
+   {
+    "dir": "codex-rs/cli",
+    "changes": 149,
+    "authors": 9
+   },
+   {
+    "dir": "codex-rs/windows-sandbox-rs",
+    "changes": 134,
+    "authors": 4
+   },
+   {
+    "dir": "codex-rs/config",
+    "changes": 131,
+    "authors": 11
+   },
+   {
+    "dir": "codex-rs/state",
+    "changes": 130,
+    "authors": 3
+   },
+   {
+    "dir": "codex-rs/rmcp-client",
+    "changes": 118,
+    "authors": 3
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "codex-rs/core/src/client.rs",
+     "codex-rs/core/src/session/startup_prewarm.rs",
+     "codex-rs/core/tests/suite/client_websockets.rs"
+    ],
+    "times": 2
+   }
+  ],
+  "cochange_pairs": [],
+  "commits_analyzed": 200,
+  "churn_by_ext": {
+   ".rs": 6550,
+   ".snap": 1528,
+   ".ts": 780,
+   ".json": 415,
+   ".py": 214,
+   ".toml": 203,
+   ".bazel": 195,
+   ".md": 193
+  }
+ }
+}

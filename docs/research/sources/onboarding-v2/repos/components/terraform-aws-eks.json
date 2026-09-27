@@ -1,0 +1,147 @@
+{
+ "name": "terraform-aws-eks",
+ "rules_fired": [
+  "R03",
+  "R04",
+  "R08",
+  "R14",
+  "R17",
+  "R19",
+  "R20",
+  "R22a",
+  "R28"
+ ],
+ "component_count": 15,
+ "by_kind": {
+  "skill": 6,
+  "rule": 5,
+  "permission": 1,
+  "scaffold": 1,
+  "hook": 2
+ },
+ "components": [
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (examples/ as integration checks (6))"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "examples/ as integration checks (6) with 20 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 6 workflows) already encodes the project's definition of green: npm install \\"
+  },
+  {
+   "rule": "R08",
+   "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "change-recipe skill for: README.md + main.tf + variables.tf (5x)"
+    }
+   ],
+   "reason": "2 recurring file-sets in history - a recipe makes the agent touch all of them, not just the obvious one"
+  },
+  {
+   "rule": "R14",
+   "signal": "cloud SDK / IaC provider present",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny mutating cloud CLI (aws/az/gcloud create|delete|deploy)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: cloud credentials are never in the repo or the agent's env"
+    }
+   ],
+   "reason": "AWS SDK referenced - an agent with a shell must not be able to touch live infrastructure"
+  },
+  {
+   "rule": "R17",
+   "signal": "no AI configuration at all",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "CLAUDE.md from the diagnosis: build=terraform init && terraform validate   # no compile; plan needs cloud creds; test=examples/ as integration checks (6); lint=pre-commit, terraform_fmt, terraform_validate, terraform_docs; layout"
+    }
+   ],
+   "reason": "no CLAUDE.md/AGENTS.md/cursor/copilot - the agent starts from zero facts; the diagnosis provides them"
+  },
+  {
+   "rule": "R19",
+   "signal": "Terraform",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse: allow terraform fmt/validate/plan; deny apply/destroy/import/state"
+    },
+    {
+     "kind": "skill",
+     "name": "terraform-docs regen skill (README tables are generated from variables.tf)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: plan is the deliverable; apply is a human's"
+    }
+   ],
+   "reason": "90 .tf files; pre-commit runs terraform_fmt, terraform_validate, terraform_docs, tflint - README/variables co-change 15 times in history"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run terraform_fmt on the edited file"
+    }
+   ],
+   "reason": "pre-commit, terraform_fmt, terraform_validate, terraform_docs configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R22a",
+   "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: read docs/ before planning"
+    },
+    {
+     "kind": "skill",
+     "name": "docs-sync skill: a change that alters behaviour updates docs/"
+    }
+   ],
+   "reason": "README 95.6 KB, 17 docs files, arch docs: none - the answers exist; the agent must be pointed at them"
+  },
+  {
+   "rule": "R28",
+   "signal": "large contributor base",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "contribution-style skill: PR format, commit convention, CONTRIBUTING (no CONTRIBUTING)"
+    }
+   ],
+   "reason": "58 authors in the sample - output must look like everyone else's PR to be merged"
+  }
+ ]
+}

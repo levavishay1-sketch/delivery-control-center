@@ -13,7 +13,7 @@
 | מסמך | מה הוא קובע |
 |---|---|
 | `product-genericity-recommendation.md` | למי DCC משרת: צורות ארגון, רמת ההתקשרות, (ערך, נעול), שתי מילים |
-| `repo-onboarding-recommendation.md` | מה זה "ריפו מוכן": אורקל P0, שכבה חמה/קרה, `/init` כמחולל, מדידה |
+| `repo-onboarding-recommendation.md` | הטמעה כ"מאמן אישי לריפו": אבחון דטרמיניסטי → כללים גלויים → סט רכיבים שונה לכל ריפו עם "כי ראיתי" → אימות ומדידה → מאמן מתמשך. ההוכחה: 11 ריפואים, 11 סטים. (+ `onboarding-walkthrough-trade.html`) |
 | `request-to-delivery-recommendation.md` | המסלול: שלב מחושב, החלטות פתוחות עם הנחות, חוזה קודם, בדיקות נסתרות, דלתא |
 | `client-environments-recommendation.md` | הנוף: Deployable × סביבה × יעד × הפניית-סוד × תהליך; סודות כהפניות |
 | `learning-system-recommendation.md` | הלולאה: אות → סף → הצעה → שער → מדידה → הודעה; ולפני הכל — evals |
@@ -104,7 +104,7 @@ P0). השאר — סעיף 9.
 | **"צ'אט אחד לכל המערכת, מסביר כל כפתור"** (עקרונות §4) מול "ה-i עונה ראשון, הצ'אט יורד בדרגה" | עקרונות ↔ למידה ↔ i | לא סתירה: אותו מרשם; ה-i הוא הדלת הראשונה, הצ'אט השנייה, ושניהם עונים אותו דבר; העקרונות מתעדכנים במילה אחת ("מעוגן") |
 | **"אין פעולה שקטה"** מול הורדת מאמץ אוטומטית | עקרונות ↔ למידה | מותר רק במדיניות נעילה של ההתקשרות, הפיך, נרשם כפעולה עם האדם שקבע את המדיניות, ומוכרז ב"מה השתנה" |
 | **הפרומפט של הבשלות טוב — לשמור** מול "בלי evals כל שיפור הוא דעה" | מסלול ↔ למידה | שניהם: לשמור *ו*למדוד; סט הזהב הראשון = 20 הדרישות של DCC Internal ו-Trade |
-| **`/init` הוא הדרך** מול "שלוש הטמעות בשבועיים בלי החלטה" | הטמעה ↔ היסטוריה | `/init` = מחולל מועמד אחד בתוך לולאה דטרמיניסטית עם מדידה; ה-PTY נשאר רק בשבילו |
+| **`/init` הוא הדרך** מול "שלוש הטמעות בשבועיים בלי החלטה" | הטמעה ↔ היסטוריה | ההטמעה היא תהליך קבוע (אבחון → כללים גלויים → כרטיס לכל רכיב → אימות → מאמן מתמשך) עם תוצאה שונה לכל ריפו; `/init` = מחולל טיוטה אחד בתוכו; ה-PTY נשאר רק בשבילו |
 | **שכתוב מאפס ושפה אחרת מותרים** מול "להישאר ב-TypeScript, מודול-מודול" | התדריך ↔ ארכיטקטורה | הראיות (Bun/Google/METR/SDK) גוברות; הדלת נשארת פתוחה דרך ספייק של שבועיים שמכריע במספר |
 | **מסך המבקש** — "אחרי ניהול משתמשים" (גנריות) מול "המבקש עונה בעצמו" (מסלול) | גנריות ↔ מסלול | בינתיים: מכתב + קישור-תשובה חד-פעמי בלי חשבון; משטח מלא כשיש משתמשים |
 | **`StatTile.info` אופציונלי** מול `CLAUDE.md` "חובה" | קוד ↔ מסמכים | חובה (או לעדכן את המסמך — החלטה קטנה במסמך ה-i) |
@@ -179,10 +179,10 @@ flowchart TB
 |---|---|---|---|
 | **0 — החוזה** (שבועות 1–3) | האורקל, האבטחה, האותות | `ci-and-real-postgres-oracle` · `tenant-wall-hardening` · `structured-output-now` · `learning-signals` · `info-hints-fixes` · תיקון היגיינה (`fix/`) · **ספייק SDK של שבועיים** (`agent-runner-sdk`, שלב א') | בלי אורקל אין אישור; 24 routes פתוחים הם סיכון היום; אותות שלא נרשמים אובדים; הספייק מכריע את קצב הגלים הבאים |
 | **1 — היסודות** (שבועות 3–7) | הישות האמצעית והמצב המחושב | `engagement-level` (+`org-shape-templates`, תיקון `project.md`) · `requirement-stage-machine` · `module-boundaries` (baseline packwerk) · `event-and-state-transaction` · `prompt-versions-and-evals` · `help-content-as-data` | הכול נשען על התקשרות ועל שלב מחושב; גבולות מוקפאים לפני שמזיזים מודולים |
-| **2 — המסלול והנוף** (שבועות 6–12) | מה שהלקוח מרגיש | `open-decisions` · `intake-form-and-readiness-eval` · `breakdown-contract-first` (+`ado-hierarchy-as-setting` מוזג) · `client-landscape-model` · `credential-refs-and-vault` · `tracker-sync-ownership` · `proposal-object` · `shared-contracts` · `onboarding-discover-and-p0` · `onboarding-measure` · `proc-and-adapters-consolidation` | הפינג-פונג, הפירוק וה-TFS הם הכאב היומי; P0 ומדידה בהטמעה לפני שמייצרים קבצים |
-| **3 — הסגירה** (שבועות 10–18) | מעגלים שנסגרים ביושר | `agent-runner-sdk` (מלא) · `held-out-acceptance-checks` · `onboarding-generate-validate` (+`landscape-discovery-in-onboarding` מוזג) · `delta-change-records` · `routing-by-outcome` · `apply-measure-announce` · `help-package` | בדיקות נסתרות דורשות מריץ + SDK; הצעות דורשות מדידה; החבילה דורשת תוכן כנתונים |
+| **2 — המסלול והנוף** (שבועות 6–12) | מה שהלקוח מרגיש | `open-decisions` · `intake-form-and-readiness-eval` · `breakdown-contract-first` (+`ado-hierarchy-as-setting` מוזג) · `client-landscape-model` · `credential-refs-and-vault` · `tracker-sync-ownership` · `proposal-object` · `shared-contracts` · `repo-diagnosis` · `onboarding-trial-and-eval` · `proc-and-adapters-consolidation` | הפינג-פונג, הפירוק וה-TFS הם הכאב היומי; P0 ומדידה בהטמעה לפני שמייצרים קבצים |
+| **3 — הסגירה** (שבועות 10–18) | מעגלים שנסגרים ביושר | `agent-runner-sdk` (מלא) · `held-out-acceptance-checks` · `onboarding-proposal-cards` · `onboarding-install-verify-deliver` (+`landscape-discovery-in-onboarding` מוזג) · `delta-change-records` · `routing-by-outcome` · `apply-measure-announce` · `help-package` | בדיקות נסתרות דורשות מריץ + SDK; הצעות דורשות מדידה; החבילה דורשת תוכן כנתונים |
 | **4 — המסכים והצ'אט** (שבועות 16–22) | מה שרואים | `screens-by-stage` (= `requirement-and-flow-screens`, מוזג) · `chat-structure-first` · `help-measure` (+`help-drafts-and-drift-check`) · `landscape-probes-and-drift` · `operator-catalog` | מסך-שלב אפשרי רק כשהשלב מחושב וההחלטות קיימות; הצ'אט נשען על מרשם הפעולות והמושגים |
-| **5 — ההרחבה** (חודש 6+) | מה שפותח לקוח שני | `requester-surface` · `help-per-client` · `deploy-actions` · `world-watch` · `onboarding-evolve` (מוזג ל-`proposal-object`+`world-watch`) · `consolidation-sweep` (חוזר חודשי מגל 1) | דורש משתמשים, כספת, ולקוח שני שמצדיק |
+| **5 — ההרחבה** (חודש 6+) | מה שפותח לקוח שני | `requester-surface` · `help-per-client` · `deploy-actions` · `world-watch` · `repo-coach` (על `proposal-object`+`world-watch`) · `consolidation-sweep` (חוזר חודשי מגל 1) | דורש משתמשים, כספת, ולקוח שני שמצדיק |
 
 **כלל לכל שינוי, בלי יוצא מן הכלל:** proposal של 4 שאלות (מי, מה "גמור",
 מחוץ לגבולות, דחיפות) → החלטות פתוחות עם בעלים → משימות קטנות עם חוזה

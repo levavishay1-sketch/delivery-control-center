@@ -1,0 +1,616 @@
+{
+ "name": "fastapi-template",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/fastapi-template",
+ "languages": [
+  {
+   "language": "TypeScript",
+   "files": 109,
+   "lines": 11193
+  },
+  {
+   "language": "Python",
+   "files": 43,
+   "lines": 2908
+  },
+  {
+   "language": "YAML",
+   "files": 23,
+   "lines": 0
+  },
+  {
+   "language": "JSON",
+   "files": 14,
+   "lines": 0
+  },
+  {
+   "language": "Markdown",
+   "files": 10,
+   "lines": 0
+  },
+  {
+   "language": "Shell",
+   "files": 8,
+   "lines": 0
+  },
+  {
+   "language": "HTML",
+   "files": 4,
+   "lines": 0
+  },
+  {
+   "language": "CSS",
+   "files": 1,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "@playwright/test (sub-package)",
+  "fastapi",
+  "pydantic",
+  "react (sub-package)",
+  "sqlmodel",
+  "tailwindcss (sub-package)",
+  "vite (sub-package)"
+ ],
+ "package_managers": [
+  "bun",
+  "uv"
+ ],
+ "build": {
+  "system": [
+   "package.json scripts",
+   "hatch",
+   "python packaging"
+  ],
+  "commands": []
+ },
+ "tests": {
+  "frameworks": [
+   "package.json:test -> bun run --filter frontend test",
+   "pytest"
+  ],
+  "test_files": 28,
+  "test_dirs": [
+   [
+    "backend",
+    15
+   ],
+   [
+    "frontend",
+    12
+   ],
+   [
+    "scripts",
+    1
+   ]
+  ]
+ },
+ "lint_format": [
+  "ruff",
+  "black",
+  "flake8",
+  "mypy",
+  "isort",
+  ".pre-commit-config.yaml"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/add-to-project.yml",
+    "name": "Add to Project"
+   },
+   {
+    "file": ".github/workflows/bump-pre-commit-hooks.yml",
+    "name": "Bump pre-commit hooks"
+   },
+   {
+    "file": ".github/workflows/create-draft-release.yml",
+    "name": "Create Draft Release"
+   },
+   {
+    "file": ".github/workflows/deploy-docker-compose.yml",
+    "name": "Deploy with Docker Compose"
+   },
+   {
+    "file": ".github/workflows/deploy.yml",
+    "name": "Deploy"
+   },
+   {
+    "file": ".github/workflows/detect-conflicts.yml",
+    "name": "Conflict detector"
+   },
+   {
+    "file": ".github/workflows/guard-dependencies.yml",
+    "name": "Guard Dependencies"
+   },
+   {
+    "file": ".github/workflows/issue-manager.yml",
+    "name": "Issue Manager"
+   },
+   {
+    "file": ".github/workflows/playwright.yml",
+    "name": "Playwright Tests"
+   },
+   {
+    "file": ".github/workflows/pre-commit.yml",
+    "name": "pre-commit"
+   },
+   {
+    "file": ".github/workflows/prepare-release.yml",
+    "name": "Prepare Release"
+   },
+   {
+    "file": ".github/workflows/smokeshow.yml",
+    "name": "Smokeshow"
+   },
+   {
+    "file": ".github/workflows/test-backend.yml",
+    "name": "Test Backend"
+   },
+   {
+    "file": ".github/workflows/test-docker-compose.yml",
+    "name": "Test Docker Compose"
+   },
+   {
+    "file": ".github/workflows/zizmor.yml",
+    "name": "Zizmor"
+   }
+  ],
+  "commands": [
+   "docker compose build",
+   "docker compose -f compose.yml -f compose.deploy.yml build",
+   "bun run --filter frontend build",
+   "docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-fail",
+   "bunx playwright merge-reports --reporter html ./all-blob-reports",
+   "curl http://localhost:8000/api/v1/utils/health-check"
+  ],
+  "workflow_count": 15
+ },
+ "monorepo": {
+  "is_monorepo": true,
+  "workspaces": [
+   "frontend",
+   "packages/*"
+  ],
+  "packages": [
+   "backend",
+   "frontend",
+   "packages/react-email"
+  ],
+  "package_count": 3
+ },
+ "generated_code": {
+  "paths": [
+   {
+    "dir": "frontend/src",
+    "files": 1
+   }
+  ],
+  "header_marked_files": 20,
+  "header_sample": [
+   "backend/app/alembic/versions/1a31ce608336_add_cascade_delete_relationships.py",
+   "backend/app/alembic/versions/e2412789c190_initialize_models.py",
+   "backend/app/alembic/versions/fe56fa70289e_add_created_at_to_user_and_item.py",
+   "frontend/src/client/client.gen.ts",
+   "frontend/src/client/client/client.gen.ts",
+   "frontend/src/client/client/index.ts",
+   "frontend/src/client/client/types.gen.ts",
+   "frontend/src/client/client/utils.gen.ts",
+   "frontend/src/client/core/auth.gen.ts",
+   "frontend/src/client/core/bodySerializer.gen.ts"
+  ],
+  "header_dirs": [
+   {
+    "dir": "frontend/src/client/core",
+    "files": 8
+   },
+   {
+    "dir": "frontend/src/client",
+    "files": 4
+   },
+   {
+    "dir": "frontend/src/client/client",
+    "files": 4
+   },
+   {
+    "dir": "backend/app/alembic/versions",
+    "files": 3
+   },
+   {
+    "dir": "frontend/src",
+    "files": 1
+   }
+  ]
+ },
+ "secrets": {
+  "total": 0,
+  "by_kind": {},
+  "files": [],
+  "sensitive_files": [
+   ".env",
+   "frontend/.env"
+  ],
+  "in_test_files": 0,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "SMTP/email": {
+   "count": 6,
+   "sample_files": [
+    ".github/workflows/deploy-docker-compose.yml"
+   ]
+  },
+  "Docker": {
+   "count": 2,
+   "sample_files": [
+    "backend/Dockerfile"
+   ]
+  },
+  "PostgreSQL": {
+   "count": 1,
+   "sample_files": [
+    "backend/pyproject.toml"
+   ]
+  },
+  "Sentry": {
+   "count": 1,
+   "sample_files": [
+    "backend/pyproject.toml"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": true,
+  "files": [
+   ".agents/skills/fastapi",
+   ".agents/skills/library-skills/.library-skills.json",
+   ".agents/skills/library-skills/SKILL.md",
+   ".agents/skills/sqlmodel",
+   ".claude/skills/fastapi",
+   ".claude/skills/library-skills/.library-skills.json",
+   ".claude/skills/library-skills/SKILL.md",
+   ".claude/skills/sqlmodel"
+  ],
+  "count": 8,
+  "kinds": [
+   ".agents/",
+   ".claude/"
+  ],
+  "sizes": {
+   ".agents/skills/library-skills/SKILL.md": 2629,
+   ".claude/skills/library-skills/SKILL.md": 2629
+  }
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 3130,
+  "docs_dir": false,
+  "docs_files": 0,
+  "adrs": [],
+  "contributing": [
+   "CONTRIBUTING.md"
+  ],
+  "architecture_docs": [],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [],
+  "license_kind": "MIT"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 0,
+  "bat_cmd": 0,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [
+   "backend/Dockerfile",
+   "frontend/Dockerfile.playwright"
+  ],
+  "docker_compose": [
+   "compose.deploy.yml",
+   "compose.override.yml",
+   "compose.yml"
+  ],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": false,
+  "tool_versions": [
+   ".python-version"
+  ]
+ },
+ "size": {
+  "files": 252,
+  "code_lines": 14101,
+  "bytes_on_disk_excl_git": 1874668,
+  "largest_files": [
+   {
+    "path": "uv.lock",
+    "bytes": 255646
+   },
+   {
+    "path": "img/mailpit.png",
+    "bytes": 170567
+   },
+   {
+    "path": "bun.lock",
+    "bytes": 148674
+   },
+   {
+    "path": "release-notes.md",
+    "bytes": 137183
+   },
+   {
+    "path": "img/dashboard-dark.png",
+    "bytes": 122439
+   },
+   {
+    "path": "img/dashboard.png",
+    "bytes": 121001
+   },
+   {
+    "path": "img/react-email.png",
+    "bytes": 99256
+   },
+   {
+    "path": "img/docs.png",
+    "bytes": 98515
+   }
+  ],
+  "top_level_dirs": [
+   ".agents",
+   ".claude",
+   ".github",
+   ".vscode",
+   "backend",
+   "frontend",
+   "hooks",
+   "img",
+   "packages",
+   "scripts"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "cb740b656d7a0a6c5e12c7bf8e50343ec94ee9c7",
+  "tracked_files": 252,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 11,
+  "commits_in_clone": 200,
+  "shallow": true,
+  "last_commit_date": "2026-09-01",
+  "first_commit_date_in_clone": "2026-05-29",
+  "authors_in_clone": 11,
+  "hot_files": [
+   {
+    "path": "release-notes.md",
+    "changes": 102,
+    "authors": 3
+   },
+   {
+    "path": "uv.lock",
+    "changes": 28,
+    "authors": 4
+   },
+   {
+    "path": "backend/pyproject.toml",
+    "changes": 19,
+    "authors": 3
+   },
+   {
+    "path": "deployment.md",
+    "changes": 15,
+    "authors": 3
+   },
+   {
+    "path": "compose.override.yml",
+    "changes": 14,
+    "authors": 4
+   },
+   {
+    "path": "compose.yml",
+    "changes": 13,
+    "authors": 4
+   },
+   {
+    "path": ".github/workflows/pre-commit.yml",
+    "changes": 13,
+    "authors": 4
+   },
+   {
+    "path": ".github/workflows/playwright.yml",
+    "changes": 12,
+    "authors": 4
+   },
+   {
+    "path": ".github/workflows/test-backend.yml",
+    "changes": 12,
+    "authors": 5
+   },
+   {
+    "path": "pyproject.toml",
+    "changes": 11,
+    "authors": 4
+   },
+   {
+    "path": "README.md",
+    "changes": 11,
+    "authors": 4
+   },
+   {
+    "path": ".github/workflows/deploy-production.yml",
+    "changes": 11,
+    "authors": 3
+   },
+   {
+    "path": ".env",
+    "changes": 11,
+    "authors": 3
+   },
+   {
+    "path": "bun.lock",
+    "changes": 10,
+    "authors": 5
+   },
+   {
+    "path": ".github/workflows/deploy-staging.yml",
+    "changes": 10,
+    "authors": 3
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": ".",
+    "changes": 253,
+    "authors": 10
+   },
+   {
+    "dir": "frontend/src",
+    "changes": 132,
+    "authors": 6
+   },
+   {
+    "dir": ".github/workflows",
+    "changes": 120,
+    "authors": 5
+   },
+   {
+    "dir": "backend/app",
+    "changes": 72,
+    "authors": 5
+   },
+   {
+    "dir": "frontend",
+    "changes": 45,
+    "authors": 6
+   },
+   {
+    "dir": "backend",
+    "changes": 34,
+    "authors": 4
+   },
+   {
+    "dir": "backend/tests",
+    "changes": 20,
+    "authors": 2
+   },
+   {
+    "dir": "frontend/tests",
+    "changes": 20,
+    "authors": 4
+   },
+   {
+    "dir": "packages/react-email",
+    "changes": 20,
+    "authors": 2
+   },
+   {
+    "dir": "img",
+    "changes": 9,
+    "authors": 2
+   },
+   {
+    "dir": ".github",
+    "changes": 9,
+    "authors": 3
+   },
+   {
+    "dir": "backend/scripts",
+    "changes": 8,
+    "authors": 2
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "backend/pyproject.toml",
+     "pyproject.toml",
+     "uv.lock"
+    ],
+    "times": 4
+   },
+   {
+    "files": [
+     ".github/workflows/deploy-production.yml",
+     ".github/workflows/deploy-staging.yml",
+     ".github/workflows/latest-changes.yml",
+     ".github/workflows/playwright.yml",
+     ".github/workflows/pre-commit.yml",
+     ".github/workflows/smokeshow.yml",
+     ".github/workflows/test-backend.yml",
+     ".github/workflows/test-docker-compose.yml",
+     ".github/workflows/zizmor.yml"
+    ],
+    "times": 2
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "backend/pyproject.toml",
+    "b": "uv.lock",
+    "times": 16
+   },
+   {
+    "a": ".github/workflows/playwright.yml",
+    "b": ".github/workflows/pre-commit.yml",
+    "times": 8
+   },
+   {
+    "a": ".github/workflows/playwright.yml",
+    "b": ".github/workflows/test-backend.yml",
+    "times": 8
+   },
+   {
+    "a": "pyproject.toml",
+    "b": "uv.lock",
+    "times": 7
+   },
+   {
+    "a": ".github/workflows/playwright.yml",
+    "b": ".github/workflows/zizmor.yml",
+    "times": 7
+   },
+   {
+    "a": ".github/workflows/pre-commit.yml",
+    "b": ".github/workflows/test-backend.yml",
+    "times": 7
+   },
+   {
+    "a": "bun.lock",
+    "b": "frontend/package.json",
+    "times": 7
+   },
+   {
+    "a": ".env",
+    "b": "compose.yml",
+    "times": 7
+   }
+  ],
+  "commits_analyzed": 200,
+  "churn_by_ext": {
+   ".yml": 166,
+   ".md": 156,
+   ".tsx": 99,
+   ".py": 77,
+   ".ts": 75,
+   ".lock": 38,
+   "": 37,
+   ".toml": 30
+  }
+ }
+}

@@ -1,0 +1,161 @@
+{
+ "name": "fastapi-template",
+ "rules_fired": [
+  "R01",
+  "R03",
+  "R04",
+  "R06",
+  "R08",
+  "R10",
+  "R13",
+  "R20",
+  "R23",
+  "R30"
+ ],
+ "component_count": 16,
+ "by_kind": {
+  "hook": 2,
+  "rule": 6,
+  "skill": 4,
+  "scaffold": 1,
+  "permission": 1,
+  "mcp": 1,
+  "runner": 1
+ },
+ "components": [
+  {
+   "rule": "R01",
+   "signal": "generated code present (path markers or 'auto-generated' headers)",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse deny Edit/Write under generated dirs"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: these paths are generated; change the source and regenerate"
+    }
+   ],
+   "reason": "generated code in frontend/src/client/core, frontend/src/client, frontend/src/client/client, backend/app/alembic/versions; editing it by hand is silently overwritten on the next build"
+  },
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (docker compose run --rm playwright bunx playwright test --fail-on-flaky-tests --trace=retain-on-fail)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "package.json:test -> bun run --filter frontend test, pytest with 28 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 15 workflows) already encodes the project's definition of green: docker compose build; docker compose -f compose.yml -f compose.deploy.yml build; bun run --filter frontend build"
+  },
+  {
+   "rule": "R06",
+   "signal": "monorepo / multi-project layout",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "per-package CLAUDE.md / AGENTS.md (build+test per package)"
+    },
+    {
+     "kind": "skill",
+     "name": "which-package skill (maps a request to the owning package)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: run commands from the package dir, not the root"
+    }
+   ],
+   "reason": "frontend; packages/* (3 packages) - one root instruction file cannot state the right build/test command for each"
+  },
+  {
+   "rule": "R08",
+   "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "change-recipe skill for: pyproject.toml + pyproject.toml + uv.lock (4x)"
+    }
+   ],
+   "reason": "1 recurring file-sets in history - a recipe makes the agent touch all of them, not just the obvious one"
+  },
+  {
+   "rule": "R10",
+   "signal": "sensitive files tracked (.env, .snk, .pfx, .pem, app/web.config, appsettings.Development)",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read/Edit on 2 sensitive files (.env, .env)"
+    }
+   ],
+   "reason": "2 sensitive-by-name files - out of the agent's context by default"
+  },
+  {
+   "rule": "R13",
+   "signal": "external system: relational database",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: schema changes go through the migration tool (PostgreSQL); no ad-hoc SQL"
+    },
+    {
+     "kind": "mcp",
+     "name": "read-only DB MCP candidate - only if a local/compose DB exists (compose present)"
+    }
+   ],
+   "reason": "PostgreSQL referenced in manifests/compose"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run ruff on the edited file"
+    }
+   ],
+   "reason": "ruff, black, flake8, mypy configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R23",
+   "signal": "devcontainer / Dockerfile / compose",
+   "components": [
+    {
+     "kind": "runner",
+     "name": "run the agent inside Dockerfile, compose; same toolchain as CI"
+    }
+   ],
+   "reason": "Dockerfile, compose present - the reproducible environment already exists"
+  },
+  {
+   "rule": "R30",
+   "signal": "lock file churn / dependency-bump shape",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: dependency bumps = pyproject.toml + uv.lock together; never edit a lock file by hand"
+    }
+   ],
+   "reason": "pyproject.toml + uv.lock co-change 16 times - the most frequent change shape in history is a dependency bump"
+  }
+ ]
+}

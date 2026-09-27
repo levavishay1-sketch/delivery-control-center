@@ -1,0 +1,600 @@
+{
+ "name": "nowinandroid",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/nowinandroid",
+ "languages": [
+  {
+   "language": "Kotlin",
+   "files": 350,
+   "lines": 31017
+  },
+  {
+   "language": "XML",
+   "files": 65,
+   "lines": 0
+  },
+  {
+   "language": "Markdown",
+   "files": 44,
+   "lines": 0
+  },
+  {
+   "language": "JSON",
+   "files": 18,
+   "lines": 0
+  },
+  {
+   "language": "YAML",
+   "files": 7,
+   "lines": 0
+  },
+  {
+   "language": "Shell",
+   "files": 4,
+   "lines": 0
+  },
+  {
+   "language": "Protobuf",
+   "files": 3,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "android",
+  "android-manifest",
+  "hilt",
+  "jetpack-compose"
+ ],
+ "package_managers": [
+  "gradle"
+ ],
+ "build": {
+  "system": [
+   "gradle"
+  ],
+  "commands": [
+   "./gradlew build"
+  ]
+ },
+ "tests": {
+  "frameworks": [
+   "junit",
+   "roborazzi-screenshot"
+  ],
+  "test_files": 69,
+  "test_dirs": [
+   [
+    "app",
+    5
+   ],
+   [
+    "benchmarks",
+    1
+   ],
+   [
+    "core",
+    43
+   ],
+   [
+    "feature",
+    14
+   ],
+   [
+    "lint",
+    2
+   ],
+   [
+    "sync",
+    3
+   ]
+  ]
+ },
+ "lint_format": [
+  "spotless",
+  "ktlint",
+  ".editorconfig"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/Build.yaml",
+    "name": "Build"
+   },
+   {
+    "file": ".github/workflows/NightlyBaselineProfiles.yaml",
+    "name": "NightlyBaselineProfiles"
+   },
+   {
+    "file": ".github/workflows/Release.yml",
+    "name": "GitHub Release with APKs"
+   }
+  ],
+  "commands": [
+   "./gradlew :build-logic:convention:check",
+   "./gradlew :benchmarks:pixel6Api33Setup",
+   "./gradlew spotlessCheck",
+   "./gradlew dependencyGuard",
+   "echo \"::error::Dependency Guard failed, please update baselines with: ./gradlew dependencyGuardBasel",
+   "./gradlew dependencyGuardBaseline",
+   "./gradlew graphUpdate",
+   "echo \"::error::Check Graphs failed, please update graphs with: ./gradlew graphUpdate\" && exit 1",
+   "./gradlew verifyRoborazziDemoDebug",
+   "./gradlew recordRoborazziDemoDebug",
+   "./gradlew testDemoDebug :lint:test",
+   "./gradlew :app:assemble -PminifyWithR8=false",
+   "./gradlew :app:lintProdRelease :app-nia-catalog:lintRelease :lint:lint",
+   "./gradlew :app:checkProdReleaseBadging",
+   "./gradlew testDemoDebugUnitTest -Proborazzi.test.verify=false # Add Prod if we ever add JVM tests fo"
+  ],
+  "workflow_count": 3
+ },
+ "monorepo": {
+  "is_monorepo": true,
+  "workspaces": [
+   "36 gradle modules"
+  ],
+  "packages": [
+   "app",
+   "app-nia-catalog",
+   "benchmarks",
+   "build-logic/convention",
+   "core/analytics",
+   "core/common",
+   "core/data",
+   "core/data-test",
+   "core/database",
+   "core/datastore",
+   "core/datastore-proto",
+   "core/datastore-test",
+   "core/designsystem",
+   "core/domain",
+   "core/model",
+   "core/navigation",
+   "core/network",
+   "core/notifications",
+   "core/screenshot-testing",
+   "core/testing",
+   "core/ui",
+   "feature/bookmarks/api",
+   "feature/bookmarks/impl",
+   "feature/foryou/api",
+   "feature/foryou/impl",
+   "feature/interests/api",
+   "feature/interests/impl",
+   "feature/search/api",
+   "feature/search/impl",
+   "feature/settings/impl",
+   "feature/topic/api",
+   "feature/topic/impl",
+   "lint",
+   "sync/sync-test",
+   "sync/work",
+   "ui-test-hilt-manifest"
+  ],
+  "package_count": 36
+ },
+ "generated_code": {
+  "paths": [],
+  "header_marked_files": 0,
+  "header_sample": [],
+  "header_dirs": []
+ },
+ "secrets": {
+  "total": 0,
+  "by_kind": {},
+  "files": [],
+  "sensitive_files": [],
+  "in_test_files": 0,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "gRPC/Protobuf": {
+   "count": 15,
+   "sample_files": [
+    "gradle/libs.versions.toml",
+    "core/datastore-proto/build.gradle.kts"
+   ]
+  },
+  "OAuth/OIDC/Identity": {
+   "count": 1,
+   "sample_files": [
+    "core/network/build.gradle.kts"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": true,
+  "files": [
+   "AGENTS.md"
+  ],
+  "count": 1,
+  "kinds": [
+   "AGENTS.md"
+  ],
+  "sizes": {
+   "AGENTS.md": 3021
+  }
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 10995,
+  "docs_dir": true,
+  "docs_files": 9,
+  "adrs": [],
+  "contributing": [
+   "CONTRIBUTING.md"
+  ],
+  "architecture_docs": [
+   "docs/ArchitectureLearningJourney.md"
+  ],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [],
+  "license_kind": "Apache-2.0"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 0,
+  "bat_cmd": 1,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": true,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 709,
+  "code_lines": 31017,
+  "bytes_on_disk_excl_git": 34351628,
+  "largest_files": [
+   {
+    "path": "docs/Now-In-Android-Design-File.pdf",
+    "bytes": 26375831
+   },
+   {
+    "path": "docs/images/screenshots.png",
+    "bytes": 308875
+   },
+   {
+    "path": "docs/images/nia-splash.jpg",
+    "bytes": 307995
+   },
+   {
+    "path": "app/src/testDemo/screenshots/expandedWidth_expandedHeight_showsNavigationRail.png",
+    "bytes": 282759
+   },
+   {
+    "path": "feature/foryou/impl/src/test/screenshots/ForYouScreenPopulatedAndLoading_tablet.png",
+    "bytes": 250976
+   },
+   {
+    "path": "feature/foryou/src/test/screenshots/ForYouScreenPopulatedAndLoading_tablet.png",
+    "bytes": 250966
+   },
+   {
+    "path": "feature/foryou/src/test/screenshots/ForYouScreenPopulatedFeed_tablet.png",
+    "bytes": 236182
+   },
+   {
+    "path": "feature/foryou/impl/src/test/screenshots/ForYouScreenPopulatedFeed_tablet.png",
+    "bytes": 236163
+   }
+  ],
+  "top_level_dirs": [
+   ".github",
+   ".google",
+   ".run",
+   "app",
+   "app-nia-catalog",
+   "benchmarks",
+   "build-logic",
+   "core",
+   "docs",
+   "feature",
+   "gradle",
+   "kokoro",
+   "lint",
+   "spotless",
+   "sync",
+   "tools",
+   "ui-test-hilt-manifest"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "a49ed253d75e61a2b6ab80a8da677b57437b08eb",
+  "tracked_files": 715,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 6,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 2981,
+  "shallow": true,
+  "last_commit_date": "2026-09-22",
+  "first_commit_date_in_clone": "2022-05-11",
+  "authors_in_clone": 180,
+  "hot_files": [
+   {
+    "path": "gradle/libs.versions.toml",
+    "changes": 378,
+    "authors": 50
+   },
+   {
+    "path": "app/build.gradle.kts",
+    "changes": 111,
+    "authors": 32
+   },
+   {
+    "path": ".github/workflows/Build.yaml",
+    "changes": 107,
+    "authors": 19
+   },
+   {
+    "path": "app/dependencies/prodReleaseRuntimeClasspath.txt",
+    "changes": 82,
+    "authors": 19
+   },
+   {
+    "path": "feature/foryou/src/main/java/com/google/samples/apps/nowinandroid/feature/foryou/ForYouScreen.kt",
+    "changes": 67,
+    "authors": 26
+   },
+   {
+    "path": "app/src/main/java/com/google/samples/apps/nowinandroid/ui/NiaApp.kt",
+    "changes": 59,
+    "authors": 17
+   },
+   {
+    "path": "feature-foryou/src/main/java/com/google/samples/apps/nowinandroid/feature/foryou/ForYouScreen.kt",
+    "changes": 53,
+    "authors": 19
+   },
+   {
+    "path": "build-logic/convention/src/main/kotlin/com/google/samples/apps/nowinandroid/KotlinAndroid.kt",
+    "changes": 51,
+    "authors": 13
+   },
+   {
+    "path": "app-nia-catalog/dependencies/releaseRuntimeClasspath.txt",
+    "changes": 47,
+    "authors": 19
+   },
+   {
+    "path": "core/ui/src/main/java/com/google/samples/apps/nowinandroid/core/ui/NewsResourceCard.kt",
+    "changes": 45,
+    "authors": 19
+   },
+   {
+    "path": "settings.gradle.kts",
+    "changes": 42,
+    "authors": 17
+   },
+   {
+    "path": "feature/bookmarks/src/main/java/com/google/samples/apps/nowinandroid/feature/bookmarks/BookmarksScreen.kt",
+    "changes": 41,
+    "authors": 18
+   },
+   {
+    "path": "README.md",
+    "changes": 38,
+    "authors": 18
+   },
+   {
+    "path": "build-logic/convention/src/main/kotlin/com/google/samples/apps/nowinandroid/AndroidCompose.kt",
+    "changes": 37,
+    "authors": 14
+   },
+   {
+    "path": "build-logic/convention/src/main/kotlin/AndroidLibraryConventionPlugin.kt",
+    "changes": 36,
+    "authors": 13
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "core/designsystem",
+    "changes": 1488,
+    "authors": 44
+   },
+   {
+    "dir": "app/src",
+    "changes": 1017,
+    "authors": 56
+   },
+   {
+    "dir": "feature/foryou",
+    "changes": 595,
+    "authors": 51
+   },
+   {
+    "dir": "build-logic/convention",
+    "changes": 455,
+    "authors": 35
+   },
+   {
+    "dir": "gradle",
+    "changes": 389,
+    "authors": 51
+   },
+   {
+    "dir": "docs/images",
+    "changes": 374,
+    "authors": 10
+   },
+   {
+    "dir": "core/data",
+    "changes": 369,
+    "authors": 30
+   },
+   {
+    "dir": "feature/interests",
+    "changes": 239,
+    "authors": 33
+   },
+   {
+    "dir": "feature/topic",
+    "changes": 229,
+    "authors": 34
+   },
+   {
+    "dir": ".",
+    "changes": 218,
+    "authors": 48
+   },
+   {
+    "dir": "feature/bookmarks",
+    "changes": 216,
+    "authors": 32
+   },
+   {
+    "dir": "core/ui",
+    "changes": 204,
+    "authors": 36
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "app-nia-catalog/dependencies/releaseRuntimeClasspath.txt",
+     "app/dependencies/prodReleaseRuntimeClasspath.txt",
+     "gradle/libs.versions.toml"
+    ],
+    "times": 5
+   },
+   {
+    "files": [
+     "app/src/benchmark/res/values-night/colors.xml",
+     "app/src/benchmark/res/values/colors.xml",
+     "app/src/debug/res/values-night/colors.xml",
+     "app/src/debug/res/values/colors.xml"
+    ],
+    "times": 4
+   },
+   {
+    "files": [
+     ".github/workflows/Build.yaml",
+     ".github/workflows/NightlyBaselineProfiles.yaml",
+     ".github/workflows/Release.yml"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "app/src/testDemo/screenshots/insets_snackbar_compact_medium.png",
+     "app/src/testDemo/screenshots/insets_snackbar_expanded_expanded.png",
+     "app/src/testDemo/screenshots/insets_snackbar_medium_medium.png"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "docs/images/screenshot-1-foryou.png",
+     "docs/images/screenshot-2-interests.png",
+     "docs/images/screenshot-3-topicdetail.png",
+     "docs/images/screenshots.png"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "app/src/testDemo/screenshots/compactWidth_compactHeight_showsNavigationBar.png",
+     "app/src/testDemo/screenshots/compactWidth_expandedHeight_showsNavigationBar.png",
+     "app/src/testDemo/screenshots/compactWidth_mediumHeight_showsNavigationBar.png",
+     "app/src/testDemo/screenshots/expandedWidth_compactHeight_showsNavigationRail.png",
+     "app/src/testDemo/screenshots/expandedWidth_expandedHeight_showsNavigationRail.png",
+     "app/src/testDemo/screenshots/expandedWidth_mediumHeight_showsNavigationRail.png",
+     "app/src/testDemo/screenshots/mediumWidth_compactHeight_showsNavigationRail.png",
+     "app/src/testDemo/screenshots/mediumWidth_expandedHeight_showsNavigationRail.png",
+     "app/src/testDemo/screenshots/mediumWidth_mediumHeight_showsNavigationRail.png"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "gradle/wrapper/gradle-wrapper.jar",
+     "gradle/wrapper/gradle-wrapper.properties",
+     "gradlew"
+    ],
+    "times": 2
+   },
+   {
+    "files": [
+     "build-logic/convention/src/main/kotlin/com/google/samples/apps/nowinandroid/AndroidCompose.kt",
+     "build-logic/convention/src/main/kotlin/com/google/samples/apps/nowinandroid/GradleManagedDevices.kt",
+     "build-logic/convention/src/main/kotlin/com/google/samples/apps/nowinandroid/KotlinAndroid.kt",
+     "build-logic/convention/src/main/kotlin/com/google/samples/apps/nowinandroid/NiaFlavor.kt"
+    ],
+    "times": 2
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "app-nia-catalog/dependencies/releaseRuntimeClasspath.txt",
+    "b": "app/dependencies/prodReleaseRuntimeClasspath.txt",
+    "times": 40
+   },
+   {
+    "a": "app/build.gradle.kts",
+    "b": "gradle/libs.versions.toml",
+    "times": 28
+   },
+   {
+    "a": "app/dependencies/prodReleaseRuntimeClasspath.txt",
+    "b": "gradle/libs.versions.toml",
+    "times": 22
+   },
+   {
+    "a": ".github/workflows/Build.yaml",
+    "b": ".github/workflows/Release.yml",
+    "times": 20
+   },
+   {
+    "a": "build-logic/convention/src/main/kotlin/AndroidApplicationConventionPlugin.kt",
+    "b": "build-logic/convention/src/main/kotlin/AndroidLibraryConventionPlugin.kt",
+    "times": 16
+   },
+   {
+    "a": "app-nia-catalog/dependencies/releaseRuntimeClasspath.txt",
+    "b": "gradle/libs.versions.toml",
+    "times": 14
+   },
+   {
+    "a": "build-logic/convention/build.gradle.kts",
+    "b": "gradle/libs.versions.toml",
+    "times": 14
+   },
+   {
+    "a": "feature/bookmarks/src/main/java/com/google/samples/apps/nowinandroid/feature/bookmarks/BookmarksScreen.kt",
+    "b": "feature/foryou/src/main/java/com/google/samples/apps/nowinandroid/feature/foryou/ForYouScreen.kt",
+    "times": 13
+   }
+  ],
+  "commits_analyzed": 1868,
+  "churn_by_ext": {
+   ".kt": 4561,
+   ".png": 1867,
+   ".kts": 750,
+   ".xml": 489,
+   ".md": 381,
+   ".toml": 378,
+   ".svg": 276,
+   ".txt": 164
+  }
+ }
+}

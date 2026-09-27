@@ -1,0 +1,230 @@
+{
+ "name": "altshuler_trade",
+ "rules_fired": [
+  "R01",
+  "R05",
+  "R06",
+  "R09a",
+  "R10",
+  "R11",
+  "R12",
+  "R14",
+  "R17",
+  "R21",
+  "R22b",
+  "R25",
+  "R32"
+ ],
+ "component_count": 27,
+ "by_kind": {
+  "hook": 2,
+  "rule": 7,
+  "scaffold": 5,
+  "report": 4,
+  "skill": 2,
+  "permission": 5,
+  "runner": 1,
+  "mcp": 1
+ },
+ "components": [
+  {
+   "rule": "R01",
+   "signal": "generated code present (path markers or 'auto-generated' headers)",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse deny Edit/Write under generated dirs"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: these paths are generated; change the source and regenerate"
+    }
+   ],
+   "reason": "generated code in Shared/DataModel/Crm/Alt.DataModel.Crm/EBG; editing it by hand is silently overwritten on the next build"
+  },
+  {
+   "rule": "R05",
+   "signal": "no CI",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "local verify script (build + tests) as the only gate"
+    },
+    {
+     "kind": "report",
+     "name": "report: no CI - agent output cannot be machine-checked before merge"
+    }
+   ],
+   "reason": "no CI config found - nothing defines green, so a minimal local gate must be created before agents change code"
+  },
+  {
+   "rule": "R06",
+   "signal": "monorepo / multi-project layout",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "per-package CLAUDE.md / AGENTS.md (build+test per package)"
+    },
+    {
+     "kind": "skill",
+     "name": "which-package skill (maps a request to the owning package)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: run commands from the package dir, not the root"
+    }
+   ],
+   "reason": "69 .NET projects in 1 solution(s) (67 packages) - one root instruction file cannot state the right build/test command for each"
+  },
+  {
+   "rule": "R09a",
+   "signal": "secret-looking strings outside test files",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read on the flagged files until reviewed"
+    },
+    {
+     "kind": "hook",
+     "name": "PreToolUse secret-scan on Write/Edit and on git commit"
+    },
+    {
+     "kind": "report",
+     "name": "report to owner: 1 hits in Stuff/OneTimeConsole/Program.cs"
+    }
+   ],
+   "reason": "1 credential-shaped hits outside tests (connection_string_with_password) - an agent must neither read nor propagate them"
+  },
+  {
+   "rule": "R10",
+   "signal": "sensitive files tracked (.env, .snk, .pfx, .pem, app/web.config, appsettings.Development)",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read/Edit on 40 sensitive files (Alt.BusinessLogicLayer.Crm.External.snk, app.config, Alt.BusinessLogicLayer.Crm.snk)"
+    }
+   ],
+   "reason": "40 sensitive-by-name files - out of the agent's context by default"
+  },
+  {
+   "rule": "R11",
+   "signal": "Windows-only build (.NET Framework / msbuild / .snk)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: 'this repository cannot be built here' - no build or test claims"
+    },
+    {
+     "kind": "runner",
+     "name": "Windows build runner (msbuild + VS build tools) reachable by a build-on-runner skill"
+    },
+    {
+     "kind": "skill",
+     "name": "build-on-runner skill (submit, wait, fetch log)"
+    }
+   ],
+   "reason": "1 .sln, netframework v4.6.2, netframework v4.7.2 targets, 58 .snk - msbuild on Windows only; an agent on Linux must say so instead of guessing"
+  },
+  {
+   "rule": "R12",
+   "signal": "external system: Dataverse / Dynamics 365",
+   "components": [
+    {
+     "kind": "mcp",
+     "name": "Dataverse MCP server candidate (official Power Platform MCP, read-only scope first)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: entity/attribute names come from Dataverse metadata, never guessed"
+    },
+    {
+     "kind": "permission",
+     "name": "deny plugin registration / solution import commands"
+    }
+   ],
+   "reason": "251 Dataverse/CRM SDK references - schema lives in the environment, not in the repo"
+  },
+  {
+   "rule": "R14",
+   "signal": "cloud SDK / IaC provider present",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny mutating cloud CLI (aws/az/gcloud create|delete|deploy)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: cloud credentials are never in the repo or the agent's env"
+    }
+   ],
+   "reason": "Azure SDK referenced - an agent with a shell must not be able to touch live infrastructure"
+  },
+  {
+   "rule": "R17",
+   "signal": "no AI configuration at all",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "CLAUDE.md from the diagnosis: build=msbuild Altshuler.sln /t:Build   # requires Windows / Visual Studio build tools; test=MSTest; lint=-; layout"
+    }
+   ],
+   "reason": "no CLAUDE.md/AGENTS.md/cursor/copilot - the agent starts from zero facts; the diagnosis provides them"
+  },
+  {
+   "rule": "R21",
+   "signal": "no formatter / linter",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: match the surrounding style; no reformatting of untouched lines"
+    },
+    {
+     "kind": "report",
+     "name": "report: no lint config - style drift is not machine-checked"
+    }
+   ],
+   "reason": "no lint/format config - a formatter hook would reformat files nobody formatted before"
+  },
+  {
+   "rule": "R22b",
+   "signal": "thin docs (no README or < 2 KB, no docs/)",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "onboarding doc from the diagnosis (layout, build, test, external systems)"
+    }
+   ],
+   "reason": "README 0.0 KB and no docs/ - nothing for the agent (or a new hire) to read"
+  },
+  {
+   "rule": "R25",
+   "signal": "binaries / package caches / IDE state tracked in git",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read/Edit under packages/, bin/, obj/, .vs/ (3215 binaries, 2963 package files tracked)"
+    },
+    {
+     "kind": "report",
+     "name": "report: repository hygiene - tracked binaries inflate every agent context and clone"
+    }
+   ],
+   "reason": "3215 dll/exe/pdb, 2963 package-cache files, 1020 IDE files in git - the agent would read them as code"
+  },
+  {
+   "rule": "R32",
+   "signal": "PCF control / web resources beside a CRM backend",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: PCF controls build with `npm run build` in their own folder (pac pcf); CRM plugins do not"
+    },
+    {
+     "kind": "scaffold",
+     "name": "per-area CLAUDE.md: Pcf/ (node) vs CrmEntryPoints/ (msbuild)"
+    }
+   ],
+   "reason": "two toolchains in one solution - a node build works here, the .NET one does not"
+  }
+ ]
+}

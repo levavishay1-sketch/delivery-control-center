@@ -1,0 +1,628 @@
+{
+ "name": "phpmyadmin",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/phpmyadmin",
+ "languages": [
+  {
+   "language": "PHP",
+   "files": 1235,
+   "lines": 240814
+  },
+  {
+   "language": "Twig",
+   "files": 274,
+   "lines": 19395
+  },
+  {
+   "language": "TypeScript",
+   "files": 105,
+   "lines": 37781
+  },
+  {
+   "language": "SCSS",
+   "files": 74,
+   "lines": 0
+  },
+  {
+   "language": "HTML",
+   "files": 22,
+   "lines": 0
+  },
+  {
+   "language": "JSON",
+   "files": 19,
+   "lines": 0
+  },
+  {
+   "language": "YAML",
+   "files": 19,
+   "lines": 0
+  },
+  {
+   "language": "XML",
+   "files": 9,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "eslint",
+  "jest",
+  "jquery",
+  "slim",
+  "symfony",
+  "twig/twig",
+  "typescript",
+  "webpack"
+ ],
+ "package_managers": [
+  "composer",
+  "yarn"
+ ],
+ "build": {
+  "system": [
+   "package.json scripts",
+   "composer"
+  ],
+  "commands": [
+   "yarn run build   # -> webpack",
+   "composer install"
+  ]
+ },
+ "tests": {
+  "frameworks": [
+   "package.json:test -> yarn node --experimental-vm-modules $(yarn bin jest)",
+   "jest",
+   "phpunit"
+  ],
+  "test_files": 494,
+  "test_dirs": [
+   [
+    "resources",
+    4
+   ],
+   [
+    "tests",
+    490
+   ]
+  ]
+ },
+ "lint_format": [
+  "eslint",
+  "phpstan",
+  "psalm",
+  ".eslintrc.json",
+  ".editorconfig",
+  "phpstan.neon.dist",
+  "psalm.xml",
+  "phpcs.xml",
+  ".stylelintrc.json"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/daily-snapshots.yml",
+    "name": "Daily snapshots"
+   },
+   {
+    "file": ".github/workflows/frontend-tests.yml",
+    "name": "Frontend analysis and tests"
+   },
+   {
+    "file": ".github/workflows/lint-and-analyse-php.yml",
+    "name": "Lint and analyse php files"
+   },
+   {
+    "file": ".github/workflows/lint-docs.yml",
+    "name": "Lint php documentation"
+   },
+   {
+    "file": ".github/workflows/lock.yml",
+    "name": "Lock threads"
+   },
+   {
+    "file": ".github/workflows/mutation-tests.yml",
+    "name": "Mutation tests"
+   },
+   {
+    "file": ".github/workflows/other-tools.yml",
+    "name": "Check other tools and scripts"
+   },
+   {
+    "file": ".github/workflows/shellcheck.yml",
+    "name": "ShellCheck"
+   },
+   {
+    "file": ".github/workflows/stale.yml",
+    "name": "Manage stale PRs/issues"
+   },
+   {
+    "file": ".github/workflows/test-selenium.yml",
+    "name": "End-to-End tests"
+   },
+   {
+    "file": ".github/workflows/tests.yml",
+    "name": "Run tests"
+   },
+   {
+    "file": ".github/workflows/update-po.yml",
+    "name": "Update translation files"
+   }
+  ],
+  "commands": [
+   "yarn install --non-interactive",
+   "composer run phpunit -- --testsuite unit --display-all-issues",
+   "./bin/internal/check-release-excludes.sh release/phpMyAdmin-${{ matrix.version }}+snapshot-all-langu",
+   "./scripts/check-release-excludes.sh release/phpMyAdmin-${{ matrix.version }}+snapshot-all-languages.",
+   "yarn test",
+   "yarn run js-lint --quiet",
+   "yarn run css-lint",
+   "composer validate --strict",
+   "composer phpcs",
+   "composer run twig-lint",
+   "composer phpstan -- --memory-limit 2G",
+   "make -C docs html SPHINXOPTS='-n -W -a'",
+   "yarn install --non-interactive --production",
+   "./vendor/bin/phpunit --testsuite end-to-end --no-logging --no-coverage --display-all-issues --stop-o",
+   "composer config --unset platform --no-interaction --ansi"
+  ],
+  "workflow_count": 12
+ },
+ "monorepo": {
+  "is_monorepo": false,
+  "workspaces": [],
+  "packages": []
+ },
+ "generated_code": {
+  "paths": [
+   {
+    "dir": "resources/js",
+    "files": 1
+   }
+  ],
+  "header_marked_files": 9,
+  "header_sample": [
+   "docs/conf.py",
+   "src/Command/SetVersionCommand.php",
+   "src/Command/WriteGitRevisionCommand.php",
+   "src/Plugins/Schema/Dia/DiaRelationSchema.php",
+   "src/Plugins/Schema/Svg/SvgRelationSchema.php",
+   "src/Setup/ConfigGenerator.php",
+   "src/Version.php",
+   "tests/doctum-config.php",
+   "tests/unit/Setup/ConfigGeneratorTest.php"
+  ],
+  "header_dirs": [
+   {
+    "dir": "src/Command",
+    "files": 2
+   },
+   {
+    "dir": "docs",
+    "files": 1
+   },
+   {
+    "dir": "src/Plugins/Schema/Dia",
+    "files": 1
+   },
+   {
+    "dir": "src/Plugins/Schema/Svg",
+    "files": 1
+   },
+   {
+    "dir": "src/Setup",
+    "files": 1
+   },
+   {
+    "dir": "src",
+    "files": 1
+   },
+   {
+    "dir": "tests",
+    "files": 1
+   },
+   {
+    "dir": "tests/unit/Setup",
+    "files": 1
+   }
+  ]
+ },
+ "secrets": {
+  "total": 6,
+  "by_kind": {
+   "password_assignment": 6
+  },
+  "files": [
+   {
+    "path": "tests/unit/Server/PrivilegesTest.php",
+    "hits": 6
+   }
+  ],
+  "sensitive_files": [],
+  "in_test_files": 6,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "MySQL/MariaDB": {
+   "count": 8,
+   "sample_files": [
+    "composer.json",
+    "package.json"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": false,
+  "files": [],
+  "count": 0,
+  "kinds": [],
+  "sizes": {}
+ },
+ "docs": {
+  "readme": "README",
+  "readme_bytes": 1525,
+  "docs_dir": true,
+  "docs_files": 43,
+  "adrs": [],
+  "contributing": [
+   "CONTRIBUTING.md"
+  ],
+  "architecture_docs": [],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [],
+  "license_kind": "GPL"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 0,
+  "bat_cmd": 1,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": true,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 3035,
+  "code_lines": 299543,
+  "bytes_on_disk_excl_git": 80721210,
+  "largest_files": [
+   {
+    "path": "resources/po/ta.po",
+    "bytes": 1003612
+   },
+   {
+    "path": "resources/po/th.po",
+    "bytes": 947325
+   },
+   {
+    "path": "resources/po/el.po",
+    "bytes": 939471
+   },
+   {
+    "path": "resources/po/bn.po",
+    "bytes": 904690
+   },
+   {
+    "path": "resources/po/ru.po",
+    "bytes": 899687
+   },
+   {
+    "path": "resources/po/uk.po",
+    "bytes": 866831
+   },
+   {
+    "path": "resources/po/si.po",
+    "bytes": 853697
+   },
+   {
+    "path": "resources/po/lo.po",
+    "bytes": 842921
+   }
+  ],
+  "top_level_dirs": [
+   ".github",
+   "app",
+   "docs",
+   "examples",
+   "public",
+   "resources",
+   "src",
+   "tests"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "09b821d72b58df1cc453cd3f935d4cecf2d3a5e0",
+  "tracked_files": 3048,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 4038,
+  "shallow": true,
+  "last_commit_date": "2026-09-27",
+  "first_commit_date_in_clone": "2021-03-02",
+  "authors_in_clone": 296,
+  "hot_files": [
+   {
+    "path": "psalm-baseline.xml",
+    "changes": 441,
+    "authors": 21
+   },
+   {
+    "path": "phpstan-baseline.neon",
+    "changes": 434,
+    "authors": 22
+   },
+   {
+    "path": "resources/po/ta.po",
+    "changes": 188,
+    "authors": 8
+   },
+   {
+    "path": "resources/po/th.po",
+    "changes": 149,
+    "authors": 10
+   },
+   {
+    "path": "po/ta.po",
+    "changes": 144,
+    "authors": 17
+   },
+   {
+    "path": "resources/po/lv.po",
+    "changes": 136,
+    "authors": 7
+   },
+   {
+    "path": "resources/po/ru.po",
+    "changes": 136,
+    "authors": 7
+   },
+   {
+    "path": "resources/po/tr.po",
+    "changes": 136,
+    "authors": 8
+   },
+   {
+    "path": "resources/po/en_GB.po",
+    "changes": 134,
+    "authors": 9
+   },
+   {
+    "path": "ChangeLog",
+    "changes": 132,
+    "authors": 20
+   },
+   {
+    "path": "resources/po/id.po",
+    "changes": 131,
+    "authors": 6
+   },
+   {
+    "path": "resources/po/uk.po",
+    "changes": 131,
+    "authors": 8
+   },
+   {
+    "path": "resources/po/fr.po",
+    "changes": 123,
+    "authors": 11
+   },
+   {
+    "path": "resources/po/ko.po",
+    "changes": 121,
+    "authors": 12
+   },
+   {
+    "path": "resources/po/mk.po",
+    "changes": 120,
+    "authors": 9
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "libraries/classes",
+    "changes": 12263,
+    "authors": 53
+   },
+   {
+    "dir": "resources/po",
+    "changes": 10834,
+    "authors": 89
+   },
+   {
+    "dir": "test/classes",
+    "changes": 7331,
+    "authors": 31
+   },
+   {
+    "dir": "themes/pmahomme",
+    "changes": 6577,
+    "authors": 19
+   },
+   {
+    "dir": "public/themes",
+    "changes": 5780,
+    "authors": 8
+   },
+   {
+    "dir": "themes/metro",
+    "changes": 5159,
+    "authors": 14
+   },
+   {
+    "dir": "themes/bootstrap",
+    "changes": 4718,
+    "authors": 16
+   },
+   {
+    "dir": "themes/original",
+    "changes": 4582,
+    "authors": 17
+   },
+   {
+    "dir": "po",
+    "changes": 3830,
+    "authors": 179
+   },
+   {
+    "dir": "tests/unit",
+    "changes": 3558,
+    "authors": 20
+   },
+   {
+    "dir": "js/vendor",
+    "changes": 3511,
+    "authors": 14
+   },
+   {
+    "dir": ".",
+    "changes": 2721,
+    "authors": 34
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "composer.lock",
+     "phpstan-baseline.neon",
+     "psalm-baseline.xml"
+    ],
+    "times": 9
+   },
+   {
+    "files": [
+     "ChangeLog",
+     "README",
+     "doc/conf.py",
+     "libraries/classes/Version.php",
+     "package.json"
+    ],
+    "times": 7
+   },
+   {
+    "files": [
+     "phpstan-baseline.neon",
+     "psalm-baseline.xml",
+     "src/WebAuthn/WebauthnLibServer.php"
+    ],
+    "times": 6
+   },
+   {
+    "files": [
+     "public/themes/bootstrap/scss/_common.scss",
+     "public/themes/metro/scss/_common.scss",
+     "public/themes/original/scss/_common.scss",
+     "public/themes/pmahomme/scss/_common.scss"
+    ],
+    "times": 5
+   },
+   {
+    "files": [
+     "phpstan-baseline.neon",
+     "psalm-baseline.xml",
+     "src/Controllers/Database/StructureController.php"
+    ],
+    "times": 4
+   },
+   {
+    "files": [
+     "phpstan-baseline.neon",
+     "psalm-baseline.xml",
+     "src/Display/Results.php",
+     "tests/unit/Display/ResultsTest.php"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "tests/unit/Plugins/Export/ExportHtmlwordTest.php",
+     "tests/unit/Plugins/Export/ExportLatexTest.php",
+     "tests/unit/Plugins/Export/ExportMediawikiTest.php",
+     "tests/unit/Plugins/Export/ExportOdtTest.php",
+     "tests/unit/Plugins/Export/ExportPdfTest.php"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "phpstan-baseline.neon",
+     "psalm-baseline.xml",
+     "src/ConfigStorage/Relation.php"
+    ],
+    "times": 3
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "phpstan-baseline.neon",
+    "b": "psalm-baseline.xml",
+    "times": 246
+   },
+   {
+    "a": "composer.lock",
+    "b": "phpstan-baseline.neon",
+    "times": 31
+   },
+   {
+    "a": "package.json",
+    "b": "yarn.lock",
+    "times": 23
+   },
+   {
+    "a": "src/Header.php",
+    "b": "tests/unit/HeaderTest.php",
+    "times": 16
+   },
+   {
+    "a": "phpstan-baseline.neon",
+    "b": "src/Controllers/Database/StructureController.php",
+    "times": 14
+   },
+   {
+    "a": "composer.lock",
+    "b": "psalm-baseline.xml",
+    "times": 14
+   },
+   {
+    "a": "phpstan-baseline.neon",
+    "b": "src/Util.php",
+    "times": 14
+   },
+   {
+    "a": "psalm-baseline.xml",
+    "b": "src/Util.php",
+    "times": 14
+   }
+  ],
+  "commits_analyzed": 3187,
+  "churn_by_ext": {
+   ".php": 31750,
+   ".png": 22116,
+   ".po": 14523,
+   ".twig": 7522,
+   ".js": 4756,
+   ".svg": 2738,
+   ".scss": 2041,
+   "": 1210
+  }
+ }
+}

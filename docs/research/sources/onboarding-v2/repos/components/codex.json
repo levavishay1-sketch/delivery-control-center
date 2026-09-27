@@ -1,0 +1,215 @@
+{
+ "name": "codex",
+ "rules_fired": [
+  "R01",
+  "R03",
+  "R04",
+  "R06",
+  "R07",
+  "R09a",
+  "R10",
+  "R16",
+  "R20",
+  "R22a",
+  "R23",
+  "R28",
+  "R29"
+ ],
+ "component_count": 23,
+ "by_kind": {
+  "hook": 3,
+  "rule": 6,
+  "skill": 5,
+  "scaffold": 1,
+  "doc": 2,
+  "agent": 1,
+  "permission": 3,
+  "report": 1,
+  "runner": 1
+ },
+ "components": [
+  {
+   "rule": "R01",
+   "signal": "generated code present (path markers or 'auto-generated' headers)",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse deny Edit/Write under generated dirs"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: these paths are generated; change the source and regenerate"
+    }
+   ],
+   "reason": "generated code in codex-rs/tui/src/chatwidget/snapshots, codex-rs/tui/src/bottom_pane/snapshots, codex-rs/tui/src/snapshots, codex-rs/tui/src/history_cell/snapshots, codex-rs/tui/src/app/snapshots, codex-rs/tui/src/chatwidget/tests/snapshots; editing it by hand is silently overwritten on the next build"
+  },
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (cargo test)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "cargo test with 1955 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 29 workflows) already encodes the project's definition of green: pnpm install --frozen-lockfile; cargo fmt -- --config imports_granularity=Item --check; cargo shear --deny-warnings"
+  },
+  {
+   "rule": "R06",
+   "signal": "monorepo / multi-project layout",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "per-package CLAUDE.md / AGENTS.md (build+test per package)"
+    },
+    {
+     "kind": "skill",
+     "name": "which-package skill (maps a request to the owning package)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: run commands from the package dir, not the root"
+    }
+   ],
+   "reason": "pnpm-workspace.yaml; cargo workspace: codex-rs/Cargo.toml (164 packages) - one root instruction file cannot state the right build/test command for each"
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for codex-rs/tui"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to codex-rs/tui"
+    }
+   ],
+   "reason": "codex-rs/tui changed 2863 times by 14 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R09a",
+   "signal": "secret-looking strings outside test files",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read on the flagged files until reviewed"
+    },
+    {
+     "kind": "hook",
+     "name": "PreToolUse secret-scan on Write/Edit and on git commit"
+    },
+    {
+     "kind": "report",
+     "name": "report to owner: 10 hits in codex-rs/memories/write/src/phase1.rs, codex-rs/model-provider/src/amazon_bedrock/mod.rs, codex-rs/agent-identity/src/lib.rs"
+    }
+   ],
+   "reason": "10 credential-shaped hits outside tests (private_key_block, password_assignment, openai_key, aws_access_key, github_token) - an agent must neither read nor propagate them"
+  },
+  {
+   "rule": "R10",
+   "signal": "sensitive files tracked (.env, .snk, .pfx, .pem, app/web.config, appsettings.Development)",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read/Edit on 4 sensitive files (.npmrc, test-ca-trusted.pem, test-ca.pem)"
+    }
+   ],
+   "reason": "4 sensitive-by-name files - out of the agent's context by default"
+  },
+  {
+   "rule": "R16",
+   "signal": "AGENTS.md / CLAUDE.md already present",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "delta only: append diagnosis facts missing from the existing file (build/test commands, generated paths, external systems - whichever the file lacks)"
+    }
+   ],
+   "reason": "instruction file exists (AGENTS.md) - generate only what the diagnosis proves and the file lacks"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run prettier on the edited file"
+    }
+   ],
+   "reason": "prettier, ruff, rustfmt/clippy (toolchain pinned), ruff.toml configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R22a",
+   "signal": "substantial docs (README >= 8 KB or docs/ folder or architecture doc)",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: read docs/ before planning"
+    },
+    {
+     "kind": "skill",
+     "name": "docs-sync skill: a change that alters behaviour updates docs/"
+    }
+   ],
+   "reason": "README 3.3 KB, 15 docs files, arch docs: none - the answers exist; the agent must be pointed at them"
+  },
+  {
+   "rule": "R23",
+   "signal": "devcontainer / Dockerfile / compose",
+   "components": [
+    {
+     "kind": "runner",
+     "name": "run the agent inside Dockerfile; same toolchain as CI"
+    }
+   ],
+   "reason": "Dockerfile present - the reproducible environment already exists"
+  },
+  {
+   "rule": "R28",
+   "signal": "large contributor base",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "contribution-style skill: PR format, commit convention, CONTRIBUTING (no CONTRIBUTING)"
+    }
+   ],
+   "reason": "54 authors in the sample - output must look like everyone else's PR to be merged"
+  },
+  {
+   "rule": "R29",
+   "signal": "LLM provider SDK in dependencies",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: tests never call live model APIs; provider keys are not in the agent's env"
+    },
+    {
+     "kind": "permission",
+     "name": "deny reading *_API_KEY env / .env"
+    }
+   ],
+   "reason": "OpenAI API referenced - a test run that hits the real API costs money and is non-deterministic"
+  }
+ ]
+}

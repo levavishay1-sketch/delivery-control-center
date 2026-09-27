@@ -1,0 +1,613 @@
+{
+ "name": "eshop",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/eshop",
+ "languages": [
+  {
+   "language": "C#",
+   "files": 547,
+   "lines": 26274
+  },
+  {
+   "language": "Markdown",
+   "files": 50,
+   "lines": 0
+  },
+  {
+   "language": "JSON",
+   "files": 45,
+   "lines": 0
+  },
+  {
+   "language": "CSS",
+   "files": 30,
+   "lines": 0
+  },
+  {
+   "language": "JavaScript",
+   "files": 14,
+   "lines": 1044
+  },
+  {
+   "language": "YAML",
+   "files": 11,
+   "lines": 0
+  },
+  {
+   "language": "XML",
+   "files": 7,
+   "lines": 0
+  },
+  {
+   "language": "TypeScript",
+   "files": 6,
+   "lines": 212
+  }
+ ],
+ "frameworks": [
+  ".NET",
+  "@playwright/test",
+  "Aspire",
+  "EntityFramework",
+  "Microsoft.AspNetCore",
+  "Microsoft.EntityFrameworkCore",
+  "android-manifest",
+  "xunit"
+ ],
+ "package_managers": [
+  "npm",
+  "nuget"
+ ],
+ "build": {
+  "system": [
+   "package.json scripts",
+   "dotnet",
+   "Directory.Build.props"
+  ],
+  "commands": [
+   "dotnet build eShop.Web.slnf"
+  ],
+  "dotnet_target_frameworks": {
+   "net10.0": 26,
+   "$(TargetFrameworks);net10.0-tizen": 2,
+   "net10.0-android;net10.0-ios;net10.0-maccatalyst;net10.0": 1,
+   "net10.0-android;net10.0-ios;net10.0-maccatalyst": 1
+  }
+ },
+ "tests": {
+  "frameworks": [
+   "@playwright/test",
+   "xunit"
+  ],
+  "test_files": 54,
+  "test_dirs": [
+   [
+    "e2e",
+    5
+   ],
+   [
+    "tests",
+    49
+   ]
+  ]
+ },
+ "lint_format": [
+  "editorconfig",
+  ".editorconfig"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/markdownlint.yml",
+    "name": "Markdownlint"
+   },
+   {
+    "file": ".github/workflows/playwright.yml",
+    "name": "Playwright Tests for eShop"
+   },
+   {
+    "file": ".github/workflows/pr-validation-maui.yml",
+    "name": "eShop Pull Request Validation - .NET MAUI"
+   },
+   {
+    "file": ".github/workflows/pr-validation.yml",
+    "name": "eShop Pull Request Validation"
+   }
+  ],
+  "commands": [
+   "npm ci",
+   "npx playwright install --with-deps chromium",
+   "npm run test:e2e",
+   "dotnet workload update",
+   "dotnet workload install android",
+   "dotnet build src/ClientApp/ClientApp.csproj",
+   "dotnet test --project tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj --no-progress --output de",
+   "dotnet build eShop.Web.slnf",
+   "dotnet test --solution eShop.Web.slnf --no-build --no-progress --output detailed"
+  ],
+  "workflow_count": 4
+ },
+ "monorepo": {
+  "is_monorepo": true,
+  "workspaces": [
+   "28 .NET projects in 4 solution(s)"
+  ],
+  "packages": [
+   "src/Basket.API",
+   "src/Catalog.API",
+   "src/ClientApp",
+   "src/EventBus",
+   "src/EventBusRabbitMQ",
+   "src/HybridApp",
+   "src/Identity.API",
+   "src/IntegrationEventLogEF",
+   "src/OrderProcessor",
+   "src/Ordering.API",
+   "src/Ordering.Domain",
+   "src/Ordering.Infrastructure",
+   "src/PaymentProcessor",
+   "src/WebApp",
+   "src/WebAppComponents",
+   "src/WebhookClient",
+   "src/Webhooks.API",
+   "src/eShop.AppHost",
+   "src/eShop.ServiceDefaults",
+   "tests/Application.UnitTests",
+   "tests/Basket.FunctionalTests",
+   "tests/Basket.UnitTests",
+   "tests/Catalog.FunctionalTests",
+   "tests/ClientApp.UnitTests",
+   "tests/Ordering.FunctionalTests",
+   "tests/Ordering.UnitTests",
+   "tests/Webhooks.FunctionalTests",
+   "tests/eShop.AppHost.UnitTests"
+  ],
+  "package_count": 28
+ },
+ "generated_code": {
+  "paths": [
+   {
+    "dir": "src/Ordering.Infrastructure/Migrations",
+    "files": 4
+   },
+   {
+    "dir": "src/Catalog.API/Infrastructure/Migrations",
+    "files": 3
+   },
+   {
+    "dir": "src/Identity.API/Data/Migrations",
+    "files": 1
+   },
+   {
+    "dir": "src/Identity.API/wwwroot/js",
+    "files": 1
+   },
+   {
+    "dir": "src/Webhooks.API/Migrations",
+    "files": 1
+   }
+  ],
+  "header_marked_files": 15,
+  "header_sample": [
+   "src/Catalog.API/Infrastructure/Migrations/20231009153249_Initial.Designer.cs",
+   "src/Catalog.API/Infrastructure/Migrations/20231018163051_RemoveHiLoAndIndexCatalogName.Designer.cs",
+   "src/Catalog.API/Infrastructure/Migrations/20231026091140_Outbox.Designer.cs",
+   "src/Catalog.API/Infrastructure/Migrations/CatalogContextModelSnapshot.cs",
+   "src/ClientApp/Services/Basket/Protos/Basket.cs",
+   "src/ClientApp/Services/Basket/Protos/BasketGrpc.cs",
+   "src/Identity.API/Data/Migrations/20230925223402_InitialMigration.Designer.cs",
+   "src/Identity.API/Data/Migrations/ApplicationDbContextModelSnapshot.cs",
+   "src/Ordering.Infrastructure/Migrations/20230925222426_Initial.Designer.cs",
+   "src/Ordering.Infrastructure/Migrations/20231021004633_FixOrderitemseqSchema.Designer.cs"
+  ],
+  "header_dirs": [
+   {
+    "dir": "src/Ordering.Infrastructure/Migrations",
+    "files": 5
+   },
+   {
+    "dir": "src/Catalog.API/Infrastructure/Migrations",
+    "files": 4
+   },
+   {
+    "dir": "src/ClientApp/Services/Basket/Protos",
+    "files": 2
+   },
+   {
+    "dir": "src/Identity.API/Data/Migrations",
+    "files": 2
+   },
+   {
+    "dir": "src/Webhooks.API/Migrations",
+    "files": 2
+   }
+  ]
+ },
+ "secrets": {
+  "total": 0,
+  "by_kind": {},
+  "files": [],
+  "sensitive_files": [
+   "src/Basket.API/appsettings.Development.json",
+   "src/Catalog.API/appsettings.Development.json",
+   "src/Identity.API/appsettings.Development.json",
+   "src/OrderProcessor/appsettings.Development.json",
+   "src/Ordering.API/appsettings.Development.json",
+   "src/PaymentProcessor/appsettings.Development.json",
+   "src/WebApp/appsettings.Development.json",
+   "src/WebhookClient/appsettings.Development.json",
+   "src/Webhooks.API/appsettings.Development.json"
+  ],
+  "in_test_files": 0,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "PostgreSQL": {
+   "count": 23,
+   "sample_files": [
+    "src/Catalog.API/Catalog.API.csproj",
+    "src/Identity.API/Identity.API.csproj",
+    "src/IntegrationEventLogEF/IntegrationEventLogEF.csproj",
+    "src/OrderProcessor/appsettings.Development.json"
+   ]
+  },
+  "OAuth/OIDC/Identity": {
+   "count": 13,
+   "sample_files": [
+    "src/Identity.API/Identity.API.csproj",
+    "src/ClientApp/ClientApp.csproj",
+    "src/HybridApp/HybridApp.csproj",
+    "tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj"
+   ]
+  },
+  "gRPC/Protobuf": {
+   "count": 11,
+   "sample_files": [
+    "src/ClientApp/ClientApp.csproj",
+    "src/WebApp/WebApp.csproj",
+    "src/Basket.API/Basket.API.csproj"
+   ]
+  },
+  "RabbitMQ/AMQP": {
+   "count": 9,
+   "sample_files": [
+    "src/Basket.API/appsettings.json",
+    "src/Catalog.API/appsettings.json",
+    "src/EventBusRabbitMQ/EventBusRabbitMQ.csproj",
+    "src/OrderProcessor/appsettings.json"
+   ]
+  },
+  "Redis": {
+   "count": 4,
+   "sample_files": [
+    "src/Basket.API/Basket.API.csproj",
+    "src/Basket.API/appsettings.json",
+    "src/eShop.AppHost/eShop.AppHost.csproj",
+    "tests/Basket.FunctionalTests/Basket.FunctionalTests.csproj"
+   ]
+  },
+  "OpenAI API": {
+   "count": 3,
+   "sample_files": [
+    "src/Catalog.API/Catalog.API.csproj",
+    "src/WebApp/WebApp.csproj",
+    "src/eShop.AppHost/appsettings.json"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": false,
+  "files": [],
+  "count": 0,
+  "kinds": [],
+  "sizes": {}
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 6686,
+  "docs_dir": false,
+  "docs_files": 0,
+  "adrs": [],
+  "contributing": [
+   "CONTRIBUTING.md"
+  ],
+  "architecture_docs": [],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [],
+  "license_kind": "MIT"
+ },
+ "windows_build": {
+  "sln": 4,
+  "csproj": 28,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 0,
+  "bat_cmd": 0,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": false,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": false,
+  "nix_flake": false,
+  "editorconfig": true,
+  "tool_versions": [
+   "global.json"
+  ]
+ },
+ "size": {
+  "files": 1142,
+  "code_lines": 27530,
+  "bytes_on_disk_excl_git": 18179447,
+  "largest_files": [
+   {
+    "path": "img/eshop_homepage.png",
+    "bytes": 1325689
+   },
+   {
+    "path": "src/Identity.API/wwwroot/images/banner.png",
+    "bytes": 969018
+   },
+   {
+    "path": "src/ClientApp/Resources/Images/header_home.png",
+    "bytes": 862851
+   },
+   {
+    "path": "src/ClientApp/Resources/Images/header.png",
+    "bytes": 776660
+   },
+   {
+    "path": "src/Identity.API/wwwroot/images/main_banner.png",
+    "bytes": 729906
+   },
+   {
+    "path": "src/ClientApp/Resources/Fonts/FontAwesomeSolid.otf",
+    "bytes": 591768
+   },
+   {
+    "path": "img/eshop_social_card.png",
+    "bytes": 506480
+   },
+   {
+    "path": "img/eshop_architecture.png",
+    "bytes": 492924
+   }
+  ],
+  "top_level_dirs": [
+   ".aspire",
+   ".config",
+   ".devcenter",
+   ".github",
+   "e2e",
+   "img",
+   "src",
+   "tests"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "b4a40872005d4bb29e5b1fa1ff7e244143d39215",
+  "tracked_files": 1144,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 200,
+  "shallow": true,
+  "last_commit_date": "2026-08-28",
+  "first_commit_date_in_clone": "2024-04-24",
+  "authors_in_clone": 33,
+  "hot_files": [
+   {
+    "path": "Directory.Packages.props",
+    "changes": 121,
+    "authors": 15
+   },
+   {
+    "path": "tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj",
+    "changes": 44,
+    "authors": 8
+   },
+   {
+    "path": "src/ClientApp/ClientApp.csproj",
+    "changes": 19,
+    "authors": 6
+   },
+   {
+    "path": "README.md",
+    "changes": 17,
+    "authors": 10
+   },
+   {
+    "path": "src/eShop.AppHost/eShop.AppHost.csproj",
+    "changes": 16,
+    "authors": 7
+   },
+   {
+    "path": "tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj",
+    "changes": 14,
+    "authors": 7
+   },
+   {
+    "path": "tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj",
+    "changes": 14,
+    "authors": 7
+   },
+   {
+    "path": "src/HybridApp/HybridApp.csproj",
+    "changes": 13,
+    "authors": 5
+   },
+   {
+    "path": "src/eShop.AppHost/Program.cs",
+    "changes": 12,
+    "authors": 8
+   },
+   {
+    "path": "src/eShop.AppHost/Extensions.cs",
+    "changes": 10,
+    "authors": 5
+   },
+   {
+    "path": "src/WebApp/Extensions/Extensions.cs",
+    "changes": 10,
+    "authors": 6
+   },
+   {
+    "path": "src/Catalog.API/Catalog.API.csproj",
+    "changes": 10,
+    "authors": 7
+   },
+   {
+    "path": "src/Catalog.API/Extensions/Extensions.cs",
+    "changes": 10,
+    "authors": 6
+   },
+   {
+    "path": "global.json",
+    "changes": 9,
+    "authors": 7
+   },
+   {
+    "path": "src/eShop.ServiceDefaults/OpenApi.Extensions.cs",
+    "changes": 8,
+    "authors": 4
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "src/ClientApp",
+    "changes": 511,
+    "authors": 10
+   },
+   {
+    "dir": "src/Catalog.API",
+    "changes": 217,
+    "authors": 9
+   },
+   {
+    "dir": "src/WebApp",
+    "changes": 196,
+    "authors": 15
+   },
+   {
+    "dir": "src/Identity.API",
+    "changes": 189,
+    "authors": 9
+   },
+   {
+    "dir": ".",
+    "changes": 184,
+    "authors": 19
+   },
+   {
+    "dir": "src/HybridApp",
+    "changes": 120,
+    "authors": 8
+   },
+   {
+    "dir": "tests/ClientApp.UnitTests",
+    "changes": 93,
+    "authors": 8
+   },
+   {
+    "dir": "src/Ordering.API",
+    "changes": 86,
+    "authors": 9
+   },
+   {
+    "dir": ".github/skills",
+    "changes": 48,
+    "authors": 1
+   },
+   {
+    "dir": "src/eShop.AppHost",
+    "changes": 41,
+    "authors": 11
+   },
+   {
+    "dir": "src/WebhookClient",
+    "changes": 35,
+    "authors": 3
+   },
+   {
+    "dir": "src/Webhooks.API",
+    "changes": 34,
+    "authors": 4
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "src/ClientApp/ClientApp.csproj",
+     "src/HybridApp/HybridApp.csproj",
+     "tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj"
+    ],
+    "times": 5
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "Directory.Packages.props",
+    "b": "tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj",
+    "times": 14
+   },
+   {
+    "a": "Directory.Packages.props",
+    "b": "src/eShop.AppHost/eShop.AppHost.csproj",
+    "times": 9
+   },
+   {
+    "a": "src/ClientApp/ClientApp.csproj",
+    "b": "tests/ClientApp.UnitTests/ClientApp.UnitTests.csproj",
+    "times": 9
+   },
+   {
+    "a": "Directory.Packages.props",
+    "b": "tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj",
+    "times": 6
+   },
+   {
+    "a": "Directory.Packages.props",
+    "b": "tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj",
+    "times": 6
+   },
+   {
+    "a": "src/eShop.AppHost/eShop.AppHost.csproj",
+    "b": "tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj",
+    "times": 6
+   },
+   {
+    "a": "src/eShop.AppHost/eShop.AppHost.csproj",
+    "b": "tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj",
+    "times": 6
+   },
+   {
+    "a": "tests/Catalog.FunctionalTests/Catalog.FunctionalTests.csproj",
+    "b": "tests/Ordering.FunctionalTests/Ordering.FunctionalTests.csproj",
+    "times": 6
+   }
+  ],
+  "commits_analyzed": 200,
+  "churn_by_ext": {
+   ".cs": 948,
+   ".csproj": 206,
+   ".props": 127,
+   ".webp": 105,
+   ".xaml": 85,
+   ".json": 81,
+   ".razor": 76,
+   ".svg": 70
+  }
+ }
+}

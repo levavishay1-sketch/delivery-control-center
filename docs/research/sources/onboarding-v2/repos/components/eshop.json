@@ -1,0 +1,211 @@
+{
+ "name": "eshop",
+ "rules_fired": [
+  "R01",
+  "R03",
+  "R04",
+  "R06",
+  "R07",
+  "R08",
+  "R10",
+  "R13",
+  "R17",
+  "R20",
+  "R29",
+  "R30",
+  "R31"
+ ],
+ "component_count": 22,
+ "by_kind": {
+  "hook": 2,
+  "rule": 8,
+  "skill": 4,
+  "scaffold": 2,
+  "doc": 1,
+  "agent": 1,
+  "permission": 2,
+  "mcp": 1,
+  "runner": 1
+ },
+ "components": [
+  {
+   "rule": "R01",
+   "signal": "generated code present (path markers or 'auto-generated' headers)",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PreToolUse deny Edit/Write under generated dirs"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: these paths are generated; change the source and regenerate"
+    }
+   ],
+   "reason": "generated code in src/Ordering.Infrastructure/Migrations, src/Catalog.API/Infrastructure/Migrations, src/ClientApp/Services/Basket/Protos, src/Identity.API/Data/Migrations, src/Webhooks.API/Migrations; editing it by hand is silently overwritten on the next build"
+  },
+  {
+   "rule": "R03",
+   "signal": "test framework present with a real corpus",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "run-affected-tests skill (npm run test:e2e)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: test command + where tests live"
+    }
+   ],
+   "reason": "@playwright/test, xunit with 54 test files - the agent should run the existing suite, not write a new one"
+  },
+  {
+   "rule": "R04",
+   "signal": "CI present",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "verify skill = the CI commands run locally"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: 'done' means the CI commands pass"
+    }
+   ],
+   "reason": "CI (github-actions, 4 workflows) already encodes the project's definition of green: npm ci; npx playwright install --with-deps chromium; npm run test:e2e"
+  },
+  {
+   "rule": "R06",
+   "signal": "monorepo / multi-project layout",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "per-package CLAUDE.md / AGENTS.md (build+test per package)"
+    },
+    {
+     "kind": "skill",
+     "name": "which-package skill (maps a request to the owning package)"
+    },
+    {
+     "kind": "rule",
+     "name": "rule line: run commands from the package dir, not the root"
+    }
+   ],
+   "reason": "28 .NET projects in 4 solution(s) (28 packages) - one root instruction file cannot state the right build/test command for each"
+  },
+  {
+   "rule": "R07",
+   "signal": "hot-spot directory with many contributors",
+   "components": [
+    {
+     "kind": "doc",
+     "name": "architecture note for src/ClientApp"
+    },
+    {
+     "kind": "agent",
+     "name": "reviewer subagent scoped to src/ClientApp"
+    }
+   ],
+   "reason": "src/ClientApp changed 511 times by 10 authors in the sampled history - highest regression risk, no single owner"
+  },
+  {
+   "rule": "R08",
+   "signal": "repeated change shapes (same >=3 files changed together >=3 times)",
+   "components": [
+    {
+     "kind": "skill",
+     "name": "change-recipe skill for: ClientApp.csproj + HybridApp.csproj + ClientApp.UnitTests.csproj (5x)"
+    }
+   ],
+   "reason": "1 recurring file-sets in history - a recipe makes the agent touch all of them, not just the obvious one"
+  },
+  {
+   "rule": "R10",
+   "signal": "sensitive files tracked (.env, .snk, .pfx, .pem, app/web.config, appsettings.Development)",
+   "components": [
+    {
+     "kind": "permission",
+     "name": "deny Read/Edit on 9 sensitive files (appsettings.Development.json, appsettings.Development.json, appsettings.Development.json)"
+    }
+   ],
+   "reason": "9 sensitive-by-name files - out of the agent's context by default"
+  },
+  {
+   "rule": "R13",
+   "signal": "external system: relational database",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: schema changes go through the migration tool (PostgreSQL); no ad-hoc SQL"
+    },
+    {
+     "kind": "mcp",
+     "name": "read-only DB MCP candidate - only if a local/compose DB exists (no compose - skip the MCP)"
+    }
+   ],
+   "reason": "PostgreSQL referenced in manifests/compose"
+  },
+  {
+   "rule": "R17",
+   "signal": "no AI configuration at all",
+   "components": [
+    {
+     "kind": "scaffold",
+     "name": "CLAUDE.md from the diagnosis: build=dotnet build eShop.Web.slnf; test=npm run test:e2e; lint=editorconfig, .editorconfig; layout"
+    }
+   ],
+   "reason": "no CLAUDE.md/AGENTS.md/cursor/copilot - the agent starts from zero facts; the diagnosis provides them"
+  },
+  {
+   "rule": "R20",
+   "signal": "formatter / linter configured",
+   "components": [
+    {
+     "kind": "hook",
+     "name": "PostToolUse: run editorconfig on the edited file"
+    }
+   ],
+   "reason": "editorconfig, .editorconfig configured - style is mechanical; a hook removes it from review"
+  },
+  {
+   "rule": "R29",
+   "signal": "LLM provider SDK in dependencies",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: tests never call live model APIs; provider keys are not in the agent's env"
+    },
+    {
+     "kind": "permission",
+     "name": "deny reading *_API_KEY env / .env"
+    }
+   ],
+   "reason": "OpenAI API referenced - a test run that hits the real API costs money and is non-deterministic"
+  },
+  {
+   "rule": "R30",
+   "signal": "lock file churn / dependency-bump shape",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: dependency bumps = Directory.Packages.props + ClientApp.UnitTests.csproj together; never edit a lock file by hand"
+    }
+   ],
+   "reason": "Directory.Packages.props + ClientApp.UnitTests.csproj co-change 14 times - the most frequent change shape in history is a dependency bump"
+  },
+  {
+   "rule": "R31",
+   "signal": "Aspire / orchestrated multi-service .NET",
+   "components": [
+    {
+     "kind": "rule",
+     "name": "rule line: run through the AppHost project; services are not started individually"
+    },
+    {
+     "kind": "runner",
+     "name": "Docker on the runner (Aspire containers: PostgreSQL, Redis, RabbitMQ/AMQP)"
+    }
+   ],
+   "reason": "Aspire AppHost orchestrates PostgreSQL, Redis, RabbitMQ/AMQP; 'dotnet run' on one service is not the system"
+  }
+ ]
+}

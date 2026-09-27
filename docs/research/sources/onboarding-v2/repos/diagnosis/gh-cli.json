@@ -1,0 +1,713 @@
+{
+ "name": "gh-cli",
+ "path": "/tmp/claude-0/-home-user-delivery-control-center/b2470b29-abd6-5f6c-8317-bcaed54a68e8/scratchpad/research2/repos/clones/gh-cli",
+ "languages": [
+  {
+   "language": "Go",
+   "files": 997,
+   "lines": 295974
+  },
+  {
+   "language": "JSON",
+   "files": 84,
+   "lines": 0
+  },
+  {
+   "language": "Markdown",
+   "files": 74,
+   "lines": 0
+  },
+  {
+   "language": "YAML",
+   "files": 25,
+   "lines": 0
+  },
+  {
+   "language": "Shell",
+   "files": 17,
+   "lines": 0
+  },
+  {
+   "language": "JavaScript",
+   "files": 5,
+   "lines": 1676
+  },
+  {
+   "language": "PowerShell",
+   "files": 4,
+   "lines": 0
+  },
+  {
+   "language": "Protobuf",
+   "files": 3,
+   "lines": 0
+  }
+ ],
+ "frameworks": [
+  "cobra",
+  "grpc"
+ ],
+ "package_managers": [
+  "go modules"
+ ],
+ "build": {
+  "system": [
+   "go",
+   "make"
+  ],
+  "commands": [
+   "go build ./..."
+  ]
+ },
+ "tests": {
+  "frameworks": [
+   "go test"
+  ],
+  "test_files": 422,
+  "test_dirs": [
+   [
+    ".github",
+    39
+   ],
+   [
+    "acceptance",
+    5
+   ],
+   [
+    "api",
+    11
+   ],
+   [
+    "git",
+    3
+   ],
+   [
+    "internal",
+    49
+   ],
+   [
+    "pkg",
+    311
+   ]
+  ]
+ },
+ "lint_format": [
+  "golangci-lint",
+  ".golangci.yml"
+ ],
+ "ci": {
+  "present": true,
+  "systems": [
+   "github-actions"
+  ],
+  "workflows": [
+   {
+    "file": ".github/workflows/acceptance.yml",
+    "name": "Acceptance Tests"
+   },
+   {
+    "file": ".github/workflows/agentics-maintenance.yml",
+    "name": "Agentic Maintenance"
+   },
+   {
+    "file": ".github/workflows/bump-go.yml",
+    "name": "Bump Go"
+   },
+   {
+    "file": ".github/workflows/codeql.yml",
+    "name": "Code Scanning"
+   },
+   {
+    "file": ".github/workflows/copilot-setup-steps.yml",
+    "name": "Copilot Setup Steps"
+   },
+   {
+    "file": ".github/workflows/dependabot-triage.lock.yml",
+    "name": "Dependabot PR Triage (skills-driven)"
+   },
+   {
+    "file": ".github/workflows/deployment.yml",
+    "name": "Deployment"
+   },
+   {
+    "file": ".github/workflows/go.yml",
+    "name": "Unit and Integration Tests"
+   },
+   {
+    "file": ".github/workflows/govulncheck.yml",
+    "name": "Go Vulnerability Check"
+   },
+   {
+    "file": ".github/workflows/issue-triage.lock.yml",
+    "name": "Issue Triage (skills-driven)"
+   },
+   {
+    "file": ".github/workflows/lint.yml",
+    "name": "Lint"
+   },
+   {
+    "file": ".github/workflows/scripts/spam-detection/eval-prompts.yml",
+    "name": "Evaluate spam detection"
+   },
+   {
+    "file": ".github/workflows/triage-issues.yml",
+    "name": "Issue Triaging"
+   },
+   {
+    "file": ".github/workflows/triage-pull-requests.yml",
+    "name": "PR Triaging"
+   },
+   {
+    "file": ".github/workflows/triage-scheduled-tasks.yml",
+    "name": "Triage Scheduled Tasks"
+   }
+  ],
+  "commands": [
+   "make",
+   "go test -tags=acceptance ./acceptance",
+   "echo \"GOROOT=$(go env GOROOT)\" >> \"$GITHUB_ENV\"",
+   "\"set -euo pipefail\\nmkdir -p /tmp/gh-aw\\nWORKLIST=/tmp/gh-aw/dependabot-worklist.json\\n\\n# The safe-",
+   "\"set -uo pipefail\\nPKGS=/tmp/gh-aw/go-production-packages.txt\\nrm -f \\\"$PKGS\\\" \\\"$PKGS.tmp\\\"\\n\\n# De",
+   "go run ./cmd/gen-docs --website --doc-path dist/manual",
+   "go mod download",
+   "go test -race -tags=integration ./...",
+   "go build -v ./cmd/gh",
+   "./test/integration/attestation-cmd/run-all-tests.sh \"${{ matrix.os }}\"",
+   "go mod tidy -diff",
+   "export GOROOT=$(go env GOROOT)"
+  ],
+  "workflow_count": 15
+ },
+ "monorepo": {
+  "is_monorepo": false,
+  "workspaces": [],
+  "packages": []
+ },
+ "generated_code": {
+  "paths": [
+   {
+    "dir": "internal/codespaces/rpc/codespace",
+    "files": 2
+   },
+   {
+    "dir": "internal/codespaces/rpc/jupyter",
+    "files": 2
+   },
+   {
+    "dir": "internal/codespaces/rpc/ssh",
+    "files": 2
+   },
+   {
+    "dir": ".github/extensions/terminal-mockup/assets",
+    "files": 1
+   },
+   {
+    "dir": "internal/barista/observability",
+    "files": 1
+   }
+  ],
+  "header_marked_files": 25,
+  "header_sample": [
+   "internal/barista/observability/telemetry.pb.go",
+   "internal/barista/observability/telemetry.twirp.go",
+   "internal/codespaces/rpc/codespace/codespace_host_service.v1.pb.go",
+   "internal/codespaces/rpc/codespace/codespace_host_service.v1.proto.mock.go",
+   "internal/codespaces/rpc/codespace/codespace_host_service.v1_grpc.pb.go",
+   "internal/codespaces/rpc/jupyter/jupyter_server_host_service.v1.pb.go",
+   "internal/codespaces/rpc/jupyter/jupyter_server_host_service.v1.proto.mock.go",
+   "internal/codespaces/rpc/jupyter/jupyter_server_host_service.v1_grpc.pb.go",
+   "internal/codespaces/rpc/ssh/ssh_server_host_service.v1.pb.go",
+   "internal/codespaces/rpc/ssh/ssh_server_host_service.v1.proto.mock.go"
+  ],
+  "header_dirs": [
+   {
+    "dir": "internal/codespaces/rpc/codespace",
+    "files": 3
+   },
+   {
+    "dir": "internal/codespaces/rpc/jupyter",
+    "files": 3
+   },
+   {
+    "dir": "internal/codespaces/rpc/ssh",
+    "files": 3
+   },
+   {
+    "dir": "internal/barista/observability",
+    "files": 2
+   },
+   {
+    "dir": "internal/gh/mock",
+    "files": 2
+   },
+   {
+    "dir": "pkg/cmd/codespace",
+    "files": 2
+   },
+   {
+    "dir": "pkg/extensions",
+    "files": 2
+   },
+   {
+    "dir": "internal/prompter",
+    "files": 1
+   },
+   {
+    "dir": "pkg/cmd/actions",
+    "files": 1
+   },
+   {
+    "dir": "pkg/cmd/agent-task/capi",
+    "files": 1
+   }
+  ]
+ },
+ "secrets": {
+  "total": 23,
+  "by_kind": {
+   "password_assignment": 23
+  },
+  "files": [
+   {
+    "path": "pkg/cmd/auth/status/status_test.go",
+    "hits": 8
+   },
+   {
+    "path": "acceptance/user_capability_test.go",
+    "hits": 5
+   },
+   {
+    "path": "internal/ghcmd/cmd_test.go",
+    "hits": 4
+   },
+   {
+    "path": "acceptance/fixture_repository_test.go",
+    "hits": 3
+   },
+   {
+    "path": "pkg/cmd/pr/edit/edit_test.go",
+    "hits": 2
+   },
+   {
+    "path": "pkg/cmd/auth/login/login_test.go",
+    "hits": 1
+   }
+  ],
+  "sensitive_files": [],
+  "in_test_files": 23,
+  "outside_tests": 0,
+  "dotenv_examples": []
+ },
+ "external_systems": {
+  "gRPC/Protobuf": {
+   "count": 5,
+   "sample_files": [
+    "go.mod"
+   ]
+  },
+  "OAuth/OIDC/Identity": {
+   "count": 3,
+   "sample_files": [
+    "go.mod"
+   ]
+  },
+  "GraphQL": {
+   "count": 2,
+   "sample_files": [
+    "go.mod"
+   ]
+  }
+ },
+ "ai_config": {
+  "present": true,
+  "files": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "count": 2,
+  "kinds": [
+   "AGENTS.md",
+   "CLAUDE.md"
+  ],
+  "sizes": {
+   "AGENTS.md": 5770,
+   "CLAUDE.md": 11
+  }
+ },
+ "docs": {
+  "readme": "README.md",
+  "readme_bytes": 6282,
+  "docs_dir": true,
+  "docs_files": 70,
+  "adrs": [],
+  "contributing": [
+   ".github/CONTRIBUTING.md"
+  ],
+  "architecture_docs": [],
+  "license": [
+   "LICENSE"
+  ],
+  "changelog": [],
+  "license_kind": "MIT"
+ },
+ "windows_build": {
+  "sln": 0,
+  "csproj": 0,
+  "snk": 0,
+  "vbproj": 0,
+  "packages_config": 0,
+  "ps1": 4,
+  "bat_cmd": 1,
+  "legacy_netframework": false,
+  "dll_checked_in": 0,
+  "exe_checked_in": 0,
+  "windows_only_build": false
+ },
+ "environment": {
+  "devcontainer": true,
+  "dockerfile": [],
+  "docker_compose": [],
+  "makefile": true,
+  "nix_flake": false,
+  "editorconfig": false,
+  "tool_versions": []
+ },
+ "size": {
+  "files": 1475,
+  "code_lines": 297650,
+  "bytes_on_disk_excl_git": 24273026,
+  "largest_files": [
+   {
+    "path": "pkg/cmd/attestation/test/data/gh_2.60.1_windows_arm64.zip",
+    "bytes": 12015465
+   },
+   {
+    "path": ".github/workflows/scripts/spam-detection/eval-prompts.yml",
+    "bytes": 439295
+   },
+   {
+    "path": "docs/primer/components/images/Help.png",
+    "bytes": 227981
+   },
+   {
+    "path": ".github/extensions/terminal-mockup/assets/html2canvas.min.js",
+    "bytes": 198689
+   },
+   {
+    "path": "docs/primer/getting-started/images/Prototyping-Figma.png",
+    "bytes": 172697
+   },
+   {
+    "path": ".github/workflows/dependabot-triage.lock.yml",
+    "bytes": 124665
+   },
+   {
+    "path": ".github/workflows/issue-triage.lock.yml",
+    "bytes": 122681
+   },
+   {
+    "path": "pkg/cmd/pr/create/create_test.go",
+    "bytes": 119615
+   }
+  ],
+  "top_level_dirs": [
+   ".devcontainer",
+   ".experiments",
+   ".github",
+   "acceptance",
+   "api",
+   "cmd",
+   "context",
+   "docs",
+   "git",
+   "internal",
+   "pkg",
+   "script",
+   "skills",
+   "test",
+   "utils"
+  ]
+ },
+ "git": {
+  "available": true,
+  "head": "9b031151a825bda919203c5202876a725d637368",
+  "tracked_files": 1483,
+  "tracked_binaries_dll_exe_pdb": 0,
+  "tracked_ide_junk": 0,
+  "tracked_package_dirs": 0,
+  "commits_in_clone": 4344,
+  "shallow": true,
+  "last_commit_date": "2026-09-25",
+  "first_commit_date_in_clone": "2024-06-13",
+  "authors_in_clone": 173,
+  "hot_files": [
+   {
+    "path": "go.mod",
+    "changes": 268,
+    "authors": 27
+   },
+   {
+    "path": "go.sum",
+    "changes": 240,
+    "authors": 22
+   },
+   {
+    "path": ".github/workflows/deployment.yml",
+    "changes": 129,
+    "authors": 17
+   },
+   {
+    "path": "pkg/cmd/pr/create/create.go",
+    "changes": 110,
+    "authors": 19
+   },
+   {
+    "path": "pkg/cmd/pr/create/create_test.go",
+    "changes": 94,
+    "authors": 22
+   },
+   {
+    "path": "pkg/cmd/pr/edit/edit.go",
+    "changes": 80,
+    "authors": 13
+   },
+   {
+    "path": "api/queries_pr.go",
+    "changes": 76,
+    "authors": 16
+   },
+   {
+    "path": "pkg/cmd/attestation/verify/verify.go",
+    "changes": 76,
+    "authors": 12
+   },
+   {
+    "path": "git/client.go",
+    "changes": 74,
+    "authors": 18
+   },
+   {
+    "path": "api/queries_repo.go",
+    "changes": 70,
+    "authors": 14
+   },
+   {
+    "path": "internal/prompter/prompter.go",
+    "changes": 70,
+    "authors": 12
+   },
+   {
+    "path": "pkg/cmd/pr/edit/edit_test.go",
+    "changes": 69,
+    "authors": 13
+   },
+   {
+    "path": "git/client_test.go",
+    "changes": 68,
+    "authors": 18
+   },
+   {
+    "path": "pkg/cmd/pr/shared/finder.go",
+    "changes": 68,
+    "authors": 17
+   },
+   {
+    "path": "pkg/cmd/pr/checkout/checkout.go",
+    "changes": 68,
+    "authors": 13
+   }
+  ],
+  "hot_dirs": [
+   {
+    "dir": "pkg/cmd",
+    "changes": 18773,
+    "authors": 121
+   },
+   {
+    "dir": "third-party/github.com",
+    "changes": 2646,
+    "authors": 5
+   },
+   {
+    "dir": ".",
+    "changes": 886,
+    "authors": 37
+   },
+   {
+    "dir": "acceptance/testdata",
+    "changes": 851,
+    "authors": 18
+   },
+   {
+    "dir": "api",
+    "changes": 819,
+    "authors": 31
+   },
+   {
+    "dir": "internal/codespaces",
+    "changes": 677,
+    "authors": 20
+   },
+   {
+    "dir": ".github/workflows",
+    "changes": 669,
+    "authors": 26
+   },
+   {
+    "dir": "pkg/cmdutil",
+    "changes": 373,
+    "authors": 16
+   },
+   {
+    "dir": "docs",
+    "changes": 369,
+    "authors": 31
+   },
+   {
+    "dir": "script",
+    "changes": 317,
+    "authors": 13
+   },
+   {
+    "dir": "git",
+    "changes": 284,
+    "authors": 20
+   },
+   {
+    "dir": "pkg/iostreams",
+    "changes": 232,
+    "authors": 17
+   }
+  ],
+  "repeated_change_shapes": [
+   {
+    "files": [
+     "third-party-licenses.darwin.md",
+     "third-party-licenses.linux.md",
+     "third-party-licenses.windows.md"
+    ],
+    "times": 32
+   },
+   {
+    "files": [
+     "acceptance/testdata/variable/variable-org.txtar",
+     "acceptance/testdata/variable/variable-repo-env.txtar",
+     "acceptance/testdata/variable/variable-repo.txtar"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "pkg/cmd/search/code/code.go",
+     "pkg/cmd/search/commits/commits.go",
+     "pkg/cmd/search/issues/issues.go",
+     "pkg/cmd/search/prs/prs.go",
+     "pkg/cmd/search/repos/repos.go"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     ".github/workflows/bump-go.yml",
+     ".github/workflows/codeql.yml",
+     ".github/workflows/deployment.yml",
+     ".github/workflows/detect-spam.yml",
+     ".github/workflows/go.yml",
+     ".github/workflows/govulncheck.yml",
+     ".github/workflows/lint.yml"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "internal/skills/discovery/discovery.go",
+     "internal/skills/discovery/discovery_test.go",
+     "pkg/cmd/skills/install/install.go",
+     "pkg/cmd/skills/install/install_test.go"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "pkg/cmd/attestation/verification/policy.go",
+     "pkg/cmd/attestation/verify/policy.go",
+     "pkg/cmd/attestation/verify/policy_test.go",
+     "pkg/cmd/attestation/verify/verify.go"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "git/client.go",
+     "git/client_test.go",
+     "git/objects.go",
+     "pkg/cmd/pr/shared/finder.go",
+     "pkg/cmd/pr/shared/finder_test.go"
+    ],
+    "times": 3
+   },
+   {
+    "files": [
+     "acceptance/testdata/pr/pr-view-respects-branch-pushremote.txtar",
+     "acceptance/testdata/pr/pr-view-respects-push-destination.txtar",
+     "acceptance/testdata/pr/pr-view-respects-remote-pushdefault.txtar",
+     "acceptance/testdata/pr/pr-view-respects-simple-pushdefault.txtar"
+    ],
+    "times": 3
+   }
+  ],
+  "cochange_pairs": [
+   {
+    "a": "go.mod",
+    "b": "go.sum",
+    "times": 211
+   },
+   {
+    "a": "third-party-licenses.linux.md",
+    "b": "third-party-licenses.windows.md",
+    "times": 40
+   },
+   {
+    "a": "third-party-licenses.darwin.md",
+    "b": "third-party-licenses.linux.md",
+    "times": 39
+   },
+   {
+    "a": "third-party-licenses.darwin.md",
+    "b": "third-party-licenses.windows.md",
+    "times": 39
+   },
+   {
+    "a": "git/client.go",
+    "b": "git/client_test.go",
+    "times": 34
+   },
+   {
+    "a": "pkg/cmd/pr/create/create.go",
+    "b": "pkg/cmd/pr/create/create_test.go",
+    "times": 29
+   },
+   {
+    "a": "pkg/cmd/pr/checkout/checkout.go",
+    "b": "pkg/cmd/pr/checkout/checkout_test.go",
+    "times": 28
+   },
+   {
+    "a": ".github/workflows/codeql.yml",
+    "b": ".github/workflows/govulncheck.yml",
+    "times": 23
+   }
+  ],
+  "commits_analyzed": 3140,
+  "churn_by_ext": {
+   ".go": 23159,
+   ".json": 1759,
+   "": 1162,
+   ".md": 1122,
+   ".yml": 892,
+   ".txtar": 849,
+   ".mod": 281,
+   ".sh": 252
+  }
+ }
+}

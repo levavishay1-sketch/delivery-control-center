@@ -1,0 +1,10 @@
+cline https://github.com/cline/cline
+fastapi-template https://github.com/fastapi/full-stack-fastapi-template
+gh-cli https://github.com/cli/cli
+spring-petclinic https://github.com/spring-projects/spring-petclinic
+eshop https://github.com/dotnet/eShop
+terraform-aws-eks https://github.com/terraform-aws-modules/terraform-aws-eks
+codex https://github.com/openai/codex
+phpmyadmin https://github.com/phpmyadmin/phpmyadmin
+pydatasci-handbook https://github.com/jakevdp/PythonDataScienceHandbook
+nowinandroid https://github.com/android/nowinandroid
