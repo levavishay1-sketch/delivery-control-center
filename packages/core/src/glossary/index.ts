@@ -73,30 +73,54 @@ const norm = (s: string) => s.toLowerCase().replace(/[?!.,"'״׳()\[\]:;]/g, " "
 const stem = (w: string) => w.replace(/^(ו|ה|ב|ל|מ|ש|כש|וה|וב|ול|שה|בה)(?=.{2,})/, "");
 const words = (s: string) => norm(s).split(" ").filter(Boolean).map(stem);
 
-const QUESTION_WORDS = /(^|\s)(מה|מהו|מהי|למה|איך|כמה|האם|הסבר|תסביר|מי|איפה|מתי)(\s|$)|\?/;
+const QUESTION_WORD_LIST = ["מה", "מהו", "מהי", "למה", "איך", "כמה", "האם", "הסבר", "תסביר", "מי", "איפה", "מתי"];
+const QUESTION_WORDS = new RegExp(`(^|\\s)(${QUESTION_WORD_LIST.join("|")})(\\s|$)|\\?`);
+/** Pure filler around the entity a question actually names — dropped before
+ *  judging how much of the question the matched term accounts for, so they
+ *  never inflate "how many other words are here besides the match". */
+const FILLER_WORDS = new Set([...QUESTION_WORD_LIST.map(stem), "זה", "זו", "זאת", "אלה", "אלו", "הוא", "היא"]);
 
 export type GlossaryMatch = { entry: Concept; screen: ScreenGlossary; certainty: "certain" | "likely" };
 
+/** How much of the question, once filler is stripped, the matched term's own
+ *  words account for. 1 for a question that is essentially just the term
+ *  ("מה זה MCP?"); low for a term that merely appears inside a longer,
+ *  substantive question — a specific entity's auto-composed title among
+ *  them ("מה זה csharp-lsp (LSP) — רשמי, Anthropic ולמה הוא מוצע?" only
+ *  brushes past "רשמי" on its way to asking about csharp-lsp). Confirmed
+ *  live 2026-09-28: a marketplace card's title always carries its trust
+ *  label ("רשמי" / "קהילה מוכרת" / "לא מאומת" — `source_trust`'s own
+ *  aliases), so every "ask" question about such a card was hijacked by
+ *  the same fixed trust explanation instead of an answer about that card. */
+function matchRatio(qw: string[], matchedWords: string[]): number {
+  const content = qw.filter((w) => !FILLER_WORDS.has(w));
+  if (!content.length) return 1;
+  const matched = matchedWords.filter((w) => !FILLER_WORDS.has(w));
+  return (matched.length || matchedWords.length) / content.length;
+}
+
 /** Does the question name a glossary term of this screen? The longest name
- *  wins; a question that only contains the term in passing is "likely",
- *  a short question about it is "certain". */
+ *  wins; a term that only accounts for a small share of the question is
+ *  "likely" (it goes to the model, with the screen's real facts), a
+ *  question that is essentially just the term is "certain". */
 export function matchGlossary(screen: string | null | undefined, question: string): GlossaryMatch | null {
   const g = glossaryFor(screen);
   if (!g) return null;
   const q = norm(question);
   const qw = words(question);
   if (!qw.length) return null;
-  let best: { entry: Concept; len: number } | null = null;
+  let best: { entry: Concept; len: number; matchedWords: string[] } | null = null;
   for (const entry of g.entries) {
     for (const name of [entry.title, ...(entry.aliases ?? [])]) {
       const n = norm(name);
-      const hit = q.includes(n) || words(name).every((w) => qw.includes(w));
-      if (hit && (!best || n.length > best.len)) best = { entry, len: n.length };
+      const nw = words(name);
+      const hit = q.includes(n) || nw.every((w) => qw.includes(w));
+      if (hit && (!best || n.length > best.len)) best = { entry, len: n.length, matchedWords: nw };
     }
   }
   if (!best) return null;
   const isQuestion = QUESTION_WORDS.test(question);
-  const certainty: GlossaryMatch["certainty"] = isQuestion && qw.length <= 12 ? "certain" : "likely";
+  const certainty: GlossaryMatch["certainty"] = isQuestion && qw.length <= 12 && matchRatio(qw, best.matchedWords) >= 0.5 ? "certain" : "likely";
   return { entry: best.entry, screen: g, certainty };
 }
 
