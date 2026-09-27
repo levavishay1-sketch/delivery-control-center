@@ -183,7 +183,7 @@ describe("secret-scan", () => {
 
   it("catches the other kinds in an Edit's new_string and a MultiEdit", () => {
     const s = hook("secret-scan", { allowTests: false });
-    const cases = ["const key = \"AKIAIOSFODNN7EXAMPL0\";", "-----BEGIN RSA PRIVATE KEY-----", "url = postgres://app:hunter22@db:5432/app", "api_key = \"9f8e7d6c5b4a3f2e1d\"", "token: ghp_abcdefghijklmnopqrstuvwxyz0123456789", "SLACK=xoxb-1234567890-abcdefghij", "stripe: sk_live_FAKEFAKE1"];
+    const cases = ["const key = \"AKIAIOSFODNN7EXAMPL0\";", "-----BEGIN RSA PRIVATE KEY-----", "url = postgres://app:hunter22@db:5432/app", "api_key = \"9f8e7d6c5b4a3f2e1d\"", "token: ghp_abcdefghijklmnopqrstuvwxyz0123456789", "SLACK=xoxb-1234567890-abcdefghij", "stripe: sk_live_Qm7xZp2Lk9"];
     for (const c of cases) expect(run(s, edit("src/config.ts", { new_string: c })).status, c).toBe(2);
     const multi = { tool_name: "MultiEdit", tool_input: { file_path: path.join(dir, "src/x.ts"), edits: [{ old_string: "a", new_string: "b" }, { old_string: "c", new_string: 'password = "hunter2hunter2"' }] }, cwd: dir };
     expect(run(s, multi).status).toBe(2);
