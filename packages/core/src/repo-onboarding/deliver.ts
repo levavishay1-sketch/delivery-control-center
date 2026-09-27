@@ -29,11 +29,14 @@ export async function deliverWorkspace(input: {
   userId: string;
   title: string;
   body: string;
+  /** Only these files are staged (by name, never `add -A`) — what the person approved. Everything else in the copy stays out of the commit. */
+  files?: string[];
   log: (line: string) => void;
-}): Promise<DeliverResult> {
+}): Promise<Omit<DeliverResult, "report">> {
   const { dir, branch, log } = input;
 
-  await git([...LONGPATHS, "add", "-A"], dir);
+  if (input.files?.length) await git([...LONGPATHS, "add", "--", ...input.files], dir);
+  else await git([...LONGPATHS, "add", "-A"], dir);
   const staged = (await git(["diff", "--cached", "--name-only"], dir)).out.split("\n").map((s) => s.trim()).filter(Boolean);
   let commitSha: string | null = null;
   if (staged.length) {

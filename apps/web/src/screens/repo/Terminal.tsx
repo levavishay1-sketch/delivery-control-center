@@ -5,10 +5,10 @@ import "@xterm/xterm/css/xterm.css";
 import { onboardingTerminalUrl, terminalAuthMessage, type SessionState } from "../../api.ts";
 
 const STATE_HE: Record<SessionState, string> = {
-  none: "הסשן יתחיל בשלב ההטמעה",
+  none: "סשן הטיוטה נפתח מכרטיס טיוטת /init",
   live: "● סשן Claude פעיל",
   ended: "הסשן נסגר",
-  disconnected: "הסשן נותק — אפשר לחדש אותו מכרטיס השלב",
+  disconnected: "הסשן נותק — אפשר לחדש אותו מכרטיס הטיוטה",
 };
 
 /** What the person sees: the visible screen plus a little above it. */

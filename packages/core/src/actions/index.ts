@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { db, type CallTrigger } from "@dcc/db";
 import { repositoryOnboardingRun, task } from "@dcc/db/schema";
 import { GROUP_NOT_DEVELOPED, approveTask, isGroupTask, previewAssessPrompt, previewBreakdownPrompt, previewImplementPrompt, startFlowRun } from "../ai-assist.ts";
-import { sendToOnboardingSession } from "../repo-onboarding/runs.ts";
+import { requestComponent, sendToOnboardingSession } from "../repo-onboarding/runs.ts";
 import { terminalState } from "../repo-onboarding/session.ts";
 import { estimateUsd, recommend, type Capability } from "../routing.ts";
 import { gapByRef, verifyGap } from "../gaps.ts";
@@ -16,7 +16,7 @@ import { isOpenGapState } from "../gap-ref.ts";
  * person's click.
  */
 
-export type ActionKey = "assess" | "breakdown" | "implement" | "approve_task" | "send_to_session" | "resolve_gap" | "dismiss_gap";
+export type ActionKey = "assess" | "breakdown" | "implement" | "approve_task" | "send_to_session" | "request_component" | "resolve_gap" | "dismiss_gap";
 export type ActionTopic = "wi" | "task" | "run" | "gaps";
 export type Actor = { userId: string };
 export type ActionEntity = { kind: ActionTopic; id: string; clientId: string; workitemId: string | null; repoId?: string | null };
@@ -122,17 +122,26 @@ export const ACTIONS: Record<ActionKey, ActionDef> = {
     run: (p, e, by) => approveTask(e.clientId, e.id, by, { intent: str(p.intent), appetite: p.appetite === "small" || p.appetite === "standard" || p.appetite === "large" ? p.appetite : undefined, prompt: typeof p.prompt === "string" ? p.prompt : undefined }),
   },
   send_to_session: {
-    key: "send_to_session", title: "שליחת הוראה לסשן ההטמעה", consequential: true, topic: "run",
-    costNote: "ההוראה נכנסת לסשן שכבר רץ — מה שקלוד יעשה בעקבותיה נרשם בעלות של הסשן",
+    key: "send_to_session", title: "שליחת הוראה לסשן טיוטת /init", consequential: true, topic: "run",
+    costNote: "ההוראה נכנסת לסשן הטיוטה שכבר רץ — מה שקלוד יעשה בעקבותיה נרשם בעלות של ההרצה",
     params: [{ name: "text", explain: "ההוראה לסשן, באנגלית, פסקה אחת", required: true }],
-    describe: (p) => `ההוראה תוקלד לתוך הסשן החי של Claude Code, בשמכם, כאילו כתבתם אותה בטרמינל:\n"${str(p.text) ?? ""}"`,
+    describe: (p) => `ההוראה תוקלד לתוך סשן טיוטת /init של Claude Code, בשמכם, כאילו כתבתם אותה בטרמינל:\n"${str(p.text) ?? ""}"`,
     allowed: async (_by, e, p) => {
       if (!str(p.text)) return { ok: false, reason: "אין הוראה לשלוח" };
-      if (terminalState(e.id) !== "live") return { ok: false, reason: "סשן Claude לא פעיל — חדשו אותו משלב ההטמעה ואז שלחו" };
+      if (terminalState(e.id) !== "live") return { ok: false, reason: "סשן הטיוטה לא פעיל — פתחו אותו מכרטיס הטיוטה במסך ההטמעה ואז שלחו" };
       return { ok: true };
     },
     estimate: async () => null,
     run: (p, e, by) => sendToOnboardingSession(e.repoId!, e.id, by, { text: str(p.text)! }),
+  },
+  // "תכין skill לתהליך X": a person's request becomes a component card in the open plan, with at most three questions.
+  request_component: {
+    key: "request_component", title: "בקשה לרכיב בתוכנית ההטמעה", consequential: true, topic: "run", approveLabel: "אשר והוסף כרטיס",
+    params: [{ name: "text", explain: "מה הרכיב צריך לעשות, במילים של האדם (skill לתהליך, סוכן שבודק, hook שאוסר, מסמך)", required: true }],
+    describe: (p) => `קלוד יהפוך את הבקשה לכרטיס רכיב בתוכנית — סוג, כותרת, מה הוא יעשה — ועד שלוש שאלות הבהרה עם ברירת מחדל. הכרטיס מחכה לאישורך כמו כל כרטיס אחר:\n"${str(p.text) ?? ""}"`,
+    allowed: async (_by, _e, p) => (str(p.text) ? { ok: true } : { ok: false, reason: "כתבו מה הרכיב צריך לעשות" }),
+    estimate: async () => typical("onboarding_processes", { input: 3_000, output: 300 }),
+    run: (p, e, by) => requestComponent(e.repoId!, e.id, by, { text: str(p.text)! }),
   },
   // The conversation about a requirement's gaps settles them one by one, but
   // only the person closes a gap: each of these is a card they approve.

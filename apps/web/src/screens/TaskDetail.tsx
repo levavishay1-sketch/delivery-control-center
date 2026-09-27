@@ -11,7 +11,7 @@ import { Info } from "../claude/Info.tsx";
 import { CodeMapPanel } from "../components/CodeMap.tsx";
 import { FileCompare } from "../components/FileCompare.tsx";
 import { useClaudeContext } from "../claude/context.ts";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 import { ManualCheckEditor, ManualReportCard, ManualReportForm, ManualSwitch } from "./ManualWork.tsx";
 
 /**

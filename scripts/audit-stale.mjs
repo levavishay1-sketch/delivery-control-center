@@ -73,11 +73,18 @@ const RETIRED = [
   "GAPS_SYSTEM", "CODE_SYSTEM", "CHANGE_SYSTEM", "RUN_SYSTEM", "INSIGHTS_SYSTEM", "NOTES_SYSTEM", "SYSTEM_HASH", "REPO_CONTEXT",
   // "a dependency exists" as a task's status, retired 2026-09-23: the status is always the stage; the dependency is a tag beside it
   "dependency_open",
+  // the four stages around one /init session, retired 2026-09-27 by the coach (openspec/changes/repository-coach):
+  // the run is seven steps now, the line next to each file is a component card, and /init is a draft generator inside the plan
+  "repository-onboarding-native-init", "onboarding_file_notes", "onboarding.file_notes", "file-notes.ts", "onboardingStageCatalogue",
+  "runOnboardingStage", "refreshReview", "approveReview", "resumeOnboardingSession", "updateOnboardingModelChoices", "STAGE_KEYS",
+  "ONBOARDING_STAGES", "checkInitFinished", "init.auto_completed", "ReviewIntro", "notesPrompt", "parseNotes", "noteSig", "currentStageKey",
+  "OnboardingStageKey", "OnboardingStageDefinition", "stageDefinition(", "STAGE_INFO", "ensureReviewNotes", "kickReviewNotes",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
-// docs/history/ holds the design records the user asked to keep. Everything else — the replacing
-// change included — may not name a retired design.
-const HISTORY = /^(CLAUDE\.md$|scripts\/audit-stale\.mjs$|packages\/db\/migrations\/|docs\/history\/|docs\/architecture-review\.md$)/;
+// docs/history/ holds the design records the user asked to keep; docs/research/ holds dated research that
+// describes what existed when it was written. Everything else — the replacing change included — may not
+// name a retired design.
+const HISTORY = /^(CLAUDE\.md$|scripts\/audit-stale\.mjs$|packages\/db\/migrations\/|docs\/history\/|docs\/research\/|docs\/architecture-review\.md$|docs\/ai-repository-architecture-research\.md$|docs\/fable-brief-repo-onboarding\.md$)/;
 const re = new RegExp(RETIRED.map((r) => r.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")).join("|"));
 const stale = [];
 for (const [f, t] of text) {

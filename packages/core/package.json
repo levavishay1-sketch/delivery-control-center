@@ -14,7 +14,8 @@
     "prove:checks": "tsx src/task-checks.prove.ts",
     "prove:manual": "tsx src/manual-work.prove.ts",
     "repair:branches": "tsx src/task-branch-repair.run.ts",
-    "prove:retention": "tsx src/chat/retention.prove.ts"
+    "prove:retention": "tsx src/chat/retention.prove.ts",
+    "prove:onboarding": "tsx src/repo-onboarding/onboarding.prove.ts"
   },
   "dependencies": {
     "@dcc/db": "*",

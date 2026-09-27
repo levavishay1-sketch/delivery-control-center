@@ -5,7 +5,7 @@ import { useClaudeContext } from "../claude/context.ts";
 import { CodeBlock, CodeEditor } from "../components/Code.tsx";
 import { langOf } from "../components/code.ts";
 import { Info } from "../claude/Info.tsx";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 
 /**
  * Deciding a conflict, laid out the way an editor's merge view is

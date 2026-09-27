@@ -3,7 +3,7 @@ import { askChat, getConversation, markHelpful, openChat, type ChatAnswer, type 
 import { Icon, ICONS } from "../ui.tsx";
 import { CostLine } from "./CostLine.tsx";
 import { ProposalCard } from "./ProposalCard.tsx";
-import { errText } from "../screens/onboarding/labels.ts";
+import { errText } from "../api.ts";
 import { onChatCommand, useCurrentClaudeContext, waitForPlace, type ClaudeScreenContext } from "./context.ts";
 import { BidiText } from "./BidiText.tsx";
 

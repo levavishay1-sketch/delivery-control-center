@@ -6,7 +6,7 @@ import { TopicRows } from "../components/Topics.tsx";
 import { useClaudeContext } from "../claude/context.ts";
 import { CardTitle, PrNumber } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 
 /**
  * One pull request, on a screen of its own (screens 2 to 5 of

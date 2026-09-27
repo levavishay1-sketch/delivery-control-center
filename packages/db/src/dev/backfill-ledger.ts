@@ -86,7 +86,7 @@ for (const r of runs) {
   if (!s.ledgerCursor) {
     await withTenant(r.clientId, (tx) =>
       tx.update(repositoryOnboardingRun)
-        .set({ session: { ...s, ledgerCursor: { ...totals, stageKey: r.currentStageKey, at: new Date().toISOString() } } })
+        .set({ session: { ...s, ledgerCursor: { ...totals, stepKey: r.currentStepKey, at: new Date().toISOString() } } })
         .where(sql`${repositoryOnboardingRun.id} = ${r.id}`),
     );
   }

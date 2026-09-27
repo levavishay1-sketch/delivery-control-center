@@ -8,7 +8,7 @@ import {
 } from "../api.ts";
 import { CardTitle, Pill, PromptPreviewModal, CopyBtn } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
-import { errText } from "./onboarding/labels.ts";
+import { errText } from "../api.ts";
 import { TaskGraph } from "./TaskGraph.tsx";
 import { TaskViewChoice } from "./RequirementMap.tsx";
 import { AddNote } from "../forms.tsx";
