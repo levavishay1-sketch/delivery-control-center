@@ -11,7 +11,7 @@
 Port, Cortex, OpsLevel), מודלי סביבה/שחרור (GitHub, Azure DevOps, Octopus, Harness,
 Argo), ALM של Dynamics 365 / Power Platform בפירוט, גילוי אוטומטי של נוף לקוח,
 שרתי MCP ל-CI/CD וענן (ספטמבר 2026), וסודות ב-SaaS רב-לקוחות. הממצאים המלאים
-עם מקור לכל טענה: `scratchpad/research/world-client-environments.md`. דרגות: **[A]**
+עם מקור לכל טענה: `docs/research/sources/world-client-environments.md`. דרגות: **[A]**
 תיעוד רשמי / מחקר · **[B]** תצפית · **[C]** דיווח מעשי.
 
 ---

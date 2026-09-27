@@ -10,7 +10,7 @@
 כלי סוכנויות (ClickUp, monday, Asana, Teamwork, Productive), מסגרות ללקוח פנימי
 (ITIL, SAFe, Power Platform, 18F), ומוצרי AI-delivery (GitHub Agents, Factory,
 Devin, Cursor, Rovo). הממצאים המלאים, עם מקור ודרגת ראיה לכל טענה:
-`scratchpad/research/world-product-genericity.md` (בסשן המחקר). כאן — רק מה
+`docs/research/sources/world-product-genericity.md`. כאן — רק מה
 שמשנה החלטה. דרגות: **[A]** תיעוד רשמי או מחקר מבוקר · **[B]** תצפית ·
 **[C]** דיווח של איש מקצוע.
 

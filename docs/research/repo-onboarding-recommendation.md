@@ -10,7 +10,7 @@ ALTSHULER_TRADE כולל מה ש-`/init` כתב לו בשלוש הרצות; (3) 
 בגרסה 2.1.283, Copilot, Codex, Cursor, Devin, Kiro, Factory, התקנים AGENTS.md ו-Agent
 Skills, ואחד-עשר מחקרים מבוקרים/קורפוס מ-2026; (4) ניסוי מדוד: אותן משימות קריאה על
 Trade, עם ובלי קובצי הנחיה, ב-`claude -p` אמיתי. הממצאים המלאים:
-`scratchpad/research/world-repo-onboarding.md`, `trade-inventory` (בדוח הסוכן),
+`docs/research/sources/world-repo-onboarding.md`, `docs/research/sources/dcc-survey.md`, `docs/research/sources/experiments/instruction-files-trade-results.tsv`,
 `docs/ai-repository-architecture-research.md` (המחקר הפנימי מ-23.9). דרגות ראיה:
 **[A]** מחקר מבוקר / תיעוד רשמי · **[B]** תצפית / קורפוס · **[C]** דיווח מעשי.
 
@@ -166,7 +166,7 @@ session-end, post-tool-use, info-hint-check), שני skills, סוכן `reviewer`
 
 | דור | מה | למה נזנח |
 |---|---|---|
-| v1 → v2 (16 → 9 שלבים) | פרומפטים של DCC + סכימות + validate + hooks מקטלוג + secret scan | "validation לא ניתן למעבר", זיהוי בלי פעולה, תבניות הגנה שמודל ניסח, עלות תחזוקה; **אבל** מצא את ה-ClientSecret ש-`/init` פספס |
+| v1 → v2 (פחות שלבים) | פרומפטים של DCC + סכימות + validate + hooks מקטלוג + secret scan | "validation לא ניתן למעבר", זיהוי בלי פעולה, תבניות הגנה שמודל ניסח, עלות תחזוקה; **אבל** מצא את ה-ClientSecret ש-`/init` פספס |
 | v3 — `/init` חי ב-PTY (19.9, נמצא בקוד) | prepare → `/init` → סקירת diff עם הערת Haiku לכל קובץ → PR | "Anthropic משפרים אותו לבד" |
 | מחקר 23.9 (אחרי v3) | `/init` = מחולל מועמדים בלבד; Measure לפני Generate; Validate עם Δ; P0 קודם | **לא הפך להחלטה**; הקוד נשאר v3 |
 
