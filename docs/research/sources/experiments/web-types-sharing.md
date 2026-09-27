@@ -161,8 +161,9 @@ Rough size: ~126 type declarations (~700 lines, mostly moved not written), plus 
    (a contracts package with annotated routes, or `satisfies` on each response).
 5. **A guard is needed the day this ships:** a lint rule restricting `apps/web` to type-only imports from `@dcc/*`
    (`no-restricted-imports` with `allowTypeImports`, or `@typescript-eslint/consistent-type-imports`), because the failure mode — a value
-   import of a Node module — is only caught at build time. dependency-cruiser could not have expressed this rule here (it did not
-   distinguish type-only edges in its default configuration; see `arch-rules.md`).
+   import of a Node module — is only caught at build time. dependency-cruiser can express it too (`tsPreCompilationDeps: "specify"`
+   plus a rule with `dependencyTypesNot: ["type-only"]`), provided it is installed where it can load TypeScript — see the
+   installation trap in `arch-rules.md`.
 6. **Caveats:** one machine, two timed runs per configuration; the web's tsconfig already pulled in `@types/node` via `vite.config.ts`, so
    the "Node globals in browser code" risk is pre-existing and not attributable to sharing; the copy renamed its package and was never
    installed, so npm-workspace effects (two packages resolving the same `@dcc/core`) were not exercised; approach B's declarations were

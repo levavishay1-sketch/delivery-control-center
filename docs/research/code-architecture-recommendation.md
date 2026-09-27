@@ -30,7 +30,7 @@ vite, git — הפירוט המלא: `docs/research/sources/dcc-metrics.md`. (2)
 **לא לשכתב. לבנות מחדש מודול-מודול, מול "אורקל", בלי לעצור את הפיילוט —
 וב-TypeScript.** ההיסוד נכון; הצורה לא. במספרים: 28,034 שורות TypeScript
 ב-193 קבצים, כתובות ב-9 ימים, עם 217 קומיטים. השכפול 1.9% (מתחת לסף של
-Sonar), 14 תלויות מעגליות (13 מהן במרשם ה-"i", תיקון של קובץ אחד), 107 מתוך
+Sonar), 14 תלויות מעגליות לפי madge — אבל עם פענוח TypeScript 12 מהן הן ייבוא-טיפוס בלבד (10 במרשם ה-"i"), אחת מכוונת, ואחת אמיתית, 107 מתוך
 4,288 פונקציות מעל מורכבות 15 (2.5%), ו-**3.9% בדיקות** — אף אחד מ-18 המודולים
 הגדולים (מעל 400 שורות) לא נבדק. שני קבצים — `ai-assist.ts` (2,708 שורות)
 ו-`server.ts` (1,813, כל 162 ה-routes) — הם 12.8% מהקוד, ושבעה מעשרת הקבצים
@@ -150,7 +150,7 @@ lesson", "found live", 13 ענפי `win32`). שכתוב מאפס עכשיו = ל
 |---|---|---|---|
 | שורות TypeScript (cloc) | 28,034 ב-193 קבצים (35,436 גולמי) | — | קטן; "החלפה סיטונאית אפשרית" |
 | שכפול (jscpd 50 טוקנים / 30) | **1.88%** / 3.24% (80 / 142 clones) | Sonar ≤3% | בסף; 17 מהשכפולים web↔core הם טיפוסים מועתקים |
-| תלויות מעגליות (madge) | **14**: 13 ב-core (9+1 במרשם ה-"i", ai-assist↔tasks, chat↔proposals, chat↔screens), 1 ב-web | 0 | תיקון קטן; המרשם — קובץ אחד |
+| תלויות מעגליות (madge) | **14**: 13 ב-core (9+1 במרשם ה-"i", ai-assist↔tasks, chat↔proposals, chat↔screens), 1 ב-web. **עם פענוח TypeScript (dependency-cruiser, 5.6): 12 ייבוא-טיפוס בלבד, 1 `await import()` מכוון (`tasks.ts:133`), 1 אמיתי — `chat/index ⇄ chat/proposals`** | 0 | תיקון קטן; המרשם — קובץ אחד; האמיתי — פיצול אחד |
 | מורכבות > 15 | **107 / 4,288** (2.5%); ממוצע 2.78, חציון 1, מקס' **244** | ≤15 | מרוכז: `TaskDetail` 244 (1,334 שורות, 65 `useState`), `WorkflowTab` 115, `pullRequestDetail` 80, `runImplement` 60, `askChat` 56 |
 | פונקציות > 120 שורות | 23 (web 17, core 6) | ≤50–80 | מסכים = פונקציה אחת ענקית |
 | קוד מת (knip) | 39 exports, 48 types, 2 קבצים (`.tmp-perf.cjs`, `scenario-altshuler.ts`), `zod` לא מוצהר ב-core | 0 | קטן, לנקות |
@@ -250,7 +250,7 @@ lesson", "found live", 13 ענפי `win32`). שכתוב מאפס עכשיו = ל
 ### 5.1 מדידה לפני שיפוט
 
 סעיף 3.1. המספר שקובע: **3.9% בדיקות ו-0 מ-18 המודולים הגדולים נבדקים**.
-כל השאר (שכפול 1.9%, 14 מעגלים, 107 פונקציות מורכבות) הוא בטווח שמתקנים
+כל השאר (שכפול 1.9%, 14 מעגלים שמהם אחד אמיתי, 107 פונקציות מורכבות) הוא בטווח שמתקנים
 בשבועות, לא סיבה לשכתוב.
 
 ### 5.2 שפה נכונה לכל חלק
@@ -342,7 +342,7 @@ test`. **התחלה בסגנון packwerk:** להקפיא את ההפרות של
 | ניסוי | מה נבדק | תוצאה | מקור |
 |---|---|---|---|
 | **פלט מובנה של ה-CLI** (Trade, `claude -p`, Sonnet, n=1 לכל ריצה, $0.81 סה"כ) | `--json-schema` מול חילוץ JSON ברגקס (`runClaudeJson`, `ai-assist.ts:590-603`: בלוק מגודר אם יש, חיתוך עד `{`/`[`, `JSON.parse`, בלי ולידציה); `--bare` | **`--json-schema` עובד על 2.1.283, גם ב-`stream-json` (הפורמט של DCC):** `structured_output` תקין מול הסכמה (4 פערים, enum/boolean/maxItems נאכפו), ו-`result` הוא JSON חשוף; $0.36, 99s. בלי סכמה: התשובה עטופה ב-```json```, `JSON.parse` נכשל, הרגקס של DCC הציל — אבל **לא מוודא כלום**; $0.23, 84s. `--bare` מתקבל אבל דורש `ANTHROPIC_API_KEY` — בסביבה עם login של host זה נכשל באימות; בלי `--bare` תשובה של מילה אחת עלתה $0.039 עם ~40k טוקני הקשר (39 כלים, 62 פקודות, 30 skills). ממצא צדדי: ריצה מקוננת יורשת `CLAUDE_CODE_SESSION_ID` של האב — DCC שרץ מתוך סשן Claude Code חייב לנקות אותו. | `sources/experiments/cli-structured-output.md` |
-| **כללי ארכיטקטורה כ-lint** (dependency-cruiser על הקוד האמיתי) | כמה הפרות יש היום לכללים שסעיף 5.3 מציע | **27 הפרות היום לחמשת הכללים המוצעים** — זו רשימת ה-todo ההתחלתית בסגנון packwerk: 14 מעגלים (13 ב-core, 1 ב-web); `api → db` 7 (`context.ts`, `server.ts`, `scenario-altshuler.ts`); `mcp → db` 2; `chat → repo-onboarding` 3; `insights → chat` 1. מידע נוסף: 44 מ-89 קובצי core (49%) מייבאים `@dcc/db` ישירות — שכבת גישה לנתונים היא שינוי מבני, לא כלל lint. הריצה: שניות בודדות. הכלי לא מבחין בייבוא-טיפוס-בלבד בהגדרות ברירת המחדל, ולכן הכלל "web מייבא רק טיפוסים" צריך ESLint. | `sources/experiments/arch-rules.md` |
+| **כללי ארכיטקטורה כ-lint** (dependency-cruiser על הקוד האמיתי) | כמה הפרות יש היום לכללים שסעיף 5.3 מציע | **27 הפרות היום לחמשת הכללים המוצעים** — זו רשימת ה-todo ההתחלתית בסגנון packwerk: 14 מעגלים (12 ייבוא-טיפוס בלבד, 1 מכוון, **1 אמיתי**: `chat/index ⇄ chat/proposals`; בלי פענוח-טיפוסים הכלי מדווח 2); `api → db` 7 (`context.ts`, `server.ts`, `scenario-altshuler.ts`); `mcp → db` 2; `chat → repo-onboarding` 3; `insights → chat` 1. מידע נוסף: 44 מ-89 קובצי core (49%) מייבאים `@dcc/db` ישירות — שכבת גישה לנתונים היא שינוי מבני, לא כלל lint — הכלל שכן ניתן לאכיפה הוא ההפוך: "רק core מייבא `@dcc/db`" (9 קשתות לתקן). הריצה: 1.6–5 שניות. **מלכודת התקנה:** `npx dependency-cruiser` בלי `typescript` לידו מדלג בשקט על כל קובצי ה-`.ts` ומחזיר 0 הפרות עם exit 0 — מעבר בריק; חייב להיות devDependency עם בקרת-חיוב (מספר מודולים מינימלי). את "web מייבא רק טיפוסים" מבטא eslint-plugin-boundaries (רואה `importKind: "type"`, רץ ב-`npm run lint`). | `sources/experiments/arch-rules.md` |
 | **שיתוף טיפוסים web↔core** (עותק זמני `apps/web-exp`) | להחליף את 17 בלוקי הטיפוסים המועתקים ב-`import type` מ-`@dcc/core`: מה נדרש, מה נשבר, מה זה עושה ל-tsc ולגודל ה-bundle | **72 מ-126 טיפוסים (57%) הוחלפו ב-`import type` עם שינוי אחד (`lib: ES2023`), וה-bundle זהה בייט-לבייט** (esbuild מוחק ייבוא-טיפוס). המחיר: typecheck של ה-web עלה מ-9.4s ל-14.4s (+48%; 402 → 891 קבצים, ×5.4 instantiations, ×1.9 זיכרון) כי `@dcc/core` מייצא *מקורות*; עם `.d.ts` מוכנים — +9–12% בלבד. **ההעתקים כבר סטו בשקט:** 7 מ-69 טיפוסים באותו שם לא תאמו לשרת (3 חסרים שדות שהשרת שולח, 2 רופפים מהאיחודים האמיתיים, 1 מדויק *יותר* מ-core) — ואף בדיקה לא תפסה. **התקרה היא ה-API, לא ה-web:** 54 טיפוסים לא ניתנים לייבוא — 20 תשובות שה-routes מרכיבים inline בלי טיפוס, 10 שורות Drizzle שנשפכות ל-JSON (`Date` → מחרוזת במרומז), 12 מוצהרים ב-core ולא מיוצאים, 6 איחודים קטנים, 6 שונים בכוונה. מסקנה: `packages/contracts` (~700 שורות, רובן מועברות) + חתימת החזרה על ~60 routes — האכיפה בצד שמייצר; ודרוש כלל ESLint "web: ייבוא-טיפוס בלבד מ-`@dcc/*`". | `sources/experiments/web-types-sharing.md` |
 
 **מה הניסויים מלמדים על "לבנות מחדש":** גם השינוי הקטן ביותר בגבול (טיפוסים)
@@ -473,7 +473,7 @@ RLS; `appendEvent` בלבד; Fastify + React; PGlite לפיתוח; `prove:`/`smo
 
 | # | שינוי | מה בפנים | תלוי ב |
 |---|---|---|---|
-| 1 | `ci-and-real-postgres-oracle` | GitHub Actions: typecheck/lint/test/audit; `dev:prove`/`smoke`/`prove:*` על Postgres בקונטיינר; jscpd (חדש ≤0%), madge 0, knip 0, dependency-cruiser baseline; כיסוי core על קוד חדש | — (החוזה) |
+| 1 | `ci-and-real-postgres-oracle` | GitHub Actions: typecheck/lint/test/audit; `dev:prove`/`smoke`/`prove:*` על Postgres בקונטיינר; jscpd (חדש ≤0%), מעגלים 0 (אמיתיים), knip 0, dependency-cruiser כ-devDependency עם baseline ובקרת-חיוב; כיסוי core על קוד חדש | — (החוזה) |
 | 2 | `tenant-wall-hardening` | RLS ל-6 הטבלאות + FORCE ב-SQL; `withTenant` בלבד; אימות לכל route; הרשאה לפי לקוח; `/admin/shutdown` מאחורי אדמין; PAT → Vault (סביבות) | 1 |
 | 3 | `structured-output-now` | `--json-schema` בכל קריאה עם חוזה JSON, ולידציה, רגקס כ-fallback; ניקוי `CLAUDE_CODE_SESSION_ID`; `is_error` נבדק בנפרד | — (מיידי) |
 | 4 | `module-boundaries` | פיצול core למודולים עם index; routes לפי מודול נגזרים ממרשם הפעולות; api/mcp בלי db; רשימת הפרות packwerk; ts-arch ב-`npm test` | 1 |
