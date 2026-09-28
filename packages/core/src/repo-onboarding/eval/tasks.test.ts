@@ -95,3 +95,14 @@ describe("exercised / globMatch", () => {
     expect(globMatch(".claude/hooks/*.mjs", ".claude/hooks/block-paths.mjs")).toBe(true);
   });
 });
+
+describe("the dependency probe", () => {
+  it("asks a cargo workspace for a crate, never a Go module ('cargo' contains 'go')", () => {
+    const rust = { ...trade, package_managers: ["cargo"], monorepo: { ...trade.monorepo, packages: ["tokio", "tokio-util", "benches"] } } as RepoProfile;
+    const ctx = evalContext(rust);
+    expect(ctx.dep_name).toBe("anyhow");
+    expect(ctx.dep_target).toBe("tokio");
+    const go = evalContext({ ...trade, package_managers: ["go"] } as RepoProfile);
+    expect(go.dep_name).toBe("github.com/google/uuid");
+  });
+});

@@ -29,17 +29,17 @@ API restart → proof on TRADE, five public repositories and DCC.
 
 ## 3. Diagnosis, rules, templates
 
-- [ ] 3.1 `diagnose.ts`: tools on the host, test projects from git, sensitive files uncapped + patterns, packages uncapped, hot dirs only from ≥ 20 commits, a large generated file, external systems corrected, `packages_committed`, the `layout` block; tests
-- [ ] 3.2 `rules.json`: R06, R10, R11, R12, R17, R21, R25; tests
-- [ ] 3.3 `catalog/`: local-gate from the tools present, agents-md conditional sections and a layout map, per-area with the exact folder, which-package all-or-nothing, hooks covering PowerShell and `git add … && git commit`, deny by pattern, `.gitattributes` without `-diff`, `.gitignore` keeping a committed package folder; tests
+- [x] 3.1 `diagnose.ts`: tools on the host, test projects from git, sensitive files uncapped + patterns, packages uncapped, hot dirs only from ≥ 20 commits, a large generated file, external systems corrected, `packages_committed`, the `layout` block; tests
+- [x] 3.2 `rules.json`: R06, R10, R11, R12, R17, R21, R25; tests
+- [x] 3.3 `catalog/`: local-gate from the tools present, agents-md conditional sections and a layout map, per-area with the exact folder, which-package all-or-nothing, hooks covering PowerShell and `git add … && git commit`, deny by pattern, `.gitattributes` without `-diff`, `.gitignore` keeping a committed package folder; tests
 
 ## 4. Build and verification
 
-- [ ] 4.1 `verify.ts`: no `null` for text kinds, `configured` for connections, commands and relative paths checked, tolerance 0, a rule checks its own line, numbered checklists, hooks routed in settings; tests
-- [ ] 4.2 `build.ts`: preamble stripped, one fix attempt, shared files composed from the cards that passed, failed cards' files deleted, names from stable keys, `.dcc/onboarding.json`; tests
-- [ ] 4.3 `components.ts`: key collision suffixed, readiness ("same" not ok, always-loaded ≤ 3,000), the PR report with the with/without table, `deliverable`; tests
-- [ ] 4.4 `deliver.ts`: `git add` by name with its exit code, no `-A`
-- [ ] 4.5 `configured` everywhere a status is enumerated (types, web api, labels, build screen, coach, verify)
+- [x] 4.1 `verify.ts`: no `null` for text kinds, `configured` for connections, commands and relative paths checked, tolerance 0, a rule checks its own line, numbered checklists, hooks routed in settings; tests
+- [x] 4.2 `build.ts`: preamble stripped, one fix attempt, shared files composed from the cards that passed, failed cards' files deleted, names from stable keys, `.dcc/onboarding.json`; tests
+- [x] 4.3 `components.ts`: key collision suffixed, readiness ("same" not ok, always-loaded ≤ 3,000), the PR report with the with/without table, `deliverable`; tests
+- [x] 4.4 `deliver.ts`: `git add` by name with its exit code, no `-A`
+- [x] 4.5 `configured` everywhere a status is enumerated (types, web api, labels, build screen, coach, verify)
 
 ## 5. The run · `runs.ts`, `draft.ts`, `session.ts`, `types.ts`
 
@@ -50,21 +50,21 @@ API restart → proof on TRADE, five public repositories and DCC.
 - [x] 5.5 The envelope: the measurement's estimate and cap before step 4; `buildEstimateUsd` on the plan
 - [x] 5.6 `removeBuiltComponent` + `POST …/components/:key/remove`; `POST …/draft/skip`
 - [x] 5.7 Events: `trial.task` with arm/runIndex/turns/graders, `trial.stopped_at_cap`, `build.removed`, `component.removed`, `session.capped`, `draft.scan_applied`, `plan.phase`
-- [ ] 5.8 Screen copy in `types.ts` (`what_he`/`cost_he` of the trial, plan and build steps)
+- [x] 5.8 Screen copy in `types.ts` (`what_he`/`cost_he` of the trial, plan and build steps)
 
 ## 6. Data · `packages/db`
 
 - [x] 6.1 Migration `0056`: `onboarding_trial` + `run_index`, `num_turns`, `graders`, `exercises`; the prompts `onboarding.trial`, `onboarding.judge`, `onboarding.review`, `onboarding.author` updated where no person edited them
 - [x] 6.2 Schema; prompt contract (`EDITS`, `CLAIMS`, `COPY_DIR`, `EXPECT`, `FIX`)
-- [ ] 6.3 The one restart: API stopped → `dev:migrate` → `dev:prove` → API started (no watch)
+- [x] 6.3 The one restart: API stopped → `dev:migrate` → `dev:prove` → API started (no watch)
 
 ## 7. Screens, glossary, spec, sweep
 
-- [ ] 7.1 `build.tsx`, `steps.tsx`, `plan.tsx`, `RepoDossier.tsx`, `cards.tsx`: the with/without table, the per-card delta and "מוצע להסרה", the envelope, the plan's phases, the draft caps in the rail — every element with an "i"
-- [ ] 7.2 Concepts: new keys and rewordings; `info:drift`
-- [ ] 7.3 `docs/onboarding-spec.html` (8 steps) and the artifact republished
-- [ ] 7.4 `scripts/audit-stale.mjs` retired names; `repository-coach/tasks.md` 2.6; `CLAUDE.md`; the sweep
-- [ ] 7.5 `prove-kit.ts` stand-in emitting tool events; `onboarding.prove.ts` extended
+- [x] 7.1 `build.tsx`, `steps.tsx`, `plan.tsx`, `RepoDossier.tsx`, `cards.tsx`: the with/without table, the per-card delta and "מוצע להסרה", the envelope, the plan's phases, the draft caps in the rail — every element with an "i"
+- [x] 7.2 Concepts: new keys and rewordings; `info:drift`
+- [x] 7.3 `docs/onboarding-spec.html` (8 steps) and the artifact republished
+- [x] 7.4 `scripts/audit-stale.mjs` retired names; `repository-coach/tasks.md` 2.6; `CLAUDE.md`; the sweep
+- [x] 7.5 `prove-kit.ts` stand-in emitting tool events; `onboarding.prove.ts` extended
 
 ## 8. Proof
 

@@ -151,6 +151,7 @@ function PlanSummary({ plan }: { plan: PlanResult }) {
         <Tile n={plan.components} label="כרטיסים" info="component_card" />
         <Tile n={market} label="חיפוש רכיבים מוכנים" info="marketplace_search" />
         <Tile n={plan.reviewer ? `${plan.reviewer.missing} חסרים · ${plan.reviewer.redundant} מיותרים` : "לא רץ"} label="הסוקר" info="reviewer_pass" />
+        {plan.pruned && <Tile n={`${plan.pruned.measured.length} נמדדו · ${plan.pruned.documented.length} מתועדים · ${plan.pruned.reviewer.length} הסוקר`} label="לא מוצע על סמך ראיות" info="plan_pruned" />}
         <Tile n={fmtUsd(plan.costUsd)} label="עלות הצעד" info="step_cost" />
       </div>
       {(plan.firings?.length || suppressed.length) ? (

@@ -10,10 +10,10 @@ import { git, runClaudeRaw } from "../ai-assist.ts";
 import { callsForEntity } from "../claude-center.ts";
 import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { renderPrompt, requirePrompt } from "../prompts.ts";
-import { estimateUsd, recommend, type Capability } from "../routing.ts";
+import { recommend, type Capability } from "../routing.ts";
 import { buildComponents, previewAgentsMd, repoFacts, writeDossier, type Author } from "./build.ts";
 import { changedFiles, fileVersions } from "./changes.ts";
-import { KIND_HE, cardFromSeed, deliverable, familyOf, mergeSeeds, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials, stepsDeciding } from "./components.ts";
+import { KIND_HE, cardFromSeed, deliverable, familyOf, mergeSeeds, pruneByBaseline, pruneDocumentedProcessSteps, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials, stepsDeciding } from "./components.ts";
 import { diagnoseRepository } from "./diagnose.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { DraftError, launchDraftSession, recordSessionSlice, recoverDraftSession, sendToDraftSession, sessionEffort, sessionModelId, sessionOf, setAfterDraftEnded, stopDraftSession, type DraftCtx } from "./draft.ts";
@@ -35,7 +35,7 @@ import {
   type PlanPhase, type PlanResult, type ProcessesResult, type ProfileCorrection, type Readiness, type RepoProfile, type RunStatus, type StepKey, type StepStatus, type TrialOutcome, type TrialPhase, type TrialResult,
 } from "./types.ts";
 import { jointCheck } from "./verify.ts";
-import { ensureOnboardingWorkspace, existingSetup, runtimeDir, trackedFileCount } from "./workspace.ts";
+import { deepenHistory, ensureOnboardingWorkspace, existingSetup, runtimeDir, trackedFileCount } from "./workspace.ts";
 
 /**
  * The onboarding run (`openspec/changes/repository-coach`): seven steps, the
@@ -271,6 +271,8 @@ async function runConnect(ctx: Ctx, run: RunRow, by: Actor) {
 async function runDiagnose(ctx: Ctx, run: RunRow, by: Actor) {
   if (!run.workspacePath) throw new OnboardingError("אין עותק מבודד — החיבור לא רץ");
   const t0 = Date.now();
+  // A shallow clone has one commit: no hot folders, no change shapes, no conventions. The history is fetched first.
+  await deepenHistory(run.workspacePath, (l) => terminalLine(ctx.runId, l)).catch((e) => terminalLine(ctx.runId, `ההיסטוריה לא הועמקה: ${(e as Error).message.slice(0, 160)}`));
   const profile = await diagnoseRepository(run.workspacePath, ctx.repoName, { log: (l) => terminalLine(ctx.runId, l) });
   const prev = await loadProfile(ctx);
   const corrections = prev?.corrections ?? [];
@@ -388,18 +390,26 @@ async function evalSetup(ctx: Ctx) {
   return { profile: p.profile, processes, tasks, evalCtx: evalContext(p.profile, processes), hints: factsForJudge(p.profile) };
 }
 
-/** What a measurement will roughly cost, from what earlier runs averaged (an executor run ~$0.35, a judge with tools ~$0.10). */
+/** What a measurement will roughly cost: the client's own earlier runs when there are enough of them (a row's cost holds the executor and its judge), else a constant (an executor run ~$0.35, a judge with tools ~$0.10). */
 const EXECUTOR_RUN_USD = 0.35;
 const JUDGE_RUN_USD = 0.1;
-export const evalEstimateUsd = (tasks: readonly EvalTask[], arms: number, runs: number) =>
-  Math.round((tasks.length * arms * runs * EXECUTOR_RUN_USD + tasks.filter((t) => t.judge).length * arms * runs * JUDGE_RUN_USD) * 100) / 100;
+const HISTORY_MIN_ROWS = 8;
+export const evalEstimateUsd = (tasks: readonly EvalTask[], arms: number, runs: number, perRunUsd: number | null = null) =>
+  Math.round((perRunUsd !== null ? tasks.length * arms * runs * perRunUsd : tasks.length * arms * runs * EXECUTOR_RUN_USD + tasks.filter((t) => t.judge).length * arms * runs * JUDGE_RUN_USD) * 100) / 100;
+/** The average a measured run cost this client so far (executor and judge together), or null until there are enough rows to trust. */
+async function measuredRunUsd(ctx: Ctx): Promise<number | null> {
+  const rows = await withTenant(ctx.clientId, (tx) => tx.select({ cost: onboardingTrial.costUsd }).from(onboardingTrial).where(eq(onboardingTrial.clientId, ctx.clientId)));
+  const costs = rows.map((r) => Number(r.cost)).filter((x) => Number.isFinite(x) && x > 0);
+  if (costs.length < HISTORY_MIN_ROWS) return null;
+  return Math.round((costs.reduce((a, b) => a + b, 0) / costs.length) * 1000) / 1000;
+}
 /** The cap the run stops at: the estimate with room for the second pass, never below a few dollars. */
 const evalCapUsd = (estimate: number) => Math.max(4, Math.round(estimate * 1.8 * 100) / 100);
 
 async function gateTrial(ctx: Ctx, run: RunRow, by: Actor) {
   if (run.kind === "coach") { await completeStep(ctx, "trial", { reused: true }, by.userId); await advance(ctx, by); return; }
   const { tasks } = await evalSetup(ctx);
-  const estimate = evalEstimateUsd(tasks, 1, 1);
+  const estimate = evalEstimateUsd(tasks, 1, 1, await measuredRunUsd(ctx));
   const waiting = { tasks: tasks.map((t) => ({ key: t.key, title_he: t.title_he, kind: t.kind, judge: t.judge ? "model" : "code" })), estimateUsd: estimate, capUsd: evalCapUsd(estimate), arms: ["without"] as EvalArm[], runs: 1 };
   if (normalizeAutomation(run.automation).level === "reversible_auto") { await patchStep(ctx, "trial", { result: waiting }); await runEvalPhase(ctx, run, by, "baseline"); return; }
   await waitStep(ctx, "trial", waiting, by.userId, `המדידה ממתינה לאישור על העלות (~$${estimate.toFixed(2)}, ${tasks.length} משימות, תקרה $${evalCapUsd(estimate)})`);
@@ -431,7 +441,7 @@ async function runEvalPhase(ctx: Ctx, run: RunRow, by: Actor, phase: TrialPhase,
   const prior = phase === "after" ? (await loadTrials(ctx, "baseline")).map(asEvalRecord) : [];
   await withTenant(ctx.clientId, (tx) => tx.delete(onboardingTrial).where(and(eq(onboardingTrial.runId, ctx.runId), eq(onboardingTrial.phase, phase))));
   const delivered = phase === "after" ? await deliverableFiles(ctx) : [];
-  const estimate = evalEstimateUsd(tasks, phase === "after" ? 2 : 1, 1);
+  const estimate = evalEstimateUsd(tasks, phase === "after" ? 2 : 1, 1, await measuredRunUsd(ctx));
   const capUsd = evalCapUsd(estimate);
   terminalLine(ctx.runId, `מדידה ${arm === "without" ? "בלי הסט" : "עם הסט שיימסר"}: ${tasks.length} משימות, אומדן ~$${estimate.toFixed(2)}, תקרה $${capUsd}${phase === "after" ? ` · ${delivered.length} קבצים בזרוע "עם"` : ""}`);
   const res = await runEval({
@@ -557,6 +567,7 @@ async function runPlan(ctx: Ctx, run: RunRow, by: Actor) {
   let rules = { fired: [] as RuleFiring[], suppressed: [] as RuleSuppression[] };
   let market = { seeds: [] as ComponentSeed[], found: 0, remembered: 0, searched: false, skipped: null as string | null, costUsd: 0 };
   let review: Awaited<ReturnType<typeof reviewerSeeds>> = null;
+  const pruned: NonNullable<PlanResult["pruned"]> = { measured: [], documented: [], reviewer: [] };
   if (run.kind === "coach") {
     seeds = await coachSeeds(ctx);
   } else {
@@ -569,12 +580,31 @@ async function runPlan(ctx: Ctx, run: RunRow, by: Actor) {
     market = await marketplaceSeeds(ctx, run, by, p.profile);
     costUsd += market.costUsd;
     seeds = mergeSeeds(fromRules, fromProcesses, fromTrials, market.seeds);
-    review = await reviewerSeeds(ctx, run, by, p.profile, processes, trials, seeds);
+    // What the evidence already rules out is not proposed: a card whose tasks passed without it (step 4 measured that),
+    // and a process helper the repository's own documentation covers. Both stay visible as "not recommended", with why.
+    const { tasks: bank } = await evalSetup(ctx);
+    const measured = pruneByBaseline(seeds, bank, trials);
+    const documented = pruneDocumentedProcessSteps(measured.seeds, p.profile);
+    seeds = documented.seeds;
+    pruned.measured = measured.pruned.map((x) => x.key);
+    pruned.documented = documented.pruned;
+    for (const x of measured.pruned) terminalLine(ctx.runId, `לא מוצע — נמדד: ${x.key} (${x.tasks.join(", ")} עברו בלעדיו)`);
+    for (const k of documented.pruned) terminalLine(ctx.runId, `לא מוצע — מתועד בריפו: ${k}`);
+    review = await reviewerSeeds(ctx, run, by, p.profile, processes, trials, seeds.filter((s) => !s.notRecommended));
     if (review) { costUsd += review.costUsd; seeds = mergeSeeds(seeds, review.seeds); }
   }
   const cards = seeds.map((s) => cardFromSeed(s, level));
   if (run.kind === "coach") for (const c of cards) if (c.status === "proposed") c.status = "approved";
-  for (const r of review?.redundant ?? []) { const c = cards.find((x) => x.key === r.key); if (c) c.why_he = `${c.why_he} הסוקר: ייתכן שמיותר — ${r.why}`; }
+  // A card the reviewer found redundant is DECLINED with its reason and an undo — the same as the scan's verdicts — not annotated for a person to notice.
+  const now = new Date().toISOString();
+  for (const r of review?.redundant ?? []) {
+    const c = cards.find((x) => x.key === r.key);
+    if (!c || c.group === "not_recommended" || c.kind === "report" || c.status !== "proposed") continue;
+    c.status = "declined"; c.declineReason = `הסוקר: ${r.why.slice(0, 300)}`; c.decidedBy = ctx.triggeredBy; c.decidedAt = now; c.params = { ...c.params, declinedBy: "reviewer" };
+    pruned.reviewer.push(c.key);
+  }
+  if (pruned.reviewer.length) await event(ctx, "onboarding.plan.reviewer_applied", { declined: pruned.reviewer }, by.userId);
+  if (pruned.measured.length || pruned.documented.length) await event(ctx, "onboarding.plan.pruned", { measured: pruned.measured, documented: pruned.documented }, by.userId);
   await upsertCards(ctx, cards, true);
   const byGroup = { auto: cards.filter((c) => c.group === "auto").length, approval: cards.filter((c) => c.group === "approval").length, not_recommended: cards.filter((c) => c.group === "not_recommended").length };
   // The cards are drawn now but decided only after the /init draft (a person's choice) was set aside and scanned — so the scan's verdicts reach the cards before anyone approves them.
@@ -583,8 +613,8 @@ async function runPlan(ctx: Ctx, run: RunRow, by: Actor) {
   const result: PlanResult & PlanExtras = {
     rulesFired: rules.fired.map((f) => f.rule), rulesSuppressed: rules.suppressed.map((s) => ({ rule: s.rule, fact: s.fact })), components: cards.length, byGroup,
     marketplace: { searched: market.searched, found: market.found, remembered: market.remembered, skipped: market.skipped }, reviewer: review ? { missing: review.seeds.length, redundant: review.redundant.length } : null, costUsd,
-    firings: rules.fired, suppressed: rules.suppressed, redundant: review?.redundant ?? [],
-    phase, buildEstimateUsd: evalEstimateUsd(tasks, 2, 1) + Math.round(cards.filter((c) => ["skill", "agent", "doc", "scaffold"].includes(c.kind) && c.group !== "not_recommended").length * 0.3 * 100) / 100,
+    firings: rules.fired, suppressed: rules.suppressed, redundant: review?.redundant ?? [], pruned,
+    phase, buildEstimateUsd: evalEstimateUsd(tasks, 2, 1, await measuredRunUsd(ctx)) + Math.round(cards.filter((c) => ["skill", "agent", "doc", "scaffold"].includes(c.kind) && c.group !== "not_recommended" && c.status !== "declined").length * 0.3 * 100) / 100,
   };
   await event(ctx, "onboarding.plan.drawn", { rulesFired: result.rulesFired, components: cards.length, byGroup, marketplace: result.marketplace, reviewer: result.reviewer, phase }, by.userId);
   if (run.kind === "coach") { await completeStep(ctx, "plan", result, by.userId); await advance(ctx, by); return; }
@@ -1156,8 +1186,9 @@ export async function updateOnboardingAutomation(repoId: string, runId: string, 
   const { run, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
   const automation = normalizeAutomation(raw);
+  const before = normalizeAutomation(run.automation);
   await patchRun(ctx, { automation });
-  await event(ctx, "onboarding.automation.updated", { level: automation.level }, by.userId);
+  await event(ctx, "onboarding.automation.updated", { level: automation.level, draftCapUsd: automation.draftCapUsd, draftCapMinutes: automation.draftCapMinutes, changed: (["level", "draftCapUsd", "draftCapMinutes"] as const).filter((k) => before[k] !== automation[k]) }, by.userId);
   return automation;
 }
 

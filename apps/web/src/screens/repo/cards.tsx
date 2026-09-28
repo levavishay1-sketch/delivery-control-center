@@ -23,7 +23,7 @@ const GROUP_SUB: Record<ComponentGroup, string> = {
 const GROUP_INFO: Record<ComponentGroup, string> = { auto: "group_auto", approval: "group_approval", not_recommended: "group_not_recommended" };
 
 /** The scan of the /init draft declines a card of ours with a reason that opens "הסריקה:" — the card shows the rest. */
-const scanReason = (reason: string | null) => (reason ?? "").replace(/^הסריקה:\s*/, "");
+const scanReason = (reason: string | null) => (reason ?? "").replace(/^(הסריקה|הסוקר):\s*/, "");
 
 /** A component's measured verdict, "with" against "without" on the tasks that exercise it — the card and the build step say it the same way. */
 export function DeltaLine({ d }: { d: NonNullable<OnboardingComponent["delta"]> }) {
@@ -43,12 +43,13 @@ export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
   const decidable = open && c.group === "approval" && c.kind !== "report";
   const v = c.validation ? validationLabel(c.validation.passed) : null;
   // Declined by the scan of the /init draft, not by a person: the reason, and "בכל זאת" to take it back.
-  const byScan = c.status === "declined" && c.params.declinedBy === "scan";
+  const byScan = c.status === "declined" && (c.params.declinedBy === "scan" || c.params.declinedBy === "reviewer");
+  const byReviewer = byScan && c.params.declinedBy === "reviewer";
   return (
     <div className={`rd-card ${c.status}`}>
       <div className="head">
         <b>{c.title_he}</b>
-        <span className={`rd-chip ${st.cls}`}>{byScan ? "נדחה בסריקה" : st.label}</span>
+        <span className={`rd-chip ${st.cls}`}>{byReviewer ? "הסוקר דחה" : byScan ? "נדחה בסריקה" : st.label}</span>
         {c.status === "configured" && <Info k="status_configured" />}
       </div>
       <div className="meta">
@@ -81,7 +82,7 @@ export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
       {c.files.length > 0 && <div className="why"><b>קבצים</b><span className="ob-code">{c.files.join("  ")}</span></div>}
       {byScan && (
         <div className="why">
-          <b>נדחה בסריקה<Info k="scan_declined" /></b>{scanReason(c.declineReason) || "הסריקה מצאה שהוא מיותר."}
+          <b>{byReviewer ? "הסוקר דחה" : "נדחה בסריקה"}<Info k={byReviewer ? "reviewer_declined" : "scan_declined"} /></b>{scanReason(c.declineReason) || (byReviewer ? "הסוקר מצא שהוא מיותר." : "הסריקה מצאה שהוא מיותר.")}
           {open && (
             <div className="acts" style={{ marginTop: 6 }}>
               <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onDecide(c.key, "undo", {})}>בכל זאת</button><Info k="scan_declined_undo" />

@@ -118,6 +118,26 @@ export async function ensureOnboardingWorkspace(
   return { dir, baselineSha, branch, defaultBranch, baseFrom: base.from };
 }
 
+/**
+ * The shared clone is made with `--depth 1` (the code, not the history, is what
+ * a first fetch needs). The diagnosis reads the history — hot folders, change
+ * shapes, authors, conventions — so before it runs, a shallow copy is deepened
+ * to the last few hundred commits. A failure (an offline machine, a bare
+ * local folder) is said and the diagnosis goes on with what it has.
+ */
+export const HISTORY_DEPTH = 400;
+export async function deepenHistory(dir: string, log: (line: string) => void): Promise<{ deepened: boolean; commits: number }> {
+  const shallow = (await git(["rev-parse", "--is-shallow-repository"], dir)).out.trim() === "true";
+  const count = async () => parseInt((await git(["rev-list", "--count", "HEAD"], dir)).out.trim(), 10) || 0;
+  if (!shallow) return { deepened: false, commits: await count() };
+  log(`dcc$ git fetch --deepen=${HISTORY_DEPTH}  # ההיסטוריה לאבחון (העותק שוכפל רדוד)`);
+  const r = await git([...LONGPATHS, "fetch", "--no-tags", `--deepen=${HISTORY_DEPTH}`], dir, { timeoutMs: 300_000 });
+  if (r.code !== 0) { log(`ההיסטוריה לא הועמקה (${r.out.split("\n").find((l) => /fatal|error/i.test(l)) ?? "git fetch failed"}) — האבחון ממשיך עם ${await count()} commits`); return { deepened: false, commits: await count() }; }
+  const commits = await count();
+  log(`היסטוריה: ${commits} commits זמינים לאבחון`);
+  return { deepened: true, commits };
+}
+
 export async function trackedFileCount(dir: string): Promise<number> {
   const r = await git(["ls-files"], dir, { timeoutMs: 60_000 });
   return r.out.split("\n").filter((l) => l.trim()).length;

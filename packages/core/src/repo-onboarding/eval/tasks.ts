@@ -85,8 +85,9 @@ function dependencyProbe(d: ProfilePlus): { name: string; target: string; patter
   if (pm.some((p) => /npm|pnpm|yarn|bun/.test(p))) return { name: "lodash", target: d.layout?.node_packages?.[0] ?? pkgs[0] ?? "the root package.json", pattern: "\"dependencies\"|\"devDependencies\"|lodash" };
   if (pm.some((p) => /pip|uv|poetry|pipenv|conda/.test(p))) return { name: "requests", target: "the project (pyproject.toml or requirements)", pattern: "requests" };
   if (pm.some((p) => /gradle|maven/.test(p))) return { name: "com.google.guava:guava", target: pkgs[0] ?? "the main module", pattern: "guava" };
-  if (pm.some((p) => /go/.test(p))) return { name: "github.com/google/uuid", target: "the module", pattern: "google/uuid" };
-  if (pm.some((p) => /cargo/.test(p))) return { name: "anyhow", target: pkgs[0] ?? "the crate", pattern: "anyhow" };
+  // `cargo` before `go`, and `go` anchored: "cargo" contains "go" (a Rust repository was asked for a Go module in the first research run).
+  if (pm.some((p) => /cargo/.test(p))) return { name: "anyhow", target: pkgs.find((p) => /\bCargo\.toml$/i.test(p) || !/test|bench|example|stress/i.test(p)) ?? pkgs[0] ?? "the crate", pattern: "anyhow" };
+  if (pm.some((p) => /^go(\s|$)|go modules|go\.mod/.test(p))) return { name: "github.com/google/uuid", target: "the module", pattern: "google/uuid" };
   if (pm.some((p) => /composer/.test(p))) return { name: "monolog/monolog", target: "the project", pattern: "monolog" };
   return null;
 }

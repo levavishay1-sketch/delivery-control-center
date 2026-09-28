@@ -472,6 +472,8 @@ export type PlanResult = {
   phase?: PlanPhase;
   /** What the build and its measurement will roughly cost, said before the decision. */
   buildEstimateUsd?: number;
+  /** What the plan left out on evidence: cards the baseline measurement showed unneeded, process helpers the repository's docs already cover, cards the reviewer found redundant (declined, undoable). */
+  pruned?: { measured: string[]; documented: string[]; reviewer: string[] };
 };
 
 /** What the scan of the /init draft decided — kept on the plan step, shown in the draft card. */

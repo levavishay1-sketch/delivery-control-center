@@ -171,7 +171,15 @@ export function eventLabel(e: OnboardingEvent, title: (key: string) => string, c
     case "onboarding.delivered": return { text: p.prUrl ? `נמסר: commit ${shortSha(s("commitSha"))} ו-PR נפתח` : p.localOnly ? "נמסר: commit בענף מקומי, אין remote" : `נמסר: commit ${shortSha(s("commitSha"))}`, tone: "healthy" };
     case "onboarding.run.completed": return { text: "ההרצה הושלמה", tone: "healthy" };
     case "onboarding.run.cancelled": return { text: "ההרצה בוטלה", tone: "warning" };
-    case "onboarding.automation.updated": return { text: `מדרגת האוטומציה שונתה: ${LEVEL_HE[s("level") as AutomationLevel]?.title ?? s("level")}`, tone: "" };
+    case "onboarding.automation.updated": {
+      const changed = Array.isArray(p.changed) ? (p.changed as string[]) : ["level"];
+      const parts = [
+        ...(changed.includes("level") ? [`מדרגת האוטומציה: ${LEVEL_HE[s("level") as AutomationLevel]?.title ?? s("level")}`] : []),
+        ...(changed.includes("draftCapUsd") ? [`תקרת סשן הטיוטה: $${s("draftCapUsd")}`] : []),
+        ...(changed.includes("draftCapMinutes") ? [`זמן הסשן: ${s("draftCapMinutes")} דק'`] : []),
+      ];
+      return { text: parts.length ? `ההגדרות שונו — ${parts.join(" · ")}` : "ההגדרות נשמרו בלי שינוי", tone: "" };
+    }
     case "onboarding.session.started": return { text: `סשן טיוטת /init נפתח · ${modelLabel(s("model"))} · מאמץ ${effortLabel(s("effort"))}`, tone: "ai" };
     case "onboarding.session.resumed": return { text: "סשן הטיוטה חודש מאותה נקודה", tone: "ai" };
     case "onboarding.session.ended": return { text: "סשן הטיוטה נסגר", tone: "" };
@@ -188,6 +196,16 @@ export function eventLabel(e: OnboardingEvent, title: (key: string) => string, c
     case "onboarding.draft.scan_applied": {
       const keys = Array.isArray(p.declined) ? (p.declined as string[]) : [];
       return { text: `הסריקה דחתה ${keys.length} כרטיסים משלנו כמיותרים: ${keys.map(card).join(", ")} — אפשר "בכל זאת" על כל אחד`, tone: "warning" };
+    }
+    case "onboarding.plan.reviewer_applied": {
+      const keys = Array.isArray(p.declined) ? (p.declined as string[]) : [];
+      return { text: `הסוקר דחה ${keys.length} כרטיסים כמיותרים: ${keys.map(card).join(", ")} — אפשר "בכל זאת" על כל אחד`, tone: "warning" };
+    }
+    case "onboarding.plan.pruned": {
+      const m = Array.isArray(p.measured) ? (p.measured as string[]) : [];
+      const d = Array.isArray(p.documented) ? (p.documented as string[]) : [];
+      const parts = [...(m.length ? [`${m.length} שהמדידה הראתה שאין בהם צורך (${m.map(card).join(", ")})`] : []), ...(d.length ? [`${d.length} עזרי-תהליך שהתיעוד של הריפו כבר מכסה`] : [])];
+      return { text: `לא מוצעים — ${parts.join(" · ")}`, tone: "" };
     }
     case "onboarding.plan.phase": {
       const why = s("why");

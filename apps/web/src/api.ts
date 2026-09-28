@@ -754,6 +754,8 @@ export type PlanResult = {
   phase?: PlanPhase;
   /** What the build and its measurement will roughly cost, said before the decision. */
   buildEstimateUsd?: number;
+  /** What the plan left out on evidence: measured unneeded, covered by the repository's docs, declined by the reviewer. */
+  pruned?: { measured: string[]; documented: string[]; reviewer: string[] };
 };
 /** The scan of the /init draft — the same shape as packages/core/src/repo-onboarding/types.ts. */
 export type InitScanState = {

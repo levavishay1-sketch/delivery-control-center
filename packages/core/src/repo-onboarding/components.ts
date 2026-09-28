@@ -1,6 +1,6 @@
 import { FAILURE_TO_KIND, FAILURE_HE } from "./trials.ts";
 import type {
-  AutomationLevel, Component, ComponentFamily, ComponentGroup, ComponentKind, ComponentSeed, DiscoveredProcess, FailureKind, ProcessStep, Readiness, ReadinessItem, TrialDelta, TrialOutcome,
+  AutomationLevel, Component, ComponentFamily, ComponentGroup, ComponentKind, ComponentSeed, DiscoveredProcess, FailureKind, ProcessStep, Readiness, ReadinessItem, RepoProfile, TrialDelta, TrialOutcome,
 } from "./types.ts";
 import { FAMILY_ORDER } from "./types.ts";
 import type { RuleFiring, RuleSuppression } from "./rules.ts";
@@ -287,3 +287,68 @@ export const stepsDeciding = (processes: readonly DiscoveredProcess[], decision:
   processes.flatMap((p) => p.steps.filter((s) => s.decision === decision).map((s) => ({ process: p, step: s })));
 
 export const failureKindsOf = (trials: readonly TrialOutcome[]): FailureKind[] => [...new Set(trials.filter((t) => t.failureKind).map((t) => t.failureKind!))];
+
+/* ── what the plan leaves out, with the evidence ──────────────────── */
+
+/** Kinds that exist only to make the agent know or do better — the ones a measurement can show unneeded (a hook, a permission, a gitignore line or a connection is not knowledge). */
+export const KNOWLEDGE_KINDS: ReadonlySet<ComponentKind> = new Set<ComponentKind>(["rule", "doc", "scaffold", "skill", "agent", "review", "pr_template"]);
+
+export type BaselineOutcome = Pick<TrialOutcome, "taskKey" | "passed">;
+export type TaskNaming = { key: string; title_he: string; exercises: { keys?: readonly string[] } };
+
+/**
+ * The measured reason a card is not proposed: every measured task that names it
+ * (by key — the strong link; a kind or a file is too loose at plan time) passed
+ * without it, in every run. The agent already does that on its own; a line or a
+ * file for it is context every session pays for and the ETH study found harmful.
+ * The person can still take it ("בכל זאת"); the build's own measurement judges
+ * what was built.
+ */
+export function pruneByBaseline(seeds: readonly ComponentSeed[], tasks: readonly TaskNaming[], baseline: readonly BaselineOutcome[]): { seeds: ComponentSeed[]; pruned: { key: string; tasks: string[] }[] } {
+  const rows = new Map<string, BaselineOutcome[]>();
+  for (const r of baseline) rows.set(r.taskKey, [...(rows.get(r.taskKey) ?? []), r]);
+  const measured = (k: string) => (rows.get(k)?.length ?? 0) > 0;
+  const passed = (k: string) => measured(k) && rows.get(k)!.every((r) => r.passed === true);
+  const out: ComponentSeed[] = [];
+  const pruned: { key: string; tasks: string[] }[] = [];
+  for (const s of seeds) {
+    if (s.notRecommended || !KNOWLEDGE_KINDS.has(s.kind)) { out.push(s); continue; }
+    const naming = tasks.filter((t) => t.exercises.keys?.includes(s.key) && measured(t.key));
+    if (!naming.length || !naming.every((t) => passed(t.key))) { out.push(s); continue; }
+    pruned.push({ key: s.key, tasks: naming.map((t) => t.key) });
+    const which = naming.length === 1 ? `המשימה "${naming[0]!.title_he}" עברה` : `${naming.length} המשימות שהוא אמור לעזור בהן (${naming.map((t) => t.title_he).join(", ")}) עברו`;
+    out.push({ ...s, notRecommended: true, why_he: `נמדד בלי הרכיב: ${which} גם בלעדיו — לא מוצע, כי כל שורה שנטענת בכל סשן צריכה להרוויח את מקומה. ${s.why_he}` });
+  }
+  return { seeds: out, pruned };
+}
+
+/** A repository that documents itself: a README of size, a docs folder, an architecture document or a CONTRIBUTING file. */
+export function docsRich(profile: Pick<RepoProfile, "docs">): { rich: boolean; what: string[] } {
+  const d = profile.docs ?? ({} as RepoProfile["docs"]);
+  const what: string[] = [];
+  if ((d.readme_bytes ?? 0) >= 8000) what.push("README");
+  if ((d.docs_files ?? 0) >= 5) what.push("docs/");
+  if (d.architecture_docs?.length) what.push(d.architecture_docs[0]!);
+  if (d.contributing?.length) what.push(d.contributing[0]!);
+  return { rich: what.length > 0, what };
+}
+
+/**
+ * A repository that documents its processes already tells the agent how they go;
+ * a skill or an agent per process step would duplicate that documentation (the
+ * ETH study: written context helps only where the docs are thin). Only a step
+ * that fails today keeps its card — there the helper is a fix, not a copy.
+ */
+export function pruneDocumentedProcessSteps(seeds: readonly ComponentSeed[], profile: Pick<RepoProfile, "docs">): { seeds: ComponentSeed[]; pruned: string[] } {
+  const docs = docsRich(profile);
+  if (!docs.rich) return { seeds: [...seeds], pruned: [] };
+  const pruned: string[] = [];
+  const out = seeds.map((s) => {
+    if (s.source !== "process" || s.notRecommended) return s;
+    const reasons = Array.isArray(s.params.reasons) ? (s.params.reasons as string[]) : [];
+    if (reasons.includes("failsToday")) return s;
+    pruned.push(s.key);
+    return { ...s, notRecommended: true, why_he: `הריפו מתעד את התהליכים שלו (${docs.what.join(", ")}) — ${s.kind === "agent" ? "סוכן" : "skill"} לצעד הזה היה משכפל את התיעוד ונטען בכל סשן. לא מוצע; אם משימה של המדידה תיכשל בו, הוא יוצע מחדש. ${s.why_he}` };
+  });
+  return { seeds: out, pruned };
+}

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { applyRules } from "./rules.ts";
-import { ALWAYS_LOADED_MAX, buildOrder, cardFromSeed, deliverable, groupFor, mergeSeeds, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials } from "./components.ts";
+import { ALWAYS_LOADED_MAX, buildOrder, cardFromSeed, deliverable, groupFor, mergeSeeds, pruneByBaseline, pruneDocumentedProcessSteps, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials } from "./components.ts";
 import type { Component, ComponentSeed, RepoProfile, TrialOutcome } from "./types.ts";
 
 const DIR = fileURLToPath(new URL("../../../../docs/research/sources/onboarding-v2/repos/diagnosis/", import.meta.url));
@@ -163,5 +163,46 @@ describe("the build order, the readiness gate and the report", () => {
     expect(report).toContain("-20%");
     expect(report).toContain("Windows");
     expect(report).not.toMatch(/\{[a-z_]+\}/);
+  });
+});
+
+describe("what the plan leaves out on evidence", () => {
+  const seed = (key: string, kind: ComponentSeed["kind"], extra: Partial<ComponentSeed> = {}): ComponentSeed => ({ key, kind, family: "knowledge", risk: "reversible", source: "rule", sourceRef: "R", title_he: key, why_he: "כי", what_he: "מה", verifyHow_he: "איך", params: {}, ...extra });
+  const tasks = [
+    { key: "how_to_test", title_he: "איך מריצים בדיקות", exercises: { keys: ["tests_rule", "run_affected_tests_skill"] } },
+    { key: "run_tests_report", title_he: "להריץ בדיקות", exercises: { keys: ["tests_rule", "local_gate_script"] } },
+    { key: "where_to_add", title_he: "איפה מוסיפים", exercises: { keys: ["which_package_skill"] } },
+  ];
+  it("does not propose a knowledge card whose every measured task passed without it — and says which", () => {
+    const baseline = [{ taskKey: "how_to_test", passed: true }, { taskKey: "run_tests_report", passed: true }, { taskKey: "where_to_add", passed: false }];
+    const r = pruneByBaseline([seed("tests_rule", "rule"), seed("run_affected_tests_skill", "skill"), seed("which_package_skill", "skill"), seed("local_gate_script", "script"), seed("agents_md_from_profile", "scaffold")], tasks, baseline);
+    expect(r.pruned.map((p) => p.key).sort()).toEqual(["run_affected_tests_skill", "tests_rule"]);
+    expect(r.seeds.find((s) => s.key === "tests_rule")?.notRecommended).toBe(true);
+    expect(r.seeds.find((s) => s.key === "tests_rule")?.why_he).toMatch(/נמדד בלי הרכיב/);
+    // a task that failed keeps its card; a script (verification) is never pruned by knowledge; a card no task names is left alone
+    expect(r.seeds.find((s) => s.key === "which_package_skill")?.notRecommended).toBeFalsy();
+    expect(r.seeds.find((s) => s.key === "local_gate_script")?.notRecommended).toBeFalsy();
+    expect(r.seeds.find((s) => s.key === "agents_md_from_profile")?.notRecommended).toBeFalsy();
+  });
+  it("keeps a card when one of its tasks failed in any run, and when nothing was measured", () => {
+    const r = pruneByBaseline([seed("tests_rule", "rule")], tasks, [{ taskKey: "how_to_test", passed: true }, { taskKey: "how_to_test", passed: false }]);
+    expect(r.pruned).toEqual([]);
+    expect(pruneByBaseline([seed("tests_rule", "rule")], tasks, []).pruned).toEqual([]);
+  });
+  it("does not propose a process step's skill or agent where the repository documents its processes — unless the step fails today", () => {
+    const docs = { docs: { readme: "README.md", readme_bytes: 12_000, docs_dir: true, docs_files: 20, adrs: [], contributing: ["CONTRIBUTING.md"], architecture_docs: [], license: [], changelog: [], license_kind: "MIT" } } as unknown as RepoProfile;
+    const seeds = [
+      seed("skill_release_bump", "skill", { source: "process", params: { reasons: [] } }),
+      seed("agent_review_loom", "agent", { source: "process", params: { reasons: ["judgment"] } }),
+      seed("skill_release_publish", "skill", { source: "process", params: { reasons: ["failsToday"] } }),
+      seed("tests_rule", "rule"),
+    ];
+    const r = pruneDocumentedProcessSteps(seeds, docs);
+    expect(r.pruned.sort()).toEqual(["agent_review_loom", "skill_release_bump"]);
+    expect(r.seeds.find((s) => s.key === "skill_release_bump")?.why_he).toMatch(/CONTRIBUTING\.md/);
+    expect(r.seeds.find((s) => s.key === "skill_release_publish")?.notRecommended).toBeFalsy();
+    expect(r.seeds.find((s) => s.key === "tests_rule")?.notRecommended).toBeFalsy();
+    const thin = { docs: { readme: "README.md", readme_bytes: 900, docs_dir: false, docs_files: 0, adrs: [], contributing: [], architecture_docs: [], license: [], changelog: [], license_kind: "" } } as unknown as RepoProfile;
+    expect(pruneDocumentedProcessSteps(seeds, thin).pruned).toEqual([]);
   });
 });
