@@ -2,6 +2,12 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "server",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "Server/src/Dcc.Api", "--launch-profile", "http"],
+      "port": 5080
+    },
+    {
       "name": "web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "@dcc/web"],

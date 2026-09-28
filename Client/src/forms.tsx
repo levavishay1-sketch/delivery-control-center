@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { authFetch } from "./auth/session.ts";
 import {
   getAdoProjects, getBugLinks, getClients, getConnections, getRepos, importAdoCsv, linkBugTask, linkRepoToClient, linkRepoToReq,
   searchClientTasks, unlinkBugTask, updateClient, updateRepo, updateRequirement, uploadAttachment,
@@ -15,11 +16,9 @@ async function fileToBase64(file: File): Promise<string> {
   return btoa(bin);
 }
 
-const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
-const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
-const H = { "content-type": "application/json", "x-dcc-hook-token": HOOK, "x-dcc-dev-email": DEV_EMAIL };
+const H = { "content-type": "application/json" };
 const api = async (path: string, body: unknown) => {
-  const r = await fetch(`/api${path}`, { method: "POST", headers: H, body: JSON.stringify(body) });
+  const r = await authFetch(`/api${path}`, { method: "POST", headers: H, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json();
 };

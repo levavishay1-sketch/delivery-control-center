@@ -1,26 +1,24 @@
 import type { FileVersionsData } from "./components/FileCompare.tsx";
-const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
-const HOOK_TOKEN = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
-/** auth headers only — no content-type (added per-request when there's a body) */
-const AUTH = { "x-dcc-hook-token": HOOK_TOKEN, "x-dcc-dev-email": DEV_EMAIL };
-const H = { "content-type": "application/json", ...AUTH };
+import { authFetch, currentAccessToken } from "./auth/session.ts";
+/** Every request carries the signed-in user's token (see auth/session.ts); a body adds its content-type. */
+const H = { "content-type": "application/json" };
 
 async function j<T>(r: Response): Promise<T> {
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json();
 }
-const get = <T,>(p: string) => fetch(`/api${p}`, { headers: H }).then((r) => j<T>(r));
+const get = <T,>(p: string) => authFetch(`/api${p}`, { headers: H }).then((r) => j<T>(r));
 const post = <T,>(p: string, body: unknown) =>
-  fetch(`/api${p}`, { method: "POST", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
+  authFetch(`/api${p}`, { method: "POST", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const patch = <T,>(p: string, body: unknown) =>
-  fetch(`/api${p}`, { method: "PATCH", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
+  authFetch(`/api${p}`, { method: "PATCH", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const put = <T,>(p: string, body: unknown) =>
-  fetch(`/api${p}`, { method: "PUT", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
+  authFetch(`/api${p}`, { method: "PUT", headers: H, body: JSON.stringify(body) }).then((r) => j<T>(r));
 const del = <T,>(p: string, body?: unknown) =>
-  fetch(`/api${p}`, body
+  authFetch(`/api${p}`, body
     ? { method: "DELETE", headers: H, body: JSON.stringify(body) }
-    : { method: "DELETE", headers: AUTH }).then((r) => j<T>(r));
-export const getText = (p: string) => fetch(`/api${p}`, { headers: H }).then((r) => r.text());
+    : { method: "DELETE" }).then((r) => j<T>(r));
+export const getText = (p: string) => authFetch(`/api${p}`, { headers: H }).then((r) => r.text());
 
 // ---------- types ----------
 /** Requirement / work-item type — 1:1 with Azure DevOps / TFS. */
@@ -535,7 +533,7 @@ export type DeleteTaskConfirm = {
   rollbackImplemented?: boolean; confirmOrphanCode?: boolean;
 };
 export async function deleteTask(id: string, body: DeleteTaskConfirm): Promise<{ deleted: boolean; subtreeDeleted: number; adoNotesPosted: number; rolledBack: string[] }> {
-  const r = await fetch(`/api/tasks/${id}`, { method: "DELETE", headers: H, body: JSON.stringify(body) });
+  const r = await authFetch(`/api/tasks/${id}`, { method: "DELETE", headers: H, body: JSON.stringify(body) });
   if (r.status === 409) {
     const body409 = await r.json() as { error: string; precheck: TaskDeletePrecheck };
     throw new DeleteBlocked(body409.error, body409.precheck);
@@ -560,7 +558,7 @@ export class ChecksNotPassed extends Error {
   constructor(message: string, public unresolved: { id: string; seq: number; intent: string }[]) { super(message); }
 }
 export async function progressTask(taskId: string, body: { to: Task["state"]; clientId: string; overrideChecks?: boolean; overrideReason?: string; reopenReason?: string }) {
-  const r = await fetch(`/api/tasks/${taskId}/progress`, { method: "POST", headers: H, body: JSON.stringify({ ...body, mode: "interactive" }) });
+  const r = await authFetch(`/api/tasks/${taskId}/progress`, { method: "POST", headers: H, body: JSON.stringify({ ...body, mode: "interactive" }) });
   if (r.status === 409) {
     const b409 = await r.json() as { error: string; unresolved: { id: string; seq: number; intent: string }[] };
     throw new ChecksNotPassed(b409.error, b409.unresolved);
@@ -903,7 +901,7 @@ export const recheckCoachSources = () => post<{ checked: number; changed: number
 export const onboardingTerminalUrl = (repoId: string, runId: string) =>
   `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api${ob(repoId, runId)}/terminal`;
 /** A WebSocket cannot carry headers — its first message carries the same credentials. */
-export const terminalAuthMessage = () => JSON.stringify({ type: "auth", token: HOOK_TOKEN, email: DEV_EMAIL });
+export const terminalAuthMessage = () => JSON.stringify({ type: "auth", token: currentAccessToken() });
 
 /** The server refuses with `{ "error": "<message for the person>" }`. */
 export function errText(e: unknown): string {

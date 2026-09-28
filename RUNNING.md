@@ -1,39 +1,72 @@
-# Running the walking skeleton
+# Running DCC locally
 
-No database install needed — `@dcc/db` uses embedded PGlite by default.
+The server is C# (ASP.NET Core Web API, `Server/`); the web client is React
+(`Client/`). Both run on this machine against a local PostgreSQL.
+
+## Once per machine
+
+1. PostgreSQL 17 (installs as a Windows service that starts with the machine):
+
+   ```bash
+   winget install PostgreSQL.PostgreSQL.17
+   ```
+
+   Put the superuser's password in `Server/.local/postgres-superuser.txt`
+   (`user=postgres`, `password=…`, `port=5432`, one per line). `Server/.local`
+   is outside git.
+
+2. Create the roles and the database — as the superuser, once:
+
+   ```bash
+   dotnet run --project Server/src/Dcc.Api -- db-bootstrap
+   ```
+
+   It creates `dcc_owner` (the API connects as it), `dcc_app` (the role RLS is
+   enforced on) and the `dcc` database, and writes the connection string to
+   `Server/.local/appsettings.local.json`.
+
+3. `npm install` (for the web client).
+
+## Every day
 
 ```bash
-npm install
-
-# 1. fresh DB + schema + guards, then seed the demo WorkItem
-cd packages/db
-npm run dev:reset && npm run dev:setup
-cd ../core && npm run demo          # seeds WI-1284 + a full timeline
-
-# 2. API  (terminal A)
-cd ../../apps/api
-DCC_HOOK_TOKEN=dev-secret npm start   # :3001
-
-# 3. Web  (terminal B)
-cd ../web
-npm run dev                           # :5173  → open it
+npm run server   # the API on http://localhost:5080 — applies new migrations on start
+npm run web      # the web client on http://localhost:5173 (proxies /api to :5080)
 ```
 
-PGlite is single-process: only one of {demo, smoke, API} holds the DB at
-a time. Seed with `demo`, then start the API.
+Open http://localhost:5173 and sign in.
 
-## Proofs
+## The first administrator
+
+On the first start with no administrator, the server creates
+`admin@dcc.local` with the Admin security role everywhere, and writes a
+one-time password to `Server/.local/initial-admin.txt` (it is never printed or
+logged). The first sign-in asks for a new password; delete the file after.
+
+Other users, teams, security roles and assignments are managed through the API
+until their screens exist — `Server/src/Dcc.Api/Dcc.Api.http` has every
+request ready to run from Visual Studio.
+
+## Tests
 
 ```bash
-cd packages/db  && npm run dev:prove   # 9 checks — RLS wall, append-only, validation
-cd apps/api     && npm run smoke       # 8 checks — capture path + reads (needs a fresh dev:setup)
+dotnet test Server/DeliveryControlCenter.sln
 ```
+
+The integration tests drop and recreate a database of their own, `dcc_test`,
+so they never touch `dcc`.
+
+## Entra ID (later)
+
+Sign-in with Microsoft, B2B guests and the directory sync are built and off.
+To switch them on, register the application in Entra ID (redirect URI
+`…/api/auth/entra/callback`; Graph application permissions User.Read.All,
+Group.Read.All, User.Invite.All with admin consent) and fill the `Entra`
+section — in `Server/.local/appsettings.local.json`, not in the committed
+`appsettings.json`.
 
 ## Wiring a real Claude Code session (optional)
 
-1. In a scratch repo, add `.dcc.json`:
-   `{ "apiUrl": "http://localhost:3001", "clientId": "<uuid from /dev/workitems>", "repo": "scratch" }`
-2. `export DCC_DEV_EMAIL=... DCC_HOOK_TOKEN=dev-secret`
-3. Add the three hooks to `.claude/settings.json` (see `hooks/README.md`)
-4. Work on a `feature/WI-xxxx-...` branch — sessions and commits land on
-   the timeline; the next session starts from the Brief.
+The hooks (`hooks/`) and `skills/dcc.mjs` still use the old shared-secret
+headers; they move to API tokens (`POST /tokens`) as part of
+`openspec/changes/server-in-csharp` (task 5.1).

@@ -1,9 +1,7 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_DCC_DEV_EMAIL?: string;
-  readonly VITE_DCC_HOOK_TOKEN?: string;
-}
+// No build-time settings: the signed-in user comes from the session (auth/session.ts).
+interface ImportMetaEnv {}
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }

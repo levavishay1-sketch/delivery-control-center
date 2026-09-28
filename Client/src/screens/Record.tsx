@@ -15,11 +15,10 @@ import { Info } from "../claude/Info.tsx";
 import { FlowGraph } from "./FlowGraph.tsx";
 import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
 import { WorkflowTab } from "./WorkflowTab.tsx";
+import { authFetch } from "../auth/session.ts";
 
-const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
-const HOOK = import.meta.env.VITE_DCC_HOOK_TOKEN ?? "dev-secret";
 const post = async (path: string, body: unknown) => {
-  const r = await fetch(`/api${path}`, { method: "POST", headers: { "content-type": "application/json", "x-dcc-hook-token": HOOK, "x-dcc-dev-email": DEV_EMAIL }, body: JSON.stringify(body) });
+  const r = await authFetch(`/api${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
   return r.json();
 };

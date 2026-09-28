@@ -109,6 +109,35 @@ sound; there is no code to review yet (Phase 1).
 | F-1 supersedes same-scope trigger | low | anytime |
 | F-2 partition procedure doc | low | when volume warrants |
 | F-3 admin path for directory writes | must | before client #2 |
-| F-4 prove against real Postgres as dcc_app | must | before client #2 |
+| ~~F-4~~ prove against real Postgres as dcc_app | must | DONE — `TenantWallTests` (C# server, 2026-09-28) |
 | F-5 background-job owner resolution | med | Phase 1 |
 | ~~F-6~~ composite FKs | med | DONE — migration 0002 |
+
+---
+
+## Addendum — 2026-09-28: the server moves to C#  ·  NO DECISION CHANGES
+
+The server is being rewritten as a C# (.NET 10) ASP.NET Core Web API under
+`Server/` (`openspec/changes/server-in-csharp`). This is a change of stack, not
+of any of the five decisions; each is carried over as follows.
+
+- **01** — one writer, `IEventLogWriter`; the per-type payload schemas and the
+  "a system actor never authors reasoning" rule sit in `ValidatingEventLogWriter`,
+  wrapped around whichever store `AddEventLog()` registers. The append-only
+  triggers are unchanged (`Server/db/guards.sql`), now also on `audit_log`.
+- **02** — unchanged. AI agents are users of kind `agent`; a *delegated* agent
+  acts for its owner and its permissions are capped by the owner's. An
+  *independent* agent would change this decision: it exists in the data model
+  but is switched off (`Agents:AllowIndependent = false`) until an amendment
+  here is written and approved.
+- **03** — `TenantScope` does what `withTenant()` did: `SET LOCAL ROLE dcc_app`
+  and `app.current_client` inside one transaction. The API connects as
+  `dcc_owner`, which is not a superuser. **F-4 is now covered**: the tests prove
+  the wall against a real Postgres as `dcc_app` (`TenantWallTests`).
+- **04** — unchanged; the schema is the same SQL migrations.
+- **05** — the permission scopes follow it: a grant counts globally, on a
+  client and its requirements, or on a requirement and its subtree
+  (`EffectivePermissions`).
+
+PGlite is dropped: it is a Node library with no .NET driver, so local
+development runs on an installed Postgres.

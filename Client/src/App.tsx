@@ -23,8 +23,8 @@ import { RepoDossier } from "./screens/repo/RepoDossier.tsx";
 import { ClaudeCenter, type CenterTab } from "./screens/ClaudeCenter.tsx";
 import { ClaudeChat } from "./claude/ClaudeChat.tsx";
 import { Stub } from "./screens/Stub.tsx";
-
-const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
+import { useSession } from "./auth/permissions.tsx";
+import { logout } from "./auth/session.ts";
 
 function useHash() {
   const [hash, setHash] = useState(() => location.hash || "#/");
@@ -54,6 +54,7 @@ const NAV: { to: string; label: string; icon: React.ReactNode }[] = [
 export function App() {
   const hash = useHash();
   const nav = (h: string) => { location.hash = h; };
+  const user = useSession()?.user;
 
   const path = hash.replace(/^#/, "").split("?")[0]!;
   let screen: React.ReactNode;
@@ -113,10 +114,10 @@ export function App() {
         </div>
         <div className="sidebar-spacer" />
         <div className="sidebar-foot">
-          <div className="avatar-chip">{initials(DEV_EMAIL)}</div>
+          <div className="avatar-chip">{initials(user?.email ?? "")}</div>
           <div className="who">
-            <p>{DEV_EMAIL.split("@")[0]}</p>
-            <span>Admin</span>
+            <p>{user?.displayName}</p>
+            <button className="link-btn" onClick={() => void logout()}>יציאה</button>
           </div>
         </div>
       </nav>

@@ -120,9 +120,10 @@ answer.
 Two cautions that belong in the recommendation itself, not after the
 fact — the longer the run, the smaller the chance anyone sees it happen:
 
-- **Stop the API** before a run that may touch migrations or any script
-  importing `@dcc/db`. A second process on the same PGlite directory
-  corrupts it; it has cost two full resets already (see `CLAUDE.md`).
+- **Keep tests off the real database.** The server runs on a local
+  PostgreSQL (`dcc`); the integration tests recreate `dcc_test` for
+  themselves. A run that writes a probe against `dcc` can destroy the
+  user's local data (see `CLAUDE.md`).
 - **Do not hand one run both a migration and screens.** Split by risk,
   even when the model could hold both.
 

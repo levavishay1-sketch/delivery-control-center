@@ -10,11 +10,11 @@ export default defineConfig({
     // (e.g. a phone) at http://<this PC's LAN IP>:5173 — localhost still
     // works exactly as before. The API server and its "/api" proxy below
     // are unaffected: the proxy runs server-side on this PC and always
-    // talks to localhost:3001, regardless of which host the browser used.
+    // talks to the C# server (localhost:5080), regardless of which host the browser used.
     host: true,
     proxy: {
       "/api": {
-        target: process.env.DCC_API_URL ?? "http://localhost:3001",
+        target: process.env.DCC_API_URL ?? "http://localhost:5080",
         changeOrigin: true,
         // The onboarding terminal is a WebSocket on the same /api prefix.
         ws: true,

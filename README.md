@@ -4,9 +4,9 @@ A system that wraps the full lifecycle of AI-assisted software delivery —
 from the first raw requirement to the end of development — around Azure
 DevOps and Claude Code, without replacing them.
 
-> **Status:** Phase 0 (walking skeleton). The database foundation for the
-> five foundational architecture decisions is in place; the app slices
-> are next. See [`openspec/changes/phase-0-walking-skeleton/`](openspec/changes/phase-0-walking-skeleton/).
+> **Status:** the server is being rewritten in C# (ASP.NET Core Web API) under
+> `Server/`; users, sign-in and permissions are the first feature on it. See
+> [`openspec/changes/server-in-csharp/`](openspec/changes/server-in-csharp/).
 
 ## The idea in one paragraph
 
@@ -21,61 +21,47 @@ enrich.
 ## Layout
 
 ```
-packages/db      @dcc/db    schema (the 5 foundational decisions as code),
-                            event validation, tenant-scoped connection
-packages/core    @dcc/core  appendEvent, timeline reads, Context Brief    (next)
-apps/api                    HTTP surface for hooks + UI                   (next)
-apps/web                    the WorkItem timeline screen                  (next)
-hooks/                      Claude Code hooks: SessionStart / SessionEnd  (next)
-                            / PostToolUse(git)
-openspec/                   the in-repo spec lifecycle — this repo
-                            dogfoods its own methodology
+Server/        the server — C# (.NET 10) ASP.NET Core Web API, opened in Visual Studio
+  DeliveryControlCenter.sln
+  src/Dcc.Api             controllers, sign-in, permissions, WebSockets
+  src/Dcc.Application     contracts between the layers
+  src/Dcc.Domain          entities, the permission catalog, event schemas
+  src/Dcc.Infrastructure  Postgres (EF Core + Npgsql), migrator, Entra / Graph
+  db/migrations           the SQL migrations — the source of truth for the schema
+  tests/Dcc.Tests         xUnit, against a fresh local test database
+Client/        the web client (React + Vite)
+OldServer/     the retired TypeScript server — reference only, never built,
+               deleted once the C# server covers everything
+hooks/         Claude Code hooks: SessionStart / SessionEnd / PostToolUse(git)
+skills/        the skill library DCC hands to a client's repository
+openspec/      the in-repo spec lifecycle — this repo dogfoods its own methodology
 ```
+
+The server is mid-rewrite from TypeScript to C#
+(`openspec/changes/server-in-csharp`). Screens whose endpoints are not yet
+rewritten show an error until their turn.
 
 ## Prerequisites
 
-- Node ≥ 22
-- **No database install needed for local dev.** `@dcc/db` falls back to
-  **PGlite** — real Postgres 18 compiled to WASM, persisted to
-  `packages/db/.pgdata`, no server, no admin rights.
-- For the pilot / production, set `DATABASE_URL` to a real
-  `postgres://` URL (Neon, Supabase, or a managed Postgres) and the
-  same schema runs unchanged.
+- .NET 10 SDK
+- PostgreSQL 17 on the machine (`winget install PostgreSQL.PostgreSQL.17`)
+- Node ≥ 22, for the web client and the hooks
 
-## Getting started (local, embedded DB)
+## Getting started
 
-```bash
-npm install
-cd packages/db
-npm run dev:reset      # wipe .pgdata
-npm run dev:setup      # apply migration 0000_init.sql + guards.sql
-npm run dev:prove      # 9 checks: RLS wall + append-only + validation
-```
-
-`dev:prove` is the living proof of foundational decisions 01 and 03 —
-run it after any schema change.
-
-## Getting started (real Postgres — pilot)
-
-```bash
-cp .env.example .env          # set DATABASE_URL to your postgres:// URL
-npm install
-npm run db:migrate            # drizzle-kit applies migrations
-npm run db:guards             # append-only triggers + the dcc_app role
-```
-
-After `db:guards`, point `DATABASE_URL` at the `dcc_app` role (never a
-superuser — Postgres ignores RLS for superusers).
+See [RUNNING.md](RUNNING.md). In short: `db-bootstrap` once, then
+`npm run server` and `npm run web`, and sign in with the administrator
+whose one-time password is in `Server/.local/initial-admin.txt`.
 
 ## Foundational decisions (do not change without review)
 
 | # | Decision | Where in code |
 |---|----------|---------------|
-| 01 | Append-only `event_log`; everything reads from it | `packages/db/src/schema/events.ts`, `sql/guards.sql`, `src/events/` |
-| 02 | Identity is always a real person | `EventActor` in `src/events/envelope.ts` |
-| 03 | `client_id` + Postgres RLS backstop | every tenant table; `src/client.ts` `withTenant()` |
-| 04 | `client → project → workitem`; repo may be org-shared | `src/schema/tenancy.ts` |
-| 05 | Resolution order `global → client → workitem` | (Phase 1 — permission/policy tables) |
+| 01 | Append-only `event_log`; everything reads from it | `IEventLogWriter` (Dcc.Domain/Events), `AddEventLog()`, `Server/db/guards.sql` |
+| 02 | Identity is always a real person | `EventActor` (Dcc.Domain/Events); delegated agents capped by their owner |
+| 03 | `client_id` + Postgres RLS backstop | every tenant table; `TenantScope` (Dcc.Infrastructure/Persistence) |
+| 04 | `client → workitem` tree; repo may be org-shared | the SQL migrations |
+| 05 | Resolution order `global → client → workitem` | permission scopes (`EffectivePermissions`) |
 
 ## Methodology
 

@@ -7,6 +7,9 @@ import type { Concept } from "../index.ts";
  * someone looking at the title.
  */
 export const PAGE_CONCEPTS: Concept[] = [
+  { key: "page_login", kind: "section", title: "כניסה", aliases: ["התחברות"], explain: "כניסה עם האימייל והסיסמה שקיבלתם ממנהל המערכת. מה שתראו אחרי הכניסה תלוי בהרשאות שניתנו לכם." },
+  { key: "page_change_password", kind: "section", title: "החלפת סיסמה", explain: "בכניסה הראשונה, או אחרי שמנהל קבע לכם סיסמה, צריך לבחור סיסמה משלכם. עד אז שום מסך אחר לא נפתח." },
+  { key: "new_password", kind: "field", title: "סיסמה חדשה", explain: "לפחות 12 תווים, ושונה מהסיסמה הנוכחית. אחרי ההחלפה, כל כניסה אחרת שלכם (במחשב או בדפדפן אחר) מתנתקת." },
   { key: "page_requirements", kind: "section", title: "דרישות", explain: "דרישות-העל של כל הלקוחות. דרישה היא מה שביקשו לבנות; בתוכה יושבות דרישות משנה ומשימות. לחיצה על שורה פותחת את הדרישה." },
   { key: "page_works", kind: "section", title: "עבודות", explain: "כל הדרישות של כל הלקוחות בטבלה אחת, עם סינון לפי עדיפות, שלב וחסימות. מכאן רואים מה פתוח ומה תקוע." },
   { key: "page_clients", kind: "section", title: "לקוחות", explain: "הלקוחות שהמערכת עובדת בשבילם. כל לקוח הוא עולם נפרד: הדרישות, המאגרים והחיבורים שלו לא נראים ללקוח אחר." },

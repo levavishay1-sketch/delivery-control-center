@@ -8,90 +8,84 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Working in this repo
 
-- npm workspaces: packages under `packages/*`, apps under `apps/*` (`api`, `web`, `mcp`), `@dcc/*` names.
-- Node ≥ 22, ESM, `.ts` extensions in imports (NodeNext).
-- **Run TypeScript with `tsx`, never raw `node`.** A script that imports across
-  workspace packages (`@dcc/core` → `@dcc/db`) resolves through a
-  `node_modules/@dcc/*` symlink, and Node's type-stripping refuses anything
-  under `node_modules` (`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`). Keep new
-  `dev`/`start`/`demo`/`smoke` scripts on `tsx`.
-- Only `appendEvent()` writes to `event_log` — never a raw INSERT.
-- Every tenant-scoped table carries `client_id` and an RLS policy.
+The server is being rewritten from TypeScript to **C# (.NET 10) ASP.NET Core Web
+API** (`openspec/changes/server-in-csharp`), with one cut-over at the end.
+
+- `Server/` — the server. `DeliveryControlCenter.sln`: `Dcc.Api` (controllers,
+  sign-in, `[RequirePermission]`, WebSockets), `Dcc.Application` (contracts),
+  `Dcc.Domain` (entities, the permission catalog, event actor and payload
+  schemas), `Dcc.Infrastructure` (EF Core + Npgsql, migrator, Graph), and
+  `tests/Dcc.Tests` (xUnit). The schema is the SQL in `Server/db/migrations`
+  (plus `Server/db/guards.sql`); EF Core never migrates.
+- `Client/` — the React web client (npm workspace `@dcc/web`).
+- `OldServer/` — the retired TypeScript server (`apps/api`, `apps/mcp`,
+  `packages/core`, `packages/db`): out of the npm workspaces and the build, kept
+  **only as the reference being rewritten**. Never run it; never add to it. The
+  "i" glossary still lives in `OldServer/packages/core/src/glossary/concepts/`
+  until it moves to `Server/glossary` (task 4.1 of server-in-csharp).
+- A rewritten endpoint keeps the old route and JSON shape (`OldServer/apps/api/src/server.ts`,
+  `Client/src/api.ts`), so the client changes only in how it authenticates.
+- Only `IEventLogWriter` writes to `event_log`; where the log is kept is decided
+  in `AddEventLog()` only. Every tenant-scoped table carries `client_id` and an
+  RLS policy, and is touched only inside `TenantScope`.
+- Every endpoint needs a signed-in user unless it says `[AllowAnonymous]`, and
+  states its permission with `[RequirePermission(Permissions.X.Y, scope, From = "id")]`.
+  A new permission goes into `Dcc.Domain/Auth/Permissions.cs` (synced on start).
 - Don't change the five foundational decisions (see `openspec/project.md`)
   without a `docs/architecture-review.md`-style review.
 
-### The local database (PGlite) — one process at a time
+### The local database — PostgreSQL
 
-No local Postgres is needed: `@dcc/db` falls back to embedded PGlite
-(`packages/db/.pgdata`) unless `DATABASE_URL` is set. **PGlite is not safe for
-two processes to hold the same `.pgdata`.** This includes any one-off script
-that imports `@dcc/db`, directly or through `@dcc/core`: a probe run with
-`npx tsx` while the API is up can corrupt the directory, and the only fix is
-`dev:reset` + `dev:setup` (which loses the local clients).
+PostgreSQL 17 runs as a Windows service. `Server/.local/` (outside git) holds
+what never goes into git: `postgres-superuser.txt`, `appsettings.local.json`
+(the `dcc_owner` connection string, written by `db-bootstrap`), the JWT signing
+key and the first admin's one-time password (`initial-admin.txt`). Never print
+their contents.
 
-- Stop the API before `dev:migrate` / `dev:setup` / `dev:reset` / `dev:prove` /
-  `smoke`. If it keeps running, it queries a stale schema and every query
-  touching a new column returns 500.
-- Editing a source file while a migration or script is mid-write races
-  `tsx watch`'s kill-and-respawn and can corrupt `.pgdata`. Use
-  `npm run -w @dcc/api start` (plain `tsx`, no watch) whenever a migration or
-  one-off script might run concurrently.
-- To run a script that needs the database while the API is up, point it at a
-  scratch directory: `DCC_PGLITE_DIR=<scratch> npx tsx <script>` — or write the
-  probe so it touches only git and the filesystem.
+- The API connects as `dcc_owner` (owns the tables, not a superuser);
+  `TenantScope` switches to `dcc_app` so RLS is enforced.
+- Migrations run on every start of the server; a new one is the next numbered
+  file in `Server/db/migrations` (split on `--> statement-breakpoint`).
+- Tests drop and recreate their own database, `dcc_test` — never `dcc`.
 
 ### Environment
 
-- The API rejects requests without a matching `x-dcc-hook-token`. The web app
-  sends `dev-secret` by default, so start the API with
-  `DCC_HOOK_TOKEN=dev-secret` (`.claude/launch.json` already does).
-- `DCC_DEV_EMAIL` and `DCC_HOOK_TOKEN` are also what the hooks and
-  `skills/dcc.mjs` read; the hooks do nothing without them.
-- Ports: API `:3001`, web `:5173` (vite proxies `/api`, including WebSocket).
+- Ports: server `:5080`, web `:5173` (vite proxies `/api` to `:5080`, WebSocket
+  included, stripping the prefix).
+- Sign-in: email + password for now (the first admin is created on first
+  start). Entra ID, B2B guests and the directory sync are built and off until
+  the `Entra` settings are filled (in `Server/.local/appsettings.local.json`).
+- The hooks and `skills/dcc.mjs` still send the old shared-secret headers; they
+  move to API tokens (task 5.1) — until then they do nothing against the C# server.
 
 ## Commands
 
 ```bash
-npm run typecheck              # tsc -b: db, core, api, mcp — NOT apps/web
-npx tsc -p apps/web --noEmit   # web app has its own tsconfig; vite does not type-check
-npm run lint                   # eslint . — errors fail, warnings are existing leftovers
-npm test                       # vitest run — database-free unit tests
+dotnet run --project Server/src/Dcc.Api -- db-bootstrap   # once per machine: roles + database (superuser)
+npm run server                 # the C# server on :5080 (applies migrations on start)
+npm run web                    # the web client on :5173
+dotnet build Server/DeliveryControlCenter.sln
+dotnet test Server/DeliveryControlCenter.sln   # xUnit: unit + integration against dcc_test
+npm run typecheck              # the web client's tsconfig
+npm run lint                   # eslint (Client + scripts) — errors fail, warnings are existing leftovers
+npm test                       # vitest (Client) + dotnet test
 npm run audit:stale            # leftovers of replaced designs, stale OpenSpec statuses, missing "i" hints
 npm run info:drift             # "i" explanations on lines a change touched — run before a PR that touches a screen
 npm run sync                   # after merges: master current, merged local branches gone, what is left
-npm run db:migrate             # drizzle-kit, real Postgres
-npm run db:guards              # append-only triggers + dcc_app role
-npm run -w @dcc/db dev:reset   # wipe local PGlite
-npm run -w @dcc/db dev:setup   # apply migrations to local PGlite
-npm run -w @dcc/db dev:migrate # migrate local PGlite
-npm run -w @dcc/db dev:prove   # 9 checks: RLS wall + append-only + validation
-npm run -w @dcc/api smoke      # 8 end-to-end checks against the API
-npm run -w @dcc/core prove:routing    # routing proofs
-npm run -w @dcc/core prove:retention  # chat-retention proofs
-npm run -w @dcc/core prove:built-on   # a task developed before its dependency, merging it in, two tasks on one file, a renamed key (own DB + git, safe with the API up)
-npm run -w @dcc/core prove:checks     # every task's checks (build → tests), its status, the done gate (same)
-npm run -w @dcc/core prove:manual     # a task developed by a person: the mark, the report, each check by hand (same)
-npm run -w @dcc/core prove:onboarding # the whole onboarding run on the kit's repository: diagnosis, rules, trial, cards, build with real hook checks, delivery (same)
-npm run -w @dcc/api dev        # API on :3001 (tsx watch)
-npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run -w @dcc/web build      # production build of the web app
 ```
 
-There is no formatter or CI. A change is verified by `typecheck`, `lint`, `test`,
-`audit:stale`, and the `dev:prove` / `smoke` / `prove:*` scripts.
-`npm run lint` (ESLint flat config in `eslint.config.js`) fails only on real
-errors; style leftovers are warnings — do not add new ones.
-`npm test` runs Vitest over `*.test.ts` files next to the code (currently pure
-modules in `packages/core/src`). **A test must import the module under test by
-its own file, never `@dcc/core`'s index or `@dcc/db`** — that opens the PGlite
-directory, which is unsafe while the API is up. Anything that needs the database
-stays a `dev:prove` / `smoke` / `prove:*` script.
+There is no formatter or CI. A change is verified by `dotnet build`, `dotnet test`,
+`typecheck`, `lint` and `audit:stale`. `npm run lint` fails only on real errors;
+style leftovers are warnings — do not add new ones. The server's tests that need
+the database are integration tests in `Server/tests/Dcc.Tests/Integration`, over
+the shared `DccFactory` (a fresh `dcc_test` database per run).
 
 Repository onboarding (`openspec/changes/repository-coach`) is one fixed
 process — connect, diagnose (no model), processes and the agent test, a trial
 run, component cards with their evidence, a verified build, delivery — whose
 result differs per repository, and a coach that keeps proposing afterwards.
-The rules are data (`packages/core/src/repo-onboarding/rules.json`); the
+The rules are data (`OldServer/packages/core/src/repo-onboarding/rules.json`, until rewritten); the
 reusable templates are the operator catalog (`.../repo-onboarding/catalog/`).
 The `/init` draft session inside the plan step is the real, interactive Claude
 Code in a pseudo-terminal (`@lydell/node-pty`); the screen reaches it over a
@@ -199,14 +193,14 @@ The end user is a Hebrew speaker who is not fluent in developer concepts. Every
 screen title, card, section title, figure and non-obvious field carries an "i"
 that opens one or two plain Hebrew sentences saying what it is — and, for a
 costly or irreversible button, what happens if you press it. `PageHead`,
-`CardTitle` and `StatTile` (`apps/web/src/ui.tsx`) take a **required** `info`
+`CardTitle` and `StatTile` (`Client/src/ui.tsx`) take a **required** `info`
 prop, and `npm run audit:stale` fails a raw `h1`–`h4` inside a screen, an unknown
 concept key, a malformed entry, or a label/column/figure that names something and
 opens no explanation. An element that genuinely needs none opts out with
 `{/* no-info: why */}` above it (the audit counts these).
 
 - The wording lives in **one** place, keyed by **concept** and never by screen:
-  `packages/core/src/glossary/concepts/`, read only through `getConcept` /
+  `OldServer/packages/core/src/glossary/concepts/` (moving to `Server/glossary`), read only through `getConcept` /
   `allConcepts` / `glossaryFor` — the same entries the chat answers from.
 - A new screen or component is not finished without it. How to add and word one,
   and which elements get an "i": the `info-hints` skill in `.claude/skills/`.
