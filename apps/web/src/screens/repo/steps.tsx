@@ -163,7 +163,7 @@ const KIND_CATALOG: { group: string; items: { name: string; what: string }[] }[]
 function ComponentKindCatalog() {
   return (
     <div className="rd-kind-catalog">
-      <p className="ob-sub" style={{ margin: "0 0 8px" }}>
+      <p style={{ margin: "0 0 8px", fontSize: 12.5 }}>
         בשלב זה מתבצעת פעולה דטרמיניסטית שחוקרת את הריפו.
         <br />על הממצאים של השלב הזה מתבססות ההחלטות על אילו רכיבים להטמיע בריפו.
         <br />רכיבים אפשריים שיוקמו בעקבות השלב הזה:
