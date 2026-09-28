@@ -181,8 +181,13 @@ export type AgentTest = {
   parallel: boolean;
   /** Fails today: the trial or the history shows it going wrong. */
   failsToday: boolean;
+  /** One shared sentence — kept for runs written before `reasons` existed. */
   why: string;
+  /** Per question, in plain Hebrew and specific to this step: which judgment, which information, which files, which failure. */
+  reasons?: Partial<Record<AgentCriterion, string>>;
 };
+
+export type AgentCriterion = "judgment" | "externalInfo" | "readsALot" | "parallel" | "failsToday";
 
 export type StepDecision = "agent" | "skill" | "none";
 

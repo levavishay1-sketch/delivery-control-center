@@ -1,5 +1,5 @@
 import type {
-  AgentTest, AutomationLevel, CoachProposal, ComponentFamily, ComponentGroup, ComponentKind, ComponentStatus, FailureKind, OnboardingComponent, OnboardingEvent,
+  AgentCriterion, AutomationLevel, CoachProposal, ComponentFamily, ComponentGroup, ComponentKind, ComponentStatus, FailureKind, OnboardingComponent, OnboardingEvent,
   OnboardingStatus, OnboardingStepDefinition,
 } from "../../api.ts";
 import { effortLabel, fmtUsd, modelLabel } from "../../claude/labels.ts";
@@ -71,14 +71,14 @@ export const PROCESS_SOURCE_HE: Record<string, string> = {
   git: "היסטוריית git", ci: "CI", contributing: "CONTRIBUTING", pr_template: "תבנית PR", docs: "תיעוד", tracker: "מערכת המשימות", interview: "הראיון", model: "קלוד",
 };
 export const DECISION_HE: Record<"agent" | "skill" | "none", { label: string; cls: string }> = {
-  agent: { label: "סוכן", cls: "ai" }, skill: { label: "skill", cls: "det" }, none: { label: "כלום", cls: "" },
+  agent: { label: "סוכן", cls: "ai" }, skill: { label: "skill", cls: "det" }, none: { label: "אין צורך בסוכן או סקיל", cls: "" },
 };
 export const JUDGE_HE: Record<string, string> = { code: "הקוד שופט", model: "מודל שופט" };
 export const PROPOSAL_KIND_HE: Record<CoachProposal["kind"], string> = { add: "הוספה", change: "שינוי", remove: "הסרה", new_in_world: "חדש בעולם" };
 /** The five questions of the agent test, in the order the concept explains them. */
-export const AGENT_TEST_HE: { key: Exclude<keyof AgentTest, "why">; label: string }[] = [
+export const AGENT_TEST_HE: { key: AgentCriterion; label: string }[] = [
   { key: "judgment", label: "צריך שיפוט עצמאי" }, { key: "externalInfo", label: "צריך מידע או גישה שאין לסוכן הראשי" }, { key: "readsALot", label: "צריך לקרוא הרבה" },
-  { key: "parallel", label: "יכול לרוץ במקביל" }, { key: "failsToday", label: "נכשל היום" },
+  { key: "parallel", label: "יכול לרוץ במקביל" }, { key: "failsToday", label: "כבר נכשל בפועל" },
 ];
 export const validationLabel = (passed: boolean | null | undefined): { label: string; cls: string } =>
   passed === true ? { label: "עבר", cls: "ok" } : passed === false ? { label: "נכשל", cls: "bad" } : { label: "לא נבדק כאן", cls: "human" };

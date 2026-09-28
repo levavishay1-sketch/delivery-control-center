@@ -80,6 +80,15 @@ export function seedsFromTrials(trials: readonly TrialOutcome[], existing: reado
 }
 
 /** Every process step decided "agent" gets an agent named after it; every "skill" step gets a skill. */
+const CRITERION_HE = { judgment: "שיפוט עצמאי", externalInfo: "מידע או גישה חסרים", readsALot: "הרבה קריאה", parallel: "ריצה במקביל", failsToday: "כבר נכשל בפועל" } as const;
+/** The step's own reason per question that came back "yes" — or the older single sentence for a run written before per-question reasons. */
+function agentTestWhy(s: DiscoveredProcess["steps"][number]): string {
+  const r = s.agentTest.reasons ?? {};
+  const parts = (Object.keys(CRITERION_HE) as (keyof typeof CRITERION_HE)[]).filter((k) => s.agentTest[k] && r[k]).map((k) => `${CRITERION_HE[k]}: ${r[k]}`);
+  if (parts.length) return `במבחן הסוכן — ${parts.join("; ")}.`;
+  return s.agentTest.why ? `במבחן הסוכן: ${s.agentTest.why}` : "";
+}
+
 export function seedsFromProcesses(processes: readonly DiscoveredProcess[]): ComponentSeed[] {
   const out: ComponentSeed[] = [];
   for (const p of processes) {
@@ -92,7 +101,7 @@ export function seedsFromProcesses(processes: readonly DiscoveredProcess[]): Com
         key: `${kind}_${p.key}_${s.key}`.slice(0, 60), kind, family: kind === "agent" ? "agents" : "skills", risk: kind === "agent" ? "significant" : "reversible",
         source: "process", sourceRef: `${p.key}.${s.key}`,
         title_he: kind === "agent" ? `סוכן: ${s.title} (${p.title})` : `skill: ${s.title} (${p.title})`,
-        why_he: `${s.reason} ${s.agentTest.why ? `במבחן הסוכן: ${s.agentTest.why}` : ""}${p.evidence.length ? ` ראיה לתהליך: ${p.evidence[0]}` : ""}`.trim(),
+        why_he: `${s.reason} ${agentTestWhy(s)}${p.evidence.length ? ` ראיה לתהליך: ${p.evidence[0]}` : ""}`.trim(),
         what_he: kind === "agent"
           ? "סוכן משנה עם היקף מהקבצים של הצעד, כלים מינימליים, ורשימת בדיקה שקלוד מנסח מהראיות (הערות סקירה, באגים). \"מתי לקרוא לי\" נבדק על משימות אמיתיות."
           : `נוהל אחד לצעד "${s.title}": הקבצים, הפקודות והסדר — כפי שנעשה כאן.`,
