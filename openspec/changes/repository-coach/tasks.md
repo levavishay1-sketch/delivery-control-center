@@ -16,7 +16,7 @@ verification. Every task ticked landed in one change.
 - [x] 2.3 `rules.json` + `rules.ts` — 32 rules with 69 component cards; corrections hold rules back; unit test: eleven research diagnoses → eleven distinct sets, Trade's thirteen rules exactly, every card filled
 - [x] 2.4 `profile.ts` — facts for the screen with the path a correction names, the summary for the prompts, the facts for the judge
 - [x] 2.5 `processes.ts` + `interview.json` — evidence, at most four questions with defaults, the model's answer parsed, the agent test decided by code, a no-model fallback; tests
-- [x] 2.6 `trials.ts` + `trial-tasks.json` — tasks from the profile and the processes, the code as judge, the judge's verdict parsed, failure → kind, the delta; tests
+- [x] 2.6 `trials.ts` — the judge's verdict parsed, failure → kind; the task bank, the code as judge and the delta were replaced on 2026-09-29 by the measurement (`eval/`, `openspec/changes/onboarding-proves-itself`); tests
 - [x] 2.7 `components.ts` — cards from every source, groups by risk and level, merge, build order, the readiness gate, the honesty card, the pull-request report; tests
 - [x] 2.8 `marketplace.ts` — the open search's answer parsed, trust graded by code (vendor namespaces, official marketplace, licence, activity, injection scan), the memory and its reuse; tests
 - [x] 2.9 `catalog/` — 32 parameterised templates (hooks that really block, deny normalisation, scripts, skills, agents, docs, MCP), executed in tests

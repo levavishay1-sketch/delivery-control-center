@@ -131,7 +131,11 @@ try {
   check("a permission is not the scan's to grant: it is a question on its card", /צריך החלטה שלך: מותר לסוכן לפרסם/.test(taken("פרסום אחרי מיזוג")?.why_he ?? ""));
   check("a section naming paths the code does not have is not recommended, with the paths", taken("ארכיטקטורה")?.group === "not_recommended" && /src\/api\//.test(taken("ארכיטקטורה")?.why_he ?? ""));
   check("a settings file is not taken whole, and the generic line is left out — both said, with why", (scan.refused ?? []).some((r) => /settings\.json/.test(r.why)) && (scan.reject ?? []).some((r) => /async/.test(r.what)));
-  check("a card of ours the scan finds redundant gets a note and stays the person's to decide; 'replaces' names only real cards", /סריקת \/init: /.test(v.components.find((c) => c.key === "reviewer_1_doc")?.why_he ?? "") && JSON.stringify(taken("build לפני סיום")?.params.replaces) === JSON.stringify(["reviewer_1_doc"]));
+  const redundant = v.components.find((c) => c.key === "reviewer_1_doc");
+  check("a card of ours the scan finds redundant is declined with the scan's reason, undoable — not a note a person must notice; 'replaces' names only real cards", redundant?.status === "declined" && /^הסריקה: /.test(redundant?.declineReason ?? "") && redundant?.params.declinedBy === "scan" && v.events.some((e) => e.type === "onboarding.draft.scan_applied") && JSON.stringify(taken("build לפני סיום")?.params.replaces) === JSON.stringify(["reviewer_1_doc"]), JSON.stringify([redundant?.status, redundant?.declineReason]));
+  await core.decideComponent(repoId, runId, by, { key: "reviewer_1_doc", decision: "undo" });
+  check("the person can undo the scan's decline", (await view(runId)).components.find((c) => c.key === "reviewer_1_doc")?.status === "proposed");
+  await core.decideComponent(repoId, runId, by, { key: "reviewer_1_doc", decision: "decline", reason: "מיותר" });
   await core.decideComponentSet(repoId, runId, by, { decision: "approve" });
   v = await view(runId);
   const now = (title: string) => v.components.find((c) => c.title_he === title);

@@ -25,6 +25,7 @@ export type Capability =
   | "onboarding_author"
   | "onboarding_review"
   | "onboarding_init_scan"
+  | "onboarding_eval"
   | "chat"
   | "chat_code_read"
   | "conversation_summary"

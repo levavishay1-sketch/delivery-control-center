@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// PreToolUse hook on Bash — written by DCC onboarding.
+// PreToolUse hook on Bash | PowerShell — written by DCC onboarding.
 //
 // Denies a shell command that contains one of the PATTERNS. The comparison is
 // case-insensitive with line continuations removed and whitespace collapsed
@@ -24,7 +24,7 @@ function readEvent() {
 }
 
 const event = readEvent();
-if (event.tool_name !== "Bash") process.exit(0);
+if (!/^(Bash|PowerShell)$/.test(event.tool_name ?? "")) process.exit(0);
 const command = typeof event.tool_input?.command === "string" ? flatten(event.tool_input.command) : "";
 if (!command) process.exit(0);
 

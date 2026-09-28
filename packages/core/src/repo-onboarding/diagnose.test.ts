@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { diagnoseRepository } from "./diagnose.ts";
+import { coveredByPattern, detectTools, diagnoseRepository, leaveReadable, sensitivePatterns } from "./diagnose.ts";
 import type { RepoProfile } from "./types.ts";
 
 /**
@@ -91,7 +91,7 @@ describe("diagnoseRepository on a synthetic monorepo", () => {
   it("reads the manifests: frameworks, build, tests, lint", () => {
     expect(p.frameworks).toEqual(["eslint", "react (sub-package)", "typescript", "vitest"]);
     expect(p.build).toEqual({ system: ["package.json scripts"], commands: ["npm run build   # -> tsc -b"] });
-    expect(p.tests).toEqual({ frameworks: ["package.json:test -> vitest run", "vitest"], test_files: 1, test_dirs: [["tests", 1]] });
+    expect(p.tests).toEqual({ frameworks: ["package.json:test -> vitest run", "vitest"], test_files: 1, test_dirs: [["tests", 1]], projects: ["."], commands: ["npm test"] });
     expect(p.lint_format).toEqual(["eslint", ".eslintrc.json"]);
     expect(p.package_managers).toEqual([]);
   });
@@ -101,6 +101,10 @@ describe("diagnoseRepository on a synthetic monorepo", () => {
     expect(p.monorepo.workspaces).toEqual(["packages/*"]);
     expect(p.monorepo.packages).toEqual(["packages/a"]);
     expect(p.monorepo.package_count).toBe(1);
+    expect(p.monorepo.packages_truncated).toBe(false);
+    expect(p.monorepo.manifest_kinds).toEqual(["package.json"]);
+    // the workspace member is built by the root: no package needs a command of its own
+    expect(p.monorepo.own_commands).toEqual([]);
   });
 
   it("finds generated code by path and by header", () => {
@@ -108,6 +112,8 @@ describe("diagnoseRepository on a synthetic monorepo", () => {
     expect(p.generated_code.header_marked_files).toBe(1);
     expect(p.generated_code.header_sample).toEqual(["src/models.ts"]);
     expect(p.generated_code.header_dirs).toEqual([{ dir: "src", files: 1 }]);
+    // a short generated file is not a large one
+    expect(p.generated_code.header_files).toEqual([]);
   });
 
   it("counts the real secret and not the placeholder, and lists the sensitive files", () => {
@@ -118,6 +124,7 @@ describe("diagnoseRepository on a synthetic monorepo", () => {
     expect(p.secrets.files).toEqual([{ path: "src/db.ts", hits: 1 }]);
     expect(p.secrets.sensitive_files).toContain(".env");
     expect(p.secrets.dotenv_examples).toEqual([]);
+    expect(p.secrets.patterns).toEqual(["**/.env"]);
   });
 
   it("reads the CI workflow and its commands", () => {
@@ -141,6 +148,9 @@ describe("diagnoseRepository on a synthetic monorepo", () => {
     expect(p.external_systems).toHaveProperty("Docker");
     expect(p.ai_config).toEqual({ present: false, files: [], count: 0, kinds: [], sizes: {} });
     expect(p.windows_build.windows_only_build).toBe(false);
+    expect(p.layout).toEqual({ model_dirs: [], node_packages: [], unit_groups: [], small_source_files: [] });
+    expect(Object.keys(p.environment.tools ?? {})).toEqual(expect.arrayContaining(["msbuild", "dotnet", "dotnet_msbuild", "vstest.console", "npm", "node", "pac", "python", "pytest", "gradle", "gradlew", "mvn", "mvnw", "go", "cargo"]));
+    expect(p.environment.tools?.dotnet_msbuild).toBe(p.environment.tools?.dotnet);
   });
 
   it("reads the git history: the three files that always change together", () => {
@@ -152,7 +162,11 @@ describe("diagnoseRepository on a synthetic monorepo", () => {
     expect(p.git.tracked_files).toBe(15);
     expect(p.git.repeated_change_shapes?.[0]).toEqual({ files: ["src/a.ts", "src/b.ts", "src/c.ts"], times: 3 });
     expect(p.git.cochange_pairs).toEqual([]);
-    expect(p.git.hot_files?.[0]).toEqual({ path: "src/a.ts", changes: 4, authors: 1 });
+    // five commits are not a history to find hot spots in
+    expect(p.git.hot_files).toEqual([]);
+    expect(p.git.hot_dirs).toEqual([]);
+    // the workspace's packages/ is tracked: it must never be gitignored
+    expect(p.git.packages_committed).toBe(true);
     // a, b and c four times each, and the four other .ts files once
     expect(p.git.churn_by_ext?.[".ts"]).toBe(16);
   });
@@ -210,4 +224,178 @@ describe("an npm monorepo's packages/ is code, not a cache", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+});
+
+/* ── a repository shaped like Trade: .NET Framework, PCF, a NuGet cache in git ── */
+
+const legacyCsproj = (extra = "", asm?: string) =>
+  `<Project ToolsVersion="15.0"><PropertyGroup><TargetFrameworkVersion>v4.6.2</TargetFrameworkVersion>${asm ? `<AssemblyName>${asm}</AssemblyName>` : ""}</PropertyGroup>${extra}</Project>\n`;
+const pluginCs = (n: number) => [
+  "using System;",
+  "",
+  "namespace Crm.Plugins",
+  "{",
+  "    // Handles the create message of the entity and writes the audit line.",
+  `    public class Plugin${n}`,
+  "    {",
+  ...Array.from({ length: 30 }, (_, i) => `        public int Field${i} { get; set; }`),
+  "    }",
+  "}",
+  "",
+].join("\n");
+
+function buildTradeLike(root: string) {
+  write(root, "App.sln", "Microsoft Visual Studio Solution File\n");
+  for (const n of [1, 2, 3, 4, 5]) {
+    write(root, `Crm/Plugins/P${n}/P${n}.csproj`, legacyCsproj());
+    write(root, `Crm/Plugins/P${n}/Plugin.cs`, pluginCs(n));
+  }
+  write(root, "Crm/Plugins/P1/packages.config", '<packages><package id="Microsoft.Azure.Amqp" version="2.4.0" /><package id="Microsoft.CrmSdk.CoreAssemblies" version="9.0.2" /></packages>\n');
+  write(root, "Crm/Plugins/P1/app.config", '<configuration><connectionStrings><add name="crm" connectionString="AuthType=Office365;Url=https://x.crm4.dynamics.com" /></connectionStrings></configuration>\n');
+  write(root, "Crm/Web/Web.csproj", legacyCsproj('<Import Project="$(VSToolsPath)\\WebApplications\\Microsoft.WebApplication.targets" />'));
+  write(root, "Test/Legacy.Tests/Legacy.Tests.csproj", legacyCsproj('<ItemGroup><Reference Include="Microsoft.VisualStudio.QualityTools.UnitTestFramework" /></ItemGroup>', "Alt.Legacy.Tests"));
+  write(root, "Test/Legacy.Tests/UnitTest1.cs", "public class UnitTest1 { }\n");
+  write(root, "Test/ParserTester/ParserTester.csproj", legacyCsproj());
+  write(root, "Test/ParserTester/Program.cs", 'class Program { const string C = "Server=db;User Id=sa;Password=Sup3rSecret;"; }\n');
+  write(root, "Pcf/Grid/package.json", JSON.stringify({ name: "grid", scripts: { build: "pcf-scripts build", lint: "pcf-scripts lint" }, devDependencies: { eslint: "^8.0.0" } }));
+  write(root, "Pcf/Json/package.json", JSON.stringify({ name: "json", scripts: { build: "pcf-scripts build" }, devDependencies: { eslint: "^8.0.0" } }));
+  write(root, "Pcf/Grid/index.ts", "export const grid = 1;\n");
+  write(root, "Shared/DataModel/Entities/Entities.cs", `// <auto-generated>\n//   Generated by CrmSvcUtil.\n// </auto-generated>\n${"public partial class E { }\n".repeat(2100)}`);
+  for (let i = 0; i < 10; i++) write(root, `Shared/DataModel/Contracts/Contract${i}.cs`, `public class Contract${i} { }\n`);
+  write(root, "Keys/a.snk", "key");
+  write(root, "Keys/b.snk", "key");
+  write(root, "Crm/Web/Properties/PublishProfiles/site.pubxml.user", "<Project />\n");
+  write(root, ".env", "X=1\n");
+  write(root, ".env.example", "X=\n");
+  write(root, "packages/Newtonsoft.Json.13.0.1/Newtonsoft.Json.13.0.1.nupkg", "");
+  write(root, "packages/Newtonsoft.Json.13.0.1/lib/net45/Newtonsoft.Json.dll", "");
+  git(root, "init", "-q");
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "import");
+  // On one person's disk only — never evidence.
+  write(root, "Test/OnDisk.Tests/OnDisk.Tests.csproj", '<Project Sdk="Microsoft.NET.Sdk"><ItemGroup><PackageReference Include="MSTest.TestFramework" /></ItemGroup></Project>\n');
+}
+
+describe("diagnoseRepository on a repository shaped like Trade", () => {
+  let root: string;
+  let bin: string;
+  let p: RepoProfile;
+  const win = process.platform === "win32";
+
+  beforeAll(async () => {
+    root = mkdtempSync(path.join(os.tmpdir(), "dcc-diagnose-trade-"));
+    bin = mkdtempSync(path.join(os.tmpdir(), "dcc-diagnose-bin-"));
+    write(bin, win ? "dotnet.exe" : "dotnet", "");
+    write(bin, win ? "npm.cmd" : "npm", "");
+    buildTradeLike(root);
+    p = await diagnoseRepository(root, "trade", { tools: { env: { PATH: bin, PATHEXT: ".EXE;.CMD" }, vsRoots: [] } });
+  });
+  afterAll(() => { rmSync(root, { recursive: true, force: true }); rmSync(bin, { recursive: true, force: true }); });
+
+  it("finds the tools the machine has, and none it lacks", () => {
+    const t = p.environment.tools!;
+    expect(t.dotnet).toBe(path.join(bin, win ? "dotnet.exe" : "dotnet"));
+    expect(t.dotnet_msbuild).toBe(t.dotnet);
+    expect(t.npm).toBe(path.join(bin, win ? "npm.cmd" : "npm"));
+    expect(t.msbuild).toBeNull();
+    expect(t.pac).toBeNull();
+  });
+
+  it("counts only the test projects git tracks, by reference or by name — not a Tester console", () => {
+    expect(p.tests.projects).toEqual(["Test/Legacy.Tests"]);
+    expect(p.tests.commands).toEqual(["vstest.console Test/Legacy.Tests/bin/Debug/Alt.Legacy.Tests.dll"]);
+  });
+
+  it("sees a single large generated file and the model folder", () => {
+    expect(p.generated_code.header_files).toEqual([{ path: "Shared/DataModel/Entities/Entities.cs", lines: 2103 }]);
+    expect(p.layout?.model_dirs).toEqual(["Shared/DataModel/Contracts"]);
+  });
+
+  it("lists every sensitive file, derives deny patterns, and keeps config and templates readable", () => {
+    expect(p.secrets.sensitive_files).toEqual([".env", ".env.example", "Crm/Plugins/P1/app.config", "Crm/Web/Properties/PublishProfiles/site.pubxml.user", "Keys/a.snk", "Keys/b.snk"]);
+    expect(p.secrets.patterns).toEqual(["**/*.pubxml.user", "**/*.snk", "**/.env"]);
+    expect(p.secrets.files).toEqual([{ path: "Test/ParserTester/Program.cs", hits: 1 }]);
+    expect(leaveReadable("Crm/Plugins/P1/app.config")).toBe(true);
+    expect(leaveReadable(".env.example")).toBe(true);
+    expect(coveredByPattern("Keys/a.snk", p.secrets.patterns!)).toBe(true);
+    expect(coveredByPattern("Test/ParserTester/Program.cs", p.secrets.patterns!)).toBe(false);
+  });
+
+  it("names Azure Service Bus, not RabbitMQ, and a Dataverse sign-in is not SharePoint", () => {
+    expect(p.external_systems).toHaveProperty(["Azure Service Bus"]);
+    expect(p.external_systems).not.toHaveProperty(["RabbitMQ/AMQP"]);
+    expect(p.external_systems).not.toHaveProperty(["SharePoint/Office365"]);
+    expect(p.external_systems).toHaveProperty(["Dataverse/Dynamics 365"]);
+  });
+
+  it("gives the sub-packages' linter its own entry, and the packages the solution does not build their own command", () => {
+    expect(p.lint_format).toContain("eslint (packages: Pcf/Grid, Pcf/Json)");
+    expect(p.monorepo.is_monorepo).toBe(true);
+    expect(p.monorepo.packages).toHaveLength(p.monorepo.package_count!);
+    expect(p.monorepo.manifest_kinds).toEqual(["*.csproj", "package.json"]);
+    expect(p.monorepo.own_commands).toEqual([{ dir: "Pcf/Grid", build: "npm run build", test: null }, { dir: "Pcf/Json", build: "npm run build", test: null }]);
+    expect(p.windows_build.web_app_projects).toBe(1);
+  });
+
+  it("maps the layout: node packages, sibling units, small commented files", () => {
+    expect(p.layout?.node_packages).toEqual(["Pcf/Grid", "Pcf/Json"]);
+    expect(p.layout?.unit_groups[0]).toEqual({ parent: "Crm/Plugins", members: ["Crm/Plugins/P1", "Crm/Plugins/P2", "Crm/Plugins/P3", "Crm/Plugins/P4", "Crm/Plugins/P5"] });
+    expect(p.layout?.small_source_files).toEqual(["Crm/Plugins/P1/Plugin.cs", "Crm/Plugins/P2/Plugin.cs", "Crm/Plugins/P3/Plugin.cs", "Crm/Plugins/P4/Plugin.cs", "Crm/Plugins/P5/Plugin.cs"]);
+  });
+
+  it("says the package cache is committed, and draws no hot spot from one commit", () => {
+    expect(p.git.packages_committed).toBe(true);
+    expect(p.git.commits_analyzed).toBe(1);
+    expect(p.git.hot_dirs).toEqual([]);
+    expect(p.git.hot_files).toEqual([]);
+  });
+});
+
+describe("the tools probe", () => {
+  it("looks in Visual Studio's folders for MSBuild and vstest, newest first, and skips the Store's python stub", () => {
+    const vs = mkdtempSync(path.join(os.tmpdir(), "dcc-vs-"));
+    const apps = mkdtempSync(path.join(os.tmpdir(), "dcc-apps-"));
+    const store = path.join(apps, "WindowsApps");
+    try {
+      write(vs, "2019/Professional/MSBuild/Current/Bin/MSBuild.exe", "");
+      write(vs, "2022/BuildTools/MSBuild/Current/Bin/MSBuild.exe", "");
+      write(vs, "2022/BuildTools/Common7/IDE/Extensions/TestPlatform/vstest.console.exe", "");
+      write(store, "python.exe", "");
+      const t = detectTools(vs, { env: { PATH: store, PATHEXT: ".EXE" }, platform: "win32", vsRoots: [vs] });
+      expect(t.msbuild).toBe(path.join(vs, "2022", "BuildTools", "MSBuild", "Current", "Bin", "MSBuild.exe"));
+      expect(t["vstest.console"]).toBe(path.join(vs, "2022", "BuildTools", "Common7", "IDE", "Extensions", "TestPlatform", "vstest.console.exe"));
+      expect(t.python).toBeNull();
+      expect(detectTools(vs, { env: { PATH: "" }, platform: "linux", vsRoots: [vs] }).msbuild).toBeNull();
+    } finally {
+      rmSync(vs, { recursive: true, force: true });
+      rmSync(apps, { recursive: true, force: true });
+    }
+  });
+
+  it("derives one pattern per kind of sensitive file", () => {
+    expect(sensitivePatterns(["a/x.pfx", "b/y.PFX", "c/.env.local", "d/.env.sample", "e/p.csproj.user", "f/s.pubxml.user", "g/web.config"])).toEqual(["**/*.pfx", "**/*.user", "**/.env.local"]);
+  });
+});
+
+describe("hot spots need a history", () => {
+  it("reports hot files once there are twenty commits", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "dcc-diagnose-hot-"));
+    try {
+      write(root, "src/a.ts", "export const a = 0;\n");
+      git(root, "init", "-q");
+      git(root, "add", "-A");
+      git(root, "commit", "-q", "-m", "0");
+      for (let n = 1; n < 20; n++) {
+        write(root, "src/a.ts", `export const a = ${n};\n`);
+        git(root, "commit", "-q", "-a", "-m", String(n));
+      }
+      const p = await diagnoseRepository(root, "hot", { tools: { env: { PATH: "" }, vsRoots: [] } });
+      expect(p.git.commits_analyzed).toBe(20);
+      expect(p.git.hot_files?.[0]).toEqual({ path: "src/a.ts", changes: 20, authors: 1 });
+      expect(p.git.hot_dirs?.[0]).toEqual({ dir: "src", changes: 20, authors: 1 });
+      expect(p.git.packages_committed).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

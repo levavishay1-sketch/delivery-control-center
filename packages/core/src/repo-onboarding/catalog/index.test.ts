@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -64,8 +64,10 @@ function place(r: Rendered, rel: string): string {
   return abs;
 }
 
-function run(script: string, event: unknown, cwd = dir) {
-  const r = spawnSync(process.execPath, [script], { input: JSON.stringify(event), encoding: "utf8", cwd });
+/** The hook's environment without the session's own project dir, so a test states the one it means. */
+const { CLAUDE_PROJECT_DIR: _sessionProjectDir, ...baseEnv } = process.env;
+function run(script: string, event: unknown, cwd = dir, env: Record<string, string> = {}) {
+  const r = spawnSync(process.execPath, [script], { input: JSON.stringify(event), encoding: "utf8", cwd, env: { ...baseEnv, ...env } });
   return { status: r.status, stdout: r.stdout, stderr: r.stderr };
 }
 
@@ -109,9 +111,11 @@ describe("the catalog", () => {
 
   it("wires hooks in Claude Code's settings format", () => {
     const r = renderTemplate("block-paths", SAMPLE["block-paths"]!, repo);
-    expect(r.settings?.hooks).toEqual({ PreToolUse: [{ matcher: "Edit|Write|MultiEdit", hooks: [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/block-paths.mjs"' }] }] });
-    expect(renderTemplate("block-commands", SAMPLE["block-commands"]!, repo).settings?.hooks?.PreToolUse?.[0]).toMatchObject({ matcher: "Bash" });
-    expect(renderTemplate("secret-scan", {}, repo).settings?.hooks?.PreToolUse).toHaveLength(2);
+    const blockPaths = [{ type: "command", command: 'node "$CLAUDE_PROJECT_DIR/.claude/hooks/block-paths.mjs"' }];
+    // every file-writing tool, and the shells a write can go through
+    expect(r.settings?.hooks).toEqual({ PreToolUse: [{ matcher: "Edit|Write|MultiEdit|NotebookEdit", hooks: blockPaths }, { matcher: "Bash|PowerShell", hooks: blockPaths }] });
+    expect(renderTemplate("block-commands", SAMPLE["block-commands"]!, repo).settings?.hooks?.PreToolUse?.[0]).toMatchObject({ matcher: "Bash|PowerShell" });
+    expect(renderTemplate("secret-scan", {}, repo).settings?.hooks?.PreToolUse).toMatchObject([{ matcher: "Edit|Write|MultiEdit|NotebookEdit" }, { matcher: "Bash|PowerShell" }]);
     const stop = renderTemplate("build-gate", SAMPLE["build-gate"]!, repo).settings?.hooks?.Stop?.[0] as { matcher?: string; hooks: { timeout: number }[] };
     expect(stop.matcher).toBeUndefined();
     expect(stop.hooks[0]!.timeout).toBeGreaterThanOrEqual(600);
@@ -144,6 +148,32 @@ describe("block-paths", () => {
   it("ignores other tools and files outside the repository", () => {
     expect(run(script(), { tool_name: "Read", tool_input: { file_path: path.join(dir, "src/generated/a") }, cwd: dir }).status).toBe(0);
     expect(run(script(), { tool_name: "Edit", tool_input: { file_path: path.join(dir, "..", "src/generated/a") }, cwd: path.join(dir, "inner") }).status).toBe(0);
+  });
+
+  it("measures from the project root Claude Code names, not from where the session has cd'ed", () => {
+    const deep = { tool_name: "Edit", tool_input: { file_path: path.join(dir, "src/generated/Model.cs") }, cwd: path.join(dir, "sub") };
+    expect(run(script(), deep, dir, { CLAUDE_PROJECT_DIR: dir }).status).toBe(2);
+  });
+
+  it("guards a notebook edit too", () => {
+    expect(run(script(), { tool_name: "NotebookEdit", tool_input: { notebook_path: path.join(dir, "src/generated/a.ipynb"), new_source: "x" }, cwd: dir }).status).toBe(2);
+  });
+
+  it("blocks a shell command that writes into a guarded path, in Bash or PowerShell, and lets reads through", () => {
+    const sh = (tool: string, command: string) => run(script(), { tool_name: tool, tool_input: { command }, cwd: dir }).status;
+    expect(sh("Bash", "echo x > src/generated/a.ts")).toBe(2);
+    expect(sh("Bash", "printf x >> ./src/generated/a.ts")).toBe(2);
+    expect(sh("Bash", "cp tmp/a.ts src/generated/")).toBe(2);
+    expect(sh("Bash", "sed -i 's/a/b/' src/generated/a.ts")).toBe(2);
+    expect(sh("Bash", "echo x | tee Keys/new.txt")).toBe(2);
+    expect(sh("PowerShell", "Set-Content -Path src/generated/b.cs -Value 'x'")).toBe(2);
+    expect(sh("PowerShell", "'x' | Out-File src\\generated\\c.cs")).toBe(2);
+    expect(sh("PowerShell", "Copy-Item tmp/a.cs -Destination src/generated/a.cs")).toBe(2);
+    expect(sh("PowerShell", "Move-Item tmp/a.snk Signing/b.snk")).toBe(2);
+    expect(sh("Bash", "cat src/generated/a.ts > out.txt")).toBe(0);
+    expect(sh("Bash", "npm test 2>&1 | tail -5")).toBe(0);
+    expect(sh("Bash", 'node -e "const f = (x) => x"')).toBe(0);
+    expect(sh("PowerShell", "Get-Content src/generated/a.ts")).toBe(0);
   });
 });
 
@@ -212,6 +242,35 @@ describe("secret-scan", () => {
     expect(r.stderr).not.toContain("tests/fixture.txt");
     expect(r.stderr).not.toContain("Sup3rSecret123");
     expect(run(hook("secret-scan", { allowTests: true }), { tool_name: "Bash", tool_input: { command: "git status" }, cwd: repoDir }, repoDir).status).toBe(0);
+  });
+
+  it.skipIf(!gitAvailable)("scans what a `git add` in the same command is about to stage, in Bash and PowerShell", () => {
+    const repoDir = path.join(dir, "git-add-repo");
+    mkdirSync(repoDir, { recursive: true });
+    const g = (...a: string[]) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@x", "-c", "commit.gpgsign=false", ...a], { cwd: repoDir });
+    expect(g("init", "-q").status).toBe(0);
+    writeFileSync(path.join(repoDir, "tracked.txt"), "ok\n");
+    expect(g("add", "-A").status).toBe(0);
+    expect(g("commit", "-q", "-m", "init").status).toBe(0);
+    // nothing staged: the hook sees the secret only because it reads what the add will stage
+    writeFileSync(path.join(repoDir, "tracked.txt"), "ok\nPassword=Sup3rSecret123;\n");
+    writeFileSync(path.join(repoDir, "new.cs"), 'const string C = "Server=x;Password=An0therSecret9;";\n');
+    const s = hook("secret-scan", { allowTests: false });
+    const all = run(s, { tool_name: "Bash", tool_input: { command: 'git add -A && git commit -m "x"' }, cwd: repoDir }, repoDir);
+    expect(all.status).toBe(2);
+    expect(all.stderr).toContain("tracked.txt:2");
+    expect(all.stderr).toContain("new.cs:1");
+    expect(all.stderr).not.toContain("Sup3rSecret123");
+    const named = run(s, { tool_name: "PowerShell", tool_input: { command: 'git add new.cs; git commit -m "x"' }, cwd: repoDir }, repoDir);
+    expect(named.status).toBe(2);
+    expect(named.stderr).toContain("new.cs:1");
+    expect(named.stderr).not.toContain("tracked.txt");
+    expect(run(s, { tool_name: "PowerShell", tool_input: { command: "git add tracked.txt" }, cwd: repoDir }, repoDir).status).toBe(0);
+  });
+
+  it("scans a notebook cell", () => {
+    const r = run(hook("secret-scan", { allowTests: false }), { tool_name: "NotebookEdit", tool_input: { notebook_path: path.join(dir, "a.ipynb"), new_source: 'api_key = "9f8e7d6c5b4a3f2e1d"' }, cwd: dir });
+    expect(r.status).toBe(2);
   });
 });
 
@@ -293,9 +352,11 @@ describe("files", () => {
   it("gitattributes marks a directory with /** and a file as it is", () => {
     const r = renderTemplate("gitattributes", { paths: ["src/generated", "Model.g.cs", "gen/"] }, repo);
     expect(r.files[0]!.path).toBe(".gitattributes");
-    expect(r.files[0]!.content).toContain("src/generated/** linguist-generated=true -diff\n");
-    expect(r.files[0]!.content).toContain("Model.g.cs linguist-generated=true -diff\n");
-    expect(r.files[0]!.content).toContain("gen/** linguist-generated=true -diff\n");
+    expect(r.files[0]!.content).toContain("src/generated/** linguist-generated=true\n");
+    expect(r.files[0]!.content).toContain("Model.g.cs linguist-generated=true\n");
+    expect(r.files[0]!.content).toContain("gen/** linguist-generated=true\n");
+    // folded in a review, never hidden from it
+    expect(r.files[0]!.content).not.toContain("-diff");
   });
 
   it("gitignore returns only the lines under the DCC header", () => {
@@ -318,10 +379,39 @@ describe("files", () => {
     expect(failed.stdout.trim().split("\n").pop()).toBe("VERIFY: failed test");
   });
 
-  it.skipIf(process.platform === "win32")("local-gate says when the build is Windows-only", () => {
-    const r = run(place(renderTemplate("local-gate", { build: "msbuild Acme.sln", test: "" }, { ...bare, windowsOnly: true }), "scripts/dcc-verify.mjs"), {});
+  it("local-gate exits 3 only when the build's tool is missing, and says which", () => {
+    const r = run(place(renderTemplate("local-gate", { build: "no-such-tool-xyz Acme.sln", tests: [] }, { ...bare, windowsOnly: true }), "scripts/dcc-verify.mjs"), {});
     expect(r.status).toBe(3);
-    expect(r.stdout.trim()).toBe("VERIFY: cannot run here (Windows-only build)");
+    expect(r.stdout.trim()).toBe("VERIFY: cannot run here (no no-such-tool-xyz)");
+  });
+
+  it("local-gate builds an msbuild solution with the tool the machine has first, and tests only tracked test projects", () => {
+    const dotnetOnly = renderTemplate("local-gate", { build: "msbuild Acme.sln /t:Build", sln: "Acme.sln", tools: { msbuild: null, dotnet: "d", dotnet_msbuild: "d" }, tests: [] }, bare).files[0]!.content;
+    expect(dotnetOnly.indexOf('"dotnet msbuild Acme.sln"')).toBeGreaterThan(-1);
+    expect(dotnetOnly.indexOf('"dotnet msbuild Acme.sln"')).toBeLessThan(dotnetOnly.indexOf('"msbuild Acme.sln"'));
+    expect(dotnetOnly).not.toContain('"name": "test"');
+    const vs = renderTemplate("local-gate", { build: "msbuild Acme.sln", tools: { msbuild: "C:/VS/MSBuild.exe", dotnet: "d" }, tests: ["vstest.console Test/X/bin/Debug/X.dll"] }, bare).files[0]!.content;
+    expect(vs.indexOf('"msbuild Acme.sln"')).toBeLessThan(vs.indexOf('"dotnet msbuild Acme.sln"'));
+    expect(vs).toContain('"vstest.console Test/X/bin/Debug/X.dll"');
+    // the diagnosing machine's paths never go into the client's script
+    expect(vs).not.toContain("C:/VS");
+  });
+
+  it("local-gate takes the first way the machine can run, and a missing test tool is a partial pass, not a failure", () => {
+    const gate = readFileSync(new URL("./templates/scripts/dcc-verify.mjs", import.meta.url), "utf8");
+    const withConfig = (config: unknown) => {
+      const abs = path.join(dir, String(n++), "scripts", "dcc-verify.mjs");
+      mkdirSync(path.dirname(abs), { recursive: true });
+      writeFileSync(abs, gate.replace("/* @dcc:config */ {}", JSON.stringify(config)));
+      return abs;
+    };
+    const second = run(withConfig({ steps: [{ name: "build", run: ["no-such-tool-xyz a", 'node -e "process.exit(0)"'] }] }), {});
+    expect(second.status).toBe(0);
+    expect(second.stdout).toContain("[verify] build: node -e");
+    expect(second.stdout.trim().split("\n").pop()).toBe("VERIFY: ok");
+    const partial = run(withConfig({ steps: [{ name: "build", run: ['node -e "process.exit(0)"'] }, { name: "test", run: ["no-such-tool-xyz run"] }] }), {});
+    expect(partial.status).toBe(0);
+    expect(partial.stdout.trim().split("\n").pop()).toBe("VERIFY: partial — test not run here (no no-such-tool-xyz)");
   });
 
   it("first-test picks the first supported language in the native framework", () => {
@@ -357,9 +447,32 @@ describe("instructions", () => {
     expect(agents.split("\n").length).toBeLessThan(80);
     expect(r.files.find((f) => f.path === "CLAUDE.md")!.content).toBe("@AGENTS.md\n");
     const windows = renderTemplate("agents-md", {}, { ...bare, name: "crm", windowsOnly: true }).files[0]!.content;
-    expect(windows).toContain("Build: not available here.");
-    expect(windows).toContain("Windows runner");
+    expect(windows).toContain("Build: no build command was found in the repository.");
+    expect(windows).toContain("only on Windows");
+    expect(windows).not.toContain("not available here");
+    expect(windows).not.toContain("Lint:");
     expect(windows).not.toContain("## Merged from");
+  });
+
+  it("agents-md states what exists: the build from the tools found, tests only from tracked projects, a layout map — no package list", () => {
+    const trade: RepoFacts = { ...bare, name: "trade", windowsOnly: true, buildCommand: "msbuild Alt.sln /t:Build", languages: ["C#"] };
+    const layout = { top: ["CrmEntryPoints", "Pcf", "Shared"], groups: [{ parent: "CrmEntryPoints/Plugins", members: ["CrmEntryPoints/Plugins/Alt.Account", "CrmEntryPoints/Plugins/Alt.Lead", "CrmEntryPoints/Plugins/Alt.Task"] }] };
+    const md = (params: Record<string, unknown>) => renderTemplate("agents-md", params, trade).files[0]!.content;
+    const dotnet = md({ tools: { msbuild: null, dotnet: "d", dotnet_msbuild: "d" }, sln: "Alt.sln", tests_projects: [], test_commands: [], layout, web_apps: 2 });
+    expect(dotnet).toContain("```sh\ndotnet msbuild Alt.sln\n```");
+    expect(dotnet).toContain("Web Application projects need Visual Studio's MSBuild");
+    expect(dotnet).toContain("Tests: no test project is tracked in git");
+    expect(dotnet).not.toMatch(/not available here|only on Windows|cannot build/i);
+    expect(dotnet).toContain("- `CrmEntryPoints/` — `CrmEntryPoints/Plugins/` holds 3 projects side by side (e.g. `Alt.Account`)");
+    expect(dotnet).toContain("- `Pcf/`\n");
+    expect(dotnet).not.toContain("{{LAYOUT}}");
+    expect(dotnet).not.toMatch(/Packages \(/);
+    const vs = md({ tools: { msbuild: "C:/VS/MSBuild.exe", dotnet: "d" }, sln: "Alt.sln", tests_projects: ["Test/Alt.Tests"], test_commands: ["vstest.console Test/Alt.Tests/bin/Debug/Alt.Tests.dll"], layout, web_apps: 0 });
+    expect(vs).toContain("```sh\nmsbuild Alt.sln\n```");
+    expect(vs).toContain("`dotnet msbuild Alt.sln` builds the class libraries too.");
+    expect(vs).toContain("Tests — the projects tracked in git: `Test/Alt.Tests/`");
+    expect(vs).toContain("```sh\nvstest.console Test/Alt.Tests/bin/Debug/Alt.Tests.dll\n```");
+    expect(vs).not.toContain("C:/VS");
   });
 
   it("agents-md-delta is a dated section to append", () => {
@@ -376,12 +489,25 @@ describe("instructions", () => {
     const r = renderTemplate("per-package", { packages }, repo);
     expect(r.files).toHaveLength(12);
     expect(r.files[0]).toMatchObject({ path: "packages/p0/CLAUDE.md" });
-    expect(r.files[0]!.content).toContain("# packages/p0\n\nRun commands from this folder.\n\n{{PACKAGE_COMMANDS}}");
+    expect(r.files[0]!.content).toContain("# packages/p0\n\nThis package does not build with the root's command. Run these from this folder:\n\n{{PACKAGE_COMMANDS}}");
     expect(r.notes.find((x) => x.startsWith("capped"))).toContain("12 of 15");
+    const own = renderTemplate("per-package", { packages: ["Pcf/Grid"], commands: [{ dir: "Pcf/Grid", build: "npm run build", test: null }] }, repo);
+    expect(own.files[0]!.content).toContain("```sh\nnpm run build\n```");
+    expect(own.files[0]!.content).not.toContain("{{PACKAGE_COMMANDS}}");
     const area = renderTemplate("per-area", SAMPLE["per-area"]!, repo);
     expect(area.files.map((f) => f.path)).toEqual(["Pcf/CLAUDE.md", "CrmEntryPoints/CLAUDE.md"]);
     expect(area.files[1]!.content).toContain("Toolchain: msbuild");
     expect(area.files[1]!.content).toContain("msbuild Crm.sln");
+    expect(area.files[0]!.content).toContain("Run `npm install` in the folder first");
+  });
+
+  it("per-area with units side by side sends the command into each unit's folder, never the parent", () => {
+    const r = renderTemplate("per-area", { areas: [{ dir: "Pcf", toolchain: "node", command: "npm run build", cwds: ["Pcf/Grid", "Pcf/Json"] }] }, repo);
+    expect(r.files.map((f) => f.path)).toEqual(["Pcf/CLAUDE.md"]);
+    const c = r.files[0]!.content;
+    expect(c).toContain("run the command from inside it (there is no build manifest in `Pcf/` itself)");
+    expect(c).toContain("- `Pcf/Grid/`\n- `Pcf/Json/`");
+    expect(c).toContain("Do not build these with the rest");
   });
 
   it("docs-set writes the known skeletons and reports an unknown name; hot-dir-doc carries the numbers", () => {
@@ -426,6 +552,18 @@ describe("skills and agents", () => {
     expect(runner).toContain("Acme.sln");
     expect(runner).toContain("{{RUNNER}}");
     expect(runner).toContain("cannot build here");
+  });
+
+  it("which-package lists every package or none, names only the manifests the repository has, and says where to build", () => {
+    const all = renderTemplate("which-package", { packages: ["Crm/A", "Crm/B", "Pcf/Grid"], count: "3", manifests: ["*.csproj", "package.json"], workspaces: "3 .NET projects in 1 solution(s)", rootBuild: "msbuild Alt.sln", own: [{ dir: "Pcf/Grid", build: "npm run build", test: null }] }, repo).files[0]!.content;
+    expect(all).toContain("The 3 packages:\n\n- `Crm/A`\n- `Crm/B`\n- `Pcf/Grid`");
+    expect(all).toContain("(`*.csproj`, `package.json`)");
+    expect(all).not.toMatch(/pyproject|go\.mod|Cargo\.toml/);
+    expect(all).toContain("Build and test from the root with `msbuild Alt.sln`, except these packages, which build from their own folder: `Pcf/Grid/` (`npm run build`).");
+    const none = renderTemplate("which-package", { packages: [], count: "164", manifests: ["Cargo.toml", "package.json"], workspaces: "cargo workspace", rootBuild: "cargo build" }, repo);
+    expect(none.files[0]!.content).toContain("The 164 packages are too many to list here; find them with Glob on `**/Cargo.toml`, `**/package.json`.");
+    expect(none.files[0]!.content).toContain("Build and test from the root: `cargo build` builds every package.");
+    expect(none.notes.join("\n")).toContain("no package list");
   });
 
   it("every agent is read-only, with a JSON findings format", () => {

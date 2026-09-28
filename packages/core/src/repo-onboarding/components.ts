@@ -4,6 +4,7 @@ import type {
 } from "./types.ts";
 import { FAMILY_ORDER } from "./types.ts";
 import type { RuleFiring, RuleSuppression } from "./rules.ts";
+import type { EvalSummary, TaskSummary } from "./eval/report.ts";
 
 /**
  * Component cards: what a rule, a failed trial, a process step, the open
@@ -126,17 +127,45 @@ export function familyOf(kind: ComponentKind): ComponentFamily {
   }
 }
 
-/** Two seeds for the same key: the later one's evidence joins the earlier one's, nothing is lost. */
+/** The longest key a seed gets — longer ones are cut, so two different seeds can arrive with one key. */
+export const KEY_MAX = 60;
+
+/** The same component seen twice (same kind; a key that was not cut, or the same thing it stands for) — not two different ones whose keys met at the cut. */
+function sameComponent(a: ComponentSeed, b: ComponentSeed): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.key.length < KEY_MAX) return true;
+  const what = (s: ComponentSeed) => (s.source === "process" || s.source === "trial" ? `${s.source}:${s.sourceRef}` : null);
+  return what(a) === null || what(b) === null || what(a) === what(b);
+}
+
+/**
+ * Two seeds for the same component: the later one's evidence joins the earlier one's, nothing is lost. Two different
+ * seeds whose keys met (cut at 60 characters, or another kind under the same key) are never merged: the later one
+ * gets `-2`, `-3`… so each keeps its own card.
+ */
 export function mergeSeeds(...lists: readonly (readonly ComponentSeed[])[]): ComponentSeed[] {
   const byKey = new Map<string, ComponentSeed>();
+  const join = (into: ComponentSeed, s: ComponentSeed) => {
+    if (!into.why_he.includes(s.why_he)) into.why_he = `${into.why_he} וגם: ${s.why_he}`;
+    into.sourceRef = [into.sourceRef, s.sourceRef].filter(Boolean).join(",");
+  };
   for (const list of lists) for (const s of list) {
     const prev = byKey.get(s.key);
     if (!prev) { byKey.set(s.key, { ...s }); continue; }
-    if (!prev.why_he.includes(s.why_he)) prev.why_he = `${prev.why_he} וגם: ${s.why_he}`;
-    prev.sourceRef = [prev.sourceRef, s.sourceRef].filter(Boolean).join(",");
+    if (sameComponent(prev, s)) { join(prev, s); continue; }
+    // A different component under a taken key: the next free `-n`, unless that one is this same component seen before.
+    const suffixed = (n: number) => `${s.key.slice(0, KEY_MAX - String(n).length - 1)}-${n}`;
+    const same = (twin: ComponentSeed) => twin.kind === s.kind && (twin.source === "process" || twin.source === "trial" ? (twin.sourceRef ?? "").split(",").includes(s.sourceRef ?? "") : true);
+    let n = 2;
+    while (byKey.has(suffixed(n)) && !same(byKey.get(suffixed(n))!)) n++;
+    const twin = byKey.get(suffixed(n));
+    if (twin) join(twin, s); else byKey.set(suffixed(n), { ...s, key: suffixed(n) });
   }
   return [...byKey.values()];
 }
+
+/** What goes out in the delivery: a component the build verified, or a connection it configured for the client. */
+export const deliverable = (c: Pick<Component, "status">): boolean => c.status === "verified" || c.status === "configured";
 
 /* ── the build order and the readiness gate ───────────────────────── */
 
@@ -154,9 +183,14 @@ export type ReadinessInput = {
   firings: readonly RuleFiring[];
   windowsOnly: boolean;
   hasRunner: boolean;
+  /** What every session loads before it starts (AGENTS.md, CLAUDE.md, rules, MCP tools) — `jointCheck.alwaysLoadedTokens`; null before the build. */
+  alwaysLoadedTokens?: number | null;
 };
 
-/** "Have we done everything we could for this repository?" — the four questions, each answered from the record. */
+/** The most an onboarded repository may load into every session: a line that is always loaded must earn its place. */
+export const ALWAYS_LOADED_MAX = 3000;
+
+/** "Have we done everything we could for this repository?" — each question answered from the record. */
 export function readiness(i: ReadinessInput): Readiness {
   const items: ReadinessItem[] = [];
   // 1. Every process has a passing trial, or an explicit "impossible here because".
@@ -171,11 +205,23 @@ export function readiness(i: ReadinessInput): Readiness {
   items.push({ key: "families", title_he: "לכל משפחת רכיבים יש החלטה: הותקן / לא צריך כי / אי אפשר כי / נדחה", ok: undecided.length === 0, detail_he: undecided.length ? `מחכים להחלטה: ${undecided.map((f) => FAMILY_HE[f]).join(", ")}` : familiesEmpty.length ? `בלי רכיב, כי שום כלל לא ירה: ${familiesEmpty.map((f) => FAMILY_HE[f]).join(", ")}` : "כל המשפחות הוכרעו" });
   // 3. The reviewer raised no open gap.
   items.push({ key: "reviewer", title_he: "הסוקר לא השאיר פער פתוח", ok: i.reviewerOpen === 0, detail_he: i.reviewerOpen ? `${i.reviewerOpen} כרטיסים מהסוקר עוד לא הוכרעו` : "כל מה שהסוקר העלה הוכרע" });
-  // 4. The last addition improved — or nothing was measured yet.
-  const measured = i.delta !== null;
-  const improved = !!i.delta && (i.delta.after.passed > i.delta.before.passed || (i.delta.after.passed === i.delta.before.passed && (i.delta.costPerTaskChange ?? 0) < 0));
-  const same = !!i.delta && i.delta.after.passed === i.delta.before.passed && !improved;
-  items.push({ key: "delta", title_he: "הניסיון החוזר מראה שיפור מול נקודת ההתחלה", ok: measured && !(i.delta!.after.passed < i.delta!.before.passed), detail_he: !measured ? "עוד לא נמדד — הבנייה מריצה את הניסיון שוב" : improved ? `${i.delta!.before.passed}/${i.delta!.before.total} → ${i.delta!.after.passed}/${i.delta!.after.total}` : same ? "אותה תוצאה — התוספת האחרונה לא שיפרה; רכיב שלא הוכח מוצע להסרה" : "פחות משימות עוברות — משהו בסט מפריע; לבדוק את הרכיבים שנוספו" });
+  // 4. The set improved on the tasks — "the same" is not an improvement — and every component measured earned its place:
+  //    a knowledge component by making its tasks pass, a safety one by being seen blocking (the measurement calls both "improved").
+  const d = i.delta;
+  const improved = !!d && d.after.passed > d.before.passed;
+  const worse = !!d && d.after.passed < d.before.passed;
+  const unproven = i.cards.filter((c) => deliverable(c) && c.delta && c.delta.verdict !== "unmeasured" && c.delta.verdict !== "improved");
+  items.push({
+    key: "delta", title_he: "המדידה עם ובלי מראה שיפור, וכל רכיב שנמדד הרוויח את מקומו", ok: improved && unproven.length === 0,
+    detail_he: !d ? "עוד לא נמדד — הבנייה מריצה את המשימות עם הסט"
+      : worse ? `פחות משימות עוברות (${d.before.passed}/${d.before.total} → ${d.after.passed}/${d.after.total}) — משהו בסט מפריע; לבדוק את הרכיבים שנוספו`
+      : !improved ? `אותה תוצאה (${d.after.passed}/${d.after.total}) — "אותו דבר" אינו שיפור; רכיב שלא הוכח מוצע להסרה`
+      : unproven.length ? `${d.before.passed}/${d.before.total} → ${d.after.passed}/${d.after.total}, אבל לא הוכחו: ${unproven.map((c) => c.title_he).slice(0, 4).join(", ")}${unproven.length > 4 ? ` ועוד ${unproven.length - 4}` : ""}`
+      : `${d.before.passed}/${d.before.total} → ${d.after.passed}/${d.after.total}`,
+  });
+  // 5. What every session loads stays small.
+  const tokens = i.alwaysLoadedTokens ?? null;
+  items.push({ key: "context", title_he: `ההקשר שנטען בכל סשן עד ${ALWAYS_LOADED_MAX.toLocaleString("en-US")} טוקנים`, ok: tokens !== null && tokens <= ALWAYS_LOADED_MAX, detail_he: tokens === null ? "עוד לא נספר — נספר אחרי הבנייה" : tokens <= ALWAYS_LOADED_MAX ? `~${tokens.toLocaleString("en-US")} טוקנים` : `~${tokens.toLocaleString("en-US")} טוקנים — יותר מדי: כל שורה שנטענת תמיד צריכה להרוויח את מקומה` });
   const honesty: string[] = [];
   if (i.windowsOnly && !i.hasRunner) honesty.push("בריפו הזה אי אפשר להריץ build ובדיקות מהמכונה של DCC (build רק ב-Windows). עד שיהיה מריץ Windows, כל משימה מסומנת \"לא אומת כאן\" והסוקר עובד review-only. מה צריך: מכונת Windows אחת עם Claude Code ו-Visual Studio Build Tools.");
   for (const c of i.cards) if (c.kind === "runner" && c.status !== "declined") honesty.push(`${c.title_he}: ${c.what_he}`);
@@ -187,24 +233,51 @@ export function readiness(i: ReadinessInput): Readiness {
 
 /* ── the report the pull request carries — from the cards, never free text ── */
 
-export function pullRequestReport(input: { repoName: string; cards: readonly Component[]; delta: TrialDelta | null; readiness: Readiness; branch: string; baselineSha: string | null }): string {
-  const installed = input.cards.filter((c) => c.status === "verified" || c.status === "installed");
+const VERDICT_HE: Record<TaskSummary["verdict"], string> = { improved: "השתפר", same: "ללא שינוי", worse: "נפגע", unmeasured: "לא נמדד" };
+const passedOf = (a: TaskSummary["with"]) => (a.runs ? `${a.passed}/${a.runs}` : "—");
+
+/** The `.mcp.json` entry a client adds once they fill the slot in its address — the build does not write an address it cannot use. */
+function mcpInstruction(c: Component): string {
+  const server = String(c.params.server ?? c.params.name ?? c.key);
+  const url = typeof c.params.url === "string" && c.params.url ? c.params.url : null;
+  const entry = url ? { type: "http", url } : { command: String(c.params.command ?? "<command>"), args: Array.isArray(c.params.args) ? c.params.args : [] };
+  const slot = url?.match(/\{[a-z_]+\}/gi)?.join(", ");
+  return [`**${c.title_he}** — ${slot ? `להשלים את ${slot} בכתובת לפי הסביבה שלכם, ` : ""}ולהוסיף ל-\`.mcp.json\` בשורש הריפו:`, "", "```json", JSON.stringify({ mcpServers: { [server]: entry } }, null, 2), "```"].join("\n");
+}
+
+export function pullRequestReport(input: { repoName: string; cards: readonly Component[]; delta: TrialDelta | null; readiness: Readiness; branch: string; baselineSha: string | null; evalSummary?: EvalSummary | null }): string {
+  const verified = input.cards.filter((c) => c.status === "verified");
+  const configured = input.cards.filter((c) => c.status === "configured");
+  const toFill = configured.filter((c) => c.kind === "mcp" && !c.files.includes(".mcp.json"));
   const failed = input.cards.filter((c) => c.status === "failed");
   const declined = input.cards.filter((c) => c.status === "declined" && c.group !== "not_recommended");
   const notHere = input.cards.filter((c) => c.group === "not_recommended");
   const reported = input.cards.filter((c) => c.kind === "report" && c.status === "reported");
   const deferred = input.cards.filter((c) => c.status === "deferred" || c.kind === "runner");
-  const line = (c: Component) => `- **${c.title_he}** (${KIND_HE[c.kind]}${c.files.length ? `: ${c.files.slice(0, 3).map((f) => `\`${f}\``).join(", ")}${c.files.length > 3 ? ` +${c.files.length - 3}` : ""}` : ""}) — כי: ${c.why_he}${c.validation ? ` נבדק: ${c.validation.how} → ${c.validation.passed === true ? "עבר" : c.validation.passed === false ? "נכשל" : "לא נבדק"}${c.validation.detail ? ` (${c.validation.detail})` : ""}.` : ""}`;
+  const files = (c: Component) => (c.files.length ? `: ${c.files.slice(0, 3).map((f) => `\`${f}\``).join(", ")}${c.files.length > 3 ? ` +${c.files.length - 3}` : ""}` : "");
+  const checked = (c: Component) => (c.validation ? ` נבדק: ${c.validation.how} → ${c.validation.passed === true ? "עבר" : "נכשל"}${c.validation.detail ? ` (${c.validation.detail})` : ""}.` : "");
+  const line = (c: Component) => `- **${c.title_he}** (${KIND_HE[c.kind]}${files(c)}) — כי: ${c.why_he}${checked(c)}`;
   const out: string[] = [`# הטמעת AI ל-${input.repoName}`, ""];
-  out.push("## התקנתי", "", ...(installed.length ? installed.map(line) : ["- (שום רכיב לא הותקן)"]), "");
-  if (failed.length) out.push("## הותקן אבל האימות נכשל", "", ...failed.map(line), "");
+  out.push("## התקנתי ואימתתי", "", ...(verified.length ? verified.map(line) : ["- (שום רכיב לא אומת)"]), "");
+  if (configured.length) out.push("## הוגדר, יחובר אצל הלקוח", "", ...configured.map((c) => `- **${c.title_he}** (${KIND_HE[c.kind]}${files(c)}) — כי: ${c.why_he}${c.validation?.detail ? ` ${c.validation.detail}.` : ""}`), "");
+  if (toFill.length) out.push("### ‎.mcp.json — להשלים אצלכם", "", ...toFill.map((c) => `${mcpInstruction(c)}\n`), "");
+  // What failed is not in this pull request: no files named, only what it was and why it did not pass.
+  if (failed.length) out.push("## נבנה ונכשל באימות — לא נכלל", "", ...failed.map((c) => `- **${c.title_he}** (${KIND_HE[c.kind]})${c.validation ? ` — ${c.validation.how}: ${c.validation.detail}` : ""}`), "");
   if (deferred.length) out.push("## דורש משהו מהלקוח", "", ...deferred.map((c) => `- **${c.title_he}** — ${c.what_he}`), "");
   if (declined.length) out.push("## לא התקנתי (נדחה)", "", ...declined.map((c) => `- ${c.title_he}${c.declineReason ? ` — ${c.declineReason}` : ""}`), "");
   if (notHere.length) out.push("## לא מומלץ כאן — ולמה", "", ...notHere.map((c) => `- ${c.title_he} — ${c.why_he}`), "");
   if (reported.length) out.push("## לתשומת לב הבעלים", "", ...reported.map((c) => `- **${c.title_he}** — ${c.what_he}`), "");
-  if (input.delta) out.push("## לפני / אחרי", "", `- משימות ניסיון שעברו: ${input.delta.before.passed}/${input.delta.before.total} → ${input.delta.after.passed}/${input.delta.after.total}`, `- עלות למשימה: ${input.delta.costPerTaskChange == null ? "לא נמדד" : `${input.delta.costPerTaskChange > 0 ? "+" : ""}${Math.round(input.delta.costPerTaskChange * 100)}%`}`, "");
+  const measured = input.evalSummary;
+  if (measured?.tasks.length) {
+    const t = measured.totals;
+    const cost = t.costChange === null ? "" : ` עלות לריצה עם הסט: ${t.costChange > 0 ? "+" : ""}${Math.round(t.costChange * 100)}%.`;
+    out.push("## מה נמדד", "", `אותן משימות, על אותו מודל, בלי הסט ועם הסט שב-PR הזה; משימה עוברת רק אם עברה בכל ההרצות שלה — ${t.improved} השתפרו, ${t.worse} נפגעו, ${t.same} ללא שינוי${t.unmeasured ? `, ${t.unmeasured} לא נמדדו` : ""}.${cost}`, "",
+      "| משימה | בלי | עם | תוצאה |", "|---|---|---|---|",
+      ...measured.tasks.map((x) => `| ${x.title_he.replace(/\|/g, "\\|")} | ${passedOf(x.without)} | ${passedOf(x.with)} | ${VERDICT_HE[x.verdict]} |`), "");
+  }
+  if (input.delta) out.push("## לפני / אחרי", "", `- משימות שעברו: ${input.delta.before.passed}/${input.delta.before.total} → ${input.delta.after.passed}/${input.delta.after.total}`, `- עלות למשימה: ${input.delta.costPerTaskChange == null ? "לא נמדד" : `${input.delta.costPerTaskChange > 0 ? "+" : ""}${Math.round(input.delta.costPerTaskChange * 100)}%`}`, "");
   out.push("## כרטיס כנות ומוכנות", "", ...input.readiness.items.map((x) => `- ${x.ok ? "✓" : "✗"} ${x.title_he} — ${x.detail_he}`), ...(input.readiness.honesty.length ? ["", ...input.readiness.honesty.map((h) => `- ${h}`)] : []), "");
-  out.push("## איך זה נעשה", "", `אבחון דטרמיניסטי של המאגר, כללי החלטה גלויים, ריצת ניסיון לפני ואחרי, ואימות לכל רכיב — ב-DCC, בענף \`${input.branch}\`${input.baselineSha ? ` מנקודת ההתחלה \`${input.baselineSha.slice(0, 7)}\`` : ""}. אף קובץ לא נכתב מחוץ לענף הזה, ורק מה שאושר נמצא ב-PR. הכול רשום ביומן ההטמעה.`);
+  out.push("## איך זה נעשה", "", `אבחון דטרמיניסטי של המאגר, כללי החלטה גלויים, מדידה עם ובלי על משימות אמיתיות, ואימות לכל רכיב — ב-DCC, בענף \`${input.branch}\`${input.baselineSha ? ` מנקודת ההתחלה \`${input.baselineSha.slice(0, 7)}\`` : ""}. אף קובץ לא נכתב מחוץ לענף הזה, ורק מה שאומת או הוגדר נמצא ב-PR. הכול רשום ביומן ההטמעה.`);
   return out.join("\n");
 }
 

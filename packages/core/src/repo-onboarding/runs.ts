@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -13,10 +13,13 @@ import { renderPrompt, requirePrompt } from "../prompts.ts";
 import { estimateUsd, recommend, type Capability } from "../routing.ts";
 import { buildComponents, previewAgentsMd, repoFacts, writeDossier, type Author } from "./build.ts";
 import { changedFiles, fileVersions } from "./changes.ts";
-import { KIND_HE, cardFromSeed, familyOf, mergeSeeds, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials, stepsDeciding } from "./components.ts";
+import { KIND_HE, cardFromSeed, deliverable, familyOf, mergeSeeds, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials, stepsDeciding } from "./components.ts";
 import { diagnoseRepository } from "./diagnose.ts";
 import { deliverWorkspace } from "./deliver.ts";
-import { DraftError, launchDraftSession, recoverDraftSession, sendToDraftSession, sessionEffort, sessionModelId, sessionOf, stopDraftSession, type DraftCtx } from "./draft.ts";
+import { DraftError, launchDraftSession, recordSessionSlice, recoverDraftSession, sendToDraftSession, sessionEffort, sessionModelId, sessionOf, setAfterDraftEnded, stopDraftSession, type DraftCtx } from "./draft.ts";
+import { legacyDelta, summarizeEval, type EvalRunRecord, type EvalSummary } from "./eval/report.ts";
+import { armsRootFor, runEval } from "./eval/run.ts";
+import { evalContext, evalTasksFor, type EvalArm, type EvalTask } from "./eval/tasks.ts";
 import { appendRepoAiEvent } from "./events.ts";
 import { draftPaths, parseInitScan, renderDraft, seedsFromScan, withScanNote, type DraftFile, type InitScan } from "./init-scan.ts";
 import { checkTrust, countSourceUse, fetchPage, parseSources, rememberSource, rememberedFor, seedFromSource, tagsToSearch, type RememberedSource } from "./marketplace.ts";
@@ -25,11 +28,11 @@ import { factsForJudge, profileFacts, profileSummary } from "./profile.ts";
 import { applyRules, stackTags, type RuleFiring, type RuleSuppression } from "./rules.ts";
 import { terminalLine, terminalState } from "./session.ts";
 import { digestTranscript, sessionIdle, writtenPaths } from "./transcript.ts";
-import { FAILURE_HE, byKind, judgeByCode, parseJudge, renderTrials, trialDelta, trialTasksFor } from "./trials.ts";
+import { byKind, renderTrials } from "./trials.ts";
 import {
   AUTOMATION_LEVELS, LIVE_RUN_STATUSES, STEPS, isStepKey, normalizeAutomation, sessionTotals, stepDefinition,
   type Automation, type BuildResult, type ClarifyingQuestion, type Component, type ComponentSeed, type ConnectResult, type DeliverResult, type DiagnoseResult, type DiscoveredProcess, type InitScanState, type InterviewAnswer, type InterviewQuestion,
-  type PlanResult, type ProcessesResult, type ProfileCorrection, type Readiness, type RepoProfile, type RunStatus, type StepKey, type StepStatus, type TrialDelta, type TrialOutcome, type TrialPhase, type TrialResult, type TrialTask,
+  type PlanPhase, type PlanResult, type ProcessesResult, type ProfileCorrection, type Readiness, type RepoProfile, type RunStatus, type StepKey, type StepStatus, type TrialOutcome, type TrialPhase, type TrialResult,
 } from "./types.ts";
 import { jointCheck } from "./verify.ts";
 import { ensureOnboardingWorkspace, existingSetup, runtimeDir, trackedFileCount } from "./workspace.ts";
@@ -89,13 +92,16 @@ async function loadProcesses(ctx: Ctx): Promise<DiscoveredProcess[]> {
   return rows.map((r) => ({ key: r.key, title: r.title, source: r.source as DiscoveredProcess["source"], evidence: r.evidence as string[], steps: r.steps as DiscoveredProcess["steps"], trialTaskKey: r.trialTaskKey, impossible: r.impossible }));
 }
 
+/** Every run of every task, in order — a task runs more than once per phase, and each run is its own row. A phase run again first deletes its earlier rows. */
 async function loadTrials(ctx: Ctx, phase?: TrialPhase): Promise<TrialOutcome[]> {
   const rows = await withTenant(ctx.clientId, (tx) => tx.select().from(onboardingTrial).where(phase ? and(eq(onboardingTrial.runId, ctx.runId), eq(onboardingTrial.phase, phase)) : eq(onboardingTrial.runId, ctx.runId)).orderBy(asc(onboardingTrial.createdAt)));
-  // The latest outcome of a task in a phase is the one that counts (a rerun replaces).
-  const latest = new Map<string, TrialOutcome>();
-  for (const r of rows) latest.set(`${r.phase}:${r.taskKey}`, { taskKey: r.taskKey, title_he: r.title, phase: r.phase as TrialPhase, passed: r.passed, failureKind: r.failureKind as TrialOutcome["failureKind"], detail: r.detail, costUsd: Number(r.costUsd), callId: r.callId, judgedBy: r.judgedBy });
-  return [...latest.values()];
+  return rows.map((r) => ({
+    taskKey: r.taskKey, title_he: r.title, phase: r.phase as TrialPhase, runIndex: r.runIndex ?? 0, numTurns: r.numTurns ?? null, graders: (r.graders ?? []) as TrialOutcome["graders"],
+    passed: r.passed, failureKind: r.failureKind as TrialOutcome["failureKind"], detail: r.detail, costUsd: Number(r.costUsd), callId: r.callId, judgedBy: r.judgedBy,
+  }));
 }
+
+const asEvalRecord = (t: TrialOutcome): EvalRunRecord => ({ taskKey: t.taskKey, title_he: t.title_he, arm: t.phase === "baseline" ? "without" : "with", runIndex: t.runIndex ?? 0, passed: t.passed, failureKind: t.failureKind, detail: t.detail, costUsd: t.costUsd, numTurns: t.numTurns ?? null, graders: t.graders ?? [], judgedBy: t.judgedBy, callId: t.callId });
 
 const cardOf = (r: ComponentRow): Component & { id: string } => ({
   id: r.id, key: r.key, kind: r.kind as Component["kind"], family: r.family as Component["family"], title_he: r.title, why_he: r.why, what_he: r.what, source: r.source as Component["source"], sourceRef: r.sourceRef,
@@ -372,69 +378,86 @@ async function reuseFromPreviousRun(ctx: Ctx, by: Actor) {
   await advance(ctx, by);
 }
 
-/* ── 3. the trial run ─────────────────────────────────────────────── */
+/* ── 3. the measurement — step 4 runs the "without" arm, the build runs the "with" arm ── */
 
-const trialEstimate = (tasks: readonly TrialTask[]) => tasks.reduce((a) => a + (estimateUsd(recommend("onboarding_trial").model, { input: 45_000, output: 1_500 }) ?? 0.25), 0) + tasks.filter((t) => t.judge.kind === "model").length * (estimateUsd(recommend("onboarding_judge").model, { input: 2_500, output: 200 }) ?? 0.01);
+/** The bank's tasks for this run, with the context the graders read and the hints the judge gets. */
+async function evalSetup(ctx: Ctx) {
+  const p = await requireProfile(ctx);
+  const processes = await loadProcesses(ctx);
+  const tasks = evalTasksFor(p.profile, processes);
+  return { profile: p.profile, processes, tasks, evalCtx: evalContext(p.profile, processes), hints: factsForJudge(p.profile) };
+}
+
+/** What a measurement will roughly cost, from what earlier runs averaged (an executor run ~$0.35, a judge with tools ~$0.10). */
+const EXECUTOR_RUN_USD = 0.35;
+const JUDGE_RUN_USD = 0.1;
+export const evalEstimateUsd = (tasks: readonly EvalTask[], arms: number, runs: number) =>
+  Math.round((tasks.length * arms * runs * EXECUTOR_RUN_USD + tasks.filter((t) => t.judge).length * arms * runs * JUDGE_RUN_USD) * 100) / 100;
+/** The cap the run stops at: the estimate with room for the second pass, never below a few dollars. */
+const evalCapUsd = (estimate: number) => Math.max(4, Math.round(estimate * 1.8 * 100) / 100);
 
 async function gateTrial(ctx: Ctx, run: RunRow, by: Actor) {
   if (run.kind === "coach") { await completeStep(ctx, "trial", { reused: true }, by.userId); await advance(ctx, by); return; }
-  const p = await requireProfile(ctx);
-  const tasks = trialTasksFor(p.profile, await loadProcesses(ctx));
-  const estimateUsdTotal = Math.round(trialEstimate(tasks) * 100) / 100;
-  if (normalizeAutomation(run.automation).level === "reversible_auto") { await runTrialPhase(ctx, run, by, "baseline", tasks); return; }
-  await waitStep(ctx, "trial", { tasks: tasks.map((t) => ({ key: t.key, title_he: t.title_he, judge: t.judge.kind })), estimateUsd: estimateUsdTotal }, by.userId, `ריצת הניסיון ממתינה לאישור על העלות (~$${estimateUsdTotal.toFixed(2)})`);
+  const { tasks } = await evalSetup(ctx);
+  const estimate = evalEstimateUsd(tasks, 1, 1);
+  const waiting = { tasks: tasks.map((t) => ({ key: t.key, title_he: t.title_he, kind: t.kind, judge: t.judge ? "model" : "code" })), estimateUsd: estimate, capUsd: evalCapUsd(estimate), arms: ["without"] as EvalArm[], runs: 1 };
+  if (normalizeAutomation(run.automation).level === "reversible_auto") { await patchStep(ctx, "trial", { result: waiting }); await runEvalPhase(ctx, run, by, "baseline"); return; }
+  await waitStep(ctx, "trial", waiting, by.userId, `המדידה ממתינה לאישור על העלות (~$${estimate.toFixed(2)}, ${tasks.length} משימות, תקרה $${evalCapUsd(estimate)})`);
 }
 
 export async function approveTrial(repoId: string, runId: string, by: Actor) {
   const { run, steps, ctx } = await loadRun(repoId, runId);
-  if (stepOf(steps, "trial")?.status !== "WaitingForUser") throw new OnboardingError("ריצת הניסיון לא ממתינה לאישור");
+  if (stepOf(steps, "trial")?.status !== "WaitingForUser") throw new OnboardingError("המדידה לא ממתינה לאישור");
   await patchStep(ctx, "trial", { status: "Running" });
   await patchRun(ctx, { status: "Running" });
   await event(ctx, "onboarding.trial.approved", {}, by.userId);
-  const p = await requireProfile(ctx);
-  void runTrialPhase(ctx, run, by, "baseline", trialTasksFor(p.profile, await loadProcesses(ctx))).catch((e) => failStep(ctx, "trial", e, by.userId));
+  void runEvalPhase(ctx, run, by, "baseline").catch((e) => failStep(ctx, "trial", e, by.userId));
   return { approved: true };
 }
 
-async function runTrialPhase(ctx: Ctx, run: RunRow, by: Actor, phase: TrialPhase, tasks: readonly TrialTask[]): Promise<TrialOutcome[]> {
-  if (!run.workspacePath) throw new OnboardingError("אין עותק מבודד");
-  const outcomes: TrialOutcome[] = [];
-  for (const task of tasks) {
-    terminalLine(ctx.runId, `ניסיון (${phase === "baseline" ? "לפני" : "אחרי"}): ${task.title_he}`);
-    let answer = "";
-    let costUsd = 0;
-    let callId: string | null = null;
-    let verdict: { passed: boolean | null; failureKind: TrialOutcome["failureKind"]; detail: string };
-    let judgedBy = "code";
-    try {
-      const res = await callModel(ctx, "onboarding.trial", { TASK: task.prompt }, { capability: "onboarding_trial", label: `ניסיון ${phase === "baseline" ? "לפני" : "אחרי"}: ${task.title_he}`, stepKey: phase === "baseline" ? "trial" : "build", by: by.userId, cwd: run.workspacePath, commands: true, maxTurns: 30, timeoutMs: 420_000 });
-      answer = res.text;
-      costUsd += res.costUsd;
-      callId = res.callId;
-      const byCode = judgeByCode(task, answer);
-      if (byCode) verdict = byCode;
-      else {
-        const facts = task.judge.kind === "model" ? task.judge.facts : factsForJudge((await requireProfile(ctx)).profile);
-        const j = await callModel(ctx, "onboarding.judge", { TASK: task.prompt, FACTS: facts.map((f) => `- ${f}`).join("\n"), ANSWER: answer.slice(0, 12_000) }, { capability: "onboarding_judge", label: `שופט: ${task.title_he}`, stepKey: phase === "baseline" ? "trial" : "build", by: by.userId, cwd: run.workspacePath, lean: true, timeoutMs: 120_000 });
-        costUsd += j.costUsd;
-        verdict = parseJudge(j.text);
-        judgedBy = recommend("onboarding_judge").model;
-      }
-    } catch (e) {
-      verdict = { passed: false, failureKind: "cannot_verify", detail: `המשימה לא הסתיימה: ${(e as Error).message.slice(0, 160)}` };
-    }
-    const outcome: TrialOutcome = { taskKey: task.key, title_he: task.title_he, phase, passed: verdict.passed, failureKind: verdict.failureKind, detail: verdict.detail, costUsd, callId, judgedBy };
-    outcomes.push(outcome);
-    await withTenant(ctx.clientId, (tx) => tx.insert(onboardingTrial).values({ runId: ctx.runId, clientId: ctx.clientId, phase, taskKey: task.key, title: task.title_he, prompt: task.prompt, passed: verdict.passed, failureKind: verdict.failureKind, detail: verdict.detail, answer: answer.slice(0, 20_000), judgedBy, costUsd: String(costUsd), callId }));
-    await event(ctx, "onboarding.trial.task", { phase, taskKey: task.key, title: task.title_he, passed: verdict.passed, failureKind: verdict.failureKind, detail: verdict.detail.slice(0, 300), costUsd, judgedBy }, by.userId);
-    terminalLine(ctx.runId, `  ${verdict.passed === true ? "✓ עבר" : verdict.passed === false ? `✗ נכשל — ${verdict.failureKind ? FAILURE_HE[verdict.failureKind] : ""}` : "? לא נשפט"}: ${verdict.detail}`);
-  }
+/**
+ * One arm of the measurement, every task, one run each — then a second run of
+ * the tasks whose arms disagree once both arms exist. `baseline` is the arm
+ * without the delivered set (step 4); `after` is the arm with exactly the
+ * files that would be delivered (the build), so what is measured is what ships.
+ * Both arms are detached worktrees off the run's copy, loading only the copy's
+ * own configuration; every run is a row and an event.
+ */
+async function runEvalPhase(ctx: Ctx, run: RunRow, by: Actor, phase: TrialPhase): Promise<EvalSummary> {
+  if (!run.workspacePath || !run.baselineSha) throw new OnboardingError("אין עותק מבודד");
+  const dir = run.workspacePath;
+  const { tasks, evalCtx, hints } = await evalSetup(ctx);
+  const arm: EvalArm = phase === "baseline" ? "without" : "with";
+  const prior = phase === "after" ? (await loadTrials(ctx, "baseline")).map(asEvalRecord) : [];
+  await withTenant(ctx.clientId, (tx) => tx.delete(onboardingTrial).where(and(eq(onboardingTrial.runId, ctx.runId), eq(onboardingTrial.phase, phase))));
+  const delivered = phase === "after" ? await deliverableFiles(ctx) : [];
+  const estimate = evalEstimateUsd(tasks, phase === "after" ? 2 : 1, 1);
+  const capUsd = evalCapUsd(estimate);
+  terminalLine(ctx.runId, `מדידה ${arm === "without" ? "בלי הסט" : "עם הסט שיימסר"}: ${tasks.length} משימות, אומדן ~$${estimate.toFixed(2)}, תקרה $${capUsd}${phase === "after" ? ` · ${delivered.length} קבצים בזרוע "עם"` : ""}`);
+  const res = await runEval({
+    ledger: { clientId: ctx.clientId, userId: by.userId, trigger: "button", entity: { kind: "onboarding_run", id: ctx.runId }, screen: "onboarding", meta: { stepKey: phase === "baseline" ? "trial" : "build", phase } },
+    sharedDir: dir, baselineSha: run.baselineSha, delivered: { fromDir: dir, files: delivered }, armsRoot: armsRootFor(runtimeDir(ctx.runId)), workDir: runtimeDir(ctx.runId),
+    tasks, ctx: evalCtx, hints, runsPerTask: 1, extraRunWhenDiffer: phase === "after", maxUsd: capUsd, arms: [arm], priorRuns: prior,
+    render: async (key, vars) => renderPrompt((await requirePrompt(key)).body, vars),
+    log: (l) => terminalLine(ctx.runId, l),
+    onRun: async (rec) => {
+      const task = tasks.find((t) => t.key === rec.taskKey)!;
+      const rowPhase: TrialPhase = rec.arm === "without" ? "baseline" : "after";
+      await withTenant(ctx.clientId, (tx) => tx.insert(onboardingTrial).values({
+        runId: ctx.runId, clientId: ctx.clientId, phase: rowPhase, taskKey: rec.taskKey, title: rec.title_he, prompt: task.prompt, passed: rec.passed, failureKind: rec.failureKind, detail: rec.detail,
+        answer: rec.answer ?? "", judgedBy: rec.judgedBy, costUsd: String(rec.costUsd), callId: rec.callId, runIndex: rec.runIndex, numTurns: rec.numTurns, graders: rec.graders, exercises: task.exercises,
+      }));
+      await event(ctx, "onboarding.trial.task", { phase: rowPhase, arm: rec.arm, runIndex: rec.runIndex, taskKey: rec.taskKey, title: rec.title_he, kind: task.kind, passed: rec.passed, failureKind: rec.failureKind, detail: rec.detail.slice(0, 300), costUsd: rec.costUsd, numTurns: rec.numTurns, judgedBy: rec.judgedBy, graders: rec.graders.filter((g) => !g.skipped).map((g) => ({ type: g.type, passed: g.passed })) }, by.userId);
+    },
+  });
+  if (res.stoppedAtCap) await event(ctx, "onboarding.trial.stopped_at_cap", { phase, capUsd, spentUsd: res.spentUsd, runs: res.runs.length }, by.userId);
   if (phase === "baseline") {
-    const result: TrialResult = { phase, tasks: outcomes.length, passed: outcomes.filter((o) => o.passed === true).length, costUsd: outcomes.reduce((a, o) => a + o.costUsd, 0), byKind: byKind(outcomes) };
+    const mine = res.runs;
+    const result: TrialResult = { phase, tasks: tasks.length, passed: res.summary.tasks.filter((t) => t.without.passK).length, costUsd: res.spentUsd, byKind: byKind(mine.map((r) => ({ ...r, phase: "baseline" as const }))), runs: 1, stoppedAtCap: res.stoppedAtCap };
     await completeStep(ctx, "trial", result, by.userId);
     await advance(ctx, by);
   }
-  return outcomes;
+  return res.summary;
 }
 
 /* ── 4. the plan: cards from every source ─────────────────────────── */
@@ -487,11 +510,16 @@ async function reviewerSeeds(ctx: Ctx, run: RunRow, by: Actor, profile: RepoProf
       COMPONENTS: seeds.map((s) => `- [${s.key}] ${s.kind} · ${s.title_he} — ${s.why_he}${s.notRecommended ? " (not recommended here)" : ""}`).join("\n"),
     }, { capability: "onboarding_review", label: "הסוקר: מה חסר ומה מיותר", stepKey: "plan", by: by.userId, cwd: run.workspacePath!, lean: true, timeoutMs: 240_000 });
     const start = res.text.indexOf("{");
-    const o = JSON.parse(res.text.slice(start, res.text.lastIndexOf("}") + 1)) as { missing?: { kind?: string; title?: string; why?: string }[]; redundant?: { key?: string; why?: string }[] };
+    const o = JSON.parse(res.text.slice(start, res.text.lastIndexOf("}") + 1)) as { missing?: { kind?: string; title?: string; why?: string; processKey?: string | null; stepKey?: string | null; slug?: string | null }[]; redundant?: { key?: string; why?: string }[] };
     const kinds = new Set<string>(["rule", "hook", "permission", "skill", "agent", "mcp", "plugin", "lsp", "scaffold", "doc", "script"]);
+    const slugOf = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32);
     const out: ComponentSeed[] = (o.missing ?? []).filter((m) => m?.title && kinds.has(String(m.kind))).slice(0, 6).map((m, i) => {
       const kind = m.kind as ComponentSeed["kind"];
-      return { key: `reviewer_${i + 1}_${kind}`, kind, family: familyOf(kind), risk: kind === "mcp" ? "external" : kind === "rule" || kind === "doc" || kind === "permission" ? "reversible" : "significant", source: "reviewer", sourceRef: "onboarding.review", title_he: String(m.title).slice(0, 120), why_he: `הסוקר: ${String(m.why ?? "").slice(0, 400)}`, what_he: `${KIND_HE[kind]} שהסוקר הצביע עליו כחסר; נבנה כמו כל רכיב אם יאושר.`, verifyHow_he: "לפי הסוג, כמו כל רכיב.", params: { template: kind === "skill" ? "process-skill" : kind === "agent" ? "process-agent" : kind === "rule" ? undefined : undefined, text: kind === "rule" ? String(m.title) : undefined, fromReviewer: true } };
+      // The file name comes from stable keys, never from a title: the process and step the reviewer named, or its own slug.
+      const processKey = m.processKey && processes.some((p) => p.key === m.processKey) ? m.processKey : null;
+      const stepKey = processKey ? processes.find((p) => p.key === processKey)!.steps.find((s) => s.key === m.stepKey)?.key ?? null : null;
+      const slug = slugOf(m.slug) || slugOf(m.title) || `${i + 1}`;
+      return { key: `reviewer_${slug}_${kind}`.slice(0, 60), kind, family: familyOf(kind), risk: kind === "mcp" ? "external" : kind === "rule" || kind === "doc" || kind === "permission" ? "reversible" : "significant", source: "reviewer", sourceRef: "onboarding.review", title_he: String(m.title).slice(0, 120), why_he: `הסוקר: ${String(m.why ?? "").slice(0, 400)}`, what_he: `${KIND_HE[kind]} שהסוקר הצביע עליו כחסר; נבנה כמו כל רכיב אם יאושר.`, verifyHow_he: "לפי הסוג, כמו כל רכיב.", params: { template: kind === "skill" ? "process-skill" : kind === "agent" ? "process-agent" : undefined, text: kind === "rule" ? String(m.title) : undefined, fromReviewer: true, process: processKey ?? "reviewer", step: stepKey ?? slug, stepTitle: String(m.title).slice(0, 120) } };
     });
     return { seeds: out, redundant: (o.redundant ?? []).filter((r) => r?.key).map((r) => ({ key: String(r.key), why: String(r.why ?? "") })), costUsd: res.costUsd };
   } catch (e) {
@@ -549,15 +577,71 @@ async function runPlan(ctx: Ctx, run: RunRow, by: Actor) {
   for (const r of review?.redundant ?? []) { const c = cards.find((x) => x.key === r.key); if (c) c.why_he = `${c.why_he} הסוקר: ייתכן שמיותר — ${r.why}`; }
   await upsertCards(ctx, cards, true);
   const byGroup = { auto: cards.filter((c) => c.group === "auto").length, approval: cards.filter((c) => c.group === "approval").length, not_recommended: cards.filter((c) => c.group === "not_recommended").length };
+  // The cards are drawn now but decided only after the /init draft (a person's choice) was set aside and scanned — so the scan's verdicts reach the cards before anyone approves them.
+  const { tasks } = await evalSetup(ctx);
+  const phase: PlanPhase = run.kind === "coach" ? "decide" : "draft";
   const result: PlanResult & PlanExtras = {
     rulesFired: rules.fired.map((f) => f.rule), rulesSuppressed: rules.suppressed.map((s) => ({ rule: s.rule, fact: s.fact })), components: cards.length, byGroup,
     marketplace: { searched: market.searched, found: market.found, remembered: market.remembered, skipped: market.skipped }, reviewer: review ? { missing: review.seeds.length, redundant: review.redundant.length } : null, costUsd,
     firings: rules.fired, suppressed: rules.suppressed, redundant: review?.redundant ?? [],
+    phase, buildEstimateUsd: evalEstimateUsd(tasks, 2, 1) + Math.round(cards.filter((c) => ["skill", "agent", "doc", "scaffold"].includes(c.kind) && c.group !== "not_recommended").length * 0.3 * 100) / 100,
   };
-  await event(ctx, "onboarding.plan.drawn", { rulesFired: result.rulesFired, components: cards.length, byGroup, marketplace: result.marketplace, reviewer: result.reviewer }, by.userId);
+  await event(ctx, "onboarding.plan.drawn", { rulesFired: result.rulesFired, components: cards.length, byGroup, marketplace: result.marketplace, reviewer: result.reviewer, phase }, by.userId);
   if (run.kind === "coach") { await completeStep(ctx, "plan", result, by.userId); await advance(ctx, by); return; }
-  await waitStep(ctx, "plan", result, by.userId, `${byGroup.approval} כרטיסים מחכים לאישורך, ${byGroup.auto} ייעשו וידווחו, ${byGroup.not_recommended} לא מומלצים כאן`);
+  await waitStep(ctx, "plan", result, by.userId, `התוכנית מוכנה (${cards.length} כרטיסים). קודם — טיוטת /init אם רוצים, ואז ההחלטות`);
 }
+
+/** The plan step's phase as it is now; a run made before phases existed is at "decide". */
+async function planPhase(ctx: Ctx): Promise<{ status: StepStatus | null; phase: PlanPhase }> {
+  const { steps } = await loadRun(ctx.repoId, ctx.runId);
+  const plan = stepOf(steps, "plan");
+  return { status: (plan?.status as StepStatus) ?? null, phase: ((plan?.result as PlanResult | null)?.phase ?? "decide") };
+}
+
+/** "בלי טיוטה": straight to the decisions. */
+export async function skipDraft(repoId: string, runId: string, by: Actor) {
+  const { run, ctx } = await loadRun(repoId, runId);
+  if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
+  const { status, phase } = await planPhase(ctx);
+  if (status !== "WaitingForUser") throw new OnboardingError("התוכנית לא ממתינה");
+  if (phase !== "draft") return { phase };
+  if (terminalState(runId) === "live") throw new OnboardingError("סשן הטיוטה עוד פעיל — סגרו אותו, ואז הוא ייסרק ותגיעו להחלטות");
+  await mergePlanResult(ctx, { phase: "decide" });
+  await event(ctx, "onboarding.plan.phase", { phase: "decide", why: "skipped_draft" }, by.userId);
+  terminalLine(runId, "בלי טיוטת /init — הכרטיסים פתוחים להחלטה");
+  return { phase: "decide" as PlanPhase };
+}
+
+/**
+ * When the draft session ends (the person closed it, or the cap did): the draft is set aside, scanned against the
+ * clean copy, its verdicts applied to the cards — and only then do the cards open for decision. The start of a build
+ * never overlaps this: both hold `planBusy`.
+ */
+async function afterDraft(ctx: Ctx, by: string) {
+  const { run } = await loadRun(ctx.repoId, ctx.runId);
+  const { status, phase } = await planPhase(ctx);
+  if (status !== "WaitingForUser" || phase !== "draft" || planBusy.has(ctx.runId)) return;
+  planBusy.add(ctx.runId);
+  try {
+    await mergePlanResult(ctx, { phase: "aside" });
+    const draft = await draftOf(run);
+    await setDraftAside(ctx, { userId: by });
+    if (draft.length) {
+      await mergePlanResult(ctx, { phase: "scan" });
+      await beginScan(ctx, by, draft.map((f) => f.path));
+      try { await runInitScan(ctx, run, { userId: by }, draft); }
+      catch (e) { await failInitScan(ctx, by, (e as Error).message.slice(0, 300)); }
+    } else terminalLine(ctx.runId, "סשן הטיוטה לא כתב כלום — אין מה לסרוק");
+    await mergePlanResult(ctx, { phase: "decide" });
+    await event(ctx, "onboarding.plan.phase", { phase: "decide", why: draft.length ? "draft_scanned" : "draft_empty" }, by);
+  } catch (e) {
+    await mergePlanResult(ctx, { phase: "decide" });
+    await event(ctx, "onboarding.plan.phase", { phase: "decide", why: `after_draft_failed: ${(e as Error).message.slice(0, 200)}` }, by);
+  } finally {
+    planBusy.delete(ctx.runId);
+  }
+}
+setAfterDraftEnded(async (d, by) => afterDraft({ repoId: d.repoId, runId: d.runId, clientId: d.clientId, repoName: "", triggeredBy: d.triggeredBy }, by ?? d.triggeredBy));
 
 /** After a correction while the plan waits: the rules run again; decisions already taken on cards that still exist are kept. */
 async function replan(ctx: Ctx, by: Actor, why: string) {
@@ -700,10 +784,7 @@ export async function scanInitDraft(repoId: string, runId: string, by: Actor) {
     const draft = await draftOf(run);
     if (!draft.length) throw new OnboardingError("סשן הטיוטה עוד לא כתב כלום בעותק — אין מה לסרוק");
     files = draft.map((f) => f.path);
-    const prev = ((stepOf(steps, "plan")?.result ?? {}) as { initScan?: InitScanState }).initScan;
-    await patchInitScan(ctx, { ...(prev?.verdict ? prev : {}), state: "running", startedAt: new Date().toISOString(), by: by.userId, files, error: undefined, failedAt: undefined });
-    await event(ctx, "onboarding.draft.scan_started", { files }, by.userId);
-    terminalLine(runId, `סריקת טיוטת /init: ${files.length} קבצים — ${files.slice(0, 6).join(", ")}`);
+    await beginScan(ctx, by.userId, files);
     void runInitScan(ctx, run, by, draft)
       .catch((e) => failInitScan(ctx, by.userId, (e as Error).message.slice(0, 300)).catch((x) => console.error("[onboarding] a failed scan could not be recorded:", x)))
       .finally(() => planBusy.delete(runId));
@@ -712,6 +793,15 @@ export async function scanInitDraft(repoId: string, runId: string, by: Actor) {
     throw e;
   }
   return { scanning: true, files: files.length };
+}
+
+/** The scan's "running" state and its event — the same whether a person pressed the button or the session ending started it. */
+async function beginScan(ctx: Ctx, by: string, files: string[]) {
+  const { steps } = await loadRun(ctx.repoId, ctx.runId);
+  const prev = ((stepOf(steps, "plan")?.result ?? {}) as { initScan?: InitScanState }).initScan;
+  await patchInitScan(ctx, { ...(prev?.verdict ? prev : {}), state: "running", startedAt: new Date().toISOString(), by, files, error: undefined, failedAt: undefined });
+  await event(ctx, "onboarding.draft.scan_started", { files }, by);
+  terminalLine(ctx.runId, `סריקת טיוטת /init: ${files.length} קבצים — ${files.slice(0, 6).join(", ")}`);
 }
 
 async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[]) {
@@ -756,8 +846,18 @@ async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[])
   const removed = now.filter((c) => c.source === "init" && !c.decidedBy && !taken.some((t) => t.key === c.key)).map((c) => c.key);
   const stays = [...oursNow, ...kept];
   const drop = new Map(scan.dropOurs.filter((d) => stays.some((c) => c.key === d.key)).map((d) => [d.key, d.why]));
-  const noted = stays.map((c) => ({ ...c, why_he: withScanNote(c.why_he, drop.get(c.key) ?? null) }));
+  // A card of ours the scan found redundant is DECLINED, with the reason and an undo — not annotated for a person to notice
+  // (in the Trade run the six "redundant" cards were approved as a set an hour before the scan, and all were built).
+  // A decision a person already took stands.
+  const now2 = new Date().toISOString();
+  const noted = stays.map((c) => {
+    const why = drop.get(c.key) ?? null;
+    if (why && !c.decidedBy && c.status === "proposed") return { ...c, status: "declined" as const, declineReason: `הסריקה: ${why.slice(0, 300)}`, decidedBy: ctx.triggeredBy, decidedAt: now2, params: { ...c.params, declinedBy: "scan" } };
+    return { ...c, why_he: withScanNote(c.why_he, why) };
+  });
+  const applied = noted.filter((c) => (c.params as { declinedBy?: string }).declinedBy === "scan" && !stays.find((s) => s.key === c.key)?.decidedBy).map((c) => c.key);
   await upsertCards(ctx, [...noted, ...taken], true);
+  if (applied.length) await event(ctx, "onboarding.draft.scan_applied", { declined: applied }, by.userId);
   const done: InitScanState = {
     state: "done", startedAt, finishedAt: new Date().toISOString(), by: by.userId, files: draft.map((d) => d.path),
     verdict: scan.verdict, summary: scan.summary, compare: scan.compare,
@@ -769,7 +869,7 @@ async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[])
     verdict: scan.verdict, cards: taken.length, asks: taken.filter((c) => c.params.decision === "ask").length, dropOurs: drop.size, rejected: scan.reject.length + refused.length, costUsd: res.costUsd,
     created: taken.map((c) => c.key), removed, noted: [...drop.keys()],
   }, by.userId);
-  terminalLine(ctx.runId, `סריקת טיוטת /init: ${VERDICT_HE[scan.verdict]} · ${taken.length} כרטיסים חדשים לאישור · ${drop.size} משלנו מסומנים כמיותרים · ${scan.reject.length + refused.length} לא נלקחו`);
+  terminalLine(ctx.runId, `סריקת טיוטת /init: ${VERDICT_HE[scan.verdict]} · ${taken.length} כרטיסים חדשים לאישור · ${applied.length} משלנו נדחו כמיותרים (אפשר לבטל) · ${scan.reject.length + refused.length} לא נלקחו`);
 }
 
 const VERDICT_HE: Record<InitScan["verdict"], string> = { adopt: "הטיוטה טובה יותר — לוקחים את רובה", merge: "משלבים את שתיהן", partial: "שלנו הבסיס, תוספות מהטיוטה", keep_ours: "נשארים עם שלנו" };
@@ -801,8 +901,12 @@ async function setDraftAside(ctx: Ctx, by: Actor): Promise<string[]> {
   const status = nul(await g(["diff", "--name-status", "--no-renames", "-z", base], "מה השתנה"));
   for (let i = 0; i + 1 < status.length; i += 2) changed.set(status[i + 1]!, status[i]!);
   for (const p of nul(await g(["ls-files", "--others", "--exclude-standard", "-z"], "קבצים חדשים"))) changed.set(p, "?");
+  // Ignored files too: what a session built or installed (bin/obj of a test project, node_modules) is not in the baseline
+  // either, and left behind it misled the next steps — a skill was written for a test project whose sources were gone
+  // but whose DLLs remained. These are removed, not kept.
+  const ignored = nul(await g(["ls-files", "--others", "--ignored", "--exclude-standard", "-z"], "קבצים שנוצרו ומתעלמים מהם")).filter((p) => !p.startsWith(".dcc/"));
   for (const p of [...changed.keys()]) if (p.startsWith(".dcc/")) changed.delete(p);
-  if (!changed.size && !commits.length) return [];
+  if (!changed.size && !commits.length && !ignored.length) return [];
   const keep = path.join(runtimeDir(ctx.runId), "init-draft");
   for (const p of changed.keys()) {
     const from = path.join(dir, p);
@@ -815,12 +919,27 @@ async function setDraftAside(ctx: Ctx, by: Actor): Promise<string[]> {
     const restore = files.filter((p) => changed.get(p) !== "A" && changed.get(p) !== "?");
     for (let i = 0; i < restore.length; i += 100) await g(["checkout", base, "--", ...restore.slice(i, i + 100)], "החזרת קבצים");
     for (const p of files.filter((x) => !restore.includes(x))) rmSync(path.join(dir, p), { force: true });
+    for (const p of ignored) rmSync(path.join(dir, p), { force: true, recursive: true });
+    removeEmptyDirs(dir, [...files, ...ignored]);
   } catch (e) {
     await event(ctx, "onboarding.draft.set_aside_failed", { error: (e as Error).message.slice(0, 300) }, by.userId);
     throw e;
   }
-  terminalLine(ctx.runId, `טיוטת /init הוזזה הצידה (${files.length} קבצים${commits.length ? `, ${commits.length} commits בוטלו` : ""}; נשמרו ב-${keep}) — רק מה שאושר בכרטיס נכנס`);
+  terminalLine(ctx.runId, `טיוטת /init הוזזה הצידה (${files.length} קבצים${ignored.length ? `, ${ignored.length} קבצים שנבנו או הותקנו נמחקו` : ""}${commits.length ? `, ${commits.length} commits בוטלו` : ""}; נשמרו ב-${keep}) — רק מה שאושר בכרטיס נכנס`);
   return files;
+}
+
+/** The folders that held only what was set aside — an empty `Test/Some.Project/` would still pass an "exists" check. */
+function removeEmptyDirs(root: string, removed: readonly string[]) {
+  const dirs = [...new Set(removed.map((p) => path.dirname(p)).filter((d) => d && d !== "."))].sort((a, b) => b.length - a.length);
+  for (const d of dirs) {
+    let cur = d;
+    while (cur && cur !== "." && !cur.startsWith(".dcc")) {
+      const abs = path.join(root, cur);
+      try { if (existsSync(abs) && statSync(abs).isDirectory() && readdirSync(abs).length === 0) rmSync(abs, { recursive: true, force: true }); else break; } catch { break; }
+      cur = path.dirname(cur);
+    }
+  }
 }
 
 /* ── 5. build: install by family, verify per kind, trial again ─────── */
@@ -836,7 +955,10 @@ export async function startBuild(repoId: string, runId: string, by: Actor) {
   if (planBusy.has(runId)) throw new OnboardingError("סריקת טיוטת /init עוד רצה — חכו שתסתיים, או בנו אחריה");
   planBusy.add(runId);
   try {
+    // A phase after the draft was already set aside and scanned by `afterDraft`; a build from the draft phase (nothing written, or the person chose to build anyway) sets it aside here.
+    await mergePlanResult(ctx, { phase: "decide" });
     if (terminalState(runId) === "live") await stopDraftSession(draftCtx(ctx), by.userId);
+    if (sessionOf(run).id) await recordSessionSlice(draftCtx(ctx), by.userId);
     await setDraftAside(ctx, by);
   } catch (e) {
     planBusy.delete(runId);
@@ -856,54 +978,96 @@ async function runBuild(ctx: Ctx, run: RunRow, by: Actor) {
   const processes = await loadProcesses(ctx);
   const cards = await loadCards(ctx);
   let costUsd = 0;
-  const author: Author = async ({ component, format, process, evidence }) => {
+  // The author reads the copy through an added folder, apart from the copy's own instructions: what an earlier card
+  // wrote into AGENTS.md (a draft section, say) must not become the author's instructions (a skill for a test project
+  // that existed only in the draft, in the Trade run). One fix attempt carries the validator's message.
+  const author: Author = async ({ component, format, process, evidence, fix }) => {
     const res = await callModel(ctx, "onboarding.author", {
       REPO_NAME: ctx.repoName, PROFILE_SUMMARY: profileSummary(p.profile),
-      COMPONENT: `${KIND_HE[component.kind]} · ${component.title_he}\nWhy: ${component.why_he}\nWhat: ${component.what_he}\nParameters: ${JSON.stringify(component.params).slice(0, 1500)}${component.questions.length ? `\nAnswers: ${component.questions.map((q) => `${q.question_he} → ${q.answer ?? q.default}`).join("; ")}` : ""}`,
-      PROCESS: process ? `${process.title}\n${process.steps.map((s) => `- ${s.title}: ${s.what}`).join("\n")}` : undefined, EVIDENCE: evidence, FORMAT: format,
-    }, { capability: "onboarding_author", label: `כתיבה: ${component.title_he}`, stepKey: "build", by: by.userId, cwd: dir, maxTurns: 25, timeoutMs: 420_000 });
+      COMPONENT: `The repository's working copy, to read with Read, Grep and Glob (absolute path): ${dir}\n${KIND_HE[component.kind]} · ${component.title_he}\nWhy: ${component.why_he}\nWhat: ${component.what_he}\nParameters: ${JSON.stringify(component.params).slice(0, 1500)}${component.questions.length ? `\nAnswers: ${component.questions.map((q) => `${q.question_he} → ${q.answer ?? q.default}`).join("; ")}` : ""}`,
+      PROCESS: process ? `${process.title}\n${process.steps.map((s) => `- ${s.title}: ${s.what}`).join("\n")}` : undefined, EVIDENCE: evidence, FORMAT: format, FIX: fix,
+    }, { capability: "onboarding_author", label: `${fix ? "תיקון" : "כתיבה"}: ${component.title_he}`, stepKey: "build", by: by.userId, cwd: dir, lean: true, leanTools: "Read,Grep,Glob", addDirs: [dir], think: true, maxTurns: 25, timeoutMs: 420_000 });
     costUsd += res.costUsd;
     return res.text;
   };
   const outcomes = await buildComponents({ dir, repoName: ctx.repoName, profile: p.profile, cards, processes, author, log: (l) => terminalLine(ctx.runId, l) });
+  const removedFiles: string[] = outcomes.removedFiles ?? [];
   for (const o of outcomes) {
     const c = cards.find((x) => x.key === o.key)!;
     await withTenant(ctx.clientId, (tx) => tx.update(onboardingComponent).set({ status: o.status, files: o.files, validation: o.validation, updatedAt: new Date() }).where(eq(onboardingComponent.id, c.id)));
-    await event(ctx, "onboarding.build.component", { key: o.key, title: c.title_he, kind: c.kind, status: o.status, files: o.files, validation: o.validation ? { how: o.validation.how, passed: o.validation.passed, detail: o.validation.detail.slice(0, 300) } : null, notes: o.notes }, by.userId);
+    await event(ctx, "onboarding.build.component", { key: o.key, title: c.title_he, kind: c.kind, status: o.status, files: o.files, validation: o.validation ? { how: o.validation.how, passed: o.validation.passed, detail: o.validation.detail.slice(0, 300) } : null, notes: o.notes, retried: o.retry ? { how: o.retry.how, detail: o.retry.detail.slice(0, 200) } : null, removed: o.removed }, by.userId);
   }
+  if (removedFiles.length) await event(ctx, "onboarding.build.removed", { files: removedFiles }, by.userId);
   const built = await loadCards(ctx);
   const joint = jointCheck(built, dir);
   for (const d of joint.duplicates) terminalLine(ctx.runId, `כפילות: ${d}`);
   for (const d of joint.contradictions) terminalLine(ctx.runId, `סתירה: ${d}`);
   terminalLine(ctx.runId, `הקשר שנטען בכל סשן: ~${joint.alwaysLoadedTokens.toLocaleString("en-US")} טוקנים`);
-  // The trial again, on the same tasks, with the components in place — the only measure that says whether the set helped.
-  let delta: TrialDelta | null = null;
+  // The measurement's "with" arm: the same tasks, on a copy holding exactly the files that would be delivered — the only
+  // measure that says whether the set helped, and the only one that says it per component.
+  let evalSummary: EvalSummary | null = null;
   const baseline = await loadTrials(ctx, "baseline");
   if (baseline.length && run.kind !== "coach") {
-    const tasks = trialTasksFor(p.profile, processes).filter((t) => baseline.some((b) => b.taskKey === t.key));
-    const after = await runTrialPhase(ctx, run, by, "after", tasks);
-    delta = trialDelta(baseline, after);
-    if (delta) terminalLine(ctx.runId, `לפני: ${delta.before.passed}/${delta.before.total} · אחרי: ${delta.after.passed}/${delta.after.total} · עלות למשימה: ${delta.costPerTaskChange == null ? "—" : `${Math.round(delta.costPerTaskChange * 100)}%`}`);
+    evalSummary = await runEvalPhase(ctx, run, by, "after");
+    for (const cs of evalSummary.components) {
+      const c = built.find((x) => x.key === cs.key);
+      if (c) await withTenant(ctx.clientId, (tx) => tx.update(onboardingComponent).set({ delta: cs.delta, updatedAt: new Date() }).where(eq(onboardingComponent.id, c.id)));
+    }
+    const t = evalSummary.totals;
+    terminalLine(ctx.runId, `מדידה: עם ${t.with.passK}/${t.measured} · בלי ${t.without.passK}/${t.measured} · השתפרו ${t.improved}, הורעו ${t.worse}, אותו דבר ${t.same} · עלות להרצה ${t.costChange == null ? "—" : `${t.costChange >= 0 ? "+" : ""}${Math.round(t.costChange * 100)}%`}`);
+    for (const cs of evalSummary.components) if (cs.removalProposed) terminalLine(ctx.runId, `  מוצע להסרה: ${cs.key} — ${cs.why_he}`);
   }
-  // The repository's own dossier (`.dcc/`), delivered with the components.
-  const dossier = writeDossier(dir, { profile: p.profile, corrections: p.corrections, cards: built, trials: await loadTrials(ctx), processes, runId: ctx.runId, baselineSha: run.baselineSha });
-  const files = [...new Set([...built.flatMap((c) => c.files), ...dossier])];
+  const delta = evalSummary ? legacyDelta(evalSummary) : null;
+  const withDelta = await loadCards(ctx);
+  // The repository's own record (`.dcc/onboarding.json`), delivered with the components.
+  const dossier = writeDossier(dir, { profile: p.profile, corrections: p.corrections, cards: withDelta, trials: await loadTrials(ctx), processes, runId: ctx.runId, baselineSha: run.baselineSha, eval: evalSummary });
+  const files = [...new Set([...withDelta.flatMap((c) => c.files), ...dossier])];
   const result: BuildResult = {
-    installed: outcomes.filter((o) => o.status === "installed" || o.status === "verified").length, verified: outcomes.filter((o) => o.status === "verified").length, failed: outcomes.filter((o) => o.status === "failed").length, skipped: outcomes.filter((o) => o.status === "deferred" || o.status === "reported").length,
-    files, delta, jointCheck: joint, costUsd,
+    installed: outcomes.filter((o) => o.status === "installed" || o.status === "verified" || o.status === "configured").length, verified: outcomes.filter((o) => o.status === "verified").length, failed: outcomes.filter((o) => o.status === "failed").length, skipped: outcomes.filter((o) => o.status === "deferred" || o.status === "reported").length,
+    files, delta, eval: evalSummary, removedFiles, jointCheck: joint, costUsd,
   };
-  await event(ctx, "onboarding.build.done", { ...result, delta }, by.userId);
+  await event(ctx, "onboarding.build.done", { ...result, eval: evalSummary ? evalSummary.totals : null }, by.userId);
   await completeStep(ctx, "build", result, by.userId);
   await advance(ctx, by);
 }
 
 /* ── 6. deliver: only what was approved, in the person's identity ─── */
 
+/** What ships: the files of cards that were VERIFIED (or configured for the client's environment), and the run's record. Nothing "installed but not checked". */
 async function deliverableFiles(ctx: Ctx): Promise<string[]> {
   const cards = await loadCards(ctx);
   const { run } = await loadRun(ctx.repoId, ctx.runId);
-  const dossier = [".dcc/profile.json", ".dcc/components.json", ".dcc/processes.json", ".dcc/trials.json"].filter((f) => run.workspacePath && existsSync(path.join(run.workspacePath, f)));
-  return [...new Set([...cards.filter((c) => c.status === "verified" || c.status === "installed").flatMap((c) => c.files), ...dossier])];
+  const dossier = [".dcc/onboarding.json"].filter((f) => run.workspacePath && existsSync(path.join(run.workspacePath, f)));
+  return [...new Set([...cards.filter(deliverable).flatMap((c) => c.files), ...dossier])];
+}
+
+/**
+ * A built card taken out before delivery — the measurement proposed it (no
+ * delta, or a worse one), or a person did not want it. Its own files leave the
+ * copy; a shared file (AGENTS.md, settings) keeps the other cards' lines.
+ */
+export async function removeBuiltComponent(repoId: string, runId: string, by: Actor, input: { key: string; reason?: string | null }) {
+  const { run, steps, ctx } = await loadRun(repoId, runId);
+  if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
+  if (stepOf(steps, "build")?.status !== "Completed" || stepOf(steps, "deliver")?.status !== "WaitingForUser") throw new OnboardingError("הסרה אפשרית אחרי הבנייה, לפני המסירה");
+  if (!run.workspacePath) throw new OnboardingError("אין עותק מבודד");
+  const cards = await loadCards(ctx);
+  const c = cards.find((x) => x.key === input.key);
+  if (!c) throw new OnboardingError("הכרטיס לא נמצא");
+  if (!deliverable(c) && c.status !== "installed" && c.status !== "failed") throw new OnboardingError("הרכיב הזה לא נמצא במסירה");
+  const sharedWithOthers = new Set(cards.filter((x) => x.key !== c.key && deliverable(x)).flatMap((x) => x.files));
+  const removed: string[] = [];
+  for (const f of c.files) {
+    if (sharedWithOthers.has(f)) continue;
+    const abs = path.join(run.workspacePath, f);
+    if (existsSync(abs)) { rmSync(abs, { force: true }); removed.push(f); }
+  }
+  removeEmptyDirs(run.workspacePath, removed);
+  await withTenant(ctx.clientId, (tx) => tx.update(onboardingComponent).set({ status: "removed", declineReason: input.reason?.trim() || c.declineReason, decidedBy: by.userId, decidedAt: new Date(), updatedAt: new Date() }).where(eq(onboardingComponent.id, c.id)));
+  await event(ctx, "onboarding.component.removed", { key: c.key, title: c.title_he, files: removed, kept: c.files.filter((f) => sharedWithOthers.has(f)), reason: input.reason ?? null }, by.userId);
+  terminalLine(runId, `הוסר לפני המסירה: ${c.title_he}${removed.length ? ` (${removed.join(", ")})` : ""}`);
+  await patchStep(ctx, "deliver", { result: { files: await deliverableFiles(ctx) } });
+  return { key: c.key, removed };
 }
 
 export async function deliverRun(repoId: string, runId: string, by: Actor) {
@@ -919,12 +1083,13 @@ export async function deliverRun(repoId: string, runId: string, by: Actor) {
       const files = await deliverableFiles(ctx);
       const view = await readinessOf(ctx, run, cards);
       const build = (stepOf(steps, "build")?.result ?? {}) as Partial<BuildResult>;
-      const report = pullRequestReport({ repoName: ctx.repoName, cards, delta: build.delta ?? null, readiness: view, branch: run.branchName!, baselineSha: run.baselineSha });
+      const report = pullRequestReport({ repoName: ctx.repoName, cards, delta: build.delta ?? null, evalSummary: build.eval ?? null, readiness: view, branch: run.branchName!, baselineSha: run.baselineSha });
       const delivered = await deliverWorkspace({ dir: run.workspacePath!, branch: run.branchName!, defaultBranch: run.defaultBranch, baselineSha: run.baselineSha, userId: by.userId, title: `DCC onboarding: Claude Code setup for ${ctx.repoName}`, body: report, files, log: (l) => terminalLine(ctx.runId, l) });
       const result: DeliverResult = { ...delivered, report };
-      for (const c of cards) if (c.source === "marketplace" && (c.status === "verified" || c.status === "installed") && typeof c.params.sourceId === "string") await countSourceUse(c.params.sourceId).catch(() => undefined);
+      for (const c of cards) if (c.source === "marketplace" && deliverable(c) && typeof c.params.sourceId === "string") await countSourceUse(c.params.sourceId).catch(() => undefined);
       await event(ctx, "onboarding.delivered", { commitSha: result.commitSha, prUrl: result.prUrl, compareUrl: result.compareUrl, localOnly: result.localOnly, files: files.length }, by.userId);
       if (terminalState(runId) === "live") await stopDraftSession(draftCtx(ctx), by.userId);
+      if (sessionOf(run).id) await recordSessionSlice(draftCtx(ctx), by.userId);
       await completeStep(ctx, "deliver", result, by.userId);
     } catch (e) {
       await failStep(ctx, "deliver", e, by.userId);
@@ -939,6 +1104,7 @@ export async function cancelOnboardingRun(repoId: string, runId: string, by: Act
   const { run, steps, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה כבר הסתיימה");
   if (terminalState(runId) === "live") await stopDraftSession(draftCtx(ctx), by.userId);
+  if (sessionOf(run).id) await recordSessionSlice(draftCtx(ctx), by.userId);
   for (const s of steps) if (s.status !== "Completed") await patchStep(ctx, s.stepKey as StepKey, { status: "Cancelled" });
   await patchRun(ctx, { status: "Cancelled", cancelledAt: new Date(), cancelledBy: by.userId });
   await event(ctx, "onboarding.run.cancelled", {}, by.userId);
@@ -962,7 +1128,9 @@ const draftCtx = (ctx: Ctx): DraftCtx => ({ repoId: ctx.repoId, runId: ctx.runId
 export async function startDraftSession(repoId: string, runId: string, by: Actor, input: { resume?: boolean; model?: string; effort?: string } = {}) {
   const { run, steps, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
-  if (stepOf(steps, "plan")?.status !== "WaitingForUser" && stepOf(steps, "processes")?.status !== "Completed") throw new OnboardingError("טיוטת /init נפתחת כשהתוכנית פתוחה לאישור");
+  // Only while the plan waits — never beside the measurement in the same copy (it used to be allowed as soon as the interview was over).
+  if (stepOf(steps, "plan")?.status !== "WaitingForUser") throw new OnboardingError("טיוטת /init נפתחת כשהתוכנית פתוחה, לפני ההחלטות על הכרטיסים");
+  if (planBusy.has(runId)) throw new OnboardingError("הטיוטה הקודמת עוד נסרקת — חכו שתסתיים");
   try { await launchDraftSession(draftCtx(ctx), run, by.userId, !!input.resume, { model: input.model, effort: input.effort }); }
   catch (e) { throw e instanceof DraftError ? new OnboardingError(e.message) : e; }
   return { started: true };
@@ -992,6 +1160,7 @@ async function readinessOf(ctx: Ctx, run: RunRow, cards: readonly Component[]): 
   return readiness({
     cards, processes, trials, delta: build.delta ?? null, reviewerOpen: cards.filter((c) => c.source === "reviewer" && c.status === "proposed").length,
     suppressed: plan.suppressed ?? [], firings: plan.firings ?? [], windowsOnly: !!p?.profile.windows_build.windows_only_build, hasRunner: interview.answers?.some((a) => a.key === "runner" && a.value === "yes") ?? false,
+    alwaysLoadedTokens: build.jointCheck?.alwaysLoadedTokens ?? null,
   });
 }
 
@@ -1014,6 +1183,8 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
   const build = (buildStep?.result ?? null) as BuildResult | null;
   const baseline = trials.filter((t) => t.phase === "baseline");
   const after = trials.filter((t) => t.phase === "after");
+  // The measurement as it stands: the build's summary once it ran, else what the "without" arm shows so far.
+  const evalNow: EvalSummary | null = build?.eval ?? (p && trials.length ? summarizeEval(evalTasksFor(p.profile, processes), trials.map(asEvalRecord), cards) : null);
   const deliver = (deliverStep?.result ?? {}) as Partial<DeliverResult>;
   let codeMap: CodeMap | null = null;
   if (run.workspacePath) codeMap = await codeMapForWorkspace(run.workspacePath, { branch: run.branchName, baselineSha: run.baselineSha, prUrl: deliver.prUrl ?? null, prNumber: deliver.prNumber ?? null }).catch(() => null);
@@ -1041,7 +1212,10 @@ export async function getOnboardingRunView(repoId: string, runId: string) {
     profile: p ? { id: p.id, facts: profileFacts(p.profile, p.corrections), corrections: p.corrections, summary: profileSummary(p.profile), tags: stackTags(p.profile), raw: p.profile } : null,
     interview: { questions: interview.questions ?? [], answers: interview.answers ?? [] },
     processes,
-    trials: { baseline, after, delta: build?.delta ?? trialDelta(baseline, after), waiting: trialStep?.status === "WaitingForUser" ? (trialStep.result as { tasks: { key: string; title_he: string; judge: string }[]; estimateUsd: number }) : null },
+    trials: {
+      baseline, after, delta: build?.delta ?? (evalNow ? legacyDelta(evalNow) : null), eval: evalNow,
+      waiting: trialStep?.status === "WaitingForUser" ? (trialStep.result as { tasks: { key: string; title_he: string; kind: string; judge: string }[]; estimateUsd: number; capUsd: number; arms: EvalArm[]; runs: number }) : null,
+    },
     components: cards,
     plan: (planStep?.result ?? null) as (PlanResult & PlanExtras) | null,
     readiness: readinessView,
@@ -1147,7 +1321,16 @@ export async function recoverOnboardingRuns(): Promise<number> {
       await failInitScan(ctx, null, "הסריקה הופסקה כשהשרת הופעל מחדש — אפשר לסרוק שוב", "api_restart");
       touched++;
     }
+    // A plan caught between the draft and the decisions opens for decision — what was scanned is applied, what was not is on the screen's log.
+    const phase = (plan?.result as PlanResult | null)?.phase;
+    if (plan?.status === "WaitingForUser" && (phase === "aside" || phase === "scan")) { await mergePlanResult(ctx, { phase: "decide" }); touched++; }
     if (await recoverDraftSession(draftCtx(ctx), run)) touched++;
+    // The measurement's arms are throw-away worktrees; a restart mid-measurement leaves them registered.
+    const arms = armsRootFor(runtimeDir(run.id));
+    if (existsSync(arms) && run.workspacePath) {
+      rmSync(arms, { recursive: true, force: true });
+      await git(["worktree", "prune"], run.workspacePath).catch(() => undefined);
+    }
   }
   return touched;
 }

@@ -84,11 +84,13 @@ export const PROMPT_USES: Record<string, PromptUse> = {
     capability: "onboarding_processes", vars: ["REPO_NAME", "PROFILE", "EVIDENCE", "INTERVIEW"],
     keeps: ['"processes"', '"steps"', '"agentTest"', '"judgment"', '"externalInfo"', '"readsALot"', '"parallel"', '"failsToday"'],
   },
-  "onboarding.trial": { capability: "onboarding_trial", vars: ["TASK"], keeps: ["RESULT: "] },
-  "onboarding.judge": { capability: "onboarding_judge", vars: ["TASK", "FACTS", "ANSWER"], keeps: ['"passed"', '"failureKind"', '"detail"'] },
+  // The measurement (onboarding-proves-itself): the same task runs in an arm without the delivered set and in one with it;
+  // EDITS marks an action task. The judge reads the copy itself; the diagnosis facts are hints to it, the graders' report a start.
+  "onboarding.trial": { capability: "onboarding_trial", vars: ["TASK"], optional: ["EDITS"], keeps: ["RESULT: "] },
+  "onboarding.judge": { capability: "onboarding_judge", vars: ["TASK", "FACTS", "ANSWER"], optional: ["CLAIMS", "COPY_DIR", "EXPECT"], keeps: ['"passed"', '"failureKind"', '"detail"'] },
   "onboarding.marketplace": { capability: "onboarding_marketplace", vars: ["STACK", "PROFILE_SUMMARY", "KNOWN"], keeps: ['"sources"', '"kind"', '"url"', '"publisher"', '"official"'] },
-  "onboarding.author": { capability: "onboarding_author", vars: ["REPO_NAME", "PROFILE_SUMMARY", "COMPONENT", "FORMAT"], optional: ["PROCESS", "EVIDENCE"], keeps: [] },
-  "onboarding.review": { capability: "onboarding_review", vars: ["REPO_NAME", "PROFILE_SUMMARY", "PROCESSES", "TRIALS", "COMPONENTS"], keeps: ['"missing"', '"redundant"'] },
+  "onboarding.author": { capability: "onboarding_author", vars: ["REPO_NAME", "PROFILE_SUMMARY", "COMPONENT", "FORMAT"], optional: ["PROCESS", "EVIDENCE", "FIX"], keeps: [] },
+  "onboarding.review": { capability: "onboarding_review", vars: ["REPO_NAME", "PROFILE_SUMMARY", "PROCESSES", "TRIALS", "COMPONENTS"], keeps: ['"missing"', '"redundant"', '"processKey"', '"stepKey"'] },
   "onboarding.init_scan": {
     capability: "onboarding_init_scan", vars: ["REPO_NAME", "PROFILE_SUMMARY", "FACTS", "INTERVIEW", "PROCESSES", "TRIALS", "SESSION_ANSWERS", "OURS_AGENTS", "OUR_CARDS", "DRAFT"],
     keeps: ['"verdict"', '"summary"', '"compare"', '"items"', '"decision"', '"form"', '"target"', '"heading"', '"text"', '"origin"', '"question"', '"replaces"', '"drop_ours"', '"reject"'],

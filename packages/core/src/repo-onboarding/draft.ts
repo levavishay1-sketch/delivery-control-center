@@ -7,7 +7,7 @@ import { recommend } from "../routing.ts";
 import { appendRepoAiEvent } from "./events.ts";
 import { lastInputUser, markDisconnected, startClaudeSession, statusFile, stopClaudeSession, terminalLine, terminalState, writeTerminalInput } from "./session.ts";
 import { promptSeenAfter, readStatusSnapshot, scanTranscript, sessionIdle, transcriptLineCount, type TranscriptFact } from "./transcript.ts";
-import { sessionTotals, type RunSession, type SessionTotals } from "./types.ts";
+import { normalizeAutomation, sessionTotals, type RunSession, type SessionTotals } from "./types.ts";
 
 /**
  * The `/init` draft session — one window inside the plan step: the real,
@@ -87,8 +87,11 @@ export async function launchDraftSession(ctx: DraftCtx, run: RunRow, by: string,
   const model = choice?.model ?? rec.model;
   const effort = choice?.effort ?? rec.effort;
   rmSync(statusFile(ctx.runId), { force: true });
+  // The cap is the run's (the automation rail); the CLI gets what is left of it as a backstop, the monitor enforces it between turns.
+  const auto = normalizeAutomation(run.automation);
+  const spentBefore = resume ? sessionTotals(prior).costUsd : 0;
   try {
-    startClaudeSession({ runId: ctx.runId, cwd: run.workspacePath, sessionId, resume, model, effort, onExit: (exitCode) => { void onExit(ctx, exitCode); } });
+    startClaudeSession({ runId: ctx.runId, cwd: run.workspacePath, sessionId, resume, model, effort, capUsd: Math.max(0.25, auto.draftCapUsd - spentBefore), onExit: (exitCode) => { void onExit(ctx, exitCode); } });
   } catch (e) {
     throw new DraftError(`לא ניתן להפעיל את Claude Code: ${(e as Error).message}`);
   }
@@ -104,10 +107,17 @@ export async function launchDraftSession(ctx: DraftCtx, run: RunRow, by: string,
 async function onExit(ctx: DraftCtx, exitCode: number | null) {
   await pollSession(ctx);
   stopMonitor(ctx.runId);
-  await recordSessionSlice(ctx, lastInputUser(ctx.runId));
+  const by = lastInputUser(ctx.runId);
+  await recordSessionSlice(ctx, by);
   await patchSession(ctx, { state: "ended", endedAt: new Date().toISOString(), exitCode });
-  await event(ctx, "onboarding.session.ended", { exitCode }, lastInputUser(ctx.runId));
+  await event(ctx, "onboarding.session.ended", { exitCode }, by);
+  // The run decides what happens next (set the draft aside, scan it, open the cards) — registered by runs.ts, so this module needs nothing of it.
+  if (afterEnded) await afterEnded(ctx, by).catch((e) => console.error("[onboarding] after the draft session ended:", e instanceof Error ? e.message : e));
 }
+
+let afterEnded: ((ctx: DraftCtx, by: string | null) => Promise<void>) | null = null;
+/** What runs once a draft session has ended and its spend is in the ledger. */
+export function setAfterDraftEnded(f: (ctx: DraftCtx, by: string | null) => Promise<void>) { afterEnded = f; }
 
 export async function stopDraftSession(ctx: DraftCtx, by: string | null) {
   await stopClaudeSession(ctx.runId, true);
@@ -160,11 +170,27 @@ async function pollSession(ctx: DraftCtx) {
     const owned = { status: next.status, transcriptPath: next.transcriptPath, transcriptCursor: next.transcriptCursor, apiCalls: next.apiCalls, lastMessageId: next.lastMessageId };
     const before = { status: s.status, transcriptPath: s.transcriptPath, transcriptCursor: s.transcriptCursor, apiCalls: s.apiCalls, lastMessageId: s.lastMessageId };
     if (JSON.stringify(owned) !== JSON.stringify(before)) await patchSession(ctx, owned);
+    // The run's cap on the session: money (the status line repaints between turns, so one turn may overshoot) or time.
+    if (terminalState(ctx.runId) === "live" && !capping.has(ctx.runId)) {
+      const auto = normalizeAutomation(row.automation);
+      const totals = sessionTotals(next);
+      const minutes = s.startedAt ? (Date.now() - new Date(s.startedAt).getTime()) / 60_000 : 0;
+      const over = totals.costUsd >= auto.draftCapUsd ? `$${totals.costUsd.toFixed(2)} מתוך תקרה של $${auto.draftCapUsd}` : minutes >= auto.draftCapMinutes ? `${Math.round(minutes)} דקות מתוך תקרה של ${auto.draftCapMinutes}` : null;
+      if (over) {
+        capping.add(ctx.runId);
+        terminalLine(ctx.runId, `\r\n[סשן הטיוטה הגיע לתקרה (${over}) — DCC סוגר אותו; מה שנכתב נשאר בעותק ויסרק]`);
+        await event(ctx, "onboarding.session.capped", { costUsd: totals.costUsd, minutes: Math.round(minutes), capUsd: auto.draftCapUsd, capMinutes: auto.draftCapMinutes }, actor);
+        try { await stopDraftSession(ctx, actor); } finally { capping.delete(ctx.runId); }
+      }
+    }
   } catch { /* a transient read error: the next tick tries again */ }
   finally {
     polling.delete(ctx.runId);
   }
 }
+
+/** Runs whose session is being closed at the cap right now — one close, not one per tick. */
+const capping = new Set<string>();
 
 /** Type an instruction into the live draft session, as the person who pressed send. Sent only while the session looks idle, unless forced. */
 export async function sendToDraftSession(ctx: DraftCtx, run: RunRow, by: string, input: { text: string; messageId?: string; force?: boolean }) {
@@ -194,6 +220,8 @@ export async function sendToDraftSession(ctx: DraftCtx, run: RunRow, by: string,
 export async function recoverDraftSession(ctx: DraftCtx, run: RunRow): Promise<boolean> {
   const was = sessionOf(run).state;
   if (was === "live") {
+    // What the session spent up to the last poll is in the row; without this slice it was never in the ledger (the Trade run's $5.55).
+    await recordSessionSlice(ctx, null);
     await patchSession(ctx, { state: "disconnected" });
     await event(ctx, "onboarding.session.disconnected", { reason: "api_restart" }, null);
     terminalLine(ctx.runId, "[השרת הופעל מחדש — סשן הטיוטה נותק. אפשר לחדש אותו מאותה נקודה]");

@@ -71,7 +71,8 @@ npm run -w @dcc/core prove:retention  # chat-retention proofs
 npm run -w @dcc/core prove:built-on   # a task developed before its dependency, merging it in, two tasks on one file, a renamed key (own DB + git, safe with the API up)
 npm run -w @dcc/core prove:checks     # every task's checks (build → tests), its status, the done gate (same)
 npm run -w @dcc/core prove:manual     # a task developed by a person: the mark, the report, each check by hand (same)
-npm run -w @dcc/core prove:onboarding # the whole onboarding run on the kit's repository: diagnosis, rules, trial, cards, build with real hook checks, delivery (same)
+npm run -w @dcc/core prove:onboarding # the whole onboarding run on the kit's repository: diagnosis, rules, the measurement's "without" arm, cards, build with real hook checks, the "with" arm, delivery (same)
+npm run -w @dcc/core eval:onboarding -- --repo <dir> --baseline <sha> --files <list.json>  # the measurement as a research script, with and without a set of files, into a scratch database (safe with the API up)
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run -w @dcc/web build      # production build of the web app
@@ -175,7 +176,9 @@ keeps open (`:5173`) watches only this folder. Create the branch here with
 `git switch -c <name> origin/master --no-track`. **Never use a separate
 `git worktree` or a second copy of the repository for your own work.** The
 exception is the worktrees DCC itself creates for `ai/onboarding/<run>` runs
-under `~/.dcc-repos-onboarding/`; work inside the one you were started in. If
+under `~/.dcc-repos-onboarding/` — and the two detached, throw-away worktrees
+the measurement makes under `_runtime/<run>/eval/` and removes when it ends;
+work inside the one you were started in. If
 git refuses a switch because an uncommitted file would be overwritten, stop and
 tell the user.
 

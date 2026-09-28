@@ -10,7 +10,7 @@
 
 ## Layout
 
-{{LAYOUT}}
+{{layout}}
 
 ## External systems
 

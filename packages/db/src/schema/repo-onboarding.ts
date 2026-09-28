@@ -142,9 +142,14 @@ export const onboardingTrial = pgTable(
     judgedBy: text("judged_by").notNull().default(""),
     costUsd: numeric("cost_usd", { precision: 12, scale: 6 }).notNull().default("0"),
     callId: uuid("call_id"),
+    /** The measurement (onboarding-proves-itself): the n-th run of this task in this phase, how many turns it took, what each code grader found, and which components the task exercises. */
+    runIndex: integer("run_index").notNull().default(0),
+    numTurns: integer("num_turns"),
+    graders: jsonb("graders").notNull().default(sql`'[]'::jsonb`),
+    exercises: jsonb("exercises").notNull().default(sql`'{}'::jsonb`),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("onboarding_trial_run_idx").on(t.runId, t.phase), tenantPolicy("onboarding_trial_tenant_isolation")],
+  (t) => [index("onboarding_trial_run_idx").on(t.runId, t.phase), index("onboarding_trial_task_idx").on(t.runId, t.phase, t.taskKey, t.runIndex), tenantPolicy("onboarding_trial_tenant_isolation")],
 ).enableRLS();
 
 /** A component card: why (the evidence), what, source, group, risk, its decision, what was written for it and how it was verified. */

@@ -102,16 +102,16 @@ export const ONBOARDING_CONCEPTS: Concept[] = [
   { key: "reviewer_pass", kind: "field", title: "הסוקר", aliases: ["מה חסר", "מה מיותר"], screens: ["onboarding"], explain: "קריאה נפרדת של קלוד שמקבלת את הפרופיל, התהליכים, הניסיון והרשימה, ושואלת רק מה חסר ומה מיותר. כל מה שהוא מעלה הופך לכרטיס לאישור; הוא לא מחליט." },
 
   /* the build */
-  { key: "build_table", kind: "section", title: "מה נבנה ואיך אומת", aliases: ["טבלת האימות"], screens: ["onboarding"], explain: "כל רכיב שאושר: אילו קבצים נכתבו לו, באיזה מבחן נבדק ומה יצא. 'לא נבדק כאן' הוא תשובה כנה, לא כישלון." },
-  { key: "validation_result", kind: "field", title: "תוצאת האימות", aliases: ["עבר", "נכשל", "לא נבדק כאן"], screens: ["onboarding"], explain: "עבר = המבחן הצליח; נכשל = הרכיב נכתב אבל המבחן נפל, והוא לא יוצא במסירה עד תיקון; לא נבדק כאן = דורש סביבה או הרשאות של הלקוח." },
+  { key: "build_table", kind: "section", title: "מה נבנה ואיך אומת", aliases: ["טבלת האימות"], screens: ["onboarding"], explain: "כל רכיב שאושר: אילו קבצים נכתבו לו, באיזה מבחן נבדק ומה יצא. רכיב שנכשל יורד מהעותק ומהקבצים המשותפים, ולא נמסר." },
+  { key: "validation_result", kind: "field", title: "תוצאת האימות", aliases: ["עבר", "נכשל", "הוגדר", "לא נבדק כאן"], screens: ["onboarding"], explain: "עבר = המבחן של הרכיב הצליח כאן; נכשל = המבחן נפל גם אחרי ניסיון תיקון אחד, והרכיב לא נמסר. הוגדר = חיבור (MCP, LSP, plugin) שההגדרה שלו נכתבה ונבדקה, והחיבור עצמו נעשה אצל הלקוח." },
   { key: "joint_check", kind: "field", title: "בדיקה משותפת", aliases: ["כפילויות", "סתירות"], screens: ["onboarding"], explain: "אחרי שכל הרכיבים נכתבו: האם שני רכיבים כותבים אותו קובץ, האם איסור קריאה מסתיר קובץ שרכיב אחר צריך, וכמה הקשר נטען בכל סשן." },
   { key: "always_loaded_tokens", kind: "field", title: "הקשר שנטען בכל סשן", screens: ["onboarding"], explain: "כמה טוקנים CLAUDE.md, AGENTS.md, ה-rules וכלי ה-MCP מוסיפים לכל סשן במאגר. מעל כמה אלפים כדאי לגזום." },
-  { key: "files_written", kind: "field", title: "קבצים שנכתבו", screens: ["onboarding"], explain: "הקבצים שהבנייה כתבה בענף המבודד. רק קבצים של רכיבים שאומתו נכנסים למסירה." },
+  { key: "files_written", kind: "field", title: "קבצים שנכתבו", screens: ["onboarding"], explain: "הקבצים שהבנייה כתבה בענף המבודד. רק קבצים של רכיבים שאומתו או הוגדרו נשארים ונכנסים למסירה; קבצים של רכיב שנכשל נמחקים." },
 
   /* delivery */
   { key: "deliver_button", kind: "button", title: "מסור: commit, push ו-PR", aliases: ["מסירה", "פתח PR"], screens: ["onboarding"], explain: "עושה commit של הקבצים המאושרים על שמכם, דוחף את הענף ופותח בקשת מיזוג עם הדו\"ח.", press: "הענף יוצא לשרת ונפתחת בקשת מיזוג בשמכם. הענף הראשי לא משתנה עד שתמזגו. אי אפשר לבטל את ה-push, אבל אפשר לסגור את ה-PR." },
   { key: "pr_report", kind: "section", title: "הדו\"ח שב-PR", aliases: ["דוח", "התקנתי כי"], screens: ["onboarding"], explain: "נכתב מהכרטיסים, לא מניסוח חופשי: התקנתי X כי Y ונבדק כך; לא התקנתי W כי; לפני/אחרי; וכרטיס הכנות. מי שקורא את ה-PR מבין בלי לפתוח קבצים." },
-  { key: "deliver_files", kind: "field", title: "מה ייכנס למסירה", screens: ["onboarding"], explain: "עץ הקבצים שיעברו commit, במקום שבו יישבו בריפו — רק של רכיבים שאושרו ואומתו. לחיצה על קובץ מציגה את התוכן שלו בצד. טיוטת /init שלא אושרה נשארת בחוץ." },
+  { key: "deliver_files", kind: "field", title: "מה ייכנס למסירה", screens: ["onboarding"], explain: "עץ הקבצים שיעברו commit, במקום שבו יישבו בריפו — רק של רכיבים שאומתו או הוגדרו, ועוד ‎.dcc/onboarding.json. לחיצה על קובץ מציגה את התוכן שלו בצד; טיוטת /init שלא אושרה נשארת בחוץ." },
   { key: "deliver_file_content", kind: "field", title: "תוכן הקובץ", aliases: ["תוכן הקובץ במסירה"], screens: ["onboarding"], explain: "הקובץ בדיוק כפי שייכנס ל-PR. \"קובץ חדש\" לא היה בריפו; \"קובץ קיים שמשתנה\" כבר היה, ואפשר להשוות לגרסה שהוא מחליף." },
 
   /* the rail */
@@ -120,7 +120,7 @@ export const ONBOARDING_CONCEPTS: Concept[] = [
   { key: "previous_runs", kind: "section", title: "הרצות קודמות", screens: ["onboarding"], explain: "הטמעות קודמות של אותו מאגר והרצות של המאמן. אפשר לפתוח הרצה ישנה ולראות מה נעשה בה ומה עלתה." },
   { key: "onboarding_intro", kind: "section", title: "מכינים את Claude לריפו הזה", screens: ["onboarding"], explain: "המטרה: שמפתח שמקבל משימה במאגר הזה יקבל מההתחלה את מה שהוא צריך — ידע, אימות, הגנות — כשכל רכיב נכנס רק כשיש ראיה שהבעיה שלו קיימת כאן." },
   { key: "steps_overview", kind: "section", title: "מה יקרה, בשבעה צעדים", screens: ["onboarding"], explain: "סקירה של הצעדים לפי הסדר: מה כל אחד עושה, מה הוא עולה ומה אתם מחליטים בו. התהליך קבוע לכל מאגר; התוצאה שונה לכל מאגר." },
-  { key: "fixed_layout", kind: "section", title: "מבנה קבוע בריפו", aliases: ["איפה זה יושב"], screens: ["onboarding"], explain: "כל מאגר שמוטמע מקבל אותו מבנה: AGENTS.md ו-CLAUDE.md דק שמפנה אליו, ‎.claude/ עם settings, rules, skills, agents ו-hooks, ‎.mcp.json, REVIEW.md, docs/, ותיקיית ‎.dcc/ עם הפרופיל והרכיבים. מה בתוכם — לפי המאגר." },
+  { key: "fixed_layout", kind: "section", title: "מבנה קבוע בריפו", aliases: ["איפה זה יושב"], screens: ["onboarding"], explain: "כל מאגר שמוטמע מקבל אותו מבנה: AGENTS.md ו-CLAUDE.md דק שמפנה אליו, ‎.claude/ עם settings, rules, skills, agents ו-hooks, ‎.mcp.json, REVIEW.md, docs/, וקובץ אחד ‎.dcc/onboarding.json: מה נמסר, איך אומת ומה נמדד. מה בתוכם — לפי המאגר." },
 
   /* the coach */
   { key: "coach_panel", kind: "section", title: "המאמן", aliases: ["coach", "מאמן"], screens: ["onboarding"], explain: "מה שממשיך אחרי ההרצה, מהעבודה האמיתית: בדיקות שנכשלות שוב, משימות שצריכות סבב שני, עלות שעולה, וחדש בעולם. כל הצעה עם ראיה ומדד; אף הצעה על אירוע בודד, ואף הפרעה באמצע משימה." },

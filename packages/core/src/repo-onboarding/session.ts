@@ -161,6 +161,8 @@ export type StartSessionOptions = {
   resume: boolean;
   model?: string;
   effort?: string;
+  /** The CLI's own stop at this spend — a backstop; the monitor enforces the run's cap between turns. */
+  capUsd?: number;
   onExit: (exitCode: number | null) => void;
 };
 
@@ -173,6 +175,7 @@ export function startClaudeSession(o: StartSessionOptions) {
     "--settings", settings,
     ...(o.model ? ["--model", o.model] : []),
     ...(o.effort ? ["--effort", o.effort] : []),
+    ...(o.capUsd ? ["--max-budget-usd", String(o.capUsd)] : []),
     ...(o.resume ? [] : ["/init"]),
   ];
   const cmd = claudeCommand();

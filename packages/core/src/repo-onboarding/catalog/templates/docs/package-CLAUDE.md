@@ -1,5 +1,5 @@
 # {{dir}}
 
-Run commands from this folder.
+This package does not build with the root's command. Run these from this folder:
 
-{{PACKAGE_COMMANDS}}
+{{commands}}

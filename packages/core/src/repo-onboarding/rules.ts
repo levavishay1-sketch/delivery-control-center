@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import { coveredByPattern, leaveReadable, sensitivePatterns } from "./diagnose.ts";
 import type { ComponentFamily, ComponentKind, ComponentRisk, ComponentSeed, ProfileCorrection, RepoProfile } from "./types.ts";
 
 /**
@@ -21,9 +22,10 @@ export type Condition =
   | { path: string; empty?: boolean; truthy?: boolean; eq?: unknown; gte?: number; gt?: number; lt?: number; includes?: string; includesAny?: string[]; hasKey?: string; hasAnyKey?: string[] }
   | { fn: string; arg?: string; truthy?: boolean; gte?: number };
 
+/** `when` on a component: it is part of the rule's answer only when this holds too (one rule, two answers — "write it" or "not needed, because"). */
 export type RuleComponent = {
   key: string; kind: ComponentKind; family: ComponentFamily; risk: ComponentRisk;
-  title_he: string; what_he: string; verify_he: string; params: Record<string, unknown>; notRecommended?: boolean;
+  title_he: string; what_he: string; verify_he: string; params: Record<string, unknown>; notRecommended?: boolean; when?: Condition;
 };
 
 export type Rule = { id: string; signal: string; when: Condition; reason_he: string; components: RuleComponent[] };
@@ -57,11 +59,17 @@ const isEmpty = (v: unknown) => v == null || v === false || v === 0 || v === "" 
 export function genDirs(d: RepoProfile): string[] {
   const out = d.generated_code.paths.filter((p) => p.files >= 2 && !p.dir.endsWith("__tests__")).map((p) => p.dir);
   for (const h of d.generated_code.header_dirs) if (h.files >= 2 && !out.includes(h.dir)) out.push(h.dir);
-  return out.slice(0, 6);
+  const dirs = out.slice(0, 6);
+  // One large generated file is enough (a 98K-line Entities.cs) — named as the file, so hand-written code beside it stays editable.
+  for (const f of d.generated_code.header_files ?? []) if (!dirs.some((x) => f.path === x || f.path.startsWith(`${x}/`))) dirs.push(f.path);
+  return dirs.slice(0, 10);
 }
 
+/** Below this many commits there is no hot spot to speak of (one squashed import makes every folder "hot"). */
+const HOT_MIN_COMMITS = 20;
+
 export function hotMultiAuthor(d: RepoProfile): { dir: string; changes: number; authors: number } | null {
-  if (!d.git.available) return null;
+  if (!d.git.available || (d.git.commits_analyzed ?? 0) < HOT_MIN_COMMITS) return null;
   return d.git.hot_dirs?.find((h) => h.dir !== "." && h.authors >= 10 && h.changes >= 100) ?? null;
 }
 
@@ -75,6 +83,35 @@ export const langFiles = (d: RepoProfile, lang: string) => d.languages.filter((l
 const BUILD_SYSTEMS = new Set(["maven", "gradle", "cargo", "dotnet", "msbuild", "go", "composer", "turborepo"]);
 export const buildSystemsCount = (d: RepoProfile) => d.build.system.filter((s) => BUILD_SYSTEMS.has(s)).length;
 
+/** The linters the root has — a linter only some sub-packages carry (`eslint (packages: …)`) is theirs, not a root formatter. */
+export const rootLint = (d: RepoProfile) => d.lint_format.filter((l) => !/\(packages: /.test(l));
+
+/** The first solution file the build commands name. */
+export const slnFirst = (d: RepoProfile): string => d.build.commands.map((c) => /(\S+\.(?:sln|slnx|slnf))\b/.exec(c)?.[1]).find(Boolean) ?? "";
+
+/** How the machine that ran the diagnosis builds a Windows-only solution: Visual Studio's MSBuild first (it builds Web Application projects too), then `dotnet msbuild`; null when it has neither, or the tools were not looked for. */
+export function winBuildTool(d: RepoProfile): { tool: "msbuild" | "dotnet_msbuild"; command: string } | null {
+  const tools = d.environment.tools;
+  if (!tools || !d.windows_build.windows_only_build) return null;
+  const target = slnFirst(d) || "<the solution>.sln";
+  if (tools.msbuild) return { tool: "msbuild", command: `msbuild ${target}` };
+  if (tools.dotnet_msbuild ?? tools.dotnet) return { tool: "dotnet_msbuild", command: `dotnet msbuild ${target}` };
+  return null;
+}
+
+/**
+ * The deny list for sensitive files: one pattern per kind (`**\/*.snk`), then
+ * every sensitive or secret-holding file no pattern covers — all of them,
+ * never a first few. An app/web.config stays editable (a change legitimately
+ * edits it; the secret-scan hook guards what is written into it), and a
+ * dotenv template stays readable.
+ */
+export function sensitiveDeny(d: RepoProfile): { entries: string[]; files: number; patterns: string[] } {
+  const patterns = d.secrets.patterns ?? sensitivePatterns(d.secrets.sensitive_files);
+  const files = [...new Set([...d.secrets.sensitive_files, ...d.secrets.files.map((f) => f.path)])].filter((f) => !leaveReadable(f));
+  return { entries: [...patterns, ...files.filter((f) => !coveredByPattern(f, patterns))], files: files.length, patterns };
+}
+
 const FN: Record<string, { run: (d: RepoProfile, arg?: string) => unknown; facts: string[] }> = {
   gen_dirs: { run: genDirs, facts: ["generated_code"] },
   hot_multi_author: { run: hotMultiAuthor, facts: ["git.hot_dirs"] },
@@ -82,6 +119,11 @@ const FN: Record<string, { run: (d: RepoProfile, arg?: string) => unknown; facts
   dep_bump_shape: { run: depBumpShape, facts: ["git.cochange_pairs"] },
   lang_files: { run: (d, arg) => langFiles(d, arg ?? ""), facts: ["languages"] },
   build_systems_count: { run: buildSystemsCount, facts: ["build.system"] },
+  root_lint: { run: rootLint, facts: ["lint_format"] },
+  win_build_tool: { run: winBuildTool, facts: ["environment.tools"] },
+  deny_sensitive: { run: (d) => sensitiveDeny(d).entries, facts: ["secrets.sensitive_files", "secrets.files"] },
+  mono_own: { run: (d) => d.monorepo.own_commands ?? [], facts: ["monorepo.own_commands"] },
+  node_packages: { run: (d) => d.layout?.node_packages ?? [], facts: ["layout.node_packages"] },
 };
 
 /* ── evaluating a condition ───────────────────────────────────────── */
@@ -145,9 +187,10 @@ export function ruleContext(d: RepoProfile): Record<string, unknown> {
   const buildFiles = new Set(["pom.xml", "build.gradle", "build.gradle.kts", "Cargo.toml", "package.json"]);
   const bp = (g.cochange_pairs ?? []).find((p) => buildFiles.has(base(p.a)) && buildFiles.has(base(p.b))) ?? null;
   const tfms = Object.keys(d.build.dotnet_target_frameworks ?? {});
-  const testCmd = d.ci.commands.find((c) => /\b(test|verify|pytest|phpunit|vitest|jest)\b/.test(c)) ?? (d.tests.frameworks[0] ?? "-");
+  const testCmd = d.ci.commands.find((c) => /\b(test|verify|pytest|phpunit|vitest|jest)\b/.test(c)) ?? d.tests.commands?.[0] ?? (d.tests.frameworks[0] ?? "-");
   const formatterPick = ["@biomejs/biome", "biome", "prettier", "ruff", "black", "spotless", "ktlint", "golangci-lint", "rustfmt/clippy (toolchain pinned)", "php-cs-fixer", "spring-javaformat", "terraform_fmt", "eslint"];
-  const formatter = d.lint_format.find((l) => formatterPick.includes(l)) ?? d.lint_format[0] ?? "-";
+  const rootLinters = rootLint(d);
+  const formatter = rootLinters.find((l) => formatterPick.includes(l)) ?? rootLinters[0] ?? "-";
   const docPointer = d.docs.architecture_docs[0] ?? (d.docs.docs_files ? "docs/" : d.docs.readme ?? "README");
   const envKind = [d.environment.devcontainer ? "devcontainer" : null, d.environment.dockerfile.length ? "Dockerfile" : null, d.environment.docker_compose.length ? "compose" : null].filter(Boolean).join(", ");
   const dbKinds = ["PostgreSQL", "MySQL/MariaDB", "SQL Server"].filter((k) => k in d.external_systems);
@@ -155,20 +198,67 @@ export function ruleContext(d: RepoProfile): Record<string, unknown> {
   const buildSystems = d.build.system.filter((s) => BUILD_SYSTEMS.has(s));
   const genList = genDirs(d);
   const mobile = d.frameworks.filter((f) => ["android", "flutter/dart", "jetpack-compose", "react-native (sub-package)"].includes(f));
+  // PCF: every control builds from the folder that holds its package.json; controls side by side share one file in their parent.
+  const nodePkgs = d.layout?.node_packages ?? [];
+  const byParent = new Map<string, string[]>();
+  for (const p of nodePkgs) { const parent = p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : p; byParent.set(parent, [...(byParent.get(parent) ?? []), p]); }
   const pcfAreas = d.frameworks.includes("PowerApps PCF control")
-    ? [{ dir: "Pcf", toolchain: "node", command: "npm run build" }, { dir: "CrmEntryPoints", toolchain: "msbuild", command: d.build.commands[0] ?? "msbuild" }]
+    ? [...byParent.entries()].map(([parent, members]) => (members.length > 1 ? { dir: parent, toolchain: "node", command: "npm run build", cwds: members } : { dir: members[0]!, toolchain: "node", command: "npm run build" }))
     : [];
+  const tick = (c: string) => `\`${c}\``;
+  const win = winBuildTool(d);
+  const webApps = d.windows_build.web_app_projects;
+  const tfmText = join(tfms.slice(0, 2)) || "-";
+  const dotnetToo = d.environment.tools?.dotnet ? ` ${tick("dotnet msbuild")} builds the class libraries${webApps ? "; the Web Application projects need Visual Studio's MSBuild" : ""}.` : "";
+  // Never "cannot build here" when a tool exists: the line says how.
+  const winLine = !win
+    ? `This repository builds only on Windows (msbuild, ${tfmText}, signed assemblies). If you are not on a Windows build runner, say so: do not claim a build or a test run.`
+    : win.tool === "msbuild"
+      ? `This repository targets .NET Framework (${tfmText}) and builds on Windows with Visual Studio's MSBuild: ${tick(win.command)} (msbuild is often not on PATH: use a Developer PowerShell, or MSBuild.exe by its full path).${dotnetToo}`
+      : `This repository targets .NET Framework (${tfmText}). Class libraries build with ${tick(win.command)}${webApps === 0 ? "" : "; Web Application projects need Visual Studio's MSBuild"}.`;
+  const own = d.monorepo.own_commands ?? [];
+  const ownText = own.map((o) => `${o.dir} (${[o.build, o.test].filter((c): c is string => !!c).map(tick).join(", ")})`).join("; ");
+  const rootBuild = win?.command ?? d.build.commands[0]?.replace(/\s+#.*$/, "") ?? "";
+  const monoWs = d.monorepo.workspaces.slice(0, 2).map(String).join("; ") || "workspace";
+  const monoN = d.monorepo.package_count ?? d.monorepo.packages.length;
+  const monoLine = own.length
+    ? `This is a multi-package repository (${monoWs}, ${monoN} packages).${rootBuild ? ` The rest build from the root with ${tick(rootBuild)}.` : ""} These build with their own command, from their own folder: ${ownText}.`
+    : `This is a multi-package repository (${monoWs}, ${monoN} packages); one command builds them all, from the root${rootBuild ? `: ${tick(rootBuild)}` : ""}.`;
+  const deny = sensitiveDeny(d);
+  const pkgCommitted = d.git.packages_committed ?? (d.git.tracked_package_dirs ?? 0) > 0;
+  const gitignore = ["bin/", "obj/", ...(pkgCommitted ? [] : ["packages/"]), ".vs/", "*.user", "*.suo"];
+  // A deny rule makes a folder look absent to the agent ("packages/ is empty, so NuGet was never restored") — the line beside it says it is there.
+  const hiddenDirs = ["packages", "bin", "obj", ".vs"];
+  const denyDirs = [...hiddenDirs.map((x) => `Read(**/${x}/**)`), ...hiddenDirs.filter((x) => x !== ".vs").map((x) => `Edit(**/${x}/**)`)];
+  const dirList = hiddenDirs.map((x) => tick(`${x}/`));
+  const denyDirsLine = `${dirList.slice(0, -1).join(", ")} and ${dirList[dirList.length - 1]} are hidden from you by a deny rule — they exist here (${pkgCommitted ? "a committed NuGet cache and build outputs" : "build outputs and IDE state"}), you just cannot read them. Never conclude they are missing or that packages were not restored; ask a person if you need something inside them.`;
+  const pcfDirs = nodePkgs.length ? nodePkgs.map((x) => tick(`${x}/`)).join(", ") : "their own folder";
+  const tests = d.tests.commands;
   return {
     gen_dirs: join(genList) || "-", gen_dirs_arr: genList,
     test_files: d.tests.test_files, test_frameworks: join(d.tests.frameworks.slice(0, 3)) || "-", test_frameworks_arr: d.tests.frameworks,
     test_cmd: testCmd, test_dirs: join(d.tests.test_dirs.map((t) => t[0])) || "-", test_dirs_arr: d.tests.test_dirs.map((t) => t[0]),
     ci_systems: join(d.ci.systems), ci_systems_arr: d.ci.systems, ci_n: d.ci.workflow_count ?? d.ci.workflows.length, ci_cmds: d.ci.commands.slice(0, 3).join("; "), ci_cmds_arr: d.ci.commands.slice(0, 10),
-    mono_ws: d.monorepo.workspaces.slice(0, 2).map(String).join("; ") || "workspace", mono_n: d.monorepo.package_count ?? "?", mono_packages_arr: d.monorepo.packages.slice(0, 40),
+    mono_ws: monoWs, mono_n: d.monorepo.package_count ?? "?", mono_packages_arr: d.monorepo.packages,
+    // All the packages or none: a list cut to a first few tells the agent the rest do not exist.
+    which_packages_arr: d.monorepo.packages_truncated || monoN > WHICH_PACKAGE_MAX ? [] : d.monorepo.packages,
+    mono_manifests_arr: d.monorepo.manifest_kinds ?? [], mono_own_arr: own, mono_own_dirs_arr: own.map((o) => o.dir), mono_own_n: own.length, mono_rule_text: monoLine,
+    mono_own_he: own.length ? `ל-${own.length} מהן פקודה משלהן (${join(own.slice(0, 3).map((o) => o.dir))}${own.length > 3 ? " ועוד" : ""})` : d.monorepo.own_commands ? "פקודה אחת מהשורש בונה את כולן" : "לא נבדק אם לחבילה כלשהי פקודה משלה",
     hot_dir: hot?.dir ?? "-", hot_changes: hot?.changes ?? 0, hot_authors: hot?.authors ?? 0,
     shape_n: sh.length, shape_example: sh[0] ? `${sh[0].files.slice(0, 4).map(base).join(" + ")} (${sh[0].times}x)` : "-", shapes_arr: sh.slice(0, 5),
     sec_outside: d.secrets.outside_tests, sec_total: d.secrets.total, sec_kinds: join(Object.keys(d.secrets.by_kind)), sec_files_outside: join(secOut.slice(0, 3)), sec_files_outside_arr: secOut.slice(0, 25),
     sens_n: d.secrets.sensitive_files.length, sens_sample: join(d.secrets.sensitive_files.slice(0, 3).map(base)), sens_files_arr: d.secrets.sensitive_files,
-    sln_n: d.windows_build.sln, snk_n: d.windows_build.snk, tfm: join(tfms.slice(0, 2)) || "-", sln_first: d.build.commands.find((c) => /msbuild /.test(c))?.replace(/^msbuild\s+(\S+).*$/, "$1") ?? "",
+    deny_sensitive_arr: deny.entries, sens_cover_n: deny.files, sens_patterns: join(deny.patterns) || "לפי שם הקובץ",
+    deny_sensitive_line: `Sensitive files exist here but are not readable to you (a deny rule): ${deny.patterns.length ? `${deny.patterns.map(tick).join(", ")}${deny.entries.length > deny.patterns.length ? `, and ${deny.entries.length - deny.patterns.length} more by name` : ""}` : `${deny.entries.length} files by name`}. Never conclude one is missing; ask a person for what you need from it.`,
+    deny_binary_arr: denyDirs, deny_binary_line: denyDirsLine,
+    sln_n: d.windows_build.sln, snk_n: d.windows_build.snk, tfm: tfmText, sln_first: slnFirst(d),
+    win_build_cmd: win?.command ?? "", win_build_line: winLine,
+    win_here_he: win ? `במכונה שנבדקה נמצא ${win.tool === "msbuild" ? "MSBuild של Visual Studio" : "dotnet msbuild"} — ההנחיה אומרת איך בונים, לא ש"אי אפשר".` : "msbuild רק ב-Windows; סוכן על Linux חייב לומר זאת במקום לנחש.",
+    tools: d.environment.tools ?? null, tests_projects_arr: d.tests.projects ?? null, test_cmds_arr: tests ?? null, web_apps: d.windows_build.web_app_projects ?? null,
+    tests_here_he: tests ? (tests.length ? join(tests.slice(0, 2)) : "אין פרויקט בדיקות ב-git") : testCmd,
+    build_here_he: rootBuild || "(none inferable)", root_build: rootBuild,
+    layout_map: d.layout ? { top: d.size.top_level_dirs, groups: d.layout.unit_groups, nodePackages: d.layout.node_packages } : null,
+    gitignore_arr: gitignore, gitignore_list: gitignore.join(", "), pkg_kept_he: pkgCommitted ? " packages/ לא נכנס: הוא נשמר ב-git בכוונה." : "",
     dv_n: d.external_systems["Dataverse/Dynamics 365"]?.count ?? 0,
     db_kinds: join(dbKinds), compose: d.environment.docker_compose.length ? "compose present" : "no compose - skip the MCP",
     cloud: join(cloud),
@@ -176,7 +266,7 @@ export function ruleContext(d: RepoProfile): Record<string, unknown> {
     ai_files: join(aiMd) || join(d.ai_config.files.slice(0, 2)), ai_files_arr: d.ai_config.files.slice(0, 20), ai_md_arr: aiMd,
     ai_missing: "build/test commands, generated paths, external systems - whichever the file lacks",
     build_cmd: d.build.commands.slice(0, 2).join("; ") || "(none inferable)", build_cmd_raw: d.build.commands[0]?.replace(/\s+#.*$/, "") ?? "",
-    lint: join(d.lint_format.slice(0, 4)) || "-", lint_arr: d.lint_format, formatter,
+    lint: join((rootLinters.length ? rootLinters : d.lint_format).slice(0, 4)) || "-", lint_arr: d.lint_format, formatter,
     nb_n: langFiles(d, "Jupyter"),
     tf_n: langFiles(d, "HCL/Terraform"), tf_lint: join(d.lint_format.filter((l) => l.startsWith("terraform") || l.startsWith("tflint"))), tf_pair: tfPair,
     doc_pointer: docPointer, readme_kb: Math.round(d.docs.readme_bytes / 102.4) / 10, docs_files: d.docs.docs_files, arch: join(d.docs.architecture_docs.slice(0, 2)) || "none",
@@ -192,8 +282,12 @@ export function ruleContext(d: RepoProfile): Record<string, unknown> {
     containers: join(["PostgreSQL", "Redis", "RabbitMQ/AMQP"].filter((k) => k in d.external_systems)),
     top_langs_arr: d.languages.slice(0, 3).map((l) => l.language),
     pcf_areas_arr: pcfAreas,
+    pcf_rule_text: `PCF controls build with ${tick("npm run build")} inside their own folder (${pcfDirs}; run ${tick("npm install")} there first when node_modules is missing); the .NET projects build from the root${win ? ` with ${tick(win.command)}` : " with msbuild"}. Do not mix the two toolchains.`,
   };
 }
+
+/** Past this many packages a list in a skill costs more than a Glob for the manifests. */
+const WHICH_PACKAGE_MAX = 100;
 
 /** `{name}` → the context's value; an unknown name stays visible, never silently blank. */
 export const fill = (text: string, ctx: Record<string, unknown>) => text.replace(/\{([a-z_0-9]+)\}/g, (m, k: string) => (k in ctx ? String(ctx[k]) : m));
@@ -207,6 +301,17 @@ function fillParams(params: Record<string, unknown>, ctx: Record<string, unknown
     else out[k] = v;
   }
   return out;
+}
+
+/**
+ * An MCP address still holding a `{placeholder}` (the client's org, its
+ * region) cannot be delivered as `.mcp.json`: the card says so in its params
+ * (`placeholder: true`, `deliverable: false`), and the build writes it as an
+ * instruction in the pull request's report instead.
+ */
+function markPlaceholder(kind: ComponentKind, params: Record<string, unknown>): Record<string, unknown> {
+  if (kind !== "mcp" || typeof params.url !== "string" || !/\{[a-z_]+\}/i.test(params.url)) return params;
+  return { ...params, placeholder: true, deliverable: false };
 }
 
 /* ── applying the rules ───────────────────────────────────────────── */
@@ -225,10 +330,10 @@ export function applyRules(profile: RepoProfile, corrections: readonly ProfileCo
     const reason = fill(r.reason_he, ctx);
     fired.push({
       rule: r.id, signal: r.signal, reason_he: reason,
-      components: r.components.map((c) => ({
+      components: r.components.filter((c) => !c.when || evaluate(c.when, profile)).map((c) => ({
         key: c.key, kind: c.kind, family: c.family, risk: c.risk, source: "rule", sourceRef: r.id,
         title_he: fill(c.title_he, ctx), what_he: fill(c.what_he, ctx), why_he: c.notRecommended ? fill(c.what_he, ctx) : reason, verifyHow_he: fill(c.verify_he, ctx),
-        params: fillParams(c.params, ctx), notRecommended: c.notRecommended,
+        params: markPlaceholder(c.kind, fillParams(c.params, ctx)), notRecommended: c.notRecommended,
       })),
     });
   }

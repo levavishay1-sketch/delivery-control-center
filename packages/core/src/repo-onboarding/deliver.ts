@@ -29,14 +29,18 @@ export async function deliverWorkspace(input: {
   userId: string;
   title: string;
   body: string;
-  /** Only these files are staged (by name, never `add -A`) — what the person approved. Everything else in the copy stays out of the commit. */
-  files?: string[];
+  /** Only these files are staged (by name, never `add -A`) — what was verified or configured. Everything else in the copy stays out of the commit; an empty list is an error, not "everything". */
+  files: string[];
   log: (line: string) => void;
 }): Promise<Omit<DeliverResult, "report">> {
   const { dir, branch, log } = input;
 
-  if (input.files?.length) await git([...LONGPATHS, "add", "--", ...input.files], dir);
-  else await git([...LONGPATHS, "add", "-A"], dir);
+  if (!input.files.length) throw new Error("אין מה למסור: רשימת הקבצים ריקה");
+  // In batches, so a long list never meets the command-line limit; a file git refuses stops the delivery with git's own words.
+  for (let i = 0; i < input.files.length; i += 100) {
+    const add = await git([...LONGPATHS, "add", "--", ...input.files.slice(i, i + 100)], dir);
+    if (add.code !== 0) throw new Error(`git add נכשל: ${add.out.trim().slice(0, 400)}`);
+  }
   const staged = (await git(["diff", "--cached", "--name-only"], dir)).out.split("\n").map((s) => s.trim()).filter(Boolean);
   let commitSha: string | null = null;
   if (staged.length) {

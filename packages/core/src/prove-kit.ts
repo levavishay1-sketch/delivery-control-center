@@ -53,13 +53,35 @@ function answer(rawInput) {
         { key: "publish", title: "Publish", what: "publish to the registry", agentTest: { judgment: false, externalInfo: true, readsALot: false, parallel: false, failsToday: false, why: "needs registry credentials" } } ] },
       { key: "edit_base", title: "Change base.txt", source: "git", evidence: ["base.txt in every commit"], steps: [
         { key: "edit", title: "Edit base.txt", what: "edit the file", agentTest: { judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "one action" } } ] } ] };
-  } else if (input.includes("You are working in this repository with no instructions")) {
-    // A trial task: honest about tests, right about the build, lost on entry points (so one failure reaches the plan).
-    const task = input.split("TASK:\\n")[1]?.split("\\n")[0] ?? "";
-    plain = /automated tests/.test(task) ? "I looked for a test runner. There is no test framework in this repository.\\nRESULT: there are no automated tests"
-      : /built\\?/.test(task) || /build/.test(task) ? "package.json has a build script.\\nRESULT: npm run build"
-      : /entry points/.test(task) ? "I could not find any entry point.\\nRESULT: could not find"
-      : "Looked around.\\nRESULT: done";
+  } else if (input.includes("You are working in the repository in the current folder as a developer")) {
+    // A measurement task, in either arm: honest about tests, right about the build, lost on entry points (so one
+    // failure reaches the plan). An action task really acts in the copy and reports its tool calls as stream-json
+    // events, the way the CLI would — what the code graders read.
+    const task = input.split("TASK:\\n")[1]?.split("\\n\\n")[0] ?? "";
+    const tool = (name, args, result) => {
+      const id = "t" + Math.random().toString(36).slice(2, 8);
+      process.stdout.write(JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id, name, input: args }] } }) + "\\n");
+      process.stdout.write(JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: id, content: result, is_error: false }] } }) + "\\n");
+    };
+    if (/automated tests/.test(task)) plain = "I looked for a test runner. There is no test framework in this repository.\\nRESULT: there are no automated tests";
+    else if (/entry points/.test(task)) plain = "I could not find any entry point.\\nRESULT: could not find";
+    else if (/commit it locally/.test(task)) {
+      appendFileSync("README.md", "DCC probe\\n");
+      tool("Edit", { file_path: "README.md" }, "ok");
+      require("node:child_process").execFileSync("git", ["-c", "user.name=probe", "-c", "user.email=p@x", "add", "README.md"], { stdio: "ignore" });
+      require("node:child_process").execFileSync("git", ["-c", "user.name=probe", "-c", "user.email=p@x", "commit", "--quiet", "-m", "dcc probe"], { stdio: "ignore" });
+      tool("Bash", { command: "git add README.md && git commit -m \\"dcc probe\\"" }, "[main] dcc probe");
+      plain = "Appended the line and committed README.md only.\\nRESULT: committed";
+    } else if (/as a dependency of/.test(task)) {
+      const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+      pkg.dependencies = { ...(pkg.dependencies ?? {}), lodash: "^4.17.21" };
+      writeFileSync("package.json", JSON.stringify(pkg, null, 2) + "\\n");
+      tool("Edit", { file_path: "package.json" }, "ok");
+      plain = "Added lodash to dependencies in package.json; a person runs npm install.\\nRESULT: package.json edited";
+    } else if (/Build the whole/.test(task) || /built\\?/.test(task) || /build/.test(task)) {
+      tool("Bash", { command: "npm run build" }, "> build\\n");
+      plain = "package.json has a build script; I ran it.\\nRESULT: npm run build";
+    } else plain = "Looked around.\\nRESULT: done";
   } else if (input.includes("You judge whether an AI coding agent did a task correctly")) {
     out = /could not find/.test(input) ? { passed: false, failureKind: "missing_fact", detail: "הסוכן לא מצא את נקודת הכניסה" } : { passed: true, failureKind: null, detail: "עבר" };
   } else if (input.includes("You search the web for ready-made components")) {
@@ -96,7 +118,7 @@ function answer(rawInput) {
     out = { summary: "did " + task, filesChanged: file ? [file] : [], testsRun: null, followUps: [], affectedConsumers: [] };
   }
   const result = plain ?? JSON.stringify(out);
-  process.stdout.write(JSON.stringify({ type: "result", result, total_cost_usd: 0.01, usage: { input_tokens: 10, output_tokens: 5 } }) + "\\n", () => process.exit(0));
+  process.stdout.write(JSON.stringify({ type: "result", result, total_cost_usd: 0.01, num_turns: 3, usage: { input_tokens: 10, output_tokens: 5 } }) + "\\n", () => process.exit(0));
 }
 `;
 

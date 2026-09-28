@@ -79,6 +79,11 @@ const RETIRED = [
   "runOnboardingStage", "refreshReview", "approveReview", "resumeOnboardingSession", "updateOnboardingModelChoices", "STAGE_KEYS",
   "ONBOARDING_STAGES", "checkInitFinished", "init.auto_completed", "ReviewIntro", "notesPrompt", "parseNotes", "noteSig", "currentStageKey",
   "OnboardingStageKey", "OnboardingStageDefinition", "stageDefinition(", "STAGE_INFO", "ensureReviewNotes", "kickReviewNotes",
+  // the five-question trial with a judge that could not look, retired 2026-09-29 by the measurement
+  // (openspec/changes/onboarding-proves-itself): two arms, code graders, a judge with the copy, a delta per component;
+  // the four .dcc/*.json files retired by the one sanitised .dcc/onboarding.json
+  "trial-tasks.json", "trialTasksFor", "judgeByCode", "trialDelta(", "MIN_TASKS", "MAX_TASKS", "TrialJudge", "runTrialPhase",
+  ".dcc/profile.json", ".dcc/components.json", ".dcc/processes.json", ".dcc/trials.json",
 ];
 // Applied migrations are history and cannot be edited; CLAUDE.md quotes examples of what to search for;
 // docs/history/ holds the design records the user asked to keep; docs/research/ holds dated research that

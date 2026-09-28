@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { applyRules } from "./rules.ts";
-import { buildOrder, cardFromSeed, groupFor, mergeSeeds, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials } from "./components.ts";
+import { ALWAYS_LOADED_MAX, buildOrder, cardFromSeed, deliverable, groupFor, mergeSeeds, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials } from "./components.ts";
 import type { Component, ComponentSeed, RepoProfile, TrialOutcome } from "./types.ts";
 
 const DIR = fileURLToPath(new URL("../../../../docs/research/sources/onboarding-v2/repos/diagnosis/", import.meta.url));
@@ -19,12 +19,14 @@ describe("cards from seeds", () => {
   });
   it("gives Trade its three groups with the numbers of the research", () => {
     const cards = seeds("altshuler_trade").map((s) => cardFromSeed(s, "reversible_auto"));
-    // 13 rules → 30 cards (the research counted 27; the port adds .gitattributes, .gitignore and the "no format hook" card)
-    expect(cards.length).toBe(30);
+    // 13 rules → 31 cards (the research counted 27; the port adds .gitattributes, .gitignore and the "no format hook" card, and a
+    // "they exist, you just cannot read them" line beside each of the two denies; the per-area card needs the diagnosis's layout, which the research's lacks)
+    expect(cards.length).toBe(31);
     const by = (g: string) => cards.filter((c) => c.group === g).length;
-    expect(by("not_recommended")).toBe(1);
+    // no format hook, and no per-package files (the research's diagnosis names no package with a command of its own)
+    expect(by("not_recommended")).toBe(2);
     expect(by("auto")).toBeGreaterThan(5);
-    expect(by("approval")).toBeGreaterThan(5);
+    expect(by("approval")).toBeGreaterThanOrEqual(5);
     expect(cards.find((c) => c.key === "windows_runner")!.group).toBe("approval");
     expect(cards.find((c) => c.key === "no_format_hook")!.status).toBe("declined");
     expect(cards.find((c) => c.key === "secrets_report")!.status).toBe("reported");
@@ -63,6 +65,18 @@ describe("seeds from the other sources", () => {
     expect(m[0]!.why_he).toBe("one וגם: two");
     expect(m[0]!.sourceRef).toBe("R01,t1");
   });
+  it("never merges two different seeds whose keys met at the 60-character cut, nor two kinds under one key — the later gets -2, -3", () => {
+    const long = (step: string): ComponentSeed => ({ key: `skill_${"a_very_long_process_key_that_goes_on".repeat(2)}_${step}`.slice(0, 60), kind: "skill", family: "skills", risk: "reversible", source: "process", sourceRef: `proc.${step}`, title_he: step, why_he: step, what_he: "w", verifyHow_he: "", params: { step } });
+    const [a, b, c] = [long("build"), long("publish"), long("review")];
+    expect(a.key).toBe(b.key);
+    const m = mergeSeeds([a, b, c], [{ ...b, why_he: "again" }]);
+    expect(m.map((s) => s.params.step)).toEqual(["build", "publish", "review"]);
+    expect(m.map((s) => s.key)).toEqual([a.key, `${a.key.slice(0, 58)}-2`, `${a.key.slice(0, 58)}-3`]);
+    expect(m.every((s) => s.key.length <= 60)).toBe(true);
+    expect(m[1]!.why_he).toBe("publish וגם: again");
+    const rule: ComponentSeed = { key: "k", kind: "rule", family: "knowledge", risk: "reversible", source: "rule", sourceRef: "R01", title_he: "t", why_he: "one", what_he: "w", verifyHow_he: "", params: {} };
+    expect(mergeSeeds([rule], [{ ...rule, kind: "doc" }]).map((s) => [s.key, s.kind])).toEqual([["k", "rule"], ["k-2", "doc"]]);
+  });
 });
 
 describe("the build order, the readiness gate and the report", () => {
@@ -78,13 +92,67 @@ describe("the build order, the readiness gate and the report", () => {
   it("is not ready while cards wait and nothing was measured; says what is missing and what cannot be verified here", () => {
     const r = readiness({ cards, processes: [], trials: [], delta: null, reviewerOpen: 1, suppressed: [], firings: [], windowsOnly: true, hasRunner: false });
     expect(r.ready).toBe(false);
-    expect(r.items.map((x) => x.ok)).toEqual([true, false, false, false]);
+    expect(r.items.map((x) => x.ok)).toEqual([true, false, false, false, false]);
     expect(r.honesty[0]).toContain("Windows");
   });
   it("is ready once everything is decided, measured and improved", () => {
     const decided: Component[] = cards.map((c) => (c.status === "proposed" ? { ...c, status: "verified" } : c));
-    const r = readiness({ cards: decided, processes: [], trials: [], delta: { before: { passed: 2, total: 5, costUsd: 1 }, after: { passed: 4, total: 5, costUsd: 0.9 }, costPerTaskChange: -0.1 }, reviewerOpen: 0, suppressed: [], firings: [], windowsOnly: false, hasRunner: false });
+    const r = readiness({ cards: decided, processes: [], trials: [], delta: { before: { passed: 2, total: 5, costUsd: 1 }, after: { passed: 4, total: 5, costUsd: 0.9 }, costPerTaskChange: -0.1 }, reviewerOpen: 0, suppressed: [], firings: [], windowsOnly: false, hasRunner: false, alwaysLoadedTokens: 1800 });
     expect(r.ready).toBe(true);
+  });
+  it("'the same' is not an improvement; every measured component must have earned its place; the always-loaded context is capped", () => {
+    const decided: Component[] = cards.map((c) => (c.status === "proposed" ? { ...c, status: "verified" } : c));
+    const base = { processes: [], trials: [], reviewerOpen: 0, suppressed: [], firings: [], windowsOnly: false, hasRunner: false, alwaysLoadedTokens: 1800 };
+    const item = (r: ReturnType<typeof readiness>, key: string) => r.items.find((x) => x.key === key)!;
+    const same = readiness({ ...base, cards: decided, delta: { before: { passed: 3, total: 5, costUsd: 1 }, after: { passed: 3, total: 5, costUsd: 0.7 }, costPerTaskChange: -0.3 } });
+    expect(item(same, "delta")).toMatchObject({ ok: false });
+    expect(item(same, "delta").detail_he).toContain("אותו דבר");
+    const improved = { before: { passed: 2, total: 5, costUsd: 1 }, after: { passed: 4, total: 5, costUsd: 1 }, costPerTaskChange: 0 };
+    const knowledge = decided.find((c) => c.kind === "rule")!;
+    const hook = decided.find((c) => c.kind === "hook")!;
+    // The measurement calls a safety component "improved" when it was seen blocking; "same" is what did not earn its place.
+    const withDelta = (c: Component, verdict: "improved" | "same" | "unmeasured"): Component => ({ ...c, status: "verified", delta: { before: 1, after: verdict === "improved" ? 2 : 1, total: 2, costPerTaskChange: null, verdict } });
+    const unproven = readiness({ ...base, cards: decided.map((c) => (c.key === knowledge.key ? withDelta(c, "same") : c)), delta: improved });
+    expect(item(unproven, "delta").ok).toBe(false);
+    expect(item(unproven, "delta").detail_he).toContain(knowledge.title_he);
+    expect(item(readiness({ ...base, cards: decided.map((c) => (c.key === hook.key ? withDelta(c, "improved") : c.key === knowledge.key ? withDelta(c, "unmeasured") : c)), delta: improved }), "delta").ok).toBe(true);
+    expect(item(readiness({ ...base, cards: decided.map((c) => (c.key === hook.key ? withDelta(c, "same") : c)), delta: improved }), "delta").ok).toBe(false);
+    expect(item(readiness({ ...base, cards: decided, delta: improved, alwaysLoadedTokens: ALWAYS_LOADED_MAX + 1 }), "context").ok).toBe(false);
+    expect(item(readiness({ ...base, cards: decided, delta: improved, alwaysLoadedTokens: undefined }), "context").ok).toBe(false);
+    expect(item(readiness({ ...base, cards: decided, delta: improved }), "context").ok).toBe(true);
+  });
+  it("delivers what was verified or configured, nothing else", () => {
+    expect((["verified", "configured", "installed", "failed", "approved", "deferred"] as const).map((status) => deliverable({ status }))).toEqual([true, true, false, false, false, false]);
+  });
+  it("reports what was measured, what waits for the client's environment, and what failed — without naming files that are not in the pull request", () => {
+    const at = "2026-09-29T00:00:00.000Z";
+    const arm = (runs: number, passed: number) => ({ runs, passed, passK: passed === runs, passRate: passed / runs, meanCostUsd: 0.5, meanTurns: 10, blocked: false });
+    const set: Component[] = [
+      { ...cards[0]!, key: "ok_rule", kind: "rule", title_he: "שורה שאומתה", status: "verified", files: ["AGENTS.md"], validation: { how: "בדיקה", passed: true, detail: "", at } },
+      { ...cards[0]!, key: "crm_mcp", kind: "mcp", title_he: "חיבור CRM", status: "configured", files: [], params: { server: "crm", url: "https://{org}.crm4.dynamics.com/api/mcp" }, validation: { how: "הגדרה", passed: true, detail: "דורש את הסביבה של הלקוח", at } },
+      { ...cards[0]!, key: "bad_skill", kind: "skill", title_he: "skill שנכשל", status: "failed", files: [".claude/skills/bad/SKILL.md"], validation: { how: "frontmatter", passed: false, detail: "לא קיים כאן: x/y.cs", at } },
+    ];
+    const report = pullRequestReport({
+      repoName: "Trade", cards: set, delta: null, branch: "ai/onboarding/abc", baselineSha: null,
+      readiness: readiness({ cards: set, processes: [], trials: [], delta: null, reviewerOpen: 0, suppressed: [], firings: [], windowsOnly: false, hasRunner: false }),
+      evalSummary: {
+        tasks: [
+          { key: "t1", title_he: "הוספת שדה", kind: "action", without: arm(2, 0), with: arm(2, 2), verdict: "improved", failureKinds: {} },
+          { key: "t2", title_he: "הרצת בדיקות", kind: "action", without: arm(2, 1), with: arm(2, 1), verdict: "same", failureKinds: {} },
+        ],
+        components: [],
+        totals: { tasks: 2, measured: 2, improved: 1, same: 1, worse: 0, unmeasured: 0, with: { passK: 1, meanCostUsd: 0.6, meanTurns: 9 }, without: { passK: 0, meanCostUsd: 0.5, meanTurns: 11 }, costChange: 0.2, spentUsd: 4.4 },
+      },
+    });
+    expect(report).toContain("## מה נמדד");
+    expect(report).toContain("| הוספת שדה | 0/2 | 2/2 | השתפר |");
+    expect(report).toContain("1 השתפרו, 0 נפגעו, 1 ללא שינוי");
+    expect(report).toContain("+20%");
+    expect(report).toContain("## הוגדר, יחובר אצל הלקוח");
+    expect(report).toContain('"url": "https://{org}.crm4.dynamics.com/api/mcp"');
+    expect(report).toContain("## נבנה ונכשל באימות — לא נכלל");
+    expect(report).toContain("skill שנכשל");
+    expect(report).not.toContain(".claude/skills/bad/SKILL.md");
   });
   it("writes the pull request's report from the cards", () => {
     const decided: Component[] = cards.map((c, i) => (c.status === "proposed" ? { ...c, status: i % 2 ? "verified" : "declined", declineReason: i % 2 ? null : "לא עכשיו", validation: i % 2 ? { how: "בדיקה", passed: true, detail: "", at: "" } : null } : c));

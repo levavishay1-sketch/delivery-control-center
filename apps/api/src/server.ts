@@ -136,6 +136,8 @@ import {
   decideComponentSet,
   requestComponent,
   scanInitDraft,
+  skipDraft,
+  removeBuiltComponent,
   startBuild,
   deliverRun,
   startDraftSession,
@@ -445,6 +447,21 @@ app.post("/repos/:id/onboarding/runs/:runId/draft/scan", async (req) => {
   const dev = await actingUser(req);
   const { id, runId } = req.params as RunParams;
   return scanInitDraft(id, runId, { userId: dev.id });
+});
+
+// "בלי טיוטה": the plan's cards open for decision without a /init session.
+app.post("/repos/:id/onboarding/runs/:runId/draft/skip", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return skipDraft(id, runId, { userId: dev.id });
+});
+
+// A built card taken out before delivery (the measurement proposed it, or the person did not want it).
+app.post("/repos/:id/onboarding/runs/:runId/components/:key/remove", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId, key } = req.params as RunParams & { key: string };
+  const b = z.object({ reason: z.string().max(1000).nullish() }).parse(req.body ?? {});
+  return removeBuiltComponent(id, runId, { userId: dev.id }, { key, reason: b.reason });
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/build", async (req) => {

@@ -360,6 +360,25 @@ export type RunClaudeOpts = {
   env?: Record<string, string>;
   /** `Read(...)` deny patterns — passed as `--settings {"permissions":{"deny":[...]}}`. */
   denyRules?: string[];
+  /**
+   * An arm of a measurement (repo-onboarding/eval): only the working copy's own
+   * configuration loads — `--setting-sources project` — never the operator's
+   * `~/.claude` (its plugins, hooks and MCP servers would leak into the
+   * "without" arm and make the baseline dirty), and no MCP server but the one
+   * file named here (`--strict-mcp-config`). Non-lean calls only: a lean call
+   * already isolates itself.
+   */
+  isolate?: { settingSources?: "project" | "local"; mcpConfig?: string | null };
+  /**
+   * `--max-budget-usd`: the CLI itself stops the run at this spend. `null` = no
+   * cap. Left out = the policy's per-call cap (`route().budgetUsd`) for the
+   * onboarding capabilities, whose costs are measured and whose caps were set
+   * from those measurements; every other capability keeps running uncapped
+   * until its cap is calibrated the same way.
+   */
+  maxBudgetUsd?: number | null;
+  /** Keep the raw stream-json events (tool calls, tool results, the answer) — what a grader reads. Off by default: a transcript is big. */
+  keepEvents?: boolean;
 };
 
 /** Run `claude -p` in `cwd` (prompt via stdin) and return the assistant's
@@ -396,7 +415,7 @@ async function recordCall(l: LedgerContext, d: RoutingDecision, startedAt: Date,
   }
 }
 
-export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts): Promise<{ text: string; meta: RunMeta; callId: string | null; assistantText: string }> {
+export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeOpts): Promise<{ text: string; meta: RunMeta; callId: string | null; assistantText: string; events: unknown[] }> {
   // prompt goes on stdin so there is nothing to shell-escape; args are all plain.
   // Read-only by default. `write` is only for implementation runs, and those
   // work on an isolated clone — never the user's own checkout.
@@ -441,6 +460,16 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   // why, goes on the call's ledger row.
   const decision = route(opts.ledger.capability, opts.ledger.signals ?? {}, undefined, { model: opts.model, effort: opts.effort });
   args.push("--model", decision.model, "--effort", decision.effort);
+  // The cap the policy computed used to stop here, in the decision, and never
+  // reach the process that spends the money (found in the TRADE onboarding
+  // audit: a $5.55 session under a "$1.5 per call" capability). Now it is the
+  // CLI's own `--max-budget-usd`.
+  const budgetCap = opts.maxBudgetUsd === undefined ? (opts.ledger.capability.startsWith("onboarding_") ? decision.budgetUsd : null) : opts.maxBudgetUsd;
+  if (budgetCap && budgetCap > 0) args.push("--max-budget-usd", String(budgetCap));
+  if (opts.isolate && !opts.lean) {
+    args.push("--setting-sources", opts.isolate.settingSources ?? "project", "--strict-mcp-config");
+    if (opts.isolate.mcpConfig) args.push("--mcp-config", opts.isolate.mcpConfig);
+  }
   const startedAt = new Date();
   // A call whose input would pass the capability's cap is refused before it
   // costs anything — and recorded, because that is the sign the delta
@@ -568,7 +597,18 @@ export async function runClaudeRaw(cwd: string, prompt: string, opts: RunClaudeO
   }
   opts.onMeta?.(meta);
   const callId = await recordCall(opts.ledger, decision, startedAt, { meta, outcome: "ok", text });
-  return { text, meta, callId, assistantText: assistantTexts(raw) };
+  return { text, meta, callId, assistantText: assistantTexts(raw), events: opts.keepEvents ? streamEvents(raw) : [] };
+}
+
+/** Every stream-json line as an object, in order — the transcript a grader reads (tool calls, their results, the answer). */
+function streamEvents(raw: string): unknown[] {
+  const out: unknown[] = [];
+  for (const line of raw.split("\n")) {
+    const t = line.trim();
+    if (!t.startsWith("{")) continue;
+    try { out.push(JSON.parse(t)); } catch { /* not a JSON line */ }
+  }
+  return out;
 }
 
 /**

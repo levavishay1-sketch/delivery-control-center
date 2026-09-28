@@ -41,6 +41,13 @@ export type Rendered = {
   notes: string[];
 };
 
+/**
+ * What the templates know about the repository besides a card's params. The
+ * optional facts come from the diagnosis (`environment.tools`,
+ * `tests.projects`, `tests.commands`, the solution); a card's params of the
+ * same name win, and a template left without either falls back to the
+ * commands above.
+ */
 export type RepoFacts = {
   name: string;
   buildCommand: string | null;
@@ -50,7 +57,15 @@ export type RepoFacts = {
   packageManager: string | null;
   defaultBranch: string | null;
   windowsOnly: boolean;
+  tools?: Tools | null;
+  testProjects?: string[] | null;
+  testCommands?: string[] | null;
+  solution?: string | null;
+  webAppProjects?: number | null;
 };
+
+/** The build and test tools the diagnosing machine has: name → resolved path, or null. */
+export type Tools = Record<string, string | null>;
 
 type Params = Record<string, unknown>;
 type Template = { kind: string; produces: string[]; render: (params: Params, repo: RepoFacts) => Rendered };
@@ -107,6 +122,10 @@ const yamlSafe = (s: string): string => s.replace(/\s*[\r\n]+\s*/g, " ").replace
 
 const HOOK_DIR = ".claude/hooks";
 const FILE_TOOLS = "Edit|Write|MultiEdit";
+/** Every tool that writes a file — a guard that misses NotebookEdit is a guard with a door in it. */
+const GUARD_TOOLS = "Edit|Write|MultiEdit|NotebookEdit";
+/** The shells Claude Code runs commands in; on Windows that includes PowerShell. */
+const SHELL_TOOLS = "Bash|PowerShell";
 const hookCommand = (name: string): string => `node "$CLAUDE_PROJECT_DIR/${HOOK_DIR}/${name}.mjs"`;
 
 /** One entry of `settings.hooks.<Event>`; `timeout` is in seconds (Claude Code kills a hook after 60 s by default). */
@@ -180,27 +199,124 @@ function denyRules(entries: string[]): string[] {
   return out;
 }
 
-/** `.gitattributes`: a directory (trailing slash, or a last segment without an extension) gets `/**`; a file is named as it is. */
+/**
+ * `.gitattributes`: a directory (trailing slash, or a last segment without an
+ * extension) gets `/**`; a file is named as it is. Only `linguist-generated`:
+ * it folds the path in a review, while `-diff` would hide a change to it from
+ * the reviewer altogether.
+ */
 function gitattributesLine(raw: string): string {
   const p = raw.replace(/\\/g, "/").replace(/^(\.\/)+/, "").replace(/\/+$/, "");
   const last = p.split("/").pop() ?? "";
   const dir = raw.endsWith("/") || !/\.[A-Za-z0-9]+$/.test(last);
-  return `${p}${dir ? "/**" : ""} linguist-generated=true -diff`;
+  return `${p}${dir ? "/**" : ""} linguist-generated=true`;
 }
 
-/** The "Build, test, lint" facts: fenced blocks for AGENTS.md, bullet lines for a section appended to an existing file. */
-function commandsSection(repo: RepoFacts, fenced: boolean): string {
-  const rows: [string, string][] = [["Build", command(repo.buildCommand)], ["Test", command(repo.testCommand)], ["Lint", command(repo.lintCommand)]];
-  const parts = rows.map(([label, cmd]) => {
-    if (!cmd) return fenced ? `${label}: not available here.` : `- ${label}: not available here`;
-    return fenced ? `${label}:\n\n\`\`\`sh\n${cmd}\n\`\`\`` : `- ${label}: ${code(cmd)}`;
+const fence = (cmds: string[]) => `\`\`\`sh\n${cmds.join("\n")}\n\`\`\``;
+
+/** The tools, from the card's params or the facts; null when the diagnosis did not look. */
+function toolsOf(p: Params, repo: RepoFacts): Tools | null {
+  const v = p.tools;
+  if (v && typeof v === "object" && !Array.isArray(v)) return v as Tools;
+  return repo.tools ?? null;
+}
+/** A list param given as an array (possibly empty — "known: none") wins; otherwise the fact; otherwise unknown. */
+const known = (p: Params, k: string, fact: string[] | null | undefined): string[] | null => (Array.isArray(p[k]) ? strs(p, k) : fact ?? null);
+
+/**
+ * The ways to build: an msbuild solution builds with Visual Studio's MSBuild
+ * or `dotnet msbuild` — the one the diagnosing machine has goes first, both
+ * are kept so the script can take whichever the machine it runs on has. Any
+ * other command is taken as it is.
+ */
+function buildAlternatives(build: string, sln: string, tools: Tools | null): string[] {
+  const m = /^msbuild(?:\.exe)?\s+("[^"]+"|\S+)/i.exec(build);
+  if (!m && !(sln && /^msbuild\b/i.test(build))) return build ? [build] : [];
+  const target = m?.[1] ?? sln;
+  const full = `msbuild ${target}`;
+  const viaDotnet = `dotnet msbuild ${target}`;
+  return tools && !tools.msbuild && (tools.dotnet_msbuild ?? tools.dotnet) ? [viaDotnet, full] : [full, viaDotnet];
+}
+
+/** What the build section of AGENTS.md says for a Windows-only (.NET Framework) solution, from the tools found — never "cannot build here" when one exists. */
+function windowsBuildText(sln: string, tools: Tools, webApps: number | null | undefined): string {
+  const target = sln || "<the solution>.sln";
+  const dotnet = !!(tools.dotnet_msbuild ?? tools.dotnet);
+  const web = webApps === 0 ? "" : webApps ? `; the ${webApps} Web Application project${webApps === 1 ? "" : "s"} need${webApps === 1 ? "s" : ""} Visual Studio's MSBuild` : "; Web Application projects need Visual Studio's MSBuild";
+  if (tools.msbuild) {
+    return [
+      "Build (Windows, Visual Studio's MSBuild — from a Developer PowerShell, or MSBuild.exe by its full path when `msbuild` is not on PATH):",
+      fence([`msbuild ${target}`]),
+      ...(dotnet ? [`${code(`dotnet msbuild ${target}`)} builds the class libraries too${web}.`] : []),
+    ].join("\n\n");
+  }
+  if (dotnet) return [`Build — the class libraries build with \`dotnet msbuild\`${web}:`, fence([`dotnet msbuild ${target}`])].join("\n\n");
+  return [`Build (Windows, Visual Studio's MSBuild):`, fence([`msbuild ${target}`]), "Where neither `msbuild` nor `dotnet` is installed, say so — never claim a build or a test run."].join("\n\n");
+}
+
+/** The tests part: only test projects git tracks count; none tracked is said plainly. */
+function testsText(projects: string[], commands: string[] | null, fallback: string): string {
+  if (!projects.length) return "Tests: no test project is tracked in git — there is nothing to run. Say so rather than claim a test run.";
+  const cmds = commands?.length ? commands : fallback ? [fallback] : [];
+  return [`Tests — the projects tracked in git: ${projects.map((d) => code(d === "." ? "(root)" : `${d}/`)).join(", ")}${cmds.length ? "" : ". Run them with the runner their framework uses."}`, ...(cmds.length ? [fence(cmds)] : [])].join("\n\n");
+}
+
+/**
+ * The "Build, test, lint" facts: fenced blocks for AGENTS.md, bullet lines for
+ * a section appended to an existing file. With the tools and the tracked test
+ * projects known, each part states what exists — a part with nothing behind
+ * it is said once, plainly, or left out (lint).
+ */
+function commandsSection(repo: RepoFacts, fenced: boolean, seen?: { tools: Tools | null; testProjects: string[] | null; testCommands: string[] | null; sln: string; webApps?: number | null }): string {
+  const build = command(repo.buildCommand);
+  const test = command(repo.testCommand);
+  const lint = command(repo.lintCommand);
+  if (fenced && seen && (seen.tools || seen.testProjects)) {
+    const parts: string[] = [];
+    if (repo.windowsOnly && seen.tools) parts.push(windowsBuildText(seen.sln, seen.tools, seen.webApps));
+    else parts.push(build ? `Build:\n\n${fence([build])}` : "Build: no build command was found in the repository.");
+    parts.push(seen.testProjects ? testsText(seen.testProjects, seen.testCommands, test) : test ? `Test:\n\n${fence([test])}` : "Test: no test command was found in the repository.");
+    if (lint) parts.push(`Lint:\n\n${fence([lint])}`);
+    return parts.join("\n\n");
+  }
+  const rows: [string, string][] = [["Build", build], ["Test", test], ["Lint", lint]];
+  const parts = rows.filter(([label, cmd]) => cmd || label !== "Lint").map(([label, cmd]) => {
+    if (!cmd) return fenced ? `${label}: no ${label.toLowerCase()} command was found in the repository.` : `- ${label}: no command found in the repository`;
+    return fenced ? `${label}:\n\n${fence([cmd])}` : `- ${label}: ${code(cmd)}`;
   });
   if (repo.windowsOnly) {
     parts.push(fenced
-      ? "The build runs only on a Windows runner (msbuild, Visual Studio build tools). From anywhere else, say so — never claim a build or a test run."
-      : "- The build runs only on a Windows runner (msbuild); from anywhere else say so — never claim a build or a test run");
+      ? "The build runs only on Windows (msbuild, Visual Studio build tools). Where there is none, say so — never claim a build or a test run."
+      : "- The build runs only on Windows (msbuild); where there is none, say so — never claim a build or a test run");
   }
   return parts.join(fenced ? "\n\n" : "\n");
+}
+
+type LayoutMap = { top: string[]; groups: { parent: string; members: string[] }[] };
+function layoutMapOf(v: unknown): LayoutMap | null {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const o = v as { top?: unknown; groups?: unknown };
+  const top = Array.isArray(o.top) ? o.top.map(String) : [];
+  const groups = (Array.isArray(o.groups) ? o.groups : [])
+    .filter((g): g is { parent: unknown; members: unknown } => !!g && typeof g === "object")
+    .map((g) => ({ parent: String(g.parent), members: Array.isArray(g.members) ? g.members.map(String) : [] }))
+    .filter((g) => g.members.length);
+  return top.length || groups.length ? { top, groups } : null;
+}
+
+const LAYOUT_TOP_MAX = 20;
+/** A map of where things are — the top folders, and the folders that hold many projects side by side — never a list of every package. */
+function layoutText(l: LayoutMap): string {
+  const baseName = (p: string) => p.split("/").pop() ?? p;
+  const within = (g: { parent: string }, top: string) => g.parent === top || g.parent.startsWith(`${top}/`);
+  const groupText = (g: { parent: string; members: string[] }) => `${code(`${g.parent}/`)} holds ${g.members.length} projects side by side (e.g. ${code(baseName(g.members[0]!))})`;
+  const lines = l.top.slice(0, LAYOUT_TOP_MAX).map((top) => {
+    const gs = l.groups.filter((g) => within(g, top));
+    return `- ${code(`${top}/`)}${gs.length ? ` — ${gs.map(groupText).join("; ")}` : ""}`;
+  });
+  if (l.top.length > LAYOUT_TOP_MAX) lines.push(`- and ${l.top.length - LAYOUT_TOP_MAX} more folders`);
+  for (const g of l.groups.filter((x) => x.parent === ".")) lines.push(`- the root holds ${g.members.length} projects side by side (e.g. ${code(baseName(g.members[0]!))})`);
+  return lines.join("\n") || "(flat)";
 }
 
 type FirstTest = { match: RegExp; file: string; template: string; note: string };
@@ -270,9 +386,12 @@ const TEMPLATES: Record<string, Template> = {
     render: (p) => {
       const paths = strs(p, "paths");
       const reason = str(p, "reason") || "this path must not be edited by hand";
-      const notes = [verifyHook("block-paths", `{"tool_name":"Edit","tool_input":{"file_path":"<a file under ${paths[0] ?? "<path>"}>"},"cwd":"<repo>"}`, "exit 2 with the reason; a file elsewhere exits 0")];
+      const notes = [
+        verifyHook("block-paths", `{"tool_name":"Edit","tool_input":{"file_path":"<a file under ${paths[0] ?? "<path>"}>"},"cwd":"<repo>"}`, "exit 2 with the reason; a file elsewhere exits 0"),
+        "a shell command that writes into a guarded path (a > or >> redirect, Set-Content / Add-Content / Out-File, tee, cp / mv / copy / move / Copy-Item / Move-Item) is blocked the same way",
+      ];
       if (!paths.length) notes.push("no paths given: the hook blocks nothing");
-      return { files: [hookFile("block-paths", { paths, reason })], settings: { hooks: { PreToolUse: [hookEntry("block-paths", FILE_TOOLS)] } }, notes };
+      return { files: [hookFile("block-paths", { paths, reason })], settings: { hooks: { PreToolUse: [hookEntry("block-paths", GUARD_TOOLS), hookEntry("block-paths", SHELL_TOOLS)] } }, notes };
     },
   },
   "block-commands": {
@@ -282,7 +401,7 @@ const TEMPLATES: Record<string, Template> = {
       const reason = str(p, "reason") || "this command is a person's decision";
       const notes = [verifyHook("block-commands", `{"tool_name":"Bash","tool_input":{"command":"${patterns[0] ?? "<pattern>"}"}}`, "exit 2 with the reason; another command exits 0")];
       if (!patterns.length) notes.push("no patterns given: the hook blocks nothing");
-      return { files: [hookFile("block-commands", { patterns, reason })], settings: { hooks: { PreToolUse: [hookEntry("block-commands", "Bash")] } }, notes };
+      return { files: [hookFile("block-commands", { patterns, reason })], settings: { hooks: { PreToolUse: [hookEntry("block-commands", SHELL_TOOLS)] } }, notes };
     },
   },
   "secret-scan": {
@@ -291,11 +410,11 @@ const TEMPLATES: Record<string, Template> = {
       const allowTests = p.allowTests === true;
       return {
         files: [hookFile("secret-scan", { allowTests })],
-        settings: { hooks: { PreToolUse: [hookEntry("secret-scan", FILE_TOOLS), hookEntry("secret-scan", "Bash")] } },
+        settings: { hooks: { PreToolUse: [hookEntry("secret-scan", GUARD_TOOLS), hookEntry("secret-scan", SHELL_TOOLS)] } },
         notes: [
           verifyHook("secret-scan", '{"tool_name":"Write","tool_input":{"file_path":"config.ts","content":"Password=Sup3rSecret123;"}}', "exit 2, the value masked as ***"),
           allowTests ? "test files (tests/, __tests__/, spec/, fixtures/, testdata/, *.test.*, *.spec.*) are not scanned: their credentials are fixtures" : "test files are scanned too; use allowTests when fixtures hold fake credentials on purpose",
-          "on `git commit` the staged diff is scanned (and the working tree for `commit -a`)",
+          "on `git commit` (in Bash or PowerShell) the staged diff is scanned, plus what a `git add` in the same command is about to stage (all changes and new files for `-A` / `.`), and the working tree for `commit -a`",
         ],
       };
     },
@@ -358,7 +477,7 @@ const TEMPLATES: Record<string, Template> = {
     render: (p) => {
       const paths = strs(p, "paths");
       return {
-        files: [{ path: ".gitattributes", content: `# added by DCC onboarding: generated code, folded in diffs and reviews\n${paths.map(gitattributesLine).join("\n")}\n` }],
+        files: [{ path: ".gitattributes", content: `# added by DCC onboarding: generated code, folded in reviews (a change to it still shows)\n${paths.map(gitattributesLine).join("\n")}\n` }],
         notes: ["merge: append the lines .gitattributes does not already have — never replace the file", ...(paths.length ? [] : ["no paths given"])],
       };
     },
@@ -366,12 +485,17 @@ const TEMPLATES: Record<string, Template> = {
   "local-gate": {
     kind: "script", produces: ["scripts/dcc-verify.mjs"],
     render: (p, repo) => {
+      const tools = toolsOf(p, repo);
       const build = command(str(p, "build")) || command(repo.buildCommand);
-      const test = command(str(p, "test")) || command(repo.testCommand);
-      const notes = ['add "verify": "node scripts/dcc-verify.mjs" to package.json scripts when the repository has a package.json', "verify: node scripts/dcc-verify.mjs — the last line is the verdict (VERIFY: ok | failed <step> | nothing to run | cannot run here)"];
-      if (!build && !test) notes.push("no build or test command known: the script prints VERIFY: nothing to run — fill CONFIG in the script when one is known");
-      if (repo.windowsOnly) notes.push("Windows-only build: off Windows the script prints VERIFY: cannot run here (Windows-only build) and exits 3");
-      return { files: [{ path: "scripts/dcc-verify.mjs", content: bake("scripts/dcc-verify.mjs", { build, test, windowsOnly: repo.windowsOnly }), mode: 0o755 }], notes };
+      // A test step only for test projects git tracks; without that fact, the one test command there is.
+      const tests = known(p, "tests", repo.testCommands) ?? [command(str(p, "test")) || command(repo.testCommand)].filter(Boolean);
+      const buildRun = buildAlternatives(build, str(p, "sln") || repo.solution || "", tools);
+      const steps = [...(buildRun.length ? [{ name: "build", run: buildRun }] : []), ...tests.map((t) => ({ name: "test", run: [t] }))];
+      const notes = ['add "verify": "node scripts/dcc-verify.mjs" to package.json scripts when the repository has a package.json', "verify: node scripts/dcc-verify.mjs — the last line is the verdict (VERIFY: ok | partial — <step> not run here | failed <step> | nothing to run | cannot run here)"];
+      if (!steps.length) notes.push("no build or test command known: the script prints VERIFY: nothing to run — fill CONFIG in the script when one is known");
+      if (buildRun.length > 1) notes.push(`build: the first of ${buildRun.map(code).join(" / ")} whose tool the machine has; neither → VERIFY: cannot run here, exit 3`);
+      if (!tests.length) notes.push("no test step: no test project is tracked in git");
+      return { files: [{ path: "scripts/dcc-verify.mjs", content: bake("scripts/dcc-verify.mjs", { steps }), mode: 0o755 }], notes };
     },
   },
   "first-test": {
@@ -398,11 +522,18 @@ const TEMPLATES: Record<string, Template> = {
       const merged = mergeFrom.length
         ? `\n## Merged from\n\nThe files below were merged into this one; where they repeat or contradict the sections above, the sections above win.\n\n${bullets(mergeFrom)}\n`
         : "";
-      const content = fill(template("docs/AGENTS.md"), { name: repo.name, facts: facts ? `\n_${facts}_\n` : "", commands: commandsSection(repo, true), merged });
+      const seen = { tools: toolsOf(p, repo), testProjects: known(p, "tests_projects", repo.testProjects), testCommands: known(p, "test_commands", repo.testCommands), sln: str(p, "sln") || repo.solution || "", webApps: typeof p.web_apps === "number" ? p.web_apps : repo.webAppProjects };
+      const layout = layoutMapOf(p.layout);
+      const content = fill(template("docs/AGENTS.md"), {
+        name: repo.name, facts: facts ? `\n_${facts}_\n` : "", commands: commandsSection(repo, true, seen), merged,
+        // A map of where things are; without the diagnosis's layout, the builder's slot stays for it to fill.
+        layout: layout ? layoutText(layout) : "{{LAYOUT}}",
+      });
       return {
         files: [{ path: "AGENTS.md", content }, { path: "CLAUDE.md", content: "@AGENTS.md\n" }],
         notes: [
-          "fill {{PURPOSE}}, {{LAYOUT}}, {{EXTERNAL}}, {{VERIFICATION}} from the diagnosis, and {{RULES}} with one bullet per approved rule line; keep the whole file under 150 lines",
+          `fill {{PURPOSE}}${layout ? "" : ", {{LAYOUT}}"}, {{EXTERNAL}}, {{VERIFICATION}} from the diagnosis, and {{RULES}} with one bullet per approved rule line; keep the whole file short — every line is loaded in every session`,
+          "{{VERIFICATION}} carries only how to check a change (the gate script when there is one): the build and test commands are already in their section above — never repeat them, never contradict them",
           "CLAUDE.md (the one line @AGENTS.md) is for a repository that has no CLAUDE.md — never overwrite an existing one",
           ...(mergeFrom.length ? [`merge the content of ${mergeFrom.join(", ")} into the matching sections and keep the list under ## Merged from`] : []),
         ],
@@ -426,8 +557,16 @@ const TEMPLATES: Record<string, Template> = {
     render: (p) => {
       const packages = strs(p, "packages");
       const kept = packages.slice(0, PER_PACKAGE_CAP);
-      const files = kept.map((dir) => ({ path: `${dir.replace(/\/+$/, "")}/CLAUDE.md`, content: fill(template("docs/package-CLAUDE.md"), { dir }) }));
-      const notes = ["fill {{PACKAGE_COMMANDS}} in each file with the package's own build and test commands, read from its manifest"];
+      // The commands the diagnosis found for a package (it lists only packages whose command differs from the root's); unknown → the builder reads the manifest.
+      const own = new Map((Array.isArray(p.commands) ? p.commands : [])
+        .filter((c): c is Params => !!c && typeof c === "object" && !Array.isArray(c))
+        .map((c) => [str(c, "dir").replace(/\/+$/, ""), [str(c, "build"), str(c, "test")].filter(Boolean)] as const));
+      const files = kept.map((raw) => {
+        const dir = raw.replace(/\/+$/, "");
+        const cmds = own.get(dir);
+        return { path: `${dir}/CLAUDE.md`, content: fill(template("docs/package-CLAUDE.md"), { dir, commands: cmds?.length ? fence(cmds) : "{{PACKAGE_COMMANDS}}" }) };
+      });
+      const notes = own.size ? ["verify: each command runs from its package's folder"] : ["fill {{PACKAGE_COMMANDS}} in each file with the package's own build and test commands, read from its manifest"];
       if (packages.length > PER_PACKAGE_CAP) notes.push(`capped: ${PER_PACKAGE_CAP} of ${packages.length} packages got a file; left out: ${packages.slice(PER_PACKAGE_CAP).join(", ")}`);
       if (!packages.length) notes.push("no packages given — nothing written");
       return { files, notes };
@@ -441,9 +580,16 @@ const TEMPLATES: Record<string, Template> = {
       for (const a of areas) {
         const dir = str(a, "dir").replace(/\/+$/, "");
         if (!dir) continue;
-        files.push({ path: `${dir}/CLAUDE.md`, content: fill(template("docs/area-CLAUDE.md"), { dir, toolchain: str(a, "toolchain") || "its own", command: str(a, "command") || "<the build command>" }) });
+        const toolchain = str(a, "toolchain") || "its own";
+        // An area of several units (PCF controls side by side): the command runs inside each, never in the parent that has no manifest.
+        const cwds = strs(a, "cwds").map((c) => c.replace(/\/+$/, ""));
+        const where = cwds.length
+          ? `Toolchain: ${toolchain}. Each folder below builds on its own — run the command from inside it (there is no build manifest in ${code(`${dir}/`)} itself):\n\n${cwds.map((c) => `- ${code(`${c}/`)}`).join("\n")}`
+          : `Toolchain: ${toolchain}. This area builds on its own, from this folder:`;
+        const after = toolchain === "node" ? `Run \`npm install\` in the folder first when it has no node_modules.\n\n` : "";
+        files.push({ path: `${dir}/CLAUDE.md`, content: fill(template("docs/area-CLAUDE.md"), { dir, where, command: str(a, "command") || "<the build command>", after, them: cwds.length ? "these" : "it" }) });
       }
-      return { files, notes: files.length ? ["verify: each command runs from its own folder"] : ["no areas given — nothing written"] };
+      return { files, notes: files.length ? ["verify: each command runs from the folder that holds its manifest (package.json, .sln)"] : ["no areas given — nothing written"] };
     },
   },
   "docs-set": {
@@ -497,9 +643,31 @@ const TEMPLATES: Record<string, Template> = {
   "which-package": {
     kind: "skill", produces: [".claude/skills/which-package/SKILL.md"],
     render: (p) => {
+      // Every package, or none: a list cut to a first few tells the agent the rest do not exist.
       const packages = strs(p, "packages");
+      const count = Number(str(p, "count")) || packages.length;
       const workspaces = yamlSafe(str(p, "workspaces")) || "workspace";
-      return { files: [skillFile("which-package", { workspaces, packages: packages.length ? bullets(packages) : "- (the package list was empty — list the packages here)" })], notes: ["verify: ask 'where do I add X' and see the skill name a package before any search"] };
+      // Only the manifests this repository has — no pyproject.toml in a .NET repository.
+      const manifests = strs(p, "manifests");
+      const manifestText = manifests.length ? manifests.map(code).join(", ") : "its manifest";
+      const globText = manifests.length ? manifests.map((m) => code(`**/${m}`)).join(", ") : "the manifest files";
+      const own = (Array.isArray(p.own) ? p.own : []).filter((o): o is Params => !!o && typeof o === "object" && !Array.isArray(o));
+      const rootBuild = command(str(p, "rootBuild"));
+      const ownText = own.map((o) => `${code(`${str(o, "dir")}/`)} (${[str(o, "build"), str(o, "test")].filter(Boolean).map(code).join(", ")})`).join(", ");
+      const buildStep = own.length
+        ? `${rootBuild ? `Build and test from the root with ${code(rootBuild)}, except` : "Build and test from the root, except"} these packages, which build from their own folder: ${ownText}.`
+        : rootBuild ? `Build and test from the root: ${code(rootBuild)} builds every package.` : "Build and test with the commands the root instructions (AGENTS.md) give.";
+      const values = {
+        workspaces,
+        packages_intro: packages.length ? `The ${packages.length} packages:` : `The ${count} packages are too many to list here; find them with Glob on ${globText}.`,
+        packages: packages.length ? bullets(packages) : "",
+        pick_step: packages.length ? "Pick from the list the one or two packages whose names or paths match the request." : `Find the one or two packages whose names or paths match the request with Glob on ${globText}.`,
+        manifests: manifestText,
+        build_step: buildStep,
+      };
+      const notes = ["verify: ask 'where do I add X' and see the skill name a package before any search"];
+      if (!packages.length) notes.push(`no package list: ${count} packages — the skill finds them with Glob instead`);
+      return { files: [skillFile("which-package", values)], notes };
     },
   },
   "change-recipe": {
@@ -607,6 +775,7 @@ const TEMPLATES: Record<string, Template> = {
       ];
       if (!url && !cmd) notes.push("no url and no command given — fill `command` in .mcp.json before use");
       if (/\{[a-z_]+\}/i.test(url)) notes.push(`the url has a placeholder to fill from the client: ${url}`);
+      if (p.placeholder === true || p.deliverable === false || /\{[a-z_]+\}/i.test(url)) notes.push("not deliverable as .mcp.json until the placeholder is filled: write it as an instruction in the pull request's report");
       const needs = strs(p, "needs");
       if (needs.length) notes.push(`needs from the client: ${needs.join(", ")}`);
       const onlyIf = str(p, "onlyIf");

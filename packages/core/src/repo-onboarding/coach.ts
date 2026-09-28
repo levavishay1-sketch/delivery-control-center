@@ -6,7 +6,7 @@ import { appendRepoAiEvent } from "./events.ts";
 import { checkTrust, fetchPage, type FoundSource, type TrustChecks } from "./marketplace.ts";
 import { stackTags } from "./rules.ts";
 import { KIND_HE } from "./components.ts";
-import type { BuildResult, CoachProposalKind, ComponentSeed, HealthScore, RepoProfile } from "./types.ts";
+import type { BuildResult, CoachProposalKind, ComponentDelta, ComponentSeed, HealthScore, RepoProfile } from "./types.ts";
 
 /**
  * The coach — what continues after the run, from real work: the checks
@@ -72,8 +72,13 @@ export function healthFrom(tasks: readonly TaskFacts[], previous: readonly TaskF
 export type Signal = { key: string; kind: CoachProposalKind; componentKey: string; title: string; why: string; evidence: Record<string, unknown>; measure: Record<string, unknown>; seed?: ComponentSeed };
 
 /** Relative thresholds: the same check failing on at least two tasks and on at least a third of the tasks that ran it. */
-export function signalsFrom(tasks: readonly TaskFacts[], installed: readonly { key: string; kind: string; contextTokens: number | null; title: string }[], previous: readonly TaskFacts[]): Signal[] {
+export function signalsFrom(tasks: readonly TaskFacts[], installed: readonly { key: string; kind: string; contextTokens: number | null; title: string; delta?: ComponentDelta | null }[], previous: readonly TaskFacts[]): Signal[] {
   const out: Signal[] = [];
+  // The run's own measurement: a delivered component whose tasks got WORSE with it is the first thing to take out, before any session data.
+  for (const c of installed) {
+    if (c.delta?.verdict !== "worse") continue;
+    out.push({ key: `measured_${c.key}`, kind: "remove", componentKey: c.key, title: `הסר: ${c.title}`, why: `במדידה של ההטמעה עברו ${c.delta.after} מתוך ${c.delta.total} משימות עם הרכיב, ${c.delta.before} בלעדיו — הוא מזיק.`, evidence: { delta: c.delta }, measure: { key: "measured_delta", before: c.delta.after - c.delta.before } });
+  }
   const kinds = ["build", "tests", "regression", "e2e"] as const;
   for (const k of kinds) {
     const ran = tasks.filter((t) => t.checks.some((c) => c.kind === k));
@@ -144,8 +149,8 @@ export async function coachView(repoId: string): Promise<CoachView> {
   const previous = previousAll.filter((t) => t.at && t.at < since);
   const last = await latestDeliveredRun(clientId, repoId);
   const runs = await withTenant(clientId, (tx) => tx.select({ id: repositoryOnboardingRun.id }).from(repositoryOnboardingRun).where(and(eq(repositoryOnboardingRun.repoId, repoId), eq(repositoryOnboardingRun.status, "Completed"))));
-  const installedRows = runs.length ? await withTenant(clientId, (tx) => tx.select().from(onboardingComponent).where(and(inArray(onboardingComponent.runId, runs.map((x) => x.id)), inArray(onboardingComponent.status, ["verified", "installed"])))) : [];
-  const installed = installedRows.map((c) => ({ key: c.key, kind: c.kind, title: c.title, contextTokens: c.contextTokens, status: c.status, runId: c.runId }));
+  const installedRows = runs.length ? await withTenant(clientId, (tx) => tx.select().from(onboardingComponent).where(and(inArray(onboardingComponent.runId, runs.map((x) => x.id)), inArray(onboardingComponent.status, ["verified", "configured", "installed"])))) : []; // "installed": what a run completed before `configured` existed delivered
+  const installed = installedRows.map((c) => ({ key: c.key, kind: c.kind, title: c.title, contextTokens: c.contextTokens, status: c.status, runId: c.runId, delta: (c.delta ?? null) as ComponentDelta | null }));
   const signals = signalsFrom(tasks, installed, previous);
   // What changed in the world since the last run, for this stack.
   let newInWorld: CoachView["newInWorld"] = [];

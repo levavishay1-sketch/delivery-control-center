@@ -20,7 +20,7 @@ const scanOf = (items: InitScan["items"]): InitScan => ({ verdict: "partial", su
 
 describe("the draft", () => {
   it("is what the session wrote plus the changed instruction files, never DCC's own", () => {
-    expect(draftPaths(["src/x.ts", ".dcc/profile.json"], [{ path: "AGENTS.md" }, { path: "pkg/CLAUDE.md" }, { path: ".claude/skills/a/SKILL.md" }, { path: "README.md" }]))
+    expect(draftPaths(["src/x.ts", ".dcc/onboarding.json"], [{ path: "AGENTS.md" }, { path: "pkg/CLAUDE.md" }, { path: ".claude/skills/a/SKILL.md" }, { path: "README.md" }]))
       .toEqual([".claude/skills/a/SKILL.md", "AGENTS.md", "pkg/CLAUDE.md", "src/x.ts"]);
   });
 
