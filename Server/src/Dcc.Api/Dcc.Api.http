@@ -1,0 +1,104 @@
+### DCC API — requests you can run from Visual Studio (or VS Code's REST Client).
+### 1. Run "Sign in" with the admin's email and password (Server/.local/initial-admin.txt).
+### 2. Copy "accessToken" from the answer into @token below.
+### 3. On first sign-in, change the password first — everything else answers 403 until you do.
+
+@api = http://localhost:5080
+@token = paste-the-access-token-here
+
+### Sign in
+POST {{api}}/auth/login
+Content-Type: application/json
+
+{ "email": "admin@dcc.local", "password": "paste-the-password-here" }
+
+### Change your password (required on first sign-in; at least 12 characters)
+POST {{api}}/auth/change-password
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "currentPassword": "the-current-one", "newPassword": "a-new-long-password" }
+
+### Who am I, and what may I do
+GET {{api}}/auth/me
+Authorization: Bearer {{token}}
+
+### ── users ───────────────────────────────────────────────────────────
+
+### All users
+GET {{api}}/users
+Authorization: Bearer {{token}}
+
+### Create a user with an initial password (they must change it on first sign-in)
+POST {{api}}/users
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "email": "dana@example.com", "displayName": "Dana", "kind": "person", "password": "initial-password-123" }
+
+### Disable a user (their sessions end at once)
+PATCH {{api}}/users/USER-ID
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "disabled": true }
+
+### ── security roles and assignments ──────────────────────────────────
+
+### The permission catalog
+GET {{api}}/permissions
+Authorization: Bearer {{token}}
+
+### Security roles (built-in and custom)
+GET {{api}}/security-roles
+Authorization: Bearer {{token}}
+
+### Give a user a security role on one client (scopeType: global | client | requirement)
+POST {{api}}/role-assignments
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "principalType": "user", "principalId": "USER-ID", "securityRoleId": "ROLE-ID", "scopeType": "client", "scopeId": "CLIENT-ID" }
+
+### Who holds what
+GET {{api}}/role-assignments
+Authorization: Bearer {{token}}
+
+### Take an assignment away (takes effect at once)
+DELETE {{api}}/role-assignments/ASSIGNMENT-ID
+Authorization: Bearer {{token}}
+
+### ── teams ───────────────────────────────────────────────────────────
+
+### Create a team
+POST {{api}}/teams
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "name": "QA", "description": "Testers" }
+
+### Add a member
+PUT {{api}}/teams/TEAM-ID/members/USER-ID
+Authorization: Bearer {{token}}
+
+### ── agents and API tokens ───────────────────────────────────────────
+
+### Create a delegated AI agent (acts for you, never more than you may)
+POST {{api}}/agents
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "displayName": "Build bot" }
+
+### Create an API token for the agent — the secret is shown only in this answer
+POST {{api}}/tokens
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "name": "build bot on CI", "forAgentId": "AGENT-ID" }
+
+### ── audit ───────────────────────────────────────────────────────────
+
+### Every change to identity and permissions, newest first
+GET {{api}}/audit
+Authorization: Bearer {{token}}
