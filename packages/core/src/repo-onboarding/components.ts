@@ -211,9 +211,14 @@ export function readiness(i: ReadinessInput): Readiness {
   const improved = !!d && d.after.passed > d.before.passed;
   const worse = !!d && d.after.passed < d.before.passed;
   const unproven = i.cards.filter((c) => deliverable(c) && c.delta && c.delta.verdict !== "unmeasured" && c.delta.verdict !== "improved");
+  // A set with no knowledge component — safety, enforcement, verification, connections only — has nothing that must make tasks
+  // pass; it must only not harm. That is the honest end state of a repository that already tells the agent what it needs.
+  const knowledgeDelivered = i.cards.filter((c) => deliverable(c) && KNOWLEDGE_KINDS.has(c.kind));
+  const nothingToProve = !!d && !worse && knowledgeDelivered.length === 0;
   items.push({
-    key: "delta", title_he: "המדידה עם ובלי מראה שיפור, וכל רכיב שנמדד הרוויח את מקומו", ok: improved && unproven.length === 0,
+    key: "delta", title_he: "המדידה עם ובלי מראה שיפור, וכל רכיב שנמדד הרוויח את מקומו", ok: (improved && unproven.length === 0) || nothingToProve,
     detail_he: !d ? "עוד לא נמדד — הבנייה מריצה את המשימות עם הסט"
+      : nothingToProve ? `אין רכיב ידע בסט — בטיחות וחיבורים לא צריכים לשפר משימות, רק לא להזיק: ${d.before.passed}/${d.before.total} → ${d.after.passed}/${d.after.total}`
       : worse ? `פחות משימות עוברות (${d.before.passed}/${d.before.total} → ${d.after.passed}/${d.after.total}) — משהו בסט מפריע; לבדוק את הרכיבים שנוספו`
       : !improved ? `אותה תוצאה (${d.after.passed}/${d.after.total}) — "אותו דבר" אינו שיפור; רכיב שלא הוכח מוצע להסרה`
       : unproven.length ? `${d.before.passed}/${d.before.total} → ${d.after.passed}/${d.after.total}, אבל לא הוכחו: ${unproven.map((c) => c.title_he).slice(0, 4).join(", ")}${unproven.length > 4 ? ` ועוד ${unproven.length - 4}` : ""}`

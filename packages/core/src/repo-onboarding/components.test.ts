@@ -107,6 +107,13 @@ describe("the build order, the readiness gate and the report", () => {
     const same = readiness({ ...base, cards: decided, delta: { before: { passed: 3, total: 5, costUsd: 1 }, after: { passed: 3, total: 5, costUsd: 0.7 }, costPerTaskChange: -0.3 } });
     expect(item(same, "delta")).toMatchObject({ ok: false });
     expect(item(same, "delta").detail_he).toContain("אותו דבר");
+    // A set of safety and connections alone has nothing that must make tasks pass — "same" is its honest end state, as long as nothing got worse.
+    const safetyOnly = decided.filter((c) => !["rule", "doc", "scaffold", "skill", "agent", "review", "pr_template"].includes(c.kind));
+    const sameSafety = readiness({ ...base, cards: safetyOnly, delta: { before: { passed: 3, total: 5, costUsd: 1 }, after: { passed: 3, total: 5, costUsd: 0.7 }, costPerTaskChange: -0.3 } });
+    expect(item(sameSafety, "delta")).toMatchObject({ ok: true });
+    expect(item(sameSafety, "delta").detail_he).toContain("אין רכיב ידע בסט");
+    const worseSafety = readiness({ ...base, cards: safetyOnly, delta: { before: { passed: 3, total: 5, costUsd: 1 }, after: { passed: 2, total: 5, costUsd: 0.7 }, costPerTaskChange: 0 } });
+    expect(item(worseSafety, "delta")).toMatchObject({ ok: false });
     const improved = { before: { passed: 2, total: 5, costUsd: 1 }, after: { passed: 4, total: 5, costUsd: 1 }, costPerTaskChange: 0 };
     const knowledge = decided.find((c) => c.kind === "rule")!;
     const hook = decided.find((c) => c.kind === "hook")!;
