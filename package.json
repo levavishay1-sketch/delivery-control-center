@@ -5,19 +5,17 @@
   "description": "מערכת שעוטפת את מחזור החיים של פיתוח תוכנה מונחה-AI מקצה לקצה, סביב Azure DevOps ו-Claude Code.",
   "type": "module",
   "workspaces": [
-    "packages/*",
-    "apps/*"
+    "Client"
   ],
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "db:generate": "npm -w @dcc/db run generate",
-    "db:migrate": "npm -w @dcc/db run migrate",
-    "db:guards": "npm -w @dcc/db run guards",
-    "typecheck": "tsc -b",
+    "server": "dotnet run --project Server/src/Dcc.Api",
+    "web": "npm run dev -w @dcc/web",
+    "typecheck": "tsc -p Client --noEmit",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests && dotnet test Server/DeliveryControlCenter.sln",
     "audit:stale": "node scripts/audit-stale.mjs",
     "sync": "node scripts/sync.mjs",
     "spec": "openspec",

@@ -34,7 +34,7 @@ if (!missing.length && !headings.length) process.exit(0);
 const lines = [`${rel} — the "i" rule (see the info-hints skill):`];
 for (const h of headings) lines.push(`  ${h.line}: a heading written by hand — use PageHead or CardTitle, which carry the "i"`);
 for (const m of missing) lines.push(`  ${m.line}: [${m.what}] "${m.text}" names something but opens no explanation`);
-lines.push(`Add <Info k="…" /> with a concept from packages/core/src/glossary/concepts/,`);
+lines.push(`Add <Info k="…" /> with a concept from OldServer/packages/core/src/glossary/concepts/,`);
 lines.push(`or put {/* no-info: why */} on the line above when the name really is the whole explanation.`);
 
 console.error(lines.join("\n"));

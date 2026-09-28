@@ -7,7 +7,7 @@
 /** Screens and components are the surface a person reads. `forms.tsx` is a set of
  *  create/edit dialogs whose fields are their own labels, and `ui.tsx` carries the
  *  `info` prop rather than an "i" of its own — neither is linted. */
-export const isScreenFile = (f) => /^apps\/web\/src\/(screens|components)\/.*\.tsx$/.test(f);
+export const isScreenFile = (f) => /^Client\/src\/(screens|components)\/.*\.tsx$/.test(f);
 
 /** `<Info k="x" />` and the `info="x"` / `info={… "x" …}` props of the shared components. */
 export function conceptsUsed(text) {

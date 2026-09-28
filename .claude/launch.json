@@ -6,13 +6,6 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "-w", "@dcc/web"],
       "port": 5173
-    },
-    {
-      "name": "api",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start", "-w", "@dcc/api"],
-      "env": { "DCC_HOOK_TOKEN": "dev-secret" },
-      "port": 3001
     }
   ]
 }

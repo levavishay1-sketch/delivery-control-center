@@ -12,6 +12,9 @@ export default tseslint.config(
       "**/*.d.ts",
       "**/*.tsbuildinfo",
       "openspec/**",
+      // the old TypeScript server, kept for reference until the C# server replaces it
+      "OldServer/**",
+      "Server/**",
       ".tmp-perf.cjs",
     ],
   },
@@ -39,7 +42,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["apps/web/**/*.{ts,tsx}"],
+    files: ["Client/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
     languageOptions: { globals: { ...globals.browser } },
     rules: {

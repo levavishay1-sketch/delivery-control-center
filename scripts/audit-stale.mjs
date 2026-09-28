@@ -23,7 +23,7 @@ function walk(d, out = []) {
 }
 const all = walk(root).map((p) => norm(path.relative(root, p)));
 const text = new Map(all.filter((f) => /\.(ts|tsx|mjs|json|md|sql|css|html)$/.test(f)).map((f) => [f, readFileSync(f, "utf8")]));
-const isSrc = (f) => /^(packages|apps)\/[^/]+\/src\/.*\.(ts|tsx|mjs)$/.test(f) && !f.endsWith(".d.ts");
+const isSrc = (f) => /^(OldServer\/(packages|apps)\/[^/]+|Client)\/src\/.*\.(ts|tsx|mjs)$/.test(f) && !f.endsWith(".d.ts");
 
 let failures = 0;
 const fail = (title, lines) => { failures++; console.log(`\n✗ ${title}`); lines.forEach((l) => console.log("   " + l)); };
@@ -32,7 +32,7 @@ const note = (title, lines) => { console.log(`\n· ${title}`); lines.forEach((l)
 
 // 1. Compiled output tracked by git inside a package's src/ (stale copies of the .ts next to them).
 const tracked = execFileSync("git", ["ls-files"], { encoding: "utf8" }).split("\n").filter(Boolean);
-const built = tracked.filter((f) => /^packages\/[^/]+\/src\/.*\.(js|js\.map|d\.ts|d\.ts\.map)$/.test(f));
+const built = tracked.filter((f) => /^OldServer\/packages\/[^/]+\/src\/.*\.(js|js\.map|d\.ts|d\.ts\.map)$/.test(f));
 built.length ? fail(`compiled files committed inside packages/*/src (${built.length})`, built.slice(0, 10)) : ok("no compiled output committed inside packages/*/src");
 
 // 2. Names of retired designs. Keep this list growing: when a change replaces a design, add its old names here.
@@ -84,7 +84,7 @@ const RETIRED = [
 // docs/history/ holds the design records the user asked to keep; docs/research/ holds dated research that
 // describes what existed when it was written. Everything else — the replacing change included — may not
 // name a retired design.
-const HISTORY = /^(CLAUDE\.md$|scripts\/audit-stale\.mjs$|packages\/db\/migrations\/|docs\/history\/|docs\/research\/|docs\/architecture-review\.md$|docs\/ai-repository-architecture-research\.md$|docs\/fable-brief-repo-onboarding\.md$)/;
+const HISTORY = /^(CLAUDE\.md$|scripts\/audit-stale\.mjs$|OldServer\/packages\/db\/migrations\/|Server\/db\/migrations\/|docs\/history\/|docs\/research\/|docs\/architecture-review\.md$|docs\/ai-repository-architecture-research\.md$|docs\/fable-brief-repo-onboarding\.md$)/;
 const re = new RegExp(RETIRED.map((r) => r.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")).join("|"));
 const stale = [];
 for (const [f, t] of text) {
@@ -122,7 +122,7 @@ orphans.length ? note(`source files nothing imports (${orphans.length}) — dele
 
 // 5. DB tables no application code references. Known-inert tables are listed so a NEW one stands out.
 const KNOWN_INERT = new Set(["repo_dependency"]);
-const schemaFiles = all.filter((f) => /^packages\/db\/src\/schema\/.*\.ts$/.test(f));
+const schemaFiles = all.filter((f) => /^OldServer\/packages\/db\/src\/schema\/.*\.ts$/.test(f));
 const tables = [];
 for (const f of schemaFiles) for (const m of text.get(f).matchAll(/export const (\w+)\s*=\s*pgTable\(\s*["'](\w+)["']/g)) tables.push({ id: m[1], name: m[2] });
 const unusedTables = tables.filter((t) => {
@@ -147,7 +147,7 @@ depIssues.length ? note("dependencies never imported — verify, then remove", d
 // 7. The "i" (openspec/changes/info-hints): the registry is well-formed, every key a screen uses exists, every screen
 //    registered with the chat has a glossary, and no screen writes a heading that bypasses the shared components
 //    (they carry the "i"). The registry is read through its own access surface, as everything else does.
-const { allConcepts, glossaryScreens } = await import(pathToFileURL(path.resolve("packages/core/src/glossary/index.ts")).href);
+const { allConcepts, glossaryScreens } = await import(pathToFileURL(path.resolve("OldServer/packages/core/src/glossary/index.ts")).href);
 const concepts = allConcepts();
 const MAX_EXPLAIN = 240, MAX_PRESS = 320;
 const bad = [];
@@ -180,7 +180,7 @@ const genericAlias = [];
 for (const c of concepts) for (const a of c.aliases ?? []) if (QUESTION_WORDS.has(a.trim())) genericAlias.push(`${c.key}: alias "${a}" is a generic question word — any short question of that shape would hijack it`);
 genericAlias.length ? fail(`a concept alias is a generic question word (${genericAlias.length})`, genericAlias) : ok("no concept alias is a generic question word");
 
-const webSrc = [...text].filter(([f]) => /^apps\/web\/src\/.*\.tsx?$/.test(f));
+const webSrc = [...text].filter(([f]) => /^Client\/src\/.*\.tsx?$/.test(f));
 const used = [];
 for (const [f, t] of webSrc) for (const u of conceptsUsed(t)) used.push({ key: u.key, at: `${f}:${u.line}` });
 const unknown = used.filter((u) => !seen.has(u.key));
@@ -229,8 +229,8 @@ else {
   const lines = (s) => (s ?? "").split("\n").map((x) => x.trim()).filter(Boolean);
   const changed = new Set([...lines(gitOut("diff", "--name-only", specBase)), ...lines(gitOut("ls-files", "--others", "--exclude-standard"))]);
   const isProcess = (f) =>
-    (f.startsWith("packages/core/src/repo-onboarding/") && !f.endsWith(".test.ts")) || f.startsWith("apps/web/src/screens/repo/") ||
-    f === "packages/core/src/glossary/concepts/onboarding.ts" || (/^packages\/db\/migrations\/.*\.sql$/.test(f) && existsSync(f) && /'onboarding\./.test(readFileSync(f, "utf8")));
+    (f.startsWith("OldServer/packages/core/src/repo-onboarding/") && !f.endsWith(".test.ts")) || f.startsWith("Client/src/screens/repo/") ||
+    f === "OldServer/packages/core/src/glossary/concepts/onboarding.ts" || (/^OldServer\/packages\/db\/migrations\/.*\.sql$/.test(f) && existsSync(f) && /'onboarding\./.test(readFileSync(f, "utf8")));
   const touchedProcess = [...changed].filter(isProcess);
   const waived = gitOut("log", "--format=%B", `${specBase}..HEAD`)?.match(/^Spec-unchanged:\s*(.+)$/m)?.[1];
   if (!touchedProcess.length) ok("the onboarding spec: this branch does not touch the onboarding process");

@@ -1,9 +1,7 @@
 {
+  // The web client (Client/) has its own tsconfig; `npm run typecheck` runs it.
+  // The server is C# (Server/). OldServer/ is the retired TypeScript server,
+  // kept for reference only and never built.
   "files": [],
-  "references": [
-    { "path": "./packages/db" },
-    { "path": "./packages/core" },
-    { "path": "./apps/api" },
-    { "path": "./apps/mcp" }
-  ]
+  "references": []
 }

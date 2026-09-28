@@ -15,11 +15,11 @@ itself without sending them elsewhere. The design and its reasons are in
 
 | What | Where |
 |---|---|
-| The wording (one entry per **concept**) | `packages/core/src/glossary/concepts/<area>.ts`, listed in `concepts/index.ts` |
-| What a chat-registered screen is for | `packages/core/src/glossary/screens.ts` |
+| The wording (one entry per **concept**) | `OldServer/packages/core/src/glossary/concepts/<area>.ts`, listed in `concepts/index.ts` |
+| What a chat-registered screen is for | `OldServer/packages/core/src/glossary/screens.ts` |
 | Reading the registry | `getConcept` / `allConcepts` / `glossaryFor` in `glossary/index.ts` — never the arrays |
-| The component | `apps/web/src/claude/Info.tsx` (`<Info k="key" />`) |
-| Shared components that carry it | `PageHead`, `CardTitle`, `StatTile` in `apps/web/src/ui.tsx` — prop `info` |
+| The component | `Client/src/claude/Info.tsx` (`<Info k="key" />`) |
+| Shared components that carry it | `PageHead`, `CardTitle`, `StatTile` in `Client/src/ui.tsx` — prop `info` |
 | The rule itself, in code | `scripts/info-lint.mjs` — what counts as "names something", used by the audit and the hook |
 | The gate | `npm run audit:stale` (section 7 of `scripts/audit-stale.mjs`) |
 | The nudge while editing | `hooks/info-hint-check.mjs`, on every Edit / Write of a screen |
