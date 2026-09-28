@@ -4,6 +4,7 @@ import { CardTitle } from "../../ui.tsx";
 import { Info } from "../../claude/Info.tsx";
 import { CodeMapPanel } from "../../components/CodeMap.tsx";
 import { FileCompare } from "../../components/FileCompare.tsx";
+import { DeliveryTree } from "./FileTree.tsx";
 import { TrialTable } from "./steps.tsx";
 import { Kv, NotYet, Tile, Working, shortPath, type StepProps } from "./shared.tsx";
 import { KIND_HE, fmtInt, fmtUsd, shortSha, signedPct, validationLabel } from "./labels.ts";
@@ -136,8 +137,8 @@ export function DeliverBody(p: StepProps) {
       <div style={{ display: "grid", gap: 10 }}>
         <span style={{ fontSize: 12.5, fontWeight: 650 }}>מה ייכנס למסירה<Info k="deliver_files" /> ({files.length} קבצים)</span>
         {files.length
-          ? <ul className="rd-list plain" style={{ display: "grid", gap: 2 }}>{files.map((f) => <li key={f} className="ob-code">{f}</li>)}</ul>
-          : <div className="ob-note warn">אין קבצים למסירה — שום רכיב לא הותקן ואומת. אפשר לבטל את ההרצה ולהתחיל חדשה.</div>}
+          ? <DeliveryTree files={files} repoName={view.repo.name} repoId={run.repoId} runId={run.id} />
+          :<div className="ob-note warn">אין קבצים למסירה — שום רכיב לא הותקן ואומת. אפשר לבטל את ההרצה ולהתחיל חדשה.</div>}
         <div className="rd-inline" style={{ fontSize: 12.5 }}><span>מי אחראי<Info k="run_identity" />:</span><span>{p.users[run.triggeredBy] ?? "—"} — ה-commit וה-PR ייחתמו בשמו</span></div>
         <CodeMapPanel map={view.codeMap} />
         <div className="ob-actions">
