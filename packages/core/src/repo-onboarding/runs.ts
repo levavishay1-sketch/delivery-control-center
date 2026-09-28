@@ -524,12 +524,15 @@ async function reviewerSeeds(ctx: Ctx, run: RunRow, by: Actor, profile: RepoProf
     const kinds = new Set<string>(["rule", "hook", "permission", "skill", "agent", "mcp", "plugin", "lsp", "scaffold", "doc", "script"]);
     const slugOf = (s: unknown) => String(s ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 32);
     const out: ComponentSeed[] = (o.missing ?? []).filter((m) => m?.title && kinds.has(String(m.kind))).slice(0, 6).map((m, i) => {
-      const kind = m.kind as ComponentSeed["kind"];
+      // A hook, a permission or a script is built only from a catalog template; what the reviewer asks for in those kinds
+      // becomes an instruction line (the Trade run failed a reviewer's hook on "unknown catalog template").
+      const asked = String(m.kind);
+      const kind = (["hook", "permission", "script"].includes(asked) ? "rule" : asked) as ComponentSeed["kind"];
       // The file name comes from stable keys, never from a title: the process and step the reviewer named, or its own slug.
       const processKey = m.processKey && processes.some((p) => p.key === m.processKey) ? m.processKey : null;
       const stepKey = processKey ? processes.find((p) => p.key === processKey)!.steps.find((s) => s.key === m.stepKey)?.key ?? null : null;
       const slug = slugOf(m.slug) || slugOf(m.title) || `${i + 1}`;
-      return { key: `reviewer_${slug}_${kind}`.slice(0, 60), kind, family: familyOf(kind), risk: kind === "mcp" ? "external" : kind === "rule" || kind === "doc" || kind === "permission" ? "reversible" : "significant", source: "reviewer", sourceRef: "onboarding.review", title_he: String(m.title).slice(0, 120), why_he: `הסוקר: ${String(m.why ?? "").slice(0, 400)}`, what_he: `${KIND_HE[kind]} שהסוקר הצביע עליו כחסר; נבנה כמו כל רכיב אם יאושר.`, verifyHow_he: "לפי הסוג, כמו כל רכיב.", params: { template: kind === "skill" ? "process-skill" : kind === "agent" ? "process-agent" : undefined, text: kind === "rule" ? String(m.title) : undefined, fromReviewer: true, process: processKey ?? "reviewer", step: stepKey ?? slug, stepTitle: String(m.title).slice(0, 120) } };
+      return { key: `reviewer_${slug}_${kind}`.slice(0, 60), kind, family: familyOf(kind), risk: kind === "mcp" ? "external" : kind === "rule" || kind === "doc" || kind === "permission" ? "reversible" : "significant", source: "reviewer", sourceRef: "onboarding.review", title_he: String(m.title).slice(0, 120), why_he: `הסוקר: ${String(m.why ?? "").slice(0, 400)}${asked !== kind ? ` (הסוקר ביקש ${asked}; ${asked} נבנה רק מתבנית מהקטלוג, ולכן הבקשה נכתבת כשורת הנחיה)` : ""}`, what_he: `${KIND_HE[kind]} שהסוקר הצביע עליו כחסר; נבנה כמו כל רכיב אם יאושר.`, verifyHow_he: "לפי הסוג, כמו כל רכיב.", params: { template: kind === "skill" ? "process-skill" : kind === "agent" ? "process-agent" : undefined, text: kind === "rule" ? String(m.title) : undefined, fromReviewer: true, process: processKey ?? "reviewer", step: stepKey ?? slug, stepTitle: String(m.title).slice(0, 120) } };
     });
     return { seeds: out, redundant: (o.redundant ?? []).filter((r) => r?.key).map((r) => ({ key: String(r.key), why: String(r.why ?? "") })), costUsd: res.costUsd };
   } catch (e) {

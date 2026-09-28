@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { coveredByPattern, detectTools, diagnoseRepository, leaveReadable, sensitivePatterns } from "./diagnose.ts";
+import { cleanCiCommand, coveredByPattern, detectTools, diagnoseRepository, leaveReadable, lintersFromCi, sensitivePatterns } from "./diagnose.ts";
 import type { RepoProfile } from "./types.ts";
 
 /**
@@ -398,4 +398,21 @@ describe("hot spots need a history", () => {
       rmSync(root, { recursive: true, force: true });
     }
   }, 60_000);
+});
+
+describe("a workflow's run lines as commands", () => {
+  it("keeps a command, drops a comment, an environment line, a matrix-dependent line and a line the cut left hanging", () => {
+    expect(cleanCiCommand("cargo hack test --each-feature")).toBe("cargo hack test --each-feature");
+    expect(cleanCiCommand("# Remove dev-dependencies from Cargo.toml")).toBeNull();
+    expect(cleanCiCommand(". $HOME/.cargo/env")).toBeNull();
+    expect(cleanCiCommand("export RUSTFLAGS=-Dwarnings")).toBeNull();
+    expect(cleanCiCommand("cargo check --workspace --target ${{ matrix.target }}")).toBeNull();
+    const long = "valgrind --error-exitcode=1 --leak-check=full --show-leak-kinds=all --fair-sched=yes ./target/debug/test-mem-and-more";
+    expect(cleanCiCommand(long)).toBeNull();
+    expect(cleanCiCommand("cargo test --workspace --features full --lib")).toBe("cargo test --workspace --features full --lib");
+  });
+  it("reads the linters a CI runs", () => {
+    expect(lintersFromCi(["cargo fmt --all --check", "cargo clippy --workspace -- -D warnings", "cargo test"])).toEqual(["rustfmt (CI)", "clippy (CI)"]);
+    expect(lintersFromCi(["npm test"])).toEqual([]);
+  });
 });

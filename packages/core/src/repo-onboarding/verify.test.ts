@@ -420,3 +420,13 @@ describe("a command of the repository's own toolchain, on a machine without that
     expect(checkClaims("Build with `dotnet build`.", repo, { tools: none, file: "AGENTS.md" }).missing).toEqual(["dotnet build"]);
   });
 });
+
+describe("a build output under a folder that exists", () => {
+  it("is a real path once the build ran — the test command the diagnosis names points there", () => {
+    const repo = scratch();
+    write(repo, "Test/Alt.Test.CrmApi/Alt.Test.CrmApi.csproj", "<Project />");
+    write(repo, "AGENTS.md", "# x\n");
+    expect(checkClaims("Run `vstest.console Test/Alt.Test.CrmApi/bin/Debug/Alt.Test.CrmApi.dll` after the build.", repo, { tools: { "vstest.console": "C:/vs/vstest.console.exe" }, file: "AGENTS.md" }).missing).toEqual([]);
+    expect(checkClaims("The tests are in `Test/Nope/bin/Debug/Nope.dll`.", repo, { file: "AGENTS.md" }).missing).toEqual(["Test/Nope/bin/Debug/Nope.dll"]);
+  });
+});

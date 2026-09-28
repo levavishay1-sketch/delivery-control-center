@@ -600,10 +600,14 @@ const TEMPLATES: Record<string, Template> = {
         // An area of several units (PCF controls side by side): the command runs inside each, never in the parent that has no manifest.
         const cwds = strs(a, "cwds").map((c) => c.replace(/\/+$/, ""));
         const where = cwds.length
-          ? `Toolchain: ${toolchain}. Each folder below builds on its own — run the command from inside it (there is no build manifest in ${code(`${dir}/`)} itself):\n\n${cwds.map((c) => `- ${code(`${c}/`)}`).join("\n")}`
+          ? `Toolchain: ${toolchain}. Each folder below builds on its own — run the command from inside it (there is no build manifest in ${code(`${dir}/`)} itself):`
           : `Toolchain: ${toolchain}. This area builds on its own, from this folder:`;
         const after = toolchain === "node" ? `Run \`npm install\` in the folder first when it has no node_modules.\n\n` : "";
-        files.push({ path: `${dir}/CLAUDE.md`, content: fill(template("docs/area-CLAUDE.md"), { dir, where, command: str(a, "command") || "<the build command>", after, them: cwds.length ? "these" : "it" }) });
+        // One checkable line per folder — `cd <folder> && <command>` from the repository root — never a bare command the
+        // area folder itself cannot run (the Trade run failed `npm run build` said from Pcf/, which holds no package.json).
+        const cmd = str(a, "command") || "<the build command>";
+        const command = cwds.length ? cwds.map((c) => `cd ${c} && ${cmd}`).join("\n") : cmd;
+        files.push({ path: `${dir}/CLAUDE.md`, content: fill(template("docs/area-CLAUDE.md"), { dir, where, command, after, them: cwds.length ? "these" : "it" }) });
       }
       return { files, notes: files.length ? ["verify: each command runs from the folder that holds its manifest (package.json, .sln)"] : ["no areas given — nothing written"] };
     },

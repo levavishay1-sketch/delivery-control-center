@@ -174,6 +174,11 @@ const touches = (fact: string, correction: string) => fact === correction || fac
 
 const base = (p: string) => p.split("/").pop() ?? p;
 const join = (xs: unknown[], sep = ", ") => xs.map(String).join(sep);
+/** The CI commands "done" is measured by: the test, build, check and lint runs first, at most three — not the CI's environment lines. */
+export const doneCommands = (cmds: readonly string[]): string[] => {
+  const gate = cmds.filter((c) => /\b(test|nextest|build|check|clippy|fmt|lint|vet|verify|tsc|vitest|jest|pytest|phpunit)\b/.test(c) && !/\$\{\{|\$[A-Z_]{4,}/.test(c));
+  return (gate.length ? gate : [...cmds]).slice(0, 3);
+};
 
 export function ruleContext(d: RepoProfile): Record<string, unknown> {
   const g = d.git;
@@ -238,7 +243,7 @@ export function ruleContext(d: RepoProfile): Record<string, unknown> {
     gen_dirs: join(genList) || "-", gen_dirs_arr: genList,
     test_files: d.tests.test_files, test_frameworks: join(d.tests.frameworks.slice(0, 3)) || "-", test_frameworks_arr: d.tests.frameworks,
     test_cmd: testCmd, test_dirs: join(d.tests.test_dirs.map((t) => t[0])) || "-", test_dirs_arr: d.tests.test_dirs.map((t) => t[0]),
-    ci_systems: join(d.ci.systems), ci_systems_arr: d.ci.systems, ci_n: d.ci.workflow_count ?? d.ci.workflows.length, ci_cmds: d.ci.commands.slice(0, 3).join("; "), ci_cmds_arr: d.ci.commands.slice(0, 10),
+    ci_systems: join(d.ci.systems), ci_systems_arr: d.ci.systems, ci_n: d.ci.workflow_count ?? d.ci.workflows.length, ci_cmds: doneCommands(d.ci.commands).join("; "), ci_cmds_arr: d.ci.commands.slice(0, 10),
     mono_ws: monoWs, mono_n: d.monorepo.package_count ?? "?", mono_packages_arr: d.monorepo.packages,
     // All the packages or none: a list cut to a first few tells the agent the rest do not exist.
     which_packages_arr: d.monorepo.packages_truncated || monoN > WHICH_PACKAGE_MAX ? [] : d.monorepo.packages,

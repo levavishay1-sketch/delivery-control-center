@@ -506,7 +506,7 @@ describe("instructions", () => {
     expect(r.files.map((f) => f.path)).toEqual(["Pcf/CLAUDE.md"]);
     const c = r.files[0]!.content;
     expect(c).toContain("run the command from inside it (there is no build manifest in `Pcf/` itself)");
-    expect(c).toContain("- `Pcf/Grid/`\n- `Pcf/Json/`");
+    expect(c).toContain("cd Pcf/Grid && npm run build\ncd Pcf/Json && npm run build");
     expect(c).toContain("Do not build these with the rest");
   });
 

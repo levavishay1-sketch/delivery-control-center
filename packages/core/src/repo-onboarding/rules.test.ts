@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { applyRules, factsOf, genDirs, hotMultiAuthor, loadRules, ruleContext, stackTags } from "./rules.ts";
+import { applyRules, doneCommands, factsOf, genDirs, hotMultiAuthor, loadRules, ruleContext, stackTags } from "./rules.ts";
 import type { RepoProfile } from "./types.ts";
 
 /**
@@ -216,5 +216,12 @@ describe("the rules on the facts the research did not have", () => {
     expect(hotMultiAuthor(d)).toBeNull();
     d.git.commits_analyzed = 200;
     expect(hotMultiAuthor(d)?.dir).toBe("Shared/Framework");
+  });
+});
+
+describe("the CI commands 'done' is measured by", () => {
+  it("prefers the test, build and lint runs, at most three, and never a line that depends on a workflow variable", () => {
+    expect(doneCommands(["cargo hack test --each-feature", "cargo fuzz check --all-features", "cargo build --bin x", "cargo nextest run --features full", "cargo test --workspace --features $TOKIO_STABLE_FEATURES"])).toEqual(["cargo hack test --each-feature", "cargo fuzz check --all-features", "cargo build --bin x"]);
+    expect(doneCommands(["docker login", "helm upgrade"])).toEqual(["docker login", "helm upgrade"]);
   });
 });

@@ -668,6 +668,36 @@ const lintFormat = (t: Tree, lint: string[]): string[] => unique([...lint, ...LI
 /* ── CI ─────────────────────────────────────────────────────────── */
 
 const CI_COMMAND = /\b(test|build|lint|check|vet|verify|mvnw|gradlew|dotnet|pytest|npm|pnpm|yarn|cargo|go |make|composer|phpunit|terraform|pre-commit|ruff|mypy|tsc|vitest|jest|playwright)\b/;
+
+/**
+ * A `run:` line of a workflow as a command worth repeating: not a comment, not an environment line
+ * (`. $HOME/.cargo/env`, `export`, `source`), not a line that depends on the workflow's matrix
+ * (`${{ matrix.target }}`), and not one the 100-character cut left hanging on `-` or `/`
+ * (the tokio run wrote `valgrind … ./target/debug/` into AGENTS.md).
+ */
+export function cleanCiCommand(raw: string): string | null {
+  const cmd = raw.trim().replace(/\s+/g, " ");
+  if (!cmd || /^(#|\.\s|source\s|export\s|set\s|echo\s|cd\s|if\s|fi$|then$|else$|done$|do$)/.test(cmd)) return null;
+  if (/\$\{\{/.test(cmd)) return null;
+  const cut = cmd.slice(0, 100);
+  if (cut.length < cmd.length && /[-/\\|,:]$|\s-\S*$/.test(cut)) return null;
+  return cut;
+}
+
+/** The linters and formatters a CI runs — a repository without a lint config file can still lint on every push. */
+const CI_LINTERS: [RegExp, string][] = [
+  [/\bcargo\s+fmt\b/, "rustfmt"], [/\bcargo\s+clippy\b/, "clippy"], [/\bcargo\s+deny\b/, "cargo-deny"],
+  [/\beslint\b/, "eslint"], [/\bprettier\b/, "prettier"], [/\bbiome\b/, "biome"], [/\btsc\b.*--noEmit/, "tsc --noEmit"],
+  [/\bruff\b/, "ruff"], [/\bblack\b/, "black"], [/\bflake8\b/, "flake8"], [/\bmypy\b/, "mypy"], [/\bpylint\b/, "pylint"], [/\bisort\b/, "isort"],
+  [/\bgolangci-lint\b/, "golangci-lint"], [/\bgo\s+vet\b/, "go vet"], [/\bgofmt\b/, "gofmt"], [/\bstaticcheck\b/, "staticcheck"],
+  [/\bdotnet\s+format\b/, "dotnet format"], [/\bktlint\b/, "ktlint"], [/\bdetekt\b/, "detekt"], [/\bcheckstyle\b/, "checkstyle"], [/\bspotless\b/, "spotless"],
+  [/\brubocop\b/, "rubocop"], [/\bphpcs\b/, "phpcs"], [/\bphp-cs-fixer\b/, "php-cs-fixer"], [/\bpre-commit\b/, "pre-commit"], [/\bshellcheck\b/, "shellcheck"],
+];
+export function lintersFromCi(commands: readonly string[]): string[] {
+  const out = new Set<string>();
+  for (const c of commands) for (const [re, name] of CI_LINTERS) if (re.test(c)) out.add(`${name} (CI)`);
+  return [...out];
+}
 const CI_FILES: [string, string][] = [
   [".gitlab-ci.yml", "gitlab-ci"], ["azure-pipelines.yml", "azure-pipelines"], ["Jenkinsfile", "jenkins"],
   [".circleci/config.yml", "circleci"], [".travis.yml", "travis"], ["bitbucket-pipelines.yml", "bitbucket"],
@@ -685,8 +715,8 @@ function detectCi(t: Tree): RepoProfile["ci"] {
       const name = /^name:\s*(.+)$/m.exec(x);
       ci.workflows.push({ file: w, name: name ? (name[1] ?? "").trim().replace(/^["']+|["']+$/g, "") : baseOf(w) });
       for (const m of x.matchAll(/^\s*(?:-\s*)?run:\s*\|?\s*(.+)$/gm)) {
-        const cmd = (m[1] ?? "").trim();
-        if (CI_COMMAND.test(cmd)) inc(cmds, cmd.slice(0, 100));
+        const cmd = cleanCiCommand((m[1] ?? "").trim());
+        if (cmd && CI_COMMAND.test(cmd)) inc(cmds, cmd);
       }
     }
     ci.commands = mostCommon(cmds, 15).map(([c]) => c);
@@ -1292,6 +1322,7 @@ export async function diagnoseRepository(root: string, name: string, opts: Diagn
   Object.assign(stack.tests, testProjects(t, kept, keptSet, stack));
   const tools = detectTools(abs, opts.tools);
   log(`tools here: ${Object.entries(tools).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}`);
+  const ci = detectCi(t);
   const profile: RepoProfile = {
     name,
     path: abs,
@@ -1300,8 +1331,8 @@ export async function diagnoseRepository(root: string, name: string, opts: Diagn
     package_managers: [...stack.packageManagers].sort(),
     build: stack.build,
     tests: stack.tests,
-    lint_format: lintFormat(t, stack.lint),
-    ci: detectCi(t),
+    lint_format: [...new Set([...lintFormat(t, stack.lint), ...lintersFromCi(ci.commands)])],
+    ci,
     monorepo: detectMonorepo(t, stack),
     generated_code: generatedCode(t, scan, keptSet),
     secrets: secrets(t, scan),

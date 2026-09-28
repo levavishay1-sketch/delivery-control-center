@@ -286,6 +286,10 @@ function pathHolds(p: string, dir: string, fromDir: string, index: () => RepoInd
   if (existsFrom(dir, fromDir, p)) return true;
   const segs = p.replace(/^\.\//, "").split("/").filter(Boolean);
   if (OUTPUT_DIRS.has(segs[0]!.toLowerCase())) return true;
+  // A build output under a folder that exists (`Test/X/bin/Debug/X.dll`, `packages/a/dist/index.js`) is a real path once the
+  // build ran — a clean copy cannot hold it, and the test command the diagnosis itself names points there.
+  const outAt = segs.findIndex((s, i) => i > 0 && OUTPUT_DIRS.has(s.toLowerCase()));
+  if (outAt > 0 && existsFrom(dir, fromDir, segs.slice(0, outAt).join("/"))) return true;
   if (p.startsWith("./") || p.startsWith("../")) return false;
   if (segs.length === 1 && !p.endsWith("/")) return index().names.has(segs[0]!.toLowerCase());
   const tail = `/${segs.join("/").toLowerCase()}${p.endsWith("/") ? "/" : ""}`;
@@ -657,10 +661,14 @@ export function validateGitattributes(c: Component, dir: string): ComponentValid
 /* ── the local gate ────────────────────────────────────────────────── */
 
 /** The local gate is run for real — that is the verification loop. A gate that cannot run here fails: what was not run is not delivered. */
+/** A gate script builds the whole repository; a large .NET solution on a busy machine took more than 15 minutes in the Trade run. */
+const SCRIPT_TIMEOUT_MS = 30 * 60_000;
 export function validateScript(c: Component, dir: string): ComponentValidation {
   const file = c.files.find((f) => f.endsWith(".mjs") || f.endsWith(".sh"));
   if (!file) return result("הרצת הסקריפט", false, "לא נכתב");
-  const r = spawnSync(process.execPath, [path.join(dir, file)], { cwd: dir, encoding: "utf8", timeout: 15 * 60_000, env: { ...process.env, CI: "1" } });
+  const r = spawnSync(process.execPath, [path.join(dir, file)], { cwd: dir, encoding: "utf8", timeout: SCRIPT_TIMEOUT_MS, env: { ...process.env, CI: "1" } });
+  // Killed at the limit: the build did not finish here — said as that, not as a failed build.
+  if (r.status === null && r.signal) return result("הרצת סקריפט האימות", false, `ה-build לא הסתיים תוך ${Math.round(SCRIPT_TIMEOUT_MS / 60_000)} דקות במכונה הזאת — הסקריפט לא אומת כאן; על מכונת פיתוח או על ה-runner הוא רץ בלי המגבלה`);
   const out = `${r.stdout ?? ""}${r.stderr ?? ""}`;
   const verdict = out.split("\n").reverse().find((l) => l.startsWith("VERIFY:")) ?? "";
   if (r.status === 0) return result("הרצת סקריפט האימות", true, verdict || "עבר");

@@ -358,6 +358,16 @@ export async function buildComponents(input: BuildInput): Promise<BuildRun> {
   const facts = repoFacts(profile, input.repoName, null);
   const tools = toolsOf(profile);
   const cards = buildOrder(input.cards.filter((c) => c.status === "approved"));
+  // A reviewer's rule card carries only its Hebrew title; the line AGENTS.md gets is authored from the card — in English,
+  // naming the file or command it concerns — and checked against the copy like any other line (the tokio run wrote the title).
+  for (const c of cards) {
+    if (c.kind !== "rule" || !c.params.fromReviewer) continue;
+    try {
+      const line = (await input.author({ component: c, format: "One instruction line for AGENTS.md, in English, imperative, specific to this repository — name the file, folder or command it concerns exactly as it is in the copy — at most 160 characters. No leading dash, no quotes, no heading, nothing else." }))
+        .split("\n").map((l) => l.replace(/^[\s\-*>"'`]+|[\s"'`]+$/g, "")).find(Boolean)?.slice(0, 200);
+      if (line) c.params = { ...c.params, text: line, titleLine: c.params.text };
+    } catch { /* the title stays the line */ }
+  }
   const baseline = new Map(SHARED_FILES.map((f) => [f, readOrNull(dir, f)] as const));
   const ownBefore = new Map<string, string | null>();
   const owner = new Map<string, string>();
