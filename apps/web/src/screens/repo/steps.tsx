@@ -109,8 +109,9 @@ function DiagnoseBody(p: StepProps) {
   const { repoId, id: runId } = view.run;
   return (
     <div style={{ display: "grid", gap: 12 }}>
+      <CardTitle info="step_description">תיאור השלב</CardTitle>
+      <ComponentKindCatalog />
       <CardTitle info="profile_card">מה מצאנו</CardTitle>
-      {profile.summary && <p className="rd-lead" style={{ margin: 0 }}>{profile.summary}</p>}
       <ProfileFacts
         facts={profile.facts} corrections={profile.corrections} users={p.users} busy={p.busy} disabled={isOver(view)}
         onCorrect={(path, note) => void p.act(`fact:${path}`, () => correctProfileFact(repoId, runId, { path, note: note || null }))}
@@ -118,6 +119,63 @@ function DiagnoseBody(p: StepProps) {
       />
       <div className="rd-inline"><span className="ob-sub">תגיות סטאק<Info k="stack_tags" /></span><div className="rd-tags">{profile.tags.length ? profile.tags.map((t) => <span className="rd-chip" key={t}>{t}</span>) : <span className="ob-sub">אין</span>}</div></div>
       {r && <p className="ob-sub" style={{ margin: 0 }}>{fmtInt(r.facts)} עובדות · נמשך {fmtDuration(r.durationMs)} · {profile.corrections.length} תיקונים</p>}
+    </div>
+  );
+}
+
+/** The full, fixed catalog of what the diagnosis can end up justifying — every kind of component the system knows how to build, plain, on the page. Not an "i": it belongs to reading the diagnosis, not to one term. */
+const KIND_CATALOG: { group: string; items: { name: string; what: string }[] }[] = [
+  { group: "מלמדים את קלוד עובדה", items: [
+    { name: "שורת הנחיה", what: "שורה שנכנסת ל-AGENTS.md/CLAUDE.md, נטענת בכל סשן." },
+    { name: "מסמך", what: "קובץ נפרד (ב-docs/) עם הסבר מורחב על משהו — ארכיטקטורה, אינטגרציה." },
+    { name: "skill", what: "נוהל כתוב: איך עושים משהו חוזר, צעד-צעד. קלוד קורא אותו רק כשצריך." },
+  ] },
+  { group: "מונעים או אוכפים", items: [
+    { name: "hook", what: "סקריפט שרץ אוטומטית ועוצר פעולה אסורה בפועל — לא רק ממליץ." },
+    { name: "הרשאה", what: "כלל ב-settings.json שחוסם גישה לקריאה או עריכה של קבצים מסוימים." },
+    { name: "REVIEW.md", what: "כללים שסוקר-קוד נוסף (בוט או קלוד) בודק לפיהם." },
+  ] },
+  { group: "עוזרים נפרדים", items: [
+    { name: "סוכן", what: "\"עובד\" נפרד עם ההקשר שלו, שקלוד הראשי קורא לו למשימה ספציפית." },
+    { name: "LSP", what: "תוסף שנותן לקלוד ניווט מדויק בקוד — מי קורא לפונקציה הזו, מה הטיפוס שלה." },
+  ] },
+  { group: "חיבורים", items: [
+    { name: "MCP", what: "חיבור למערכת חיצונית (מסד נתונים, API) שקלוד יכול לשאול." },
+    { name: "plugin", what: "הרחבה מוכנה שמורידים ממקור חיצוני, למשל plugin רשמי." },
+  ] },
+  { group: "קבצי בסיס ותשתית", items: [
+    { name: "קובץ בסיס", what: "קובץ קוד ראשוני שקלוד יוצר, כמו בדיקה ראשונה כשאין אף בדיקה." },
+    { name: "הגדרות", what: "עצם קובץ settings.json — permissions ו-hooks מוגדרים." },
+    { name: ".gitattributes", what: "מסמן קבצים (כמו קוד מג'ונרט) כך ש-git וסקירות מתייחסים אליהם אחרת." },
+    { name: ".gitignore", what: "מוסיף שורות לקבצים שלא צריכים להיכנס למעקב git." },
+    { name: "תבנית PR", what: "התבנית שממלאים כשפותחים בקשת מיזוג." },
+    { name: "devcontainer", what: "הגדרת סביבת פיתוח קבועה, למשל לתוך Docker." },
+    { name: "סקריפט", what: "פקודה אחת שמריצה בדיקה או אימות — קובץ הרצה בפועל, לא נוהל." },
+  ] },
+  { group: "דורשים מהלקוח", items: [
+    { name: "מריץ", what: "לא קובץ — בקשה ממך: מכונה עם יכולת מסוימת (כמו Windows) שקלוד צריך גישה אליה." },
+  ] },
+  { group: "דיווח בלבד", items: [
+    { name: "דיווח", what: "הודעה לבעלים, לא רכיב פעיל — למשל \"לא מומלץ סוכן X כי אין דרך לבדוק אותו\"." },
+  ] },
+];
+
+function ComponentKindCatalog() {
+  return (
+    <div className="rd-kind-catalog">
+      <p style={{ margin: "0 0 8px", fontSize: 12.5 }}>
+        בשלב זה מתבצעת פעולה דטרמיניסטית שחוקרת את הריפו.
+        <br />על הממצאים של השלב הזה מתבססות ההחלטות על אילו רכיבים להטמיע בריפו.
+        <br />רכיבים אפשריים שיוקמו בעקבות השלב הזה:
+      </p>
+      {KIND_CATALOG.map((g) => (
+        <div key={g.group} style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 2 }}>{g.group}</div>
+          <ul className="rd-list plain" style={{ display: "grid", gap: 2, paddingInlineStart: 20 }}>
+            {g.items.map((it) => <li key={it.name}><b>{it.name}</b> — {it.what}</li>)}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }
