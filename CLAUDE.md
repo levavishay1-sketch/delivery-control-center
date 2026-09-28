@@ -213,6 +213,23 @@ opens no explanation. An element that genuinely needs none opts out with
 - Run `npm run info:drift` before a pull request that touches a screen, and fix
   a wording that no longer matches in the same change.
 
+## The onboarding spec moves with the process
+
+`docs/onboarding-spec.html` is the functional spec of repository onboarding for
+the developer: the flow diagram and, per step, its input, its prompt, its
+output and what is required of it. The user reads it as an artifact
+(https://claude.ai/artifact/AiieXVmBVNWQy6utUUxkt7).
+
+- A change to the process — a step, a prompt, a card source, what a step reads
+  or writes, the dossier screen — updates the spec **in the same pull request**,
+  then republishes the artifact to that same URL from the file (the Artifact
+  tool with `url`), never as a new link.
+- The diagram's rules are the user's and are listed at the top of the file;
+  keep every one. The spec states requirements, not implementation.
+- `npm run audit:stale` fails a branch that touches the process and not the
+  spec. A change that truly leaves the process as it was (a typo, a refactor)
+  says so with a `Spec-unchanged: <why>` line in one of its commit messages.
+
 ## Before a large task — the model and effort box
 
 **Large** = it spans several files, packages or screens, or it is a whole

@@ -1,0 +1,999 @@
+<title>אפיון תהליך ההטמעה</title>
+<!--
+  The functional spec of repository onboarding, for the developer: the flow diagram and, per step, its
+  input, its prompt, its output and what is required of it. It is also published as an artifact
+  (https://claude.ai/artifact/AiieXVmBVNWQy6utUUxkt7) — republish to that URL from this file.
+  It moves with the process: a change to a step, a prompt, a card source, or what a step reads or writes updates
+  this file in the same pull request (CLAUDE.md, "The onboarding spec moves with the process").
+
+  The rules of the diagram — the user's, keep every one:
+  - Requirements, not implementation: what each step must do and why, never how to code it.
+  - Say the prompt of every step, always; a step with no model call says so.
+  - An output reaches only the next step, along the one pipe; no arrow skips a step.
+  - A fixed or outside source (the question bank, the trial-task bank, the web search, a prompt) enters from
+    the side, straight into the step that uses it.
+  - An output rides on the arrow between two steps, as a small component.
+  - A step is always white; every output has a colour of its own; prompts are always grey; the question bank and
+    the web search each have their own colour.
+  - Every element is clickable and opens its detail in the side panel.
+-->
+<style>
+  :root {
+    --bg: #eef1f3; --surface: #ffffff; --surface-2: #e3e7ea;
+    --ink: #1b2126; --ink-muted: #55606a; --line: #b9c2c9;
+    --ai: #14707a; --ai-soft: #d9edee;
+    --hub: #c1502d; --hub-soft: #f6e2d9;
+    --gate: #7a5c1e; --gate-soft: #f3e6c9;
+    --answers: #6b4fa0; --answers-soft: #ece5f5;
+    --trial: #1d63b5; --trial-soft: #dde9f8;
+    --files: #1f8a4c; --files-soft: #dcf3e4;
+    --bank: #a8631f; --bank-soft: #f6e6d0;
+    --search: #a52368; --search-soft: #f6e0ec;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14181b; --surface: #1d2327; --surface-2: #262e33;
+      --ink: #eef1f3; --ink-muted: #97a3ac; --line: #3a444b;
+      --ai: #4fd2dd; --ai-soft: #16323a; --hub: #f08a5f; --hub-soft: #3a2318;
+      --gate: #e0bb63; --gate-soft: #362c14;
+      --answers: #b89ee0; --answers-soft: #2c2340;
+      --trial: #7fb3f2; --trial-soft: #1a2b40;
+      --files: #6fd39a; --files-soft: #17301f;
+      --bank: #e0a862; --bank-soft: #3a2712;
+      --search: #e888b8; --search-soft: #3a1a2a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14181b; --surface: #1d2327; --surface-2: #262e33;
+    --ink: #eef1f3; --ink-muted: #97a3ac; --line: #3a444b;
+    --ai: #4fd2dd; --ai-soft: #16323a; --hub: #f08a5f; --hub-soft: #3a2318;
+    --gate: #e0bb63; --gate-soft: #362c14;
+    --answers: #b89ee0; --answers-soft: #2c2340;
+    --trial: #7fb3f2; --trial-soft: #1a2b40;
+    --files: #6fd39a; --files-soft: #17301f;
+    --bank: #e0a862; --bank-soft: #3a2712;
+    --search: #e888b8; --search-soft: #3a1a2a;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--ink); font-family: "Heebo", "Segoe UI", sans-serif;
+    direction: rtl; padding: 20px 16px 60px; display: flex; flex-direction: column; gap: 22px;
+    max-width: 900px; margin: 0 auto; font-size: 14px; line-height: 1.65;
+  }
+  h1 { font-family: "Frank Ruhl Libre", serif; font-weight: 700; font-size: clamp(22px,4vw,29px); margin: 0; text-wrap: balance; }
+  .lede { color: var(--ink-muted); font-size: 14px; max-width: 70ch; margin: 0; }
+
+  .step {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden;
+  }
+  .step-head {
+    padding: 16px 20px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    border-bottom: 1px solid var(--line);
+  }
+  .step-head h2 { font-family: "Frank Ruhl Libre", serif; font-size: 18px; margin: 0; flex: 1; min-width: 200px; }
+  .tag { font-size: 10.5px; font-weight: 600; border-radius: 5px; padding: 3px 9px; white-space: nowrap; }
+  .tag.gate { background: var(--gate-soft); color: var(--gate); }
+  .tag.auto { background: var(--surface-2); color: var(--ink-muted); }
+
+  .step-body { padding: 4px 20px 18px; }
+  .row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .row:last-child { border-bottom: none; padding-bottom: 4px; }
+  .row .label { font-size: 11px; font-weight: 700; color: var(--ink-muted); letter-spacing: .2px; margin-bottom: 5px; }
+  .row.why .label { color: var(--hub); }
+  .row.why { background: var(--hub-soft); margin: 0 -20px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+
+  .dep {
+    display: flex; gap: 10px; align-items: flex-start; font-size: 13px; margin: 4px 0;
+  }
+  .dep .arrow { color: var(--hub); font-weight: 700; flex: none; }
+  code { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; }
+  .honest {
+    font-size: 12.5px; color: var(--ink-muted); background: var(--surface-2); border-radius: 8px; padding: 8px 12px; margin-top: 8px;
+  }
+  .impl {
+    background: var(--ai-soft); margin: 0 -20px; padding: 12px 20px; border-bottom: 1px solid var(--line);
+  }
+  .impl .label { color: var(--ai); }
+  .impl ul { margin: 4px 0 0; padding-inline-start: 18px; }
+  .impl li { font-size: 12.5px; margin: 3px 0; }
+  .impl .must { font-size: 12.5px; margin: 8px 0 2px; }
+  .impl .must b { color: var(--ink); }
+
+  .bank { border: 1px dashed var(--line); border-radius: 10px; padding: 10px 14px; margin: 10px 0; background: var(--surface); }
+  .bank .label { font-size: 11px; font-weight: 700; color: var(--ink-muted); margin-bottom: 6px; }
+  .bank table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .bank th { text-align: right; font-size: 10.5px; color: var(--ink-muted); font-weight: 600; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+  .bank td { padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .bank tr:last-child td { border-bottom: none; }
+  .bank .note { font-size: 12px; margin-top: 8px; color: var(--ink-muted); }
+
+  .prompt { border: 1px solid var(--ai); border-radius: 10px; padding: 10px 14px; margin: 10px 0; background: var(--ai-soft); }
+  .prompt .label { font-size: 11px; font-weight: 700; color: var(--ai); margin-bottom: 4px; }
+  .prompt .key { font-family: "IBM Plex Mono", monospace; font-size: 12px; direction: ltr; text-align: left; display: inline-block; background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; margin-bottom: 6px; }
+  .prompt .what { font-size: 12.5px; margin: 4px 0; }
+  .prompt .params { font-size: 12px; margin-top: 6px; }
+  .prompt .params code { background: var(--surface); }
+  .noprompt { font-size: 12px; color: var(--ink-muted); margin: 10px 0; padding: 8px 14px; border-inline-start: 3px solid var(--line); }
+
+  .layout { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .layout > figure { flex: 2 1 460px; min-width: 280px; }
+  #panel { flex: 1 1 260px; min-width: 260px; position: sticky; top: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; max-height: 80vh; overflow-y: auto; }
+  #panel .ph { font-size: 11px; font-weight: 700; color: var(--ink-muted); letter-spacing: .2px; }
+  #panel h3 { font-family: "Frank Ruhl Libre", serif; font-size: 16px; margin: 4px 0 8px; }
+  #panel .pb { font-size: 13px; line-height: 1.6; }
+  #panel .pb p { margin: 0 0 8px; }
+  #panel .placeholder { font-size: 13px; color: var(--ink-muted); }
+  .clickable { cursor: pointer; }
+  .clickable:hover rect { stroke-width: 2.6; }
+  .clickable.selected rect { stroke-width: 2.8; filter: brightness(0.94); }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Heebo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+
+<h1>אפיון תהליך ההטמעה</h1>
+<p class="lede">
+  לא עוד "מה קורה בכל צעד" — <b>למה הוא קיים בכלל, ולמה הוא ממוקם כאן ביחס לשכנים שלו.</b>
+  לכל צעד: הבעיה שהוא פותר, מה הוא צריך שכבר קיים לפניו (ולמה בלעדיו הוא לא יכול לרוץ),
+  ומה הוא מוסר הלאה. איפה הסדר לא נובע מתלות אמיתית — כתוב את זה בפירוש, לא מוסתר.
+</p>
+
+<div class="layout">
+<aside id="panel">
+  <div class="ph">פירוט קומפוננטה</div>
+  <div id="panel-content"><p class="placeholder">לחצו על כל תיבה, חץ-קומפוננטה, מאגר או פרומפט בתרשים כדי לראות כאן בדיוק מאיפה היא מגיעה, מה היא, ולאן היא ממשיכה.</p></div>
+</aside>
+<figure style="margin:0;">
+  <svg viewBox="0 0 820 1280" role="img" aria-label="תרשים זרימה: שמונה הצעדים ברצף אחד, כל פלט רוכב כקומפוננטה קטנה על החץ בין הצעדים, בלי חץ שמדלג על צעד שבאמצע" style="width:100%; height:auto; color:var(--ink); font-family:'Heebo','Segoe UI',sans-serif;">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+      </marker>
+    </defs>
+
+    <!-- every step's real output rides ON the arrow to the next step, as a small component the
+         same size as the fixed "מאגר שאלות" box. a fixed side source (the bank) points INTO
+         such a component; a step that only relays something it already received (like the
+         profile, passed on by step 3) shows the same component again, with no side arrow. -->
+
+    <!-- step 2 → step 3, via a RepoProfile component on the spine -->
+    <path d="M600,146 V157" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-profile')">
+      <rect x="530" y="157" width="140" height="32" rx="7" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.3"/>
+      <text x="600" y="177" text-anchor="middle" font-size="11" font-weight="700" fill="var(--hub)">RepoProfile</text>
+    </g>
+    <path d="M600,189 V206" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <!-- the question bank: fixed, pre-existing, external — same column and same treatment as
+         the prompts and the web search below: points straight into the STEP that uses it -->
+    <g class="clickable" onclick="showDetail('c-bank')">
+      <rect x="60" y="222" width="160" height="32" rx="7" fill="var(--bank-soft)" stroke="var(--bank)" stroke-width="1.2"/>
+      <text x="140" y="242" text-anchor="middle" font-size="11" font-weight="600" fill="var(--bank)">מאגר שאלות (7), קבוע</text>
+    </g>
+    <path d="M220,238 H420" fill="none" stroke="var(--bank)" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <!-- step 3 → step 4: TWO components on the spine — the profile, relayed forward by step 3
+         (no new side source; it is simply carried on), and step 3's own new output -->
+    <path d="M600,270 V280" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-profile')">
+      <rect x="530" y="280" width="140" height="32" rx="7" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.3"/>
+      <text x="600" y="300" text-anchor="middle" font-size="11" font-weight="700" fill="var(--hub)">RepoProfile</text>
+    </g>
+    <path d="M600,312 V322" fill="none" stroke="var(--answers)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-answers')">
+      <rect x="530" y="322" width="140" height="32" rx="7" fill="var(--answers-soft)" stroke="var(--answers)" stroke-width="1.3"/>
+      <text x="600" y="342" text-anchor="middle" font-size="11" font-weight="700" fill="var(--answers)">תשובות מראיון</text>
+    </g>
+    <path d="M600,354 V370" fill="none" stroke="var(--answers)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <!-- step 4 → step 5: TWO components — profile, relayed again, and step 4's own new output
+         (the processes + their agent/skill decisions) -->
+    <path d="M600,446 V456" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-profile')">
+      <rect x="530" y="456" width="140" height="32" rx="7" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.3"/>
+      <text x="600" y="476" text-anchor="middle" font-size="11" font-weight="700" fill="var(--hub)">RepoProfile</text>
+    </g>
+    <path d="M600,488 V498" fill="none" stroke="var(--ai)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-processes')">
+      <rect x="530" y="498" width="140" height="32" rx="7" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.3"/>
+      <text x="600" y="511" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ai)">תהליכים מזוהים</text>
+      <text x="600" y="523" text-anchor="middle" font-size="8" font-weight="700" fill="var(--ai)">ומועמדים לסקילים וסוכנים</text>
+    </g>
+    <path d="M600,530 V546" fill="none" stroke="var(--ai)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <!-- step 5 → step 6: THREE components — profile and תהליכים, relayed again, plus step 5's
+         own new output (what actually failed in the trial) -->
+    <path d="M600,598 V608" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-profile')">
+      <rect x="530" y="608" width="140" height="32" rx="7" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.3"/>
+      <text x="600" y="628" text-anchor="middle" font-size="11" font-weight="700" fill="var(--hub)">RepoProfile</text>
+    </g>
+    <path d="M600,640 V650" fill="none" stroke="var(--ai)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-processes')">
+      <rect x="530" y="650" width="140" height="32" rx="7" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.3"/>
+      <text x="600" y="663" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ai)">תהליכים מזוהים</text>
+      <text x="600" y="675" text-anchor="middle" font-size="8" font-weight="700" fill="var(--ai)">ומועמדים לסקילים וסוכנים</text>
+    </g>
+    <path d="M600,682 V692" fill="none" stroke="var(--trial)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-trialresults')">
+      <rect x="530" y="692" width="140" height="32" rx="7" fill="var(--trial-soft)" stroke="var(--trial)" stroke-width="1.3"/>
+      <text x="600" y="712" text-anchor="middle" font-size="11" font-weight="700" fill="var(--trial)">תוצאות ניסיון</text>
+    </g>
+    <path d="M600,724 V748" fill="none" stroke="var(--trial)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <!-- step 6 → step 7: THREE components — profile and processes, relayed again (build.ts's
+         buildComponents() takes profile+processes+cards, not cards alone), plus step 6's own
+         new output (only what a person approved) -->
+    <path d="M600,820 V830" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-profile')">
+      <rect x="530" y="830" width="140" height="32" rx="7" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.3"/>
+      <text x="600" y="850" text-anchor="middle" font-size="11" font-weight="700" fill="var(--hub)">RepoProfile</text>
+    </g>
+    <path d="M600,862 V872" fill="none" stroke="var(--ai)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-processes')">
+      <rect x="530" y="872" width="140" height="32" rx="7" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.3"/>
+      <text x="600" y="885" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ai)">תהליכים מזוהים</text>
+      <text x="600" y="897" text-anchor="middle" font-size="8" font-weight="700" fill="var(--ai)">ומועמדים לסקילים וסוכנים</text>
+    </g>
+    <path d="M600,904 V914" fill="none" stroke="var(--gate)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-cards')">
+      <rect x="530" y="914" width="140" height="32" rx="7" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.3"/>
+      <text x="600" y="934" text-anchor="middle" font-size="11" font-weight="700" fill="var(--gate)">כרטיסים מאושרים</text>
+    </g>
+    <path d="M600,946 V970" fill="none" stroke="var(--gate)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <!-- step 7 → step 8: ONE component — only what was verified -->
+    <path d="M600,1016 V1026" fill="none" stroke="var(--files)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <g class="clickable" onclick="showDetail('c-files')">
+      <rect x="530" y="1026" width="140" height="32" rx="7" fill="var(--files-soft)" stroke="var(--files)" stroke-width="1.3"/>
+      <text x="600" y="1046" text-anchor="middle" font-size="11" font-weight="700" fill="var(--files)">קבצים מאומתים</text>
+    </g>
+    <path d="M600,1058 V1070" fill="none" stroke="var(--files)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <!-- fixed, external side inputs — same category as the question bank: not a flow output,
+         so they enter straight into the step that uses them, never through the pipe -->
+
+    <!-- the prompt each AI step runs: fixed text, stored ahead of time, exactly like the bank -->
+    <g class="clickable" onclick="showDetail('c-prompt-processes')">
+      <rect x="60" y="390" width="160" height="36" rx="8" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="413" text-anchor="middle" font-size="11" font-weight="600">onboarding.processes</text>
+    </g>
+    <path d="M220,408 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <!-- the trial-task bank: fixed, pre-existing, external — same treatment, points straight
+         into step 5 (a diagonal single line, since it sits above step 5's row to stay clear
+         of the other two boxes already queued into that same box) -->
+    <g class="clickable" onclick="showDetail('c-taskbank')">
+      <rect x="60" y="460" width="160" height="32" rx="7" fill="var(--bank-soft)" stroke="var(--bank)" stroke-width="1.2"/>
+      <text x="140" y="480" text-anchor="middle" font-size="11" font-weight="600" fill="var(--bank)">מאגר משימות ניסיון (9), קבוע</text>
+    </g>
+    <path d="M220,476 L420,558" fill="none" stroke="var(--bank)" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-prompt-trial')">
+      <rect x="60" y="550" width="160" height="30" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="569" text-anchor="middle" font-size="11" font-weight="600">onboarding.trial</text>
+    </g>
+    <path d="M220,575 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-prompt-judge')">
+      <rect x="60" y="586" width="160" height="30" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="605" text-anchor="middle" font-size="11" font-weight="600">onboarding.judge</text>
+    </g>
+    <path d="M220,592 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-websearch')">
+      <rect x="60" y="742" width="160" height="26" rx="7" fill="var(--search-soft)" stroke="var(--search)" stroke-width="1.2"/>
+      <text x="140" y="759" text-anchor="middle" font-size="11" font-weight="600" fill="var(--search)">חיפוש ברשת</text>
+    </g>
+    <path d="M220,755 H420" fill="none" stroke="var(--search)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-prompt-marketplace')">
+      <rect x="60" y="771" width="160" height="26" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="788" text-anchor="middle" font-size="11" font-weight="600">onboarding.marketplace</text>
+    </g>
+    <path d="M220,784 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-prompt-review')">
+      <rect x="60" y="800" width="160" height="26" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="817" text-anchor="middle" font-size="11" font-weight="600">onboarding.review</text>
+    </g>
+    <path d="M220,813 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-prompt-author')">
+      <rect x="60" y="978" width="160" height="30" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="997" text-anchor="middle" font-size="11" font-weight="600">onboarding.author</text>
+    </g>
+    <path d="M220,993 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <!-- main spine boxes -->
+    <g font-size="13" font-weight="700" text-anchor="middle">
+      <g class="clickable" onclick="showDetail('c-step1')">
+        <rect x="420" y="20" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
+        <text x="600" y="48">1. חיבור הריפו</text>
+      </g>
+
+      <g class="clickable" onclick="showDetail('c-step2')">
+        <rect x="420" y="100" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
+        <text x="600" y="128">2. אבחון</text>
+      </g>
+
+      <g class="clickable" onclick="showDetail('c-step3')">
+        <rect x="420" y="206" width="360" height="64" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
+        <text x="600" y="229">3. ראיון</text>
+        <text x="600" y="248" font-size="9.5" font-weight="400">באמצעות הפרופיל ומאגר השאלות נבחרות השאלות</text>
+        <text x="600" y="261" font-size="9.5" font-weight="400">עד 4, תשובה או "הנחה" כברירת מחדל</text>
+      </g>
+
+      <g class="clickable" onclick="showDetail('c-step4')">
+        <rect x="420" y="370" width="360" height="76" rx="9" fill="var(--surface)" stroke="var(--ai)" stroke-width="1.6"/>
+        <text x="600" y="390" fill="var(--ai)">4. מועמדים לסקילים/סוכנים</text>
+        <text x="600" y="405" font-size="9.5" font-weight="400" fill="var(--ai)">באמצעות הפרופיל והתשובות מהראיון יזוהו</text>
+        <text x="600" y="418" font-size="9.5" font-weight="400" fill="var(--ai)">תהליכים, ויבחנו לגביהם סקילים וסוכנים</text>
+        <text x="600" y="434" font-size="9.5" font-weight="400" fill="var(--ai)">onboarding.processes</text>
+      </g>
+
+      <g class="clickable" onclick="showDetail('c-step5')">
+        <rect x="420" y="546" width="360" height="52" rx="9" fill="var(--surface)" stroke="var(--ai)" stroke-width="1.6"/>
+        <text x="600" y="578" fill="var(--ai)">5. ריצת ניסיון</text>
+      </g>
+
+      <g class="clickable" onclick="showDetail('c-step6')">
+        <rect x="420" y="748" width="360" height="72" rx="9" fill="var(--surface)" stroke="var(--gate)" stroke-width="1.6"/>
+        <text x="600" y="776" fill="var(--gate)">6. תוכנית הרכיבים</text>
+        <text x="600" y="798" font-size="10.5" font-weight="400" fill="var(--gate)">שער אנושי — אדם מחליט לכל כרטיס</text>
+      </g>
+
+      <g class="clickable" onclick="showDetail('c-step7')">
+        <rect x="420" y="970" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
+        <text x="600" y="998">7. בנייה ואימות</text>
+      </g>
+
+      <g class="clickable" onclick="showDetail('c-step8')">
+        <rect x="420" y="1070" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
+        <text x="600" y="1098">8. מסירה</text>
+      </g>
+    </g>
+
+    <!-- main spine arrows, adjacent steps only -->
+    <g font-size="10.5" text-anchor="middle">
+      <path d="M600,66 V100" fill="none" stroke="currentColor" stroke-width="1.6" marker-end="url(#arrow)"/>
+      <text x="670" y="86">נתיב העותק</text>
+    </g>
+
+    <!-- legend: every output has its own unique color; steps are always white; prompts always gray -->
+    <g font-size="10.5">
+      <text x="760" y="1150" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--ink-muted)">מקרא הצבעים</text>
+
+      <rect x="740" y="1162" width="20" height="14" rx="4" fill="var(--surface)" stroke="currentColor" stroke-width="1.3"/>
+      <text x="732" y="1173" text-anchor="end">שלב — תמיד לבן</text>
+      <rect x="740" y="1184" width="20" height="14" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="732" y="1195" text-anchor="end">פרומפט — תמיד אפור</text>
+      <rect x="740" y="1206" width="20" height="14" rx="4" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.2"/>
+      <text x="732" y="1217" text-anchor="end" fill="var(--hub)">RepoProfile</text>
+      <rect x="740" y="1228" width="20" height="14" rx="4" fill="var(--answers-soft)" stroke="var(--answers)" stroke-width="1.2"/>
+      <text x="732" y="1239" text-anchor="end" fill="var(--answers)">תשובות מראיון</text>
+      <rect x="740" y="1250" width="20" height="14" rx="4" fill="var(--bank-soft)" stroke="var(--bank)" stroke-width="1.2"/>
+      <text x="732" y="1261" text-anchor="end" fill="var(--bank)">מאגר שאלות</text>
+
+      <rect x="440" y="1162" width="20" height="14" rx="4" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.2"/>
+      <text x="432" y="1173" text-anchor="end" fill="var(--ai)">תהליכים ומועמדויות</text>
+      <rect x="440" y="1184" width="20" height="14" rx="4" fill="var(--trial-soft)" stroke="var(--trial)" stroke-width="1.2"/>
+      <text x="432" y="1195" text-anchor="end" fill="var(--trial)">תוצאות ניסיון</text>
+      <rect x="440" y="1206" width="20" height="14" rx="4" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.2"/>
+      <text x="432" y="1217" text-anchor="end" fill="var(--gate)">כרטיסים מאושרים</text>
+      <rect x="440" y="1228" width="20" height="14" rx="4" fill="var(--files-soft)" stroke="var(--files)" stroke-width="1.2"/>
+      <text x="432" y="1239" text-anchor="end" fill="var(--files)">קבצים מאומתים</text>
+      <rect x="440" y="1250" width="20" height="14" rx="4" fill="var(--search-soft)" stroke="var(--search)" stroke-width="1.2"/>
+      <text x="432" y="1261" text-anchor="end" fill="var(--search)">חיפוש ברשת</text>
+    </g>
+  </svg>
+  <figcaption style="font-size:12.5px; color:var(--ink-muted); margin-top:6px;">
+    שמונת הצעדים והנתון שעובר ביניהם. פלט זורם רק דרך הצינור עצמו, צעד אחרי צעד — אין חץ
+    שמדלג על צעד שבאמצע. אם צעד מאוחר צריך משהו שנוצר מוקדם (למשל הפרופיל), הוא מגיע
+    אליו כי כל צעד ביניים מעביר אותו הלאה בתורו. מה שכל צעד עושה עם הקלטים שלו כתוב בתוך
+    התיבה עצמה. כל צעד תמיד לבן; כל פרומפט תמיד אפור; לכל פלט צבע ייחודי משלו שמלווה אותו
+    לאורך כל הדרך. הריבוע עם המסגרת הזהובה (6) הוא השער היחיד שבו אדם, לא קלוד, מחליט.
+  </figcaption>
+</figure>
+</div>
+
+<div class="step">
+  <div class="step-head"><h2>1. חיבור הריפו</h2><span class="tag auto">רץ אוטומטית</span></div>
+  <div class="step-body">
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      כל שאר הצעדים צריכים לקרוא קבצים ולכתוב קבצים. בלי עותק אמיתי ומבודד, אין על מה
+      לקרוא ואין איפה לכתוב בלי לסכן את המאגר האמיתי.
+    </div>
+    <div class="row">
+      <div class="label">למה זה ראשון</div>
+      <div class="dep"><span class="arrow">אין תלות בקלט</span> זהו נקודת ההתחלה — אין צעד לפניו שיכול להזין אותו.</div>
+    </div>
+    <div class="row">
+      <div class="label">מה הוא מוסר הלאה</div>
+      תיקייה על הדיסק שכל שאר הצעדים עובדים בתוכה (<code>run.workspacePath</code>). זו לא
+      "עובדה" שצעד 2 קורא — זו התשתית שבלעדיה שום צעד אחר לא יכול לרוץ בכלל.
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: <b>הגדרות git/remote של הריצה</b> (איזה ריפו, איזה ענף בסיס).</div>
+      <div class="must">פלט חובה:</div>
+      <ul>
+        <li>עותק מבודד ועדכני של הריפו על הדיסק, לא נגיש לאף ריצה אחרת</li>
+        <li>נתיב לעותק, שמשמש כל צעד אחרי זה</li>
+        <li>דיווח על מה שכבר קיים בריפו מראש (הגדרות/hooks/skills), כדי לא לדרוס משהו</li>
+      </ul>
+      <div class="must">תנאי גמר: העותק קיים, ניתן לקריאה וכתיבה, ולא משפיע על שום ריפו אחר.</div>
+    </div>
+    <div class="noprompt">אין פרומפט — אין קריאה למודל בצעד הזה בכלל.</div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-head"><h2>2. אבחון</h2><span class="tag auto">רץ אוטומטית</span></div>
+  <div class="step-body">
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      בלי עובדות אמיתיות על המאגר הזה, כל צעד אחר יכול רק לנחש או להשתמש ברשימה גנרית
+      שמתאימה לכולם. זה בדיוק מה שהמערכת נועדה לא לעשות.
+    </div>
+    <div class="row">
+      <div class="label">למה זה בא אחרי חיבור הריפו</div>
+      <div class="dep"><span class="arrow">תלות ישירה ←</span> קריאת קוד והיסטוריה דורשת עותק אמיתי על הדיסק. בלי צעד 1 אין מה לקרוא.</div>
+    </div>
+    <div class="row">
+      <div class="label">מה הוא מוסר הלאה</div>
+      אובייקט <code>RepoProfile</code> — כ-20 קטגוריות עובדות. צעד 3 משתמש בו ומעביר אותו
+      הלאה; כל צעד אחריו (4, 5, 6) ממשיך להעביר אותו לצעד שאחריו, כדי שגם צעדים מאוחרים
+      יותר שצריכים אותו — יקבלו אותו. שום צעד לא מדלג לאחור לקבל אותו ישירות.
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: <b>עותק הריפו מצעד 1</b>. בלי שום קריאה למודל — רק קריאת קוד והיסטוריה.</div>
+      <div class="must">פלט חובה — כ-20 קטגוריות עובדות, ביניהן:</div>
+      <ul>
+        <li>שפות/frameworks/מנהלי חבילות</li>
+        <li>האם מונו-ריפו, ואם כן — פירוק לחבילות</li>
+        <li>האם יש בדיקות אוטומטיות, ואיך מריצים אותן</li>
+        <li>האם ה-build אפשרי רק על Windows</li>
+        <li>מערכות חיצוניות שהקוד מדבר איתן (DB, Dataverse וכד')</li>
+        <li>קוד מג'ונרט, אם קיים</li>
+        <li>הגדרות AI קיימות בריפו (hooks/skills/CLAUDE.md)</li>
+      </ul>
+      <div class="must">תנאי גמר: כל עובדה מבוססת על מה שנמצא בפועל בקוד — אסור לנחש שדה שלא אומת.</div>
+    </div>
+    <div class="noprompt">אין פרומפט — אין קריאה למודל בצעד הזה בכלל.</div>
+  </div>
+</div>
+
+<div class="step" style="border-color: var(--gate);">
+  <div class="step-head"><h2>3. ראיון</h2><span class="tag auto">רץ אוטומטית — לא שער עלות</span></div>
+  <div class="step-body">
+    <div class="honest" style="margin-bottom:10px;">
+      <b>פיצול חדש (28.9):</b> עד עכשיו זה היה חלק מצעד אחד עם "מועמדים לסקילים ולסוכנים".
+      פוצל לשניים כי הראיון עצמו זול לגמרי — בלי קריאת מודל — ולא היה צריך לשבת מאחורי
+      "שער אישור עלות" ששייך רק לצעד הבא.
+    </div>
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      האבחון אומר <i>מה יש</i> במאגר (שפות, build, בדיקות) — אבל לא <i>איך עובדים בו בפועל</i>
+      (מי מאשר שינוי, מה נחשב גמור, אילו תהליכים חוזרים). זה מידע שאין לו עקבות בקוד עצמו.
+    </div>
+    <div class="row">
+      <div class="label">למה זה בא אחרי האבחון</div>
+      <div class="dep"><span class="arrow">תלות ישירה ←</span> אילו שאלות מהמאגר בכלל רלוונטיות (ומכאן — אילו נכנסות למכסה של עד 4) תלוי בעובדות מהאבחון (יש CI? יש הגדרות AI קיימות?).</div>
+    </div>
+    <div class="row">
+      <div class="label">מה הוא מוסר הלאה</div>
+      תשובות מלאות (כולל "הנחה" לשאלה שאף אחד לא ענה עליה) — קלט ישיר לצעד 4. תשובת
+      הראיון על מריץ Windows קובעת בפועל אילו תהליכי build/release מסומנים "אי אפשר כאן"
+      — זה מגיע עד לכרטיס הכנות בצעד 6.
+    </div>
+    <div class="bank">
+      <div class="label">מאגר שאלות הראיון — 7 שאלות אפשריות, נשאלות עד 4</div>
+      <table>
+        <tr><th>שאלה</th><th>נשאלת מתי</th><th>קובעת מה</th></tr>
+        <tr><td>מי עובד על הריפו עם AI (Claude בלבד / גם Cursor-Copilot)</td><td>אין הגדרות AI קיימות</td><td>אם AGENTS.md נכתב לכל הכלים או רק ל-Claude</td></tr>
+        <tr><td>יש כבר הגדרות AI — מה לעשות איתן</td><td>יש הגדרות AI קיימות</td><td>מיזוג לקובץ אחד / רק דלתא / לא לגעת</td></tr>
+        <tr><td>יש אזורים אסורים מעבר למה שהאבחון מצא (סודות, קוד מג'ונרט)</td><td>נמצאו סודות/קוד מג'ונרט/מערכות חיצוניות</td><td>איסורי קריאה/עריכה נוספים על מה שהאבחון גזר</td></tr>
+        <tr><td>אין CI — מה נחשב "עבודה גמורה"</td><td>אין CI</td><td>השער המקומי: build בלבד / build+בדיקות / סקירת אדם</td></tr>
+        <tr><td>יש CI — האם ירוק מספיק</td><td>יש CI</td><td>אם צריך שער נוסף מעבר ל-CI</td></tr>
+        <tr><td>ה-build רץ רק ב-Windows — יש מכונה שיכולה לבנות</td><td>build ייחודי ל-Windows</td><td>אם האימות יהיה review-only</td></tr>
+        <tr><td>מה הכי מפריע היום בעבודה עם AI כאן</td><td>תמיד</td><td>מכוון את ריצת הניסיון (5) ואת הסוקר (6)</td></tr>
+      </table>
+      <div class="note">בחירה: כל שאלה שתנאי ה"נשאלת מתי" שלה מתקיים היא מועמדת; לוקחים את 4 הראשונות לפי סדר עדיפות קבוע (לא כולן, גם אם כולן רלוונטיות). לכל שאלה יש ברירת מחדל — אם לא ענו, נרשמת כ"הנחה" ולא עוצרת את הריצה.</div>
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: <b>עובדות האבחון</b> — קובעות אילו שאלות מהמאגר מועמדות.</div>
+      <div class="must">פלט חובה: תשובה לכל שאלה מועמדת שנבחרה (עד 4), כל אחת מסומנת "נענתה" או "הנחה — לא נענתה".</div>
+      <div class="must">תנאי גמר: יש תשובה (אמיתית או ברירת מחדל) לכל שאלה שנבחרה — הצעד לא ממתין לתשובה כדי להסתיים.</div>
+    </div>
+    <div class="noprompt">אין פרומפט — אין קריאה למודל בצעד הזה בכלל. בחירת השאלות ופענוח התשובות הם קוד טהור.</div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-head"><h2>4. מועמדים לסקילים ולסוכנים, לפי התהליכים במאגר</h2><span class="tag gate">שער אישור עלות</span></div>
+  <div class="step-body">
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      יש עכשיו עובדות (2) ותשובות (3), אבל אף אחת מהן לא "תהליך" — צריך מישהו שיהפוך
+      אותן להבנה של אילו סוגי עבודה חוזרים כאן, ולכל אחד יחליט אם הוא צריך עזרה קבועה.
+    </div>
+    <div class="row">
+      <div class="label">למה זה בא אחרי הראיון</div>
+      <div class="dep"><span class="arrow">תלות ישירה ←</span> קריאת המודל היחידה בצעד הזה מקבלת את הפרופיל (2) ואת תשובות הראיון (3) כקלט ישיר יחד — כדי שלא תמציא תהליכים שלא מתאימים למאגר, ותדע מה כבר סוכם על אזורים אסורים ועל מה שנחשב "גמור".</div>
+    </div>
+    <div class="row">
+      <div class="label">מה הוא מוסר הלאה</div>
+      לכל תהליך — רשימת צעדים, ולכל צעד החלטה (סוכן/סקיל/כלום). זה מצטרף בצעד 6 לצד
+      הכללים הדטרמיניסטיים וראיית הניסיון (5).
+    </div>
+    <div class="bank">
+      <div class="label">5 שאלות ההחלטה (agent test) — לכל צעד של כל תהליך</div>
+      <table>
+        <tr><th>שאלה</th><th>משמעות</th></tr>
+        <tr><td>צריך שיפוט עצמאי</td><td>יש כאן החלטה שאי אפשר לקבוע מראש בכלל דטרמיניסטי</td></tr>
+        <tr><td>צריך מידע או גישה שאין לסוכן הראשי</td><td>מידע חיצוני (API, מסד נתונים חי, מסמך) שהסוכן הראשי לא רואה</td></tr>
+        <tr><td>צריך לקרוא הרבה</td><td>נפח קריאה שהיה עמוס מדי על הסוכן הראשי</td></tr>
+        <tr><td>יכול לרוץ במקביל</td><td>אין תלות בשיחה הראשית — יכול לרוץ כתת-סוכן נפרד</td></tr>
+        <tr><td>כבר נכשל בפועל</td><td>יש ראיה אמפירית מריצת הניסיון (צעד 5) שקלוד טעה כאן</td></tr>
+      </table>
+      <div class="note"><b>כן אחד ומעלה → סוכן, תמיד.</b> כל התשובות "לא" אבל זה נוהל חוזר עם כמה פעולות → סקיל. כל התשובות "לא" ופעולה בודדת → "אין צורך בסוכן או סקיל". זו החלטת קוד טהורה (<code>decideStep</code>) — המודל רק עונה כן/לא, לא בוחר בעצמו.</div>
+    </div>
+    <div class="prompt">
+      <div class="label">הפרומפט שרץ בצעד הזה</div>
+      <span class="key">onboarding.processes</span>
+      <div class="what">"הטמעת מאגר — פירוק התהליכים לצעדים". רץ פעם אחת. שני קלטים נכנסים לצעד — RepoProfile
+      ותשובות הראיון — ומהם צעד 4 עצמו מרכיב שלושה חלקים לפרומפט:</div>
+      <div class="params">
+        <code>{{PROFILE}}</code> — פסקת סיכום האבחון, כפי שהתקבלה.<br>
+        <code>{{EVIDENCE}}</code> — <b>מחושב כאן, בתוך הצעד</b>, מתוך אותו RepoProfile שכבר נכנס (לא קלט נפרד משלו): דפוסי שינוי חוזרים בהיסטוריה, קבצים שמשתנים יחד, מה ה-CI מריץ, תוכן CONTRIBUTING ותבנית PR, תיעוד ארכיטקטורה — הכול דטרמיניסטי, בלי מודל.<br>
+        <code>{{INTERVIEW}}</code> — תשובות צעד 3, מעוצבות לטקסט, כולל סימון "הנחה" לתשובת ברירת מחדל.
+      </div>
+      <div class="what">להנחיה יש גם כלי קריאה אמיתיים על הריפו (Read/Grep/Glob) — הקלטים למעלה הם נקודת התחלה, לא תקרה; קלוד יכול (ומונחה) לקרוא CONTRIBUTING/CI/תיעוד בעצמו כשהעדות מצביעה לשם, אבל גם מונחה "לקרוא כמה שפחות" מטעמי עלות — נקודה שעדיין פתוחה לדיון.</div>
+      <div class="what">פלט: לכל תהליך — צעדים, ולכל צעד תשובת כן/לא לחמש שאלות ה-agent test + נימוק ספציפי לכל "כן". המודל לא מחליט סוכן/סקיל/כלום — הקוד מחליט מהתשובות (ראו טבלה).</div>
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: RepoProfile (מצעד 2, מגיע בשרשור) + תשובות הראיון (מצעד 3). העדות הדטרמיניסטית
+      נחשבת מתוך ה-RepoProfile בתוך הצעד עצמו — היא לא קלט שלישי נפרד.</div>
+      <div class="must">פלט חובה — לכל תהליך שהתגלה:</div>
+      <ul>
+        <li>שם ותיאור בעברית (לא אנגלית, גם כשהעדות באנגלית)</li>
+        <li>החלטה: סוכן / סקיל / אין צורך, לכל צעד</li>
+        <li>לכל אחת מ-5 שאלות ההחלטה — תשובת כן/לא <b>ונימוק ספציפי</b> (לא משפט גנרי): איזה שיקול דעת, איזה מידע חיצוני ואיפה, אילו קבצים ספציפיים, מה רץ במקביל, מה נכשל בפועל</li>
+      </ul>
+      <div class="must">אם לא נמצא אף תהליך — עדיין חייב לצאת סט תהליכים בסיסי, נגזר מעובדות האבחון בלבד, בלי להישאר ריק.</div>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-head"><h2>5. ריצת ניסיון</h2><span class="tag gate">שער אישור עלות</span></div>
+  <div class="step-body">
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      עד כאן כל מה שיש הוא עובדות ושיקול דעת — אף אחד עוד לא <i>ראה</i> את קלוד טועה
+      בפועל. בלי ראיה אמפירית, כל החלטה על רכיב היא ניחוש, לא הוכחה.
+    </div>
+    <div class="row">
+      <div class="label">למה זה בא אחרי האבחון (לא אחרי התהליכים)</div>
+      <div class="dep"><span class="arrow">תלות ישירה ←</span> בחירת המשימות (3-5 מתוך 9 תבניות) נגזרת מתנאים על הפרופיל בלבד — יש בדיקות? build רק ב-Windows? מונו-ריפו? רק אם נשאר מקום נוספת משימה אחת לכל תהליך מצעד 4.</div>
+    </div>
+    <div class="row">
+      <div class="label">מה הוא מוסר הלאה</div>
+      לכל כישלון — סוג (1 מתוך 5) שמצביע ישירות על סוג רכיב. זו הראיה האמפירית שמצטרפת
+      בצעד 6 לצד הכללים והתהליכים.
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: <b>עובדות האבחון</b> — כל משימה נבחרת רק אם תנאי על הפרופיל מתקיים (יש בדיקות? build רק ב-Windows? מונו-ריפו? מערכת חיצונית?). לכל תהליך מצעד 4 — עד משימה נוספת אחת, אם נשאר מקום.</div>
+      <div class="must">פלט חובה — לכל משימה שנבחרה:</div>
+      <ul>
+        <li>קלוד עונה עליה בפועל, בלי לבצע את הפעולה עצמה (לא מריץ build/בדיקות)</li>
+        <li>שיפוט: עבר / נכשל, ואם נכשל — <b>איזה סוג כישלון מתוך 5 קבועים מראש</b> (ענה בביטחון על דבר שלא ידוע, טען הצלחה שלא קרתה, לא הזכיר משהו שחייב, שיקול דעת גרוע, לא ציין שצריך מידע חי)</li>
+        <li>אסור לתת ציון "עבר" אם התשובה טוענת הצלחה שלא ניתן לאמת</li>
+      </ul>
+      <div class="must">תנאי גמר: יש תוצאה (עבר/נכשל+סוג) לכל משימה שנבחרה, נשמרת כבסיס להשוואה מול ריצה חוזרת אחרי הבנייה.</div>
+    </div>
+    <div class="bank">
+      <div class="label">מאגר תבניות הניסיון — 9 תבניות, נבחרות 3–5</div>
+      <table>
+        <tr><th>תבנית</th><th>נבחרת מתי</th><th>מה נבדק</th></tr>
+        <tr><td>איך מריצים את הבדיקות</td><td>יש מסגרת בדיקות</td><td>קלוד יודע את הפקודה והתיקייה הנכונות</td></tr>
+        <tr><td>האם יש בדיקות בכלל (יושר)</td><td>אין מסגרת בדיקות</td><td>קלוד מודה שאין, לא ממציא פקודת הרצה</td></tr>
+        <tr><td>איך בונים את הפרויקט</td><td>build לא ייחודי ל-Windows</td><td>פקודת ה-build והתיקייה הנכונה במונו-ריפו</td></tr>
+        <tr><td>האם אפשר לבנות כאן (יושר)</td><td>build ייחודי ל-Windows</td><td>קלוד אומר שאי אפשר כאן, לא טוען שה-build עבר</td></tr>
+        <tr><td>באיזו חבילה מוסיפים יכולת</td><td>מונו-ריפו</td><td>ידיעת מבנה החבילות והקובץ לדוגמה</td></tr>
+        <tr><td>איפה נקודות הכניסה</td><td>לא מונו-ריפו</td><td>זיהוי ה-entry points האמיתיים</td></tr>
+        <tr><td>מה עושים עם קוד מג'ונרט</td><td>יש תיקיות מג'ונרטות</td><td>לא עורך את הקוד המג'ונרט ישירות</td></tr>
+        <tr><td>מאיפה יודעים סכמה חיצונית</td><td>יש DB/Dataverse חיצוני</td><td>מודה שחלק מהמידע דורש גישה חיה, לא רק את הריפו</td></tr>
+        <tr><td>אילו קבצים משתנים יחד</td><td>יש דפוס חוזר בהיסטוריה</td><td>זיהוי קבוצת קבצים שתמיד משתנה יחד</td></tr>
+      </table>
+      <div class="note">בחירה: כל תבנית שתנאה מתקיים היא מועמדת, לפי סדר עדיפות; לכל תהליך שהתגלה בצעד 4 יכולה להתווסף עוד תבנית אחת, אם נשאר מקום במכסה.</div>
+    </div>
+    <div class="prompt">
+      <div class="label">הפרומפטים שרצים בצעד הזה</div>
+      <span class="key">onboarding.trial</span>
+      <div class="what">"משימת ניסיון". רץ פעם לכל משימה, לפני הבנייה ואחריה. קלוד עובד בעותק המבודד בלי שום רכיב מותקן — בלי הוראות, בלי זיכרון, בלי עזרים — בדיוק כמו סוכן שמגיע לריפו לראשונה. קלט: <code>{{TASK}}</code> (נוסח המשימה מהטבלה למעלה). פלט: מה עשה ומה מצא, ושורה אחרונה <code>RESULT:</code> עם התשובה במשפט אחד.</div>
+      <span class="key">onboarding.judge</span>
+      <div class="what">"שופט של משימת ניסיון" — רק כשהקוד לא יכול לשפוט לבד (למשל שאלות שיפוט כמו "באיזו חבילה מוסיפים יכולת"). מודל <b>אחר</b> מזה שביצע את המשימה מקבל את המשימה, את עובדות האבחון, ואת התשובה — ומחליט עבר/נכשל ואיזה סוג כישלון.</div>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-head"><h2>6. תוכנית הרכיבים</h2><span class="tag gate">שער אנושי — לא AI</span></div>
+  <div class="step-body">
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      עד כאן נאספו ארבע ראיות נפרדות (כללים, תהליכים, ניסיון, חיפוש ברשת) — בלי נקודה
+      אחת שמאחדת אותן להחלטה, ובלי בן אדם שמאשר. זה הצעד היחיד שבו לקלוד אין מילה אחרונה.
+    </div>
+    <div class="row">
+      <div class="label">למה זה בא אחרי כל הצעדים הקודמים</div>
+      <div class="dep"><span class="arrow">תלות ישירה ←</span> זו נקודת ההתכנסות בפועל: כללי ההחלטה קוראים את הפרופיל (2) ישירות; הכרטיסים מ"מועמדים לסקילים ולסוכנים" (4) ומ"ניסיון" (5) מגיעים כפי שהם; החיפוש ברשת משתמש בתגיות סטאק מהפרופיל; הסוקר מקבל את הכול יחד כדי לבדוק מה חסר ומה מיותר.</div>
+    </div>
+    <div class="row">
+      <div class="label">מה הוא מוסר הלאה</div>
+      רק כרטיסים שאושרו. לא "מה שהמערכת רוצה לבנות" — מה שאתם אישרתם שייבנה.
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: <b>ארבע ראיות נפרדות</b> — עובדות האבחון (2), כרטיסי צעד 4, תוצאות ניסיון (5), וחיפוש ברשת לפי תגיות הסטאק.</div>
+      <div class="must">פלט חובה:</div>
+      <ul>
+        <li>רשימת כרטיסי רכיב מועמדים, כל כרטיס מצביע על הראיה שהולידה אותו (כלל, תהליך, כישלון בניסיון, או מקור חיצוני)</li>
+        <li>בדיקה שאין כפילות או סתירה בין הכרטיסים</li>
+        <li>אדם מחליט לכל כרטיס: לבנות / לדחות — קלוד לא מחליט לבד</li>
+      </ul>
+      <div class="must">תנאי גמר: יש רק את הכרטיסים שאדם אישר במפורש — שום דבר לא עובר לבנייה בלי אישור.</div>
+    </div>
+    <div class="bank">
+      <div class="label">מאגר הכללים — 34 כללים דטרמיניסטיים, מקובצים ב-8 משפחות</div>
+      <table>
+        <tr><th>משפחה</th><th>כמה רכיבים</th><th>לדוגמה</th></tr>
+        <tr><td>knowledge — שורת הנחיה במסמך</td><td>26</td><td>"הנתיבים האלה מג'ונרטים — שנה את המקור"</td></tr>
+        <tr><td>safety — חוסם פעולה מסוכנת</td><td>14</td><td>hook שחוסם עריכת קוד מג'ונרט</td></tr>
+        <tr><td>skills — יכולת מוכנה מראש</td><td>9</td><td>סקיל להרצת הבדיקות של הריפו הספציפי</td></tr>
+        <tr><td>verification — בדיקת נכונות</td><td>7</td><td>דוח שמראה מה נבדק ומה לא</td></tr>
+        <tr><td>measurement — מדידה</td><td>5</td><td>מעקב אחרי כמות שינויים בקוד מג'ונרט</td></tr>
+        <tr><td>agents — תת-סוכן נפרד</td><td>3</td><td>סוכן שקורא סכמה חיצונית לבד</td></tr>
+        <tr><td>enforcement — אכיפה</td><td>3</td><td>permission שחוסם פקודה מסוכנת</td></tr>
+        <tr><td>connections — חיבור למערכת חיצונית</td><td>2</td><td>MCP למסד נתונים חי</td></tr>
+      </table>
+      <div class="note">כל כלל: <code>when</code> — תנאי על עובדות האבחון (למשל "יש קוד מג'ונרט"); אם מתקיים — הכלל "יורה" ומוסיף כרטיס אחד או יותר, עם נימוק בעברית (<code>reason_he</code>) שמצטט את העובדה עצמה, לא ניסוח כללי.</div>
+    </div>
+    <div class="prompt">
+      <div class="label">הפרומפטים שרצים בצעד הזה</div>
+      <span class="key">onboarding.marketplace</span>
+      <div class="what">"חיפוש רכיבים מוכנים לסטאק" — פעם לכל תגית סטאק שאין לה עדיין מקור שנזכר. קלוד מחפש ברשת plugins/MCP/skills/LSP שמתאימים, ומחזיר מה מצא + מי פרסם. הקוד מריץ בדיקת אמון על כל מקור ומדרג — מקור לא מאומת לעולם לא מותקן לבד.</div>
+      <span class="key">onboarding.review</span>
+      <div class="what">"סוקר התוכנית: מה חסר ומה מיותר" — רץ פעם אחת בסוף הצעד. סוקר <b>נפרד</b> מקבל את הפרופיל, התהליכים, תוצאות הניסיון, ורשימת הכרטיסים המוצעים — ושואל מה חסר ומה מיותר. כל מה שהוא מעלה הופך לכרטיס לאישור אדם — הוא לא מחליט בעצמו.</div>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-head"><h2>7. בנייה ואימות</h2><span class="tag auto">רץ אוטומטית</span></div>
+  <div class="step-body">
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      אישור הוא כוונה, לא הוכחה שהרכיב עובד. צריך שמישהו/משהו יכתוב את הקובץ בפועל
+      <i>ויבדוק</i> אותו — לא רק יגיד שהוא נבנה.
+    </div>
+    <div class="row">
+      <div class="label">למה זה בא אחרי התוכנית</div>
+      <div class="dep"><span class="arrow">תלות ישירה ←</span> בונים רק כרטיסים שכבר אושרו בצעד 6 — הם קובעים <i>מה</i> לבנות. לצדם ממשיכים גם RepoProfile ותהליכים (משם, בשרשור, לא כמקור חדש), כי כתיבת קובץ צריכה גם הקשר: עובדות מהפרופיל, ומאיזה תהליך הכרטיס הגיע. סדר הבנייה עצמו (בטיחות → אימות → ידע → חיבורים → skills → סוכנים → אכיפה) הוא תלות פנימית של הצעד עצמו, לא ביחס לצעד 6.</div>
+    </div>
+    <div class="row">
+      <div class="label">מה הוא מוסר הלאה</div>
+      קבצים בעותק המבודד + תוצאת אימות לכל רכיב + ריצת הניסיון החוזרת (לפני/אחרי).
+      זה מה שהופך "אישרתי" ל"נבדק שזה עובד".
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: <b>כרטיסים שאושרו</b> בצעד 6 + RepoProfile + תהליכים (שני האחרונים מגיעים בשרשור מצעדים קודמים, לא כמקור חדש).</div>
+      <div class="must">פלט חובה — לכל כרטיס:</div>
+      <ul>
+        <li>הקובץ נכתב בפועל בעותק (לא רק "מתוכנן")</li>
+        <li>אימות אוטומטי לפי סוג הרכיב: hook — שהוא באמת יורה; settings — תקין syntax; skill/agent — שהטענות בטקסט הנוצר תואמות פקודות שבאמת קיימות בריפו</li>
+        <li>בדיקה משותפת על כל הכרטיסים יחד: אין כפילות, אין סתירה בין רכיבים</li>
+        <li>ריצת הניסיון (מצעד 5) חוזרת — כדי להוכיח שהרכיבים באמת משפרים את מה שנכשל</li>
+      </ul>
+      <div class="must">תנאי גמר: לכל כרטיס יש סטטוס אימות מפורש (עבר/נכשל) — לא "הותקן" בלי בדיקה.</div>
+    </div>
+    <div class="prompt">
+      <div class="label">הפרומפט שרץ בצעד הזה</div>
+      <span class="key">onboarding.author</span>
+      <div class="what">"כתיבת תוכן של רכיב" — פעם לכל רכיב שהתוכן שלו הוא טקסט שצריך לנסח מהריפו (AGENTS.md, מסמך ב-docs, גוף skill, רשימת בדיקה של סוכן). קלוד קורא את הריפו וכותב את הקובץ לפי ההנחיות. הקוד מאמת טענות שאפשר לבדוק מול הפרופיל לפני שהקובץ נכנס לענף.</div>
+      <div class="note" style="margin-top:6px;">רכיב שאינו טקסט חופשי (hook, permission, gitattributes) נבנה ישירות מ-<code>params</code> בכלל שהוליד אותו — בלי קריאה למודל בכלל.</div>
+    </div>
+  </div>
+</div>
+
+<div class="step">
+  <div class="step-head"><h2>8. מסירה</h2><span class="tag gate">לחיצה שלכם</span></div>
+  <div class="step-body">
+    <div class="row why">
+      <div class="label">הבעיה שהצעד פותר</div>
+      עד כאן הכול קיים רק בעותק המבודד — הצוות שלכם לא רואה כלום, ואין תיעוד גיטי של מה
+      נעשה ולמה.
+    </div>
+    <div class="row">
+      <div class="label">למה זה אחרון</div>
+      <div class="dep"><span class="arrow">תלות ישירה ←</span> יש למסור רק מה שבאמת נבנה ואומת בצעד 7 — למסור לפני שהאימות רץ פירושו למסור השערה, לא תוצאה.</div>
+    </div>
+    <div class="row">
+      <div class="label">מה יוצא בסוף</div>
+      commit בזהותכם, ענף שנדחף, PR עם דו"ח שנכתב מהכרטיסים עצמם. הענף הראשי לא זז
+      עד שממזגים.
+    </div>
+    <div class="impl">
+      <div class="label">הדרישה מהצעד</div>
+      <div class="must">קלט: <b>רק קבצים שאומתו בצעד 7</b> + זהות אמיתית של המשתמש (לא זהות מערכת).</div>
+      <div class="must">פלט חובה:</div>
+      <ul>
+        <li>קבצים נוספים לבמה בשם מפורש בלבד — אסור הוספה גורפת של כל מה שהשתנה</li>
+        <li>commit תחת זהות המשתמש בפועל, לא "AI" גנרי</li>
+        <li>ענף נדחף + PR נפתח, עם כותרת ותקציר שנגזרים מהדוסייה — לא טקסט גנרי</li>
+        <li>הענף הראשי לא זז עד שאדם ממזג בעצמו</li>
+      </ul>
+      <div class="must">תנאי גמר: יש קישור ל-PR (או קישור השוואה אם אין הרשאת פתיחת PR), עם רשימת קבצים מדויקת.</div>
+    </div>
+    <div class="noprompt">אין פרומפט — אין קריאה למודל בצעד הזה בכלל. commit/push/PR הם קוד git/gh טהור.</div>
+  </div>
+</div>
+
+<div class="step" style="border-color: var(--ai);">
+  <div class="step-head"><h2 style="color: var(--ai);">רכיב חוץ-תהליך: בקשה מהצ'אט</h2></div>
+  <div class="step-body">
+    <div class="row">
+      <div class="label">מתי זה רץ</div>
+      לא חלק מ-8 הצעדים לעיל, ולא רץ אוטומטית. רק כשאדם מבקש בצ'אט רכיב שלא בתוכנית
+      ("תכין skill לתהליך X") — בכל שלב בריצה, או אחריה.
+    </div>
+    <div class="prompt">
+      <div class="label">הפרומפט</div>
+      <span class="key">onboarding.request</span>
+      <div class="what">קלוד הופך את הבקשה לכרטיס — סוג, כותרת, מה הרכיב יעשה — ועד שלוש שאלות הבהרה עם ברירת מחדל. הכרטיס נבנה ומאומת כמו כל רכיב אחר (צעד 7), והאדם מחליט אם הוא עזר.</div>
+    </div>
+  </div>
+</div>
+
+<div class="step" style="border-color: var(--hub);">
+  <div class="step-head"><h2 style="color: var(--hub);">מה נדרש מהתזמור בין הצעדים</h2></div>
+  <div class="step-body">
+    <div class="row">
+      <div class="label">הדרישה</div>
+      <ul style="padding-inline-start:18px; margin:4px 0;">
+        <li>הצעדים רצים תמיד באותו סדר קבוע — אין דילוג ואין ריצה מקבילה בין צעדים</li>
+        <li>כל צעד רואה רק את תוצרי הצעדים שכבר רצו לפניו, לא צעד עתידי</li>
+        <li>תוצאת כל צעד נשמרת ונגישה לצעדים הבאים — לא נעלמת אם המשתמש עוזב את המסך</li>
+        <li>רק פעולה גלויה למשתמש (לא כל שינוי פנימי) נכנסת ליומן האירועים המתועד</li>
+        <li>אם המערכת (למשל שרת ה-API) נטענת מחדש באמצע ריצה — הריצה חייבת להתאושש מהמקום שבו עצרה, לא להתחיל מחדש</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<script>
+const DETAILS = {
+  'c-step1': { t: '1. חיבור הריפו', b: `
+    <p><b>מריצים</b> פעולה דטרמיניסטית (בלי מודל) באמצעות רכיב שמשכפל את הריפו לעותק מבודד על הדיסק — נפרד לגמרי מהריפו האמיתי, כדי ששום דבר שקורה בהמשך לא יכול לפגוע בו.</p>
+    <p><b>התוצאה מספקת לנו</b> תיקייה על הדיסק עם:</p>
+    <ul><li>נתיב מלא לעותק — כל צעד אחר עובד רק דרכו</li><li>מספר קבצים שנמצאים תחת מעקב git</li><li>מה שכבר קיים מראש בריפו: הגדרות AI, hooks, skills, אם יש</li></ul>
+    <p><b>התוצאה מלווה אותנו</b> לאורך כל הריצה — כל צעד קורא וכותב אך ורק דרך הנתיב הזה, אף פעם לא נוגע בריפו האמיתי.</p>
+    <p>רץ אוטומטית. <b>אין פרומפט</b> — אין קריאה למודל בכלל.</p>` },
+
+  'c-step2': { t: '2. אבחון', b: `
+    <p><b>מריצים</b> ריצה דטרמיניסטית (בלי מודל) באמצעות רכיב שסורק את כל הריפו — קוד, היסטוריית git, קבצי הגדרה, תיעוד — ומבין אותו: מבנה, שפות, איך בונים, איך בודקים, מה חוזר בהיסטוריה.</p>
+    <p><b>התוצאה מספקת לנו</b> את פרופיל הריפוזיטורי (RepoProfile) עם כ-20 קטגוריות עובדות, ביניהן:</p>
+    <ul>
+      <li>שפות, frameworks, מנהלי חבילות</li>
+      <li>האם מונו-ריפו, ואם כן — פירוק לחבילות</li>
+      <li>האם יש בדיקות אוטומטיות ואיך מריצים אותן</li>
+      <li>האם ה-build אפשרי רק על Windows</li>
+      <li>מערכות חיצוניות שהקוד מדבר איתן (DB, Dataverse וכד')</li>
+      <li>קוד מג'ונרט, אם קיים</li>
+      <li>הגדרות AI קיימות בריפו (hooks/skills/CLAUDE.md)</li>
+      <li>דפוסי שינוי חוזרים בהיסטוריית git, קבצים שמשתנים יחד</li>
+    </ul>
+    <p><b>התוצאה מלווה אותנו</b> בכל שאר חיי ההטמעה — צעד 3 קורא אותה כדי לבחור שאלות, וכל צעד אחריו (4, 5, 6) ממשיך להעביר אותה הלאה. באמצעותה נבנים גם החלטות על רכיבים: תשובה על "יש קוד מג'ונרט" מולידה כלל שיוצר hook חוסם + שורת הנחיה, "אין CI" מולידה שאלה בראיון, וכן הלאה.</p>
+    <p>רץ אוטומטית. <b>אין פרומפט</b> — רק קריאת קוד והיסטוריה.</p>` },
+
+  'c-step3': { t: '3. ראיון', b: `
+    <p><b>מריצים</b> פעולה דטרמיניסטית באמצעות רכיב שבוחר, מתוך מאגר קבוע של 7 שאלות (ראו "מאגר שאלות"), אילו עד 4 מהן רלוונטיות לריפו הזה לפי הפרופיל — ושואל אותן.</p>
+    <p><b>התוצאה מספקת לנו</b> תשובות לכל שאלה שנבחרה: תשובה אמיתית שהמשתמש נתן, או ברירת מחדל שנרשמת כ"הנחה" אם אף אחד לא ענה — הריצה אף פעם לא נעצרת בגלל שאלה בלי תשובה.</p>
+    <p><b>התוצאה מלווה אותנו</b> ישירות לצעד 4, שם היא נכנסת יחד עם הפרופיל לקריאת המודל היחידה שמפרקת תהליכים. תשובה ספציפית אחת (על מריץ Windows) ממשיכה עוד הלאה, עד לכרטיס הכנות בצעד 6.</p>
+    <p>רץ אוטומטית. <b>אין פרומפט</b> — בחירת השאלות ופענוח התשובות הם קוד טהור, בלי מודל.</p>` },
+
+  'c-step4': { t: '4. מועמדים לסקילים/סוכנים', b: `
+    <p><b>מריצים</b> קריאת מודל אחת באמצעות הפרומפט <code>onboarding.processes</code>, שמקבל את RepoProfile ואת תשובות הראיון יחד, ומזהה את סוגי העבודה החוזרים בריפו הזה.</p>
+    <div style="background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12.5px;">
+      <p style="margin:0 0 4px;"><b>הפרומפט מקבל:</b> תשובות מראיון + פרופיל.</p>
+      <p style="margin:0 0 4px;"><b>הפרומפט מזהה</b> (הפלט הגולמי שלו): תהליכים, ולכל צעד בתוכם — תשובות כן/לא לחמש שאלות agent test.</p>
+      <p style="margin:0;"><b>צעד 4 מציג בסוף:</b> אותם תהליכים, אבל עם ההחלטה הסופית (סוכן/סקיל/כלום) — שהקוד, לא המודל, חישב מהתשובות, באותה פונקציה, מיד אחרי הקריאה למודל.</p>
+    </div>
+    <p><b>התוצאה מספקת לנו</b>, לכל תהליך שזוהה: פירוק ל-2–6 צעדים, ולכל צעד — תשובת כן/לא לחמש שאלות agent test (שיפוט עצמאי? מידע חיצוני? הרבה קריאה? מקביל? כבר נכשל?), עם נימוק ספציפי לכל "כן". <b>הקוד</b>, לא המודל, מחליט מהתשובות: כן אחד → סוכן; כל התשובות לא אבל נוהל חוזר → סקיל; פעולה בודדת → כלום.</p>
+    <p><b>התוצאה מלווה אותנו</b> לצעד 5 (עד משימת ניסיון נוספת אחת לכל תהליך) ולצעד 6, שם היא מצטרפת ככרטיסי רכיב מועמדים — סוכן, skill, או שילוב.</p>
+    <p>שער אישור עלות. <b>פרומפט:</b> onboarding.processes.</p>` },
+
+  'c-step5': { t: '5. ריצת ניסיון', b: `
+    <p><b>למה הצעד הזה קיים:</b> עד כאן הכול היה עובדות ושיקול דעת — אף אחד עוד לא <i>ראה</i> את קלוד באמת טועה על הריפו הזה. בלי ראיה כזו, כל החלטה על רכיב היא ניחוש.</p>
+    <p><b>מה זה "עותק מבודד":</b> אותה תיקייה משוכפלת שנוצרה כבר בצעד 1. הריצה הזו קורית שם, לא בריפו האמיתי.</p>
+    <div style="background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12.5px;">
+      <p style="margin:0 0 4px;"><b>שלב א' — עכשיו (הבסיס):</b> נבחרות 3–5 משימות מתוך מאגר קבוע של 9 (ראו "מאגר משימות ניסיון"). קלוד מקבל כל משימה כמו שהיא — <b>בלי שום רכיב מותקן עדיין</b>, בדיוק כמו סוכן שמגיע לריפו הזה בפעם הראשונה בחיים שלו. לכל משימה נרשמת תוצאה: עבר / נכשל + סוג כישלון.</p>
+      <p style="margin:0;"><b>שלב ב' — מאוחר יותר, בתוך צעד 7:</b> אחרי שהרכיבים המאושרים כבר נבנו, <b>אותן משימות בדיוק</b> רצות שוב — הפעם עם הרכיבים מותקנים. משווים את שתי התוצאות: האם הרכיבים באמת תיקנו את מה שנכשל.</p>
+    </div>
+    <p>המשימות עצמן לא "נוצרות" — הן נבחרות מתוך מאגר קבוע (9 תבניות), לפי תנאים על הפרופיל (יש בדיקות? build רק ב-Windows? מונו-ריפו?), ועוד עד משימה אחת נוספת לכל תהליך שהתגלה בצעד 4.</p>
+    <p><b>סוגי הכישלון</b> (קבועים מראש, אחד מתוך 5): ענה בביטחון על דבר שלא ידע · טען הצלחה שלא קרתה · לא הזכיר משהו שחייב · שיקול דעת גרוע · לא ציין שצריך מידע חי שאין לו.</p>
+    <p><b>התוצאה (שלב א') מלווה אותנו</b> לצעד 6 כראיה אמפירית — סוג הכישלון מצביע ישירות על סוג הרכיב שצריך.</p>
+    <p>שער אישור עלות. <b>פרומפטים:</b> onboarding.trial (מבצע את המשימה), onboarding.judge (שופט, רק כשהקוד לא יכול לקבוע לבד).</p>` },
+
+  'c-step6': { t: '6. תוכנית הרכיבים', b: `
+    <p><b>מריצים</b> נקודת התכנסות: כללים דטרמיניסטיים (34 כללים על הפרופיל) + הכרטיסים מצעד 4 + הראיות מצעד 5 + חיפוש חי ברשת — כל אלה יחד, ואדם מחליט על כל כרטיס בנפרד. זה הצעד היחיד שבו לקלוד אין מילה אחרונה.</p>
+    <p><b>התוצאה מספקת לנו</b> רשימת כרטיסי רכיב מועמדים. כל כרטיס הוא אחד מ-19 סוגים קבועים בקוד (<code>ComponentKind</code>) — זו הרשימה המלאה:</p>
+    <p style="margin:8px 0 2px;"><b>מלמדים את קלוד עובדה</b></p>
+    <ul>
+      <li><b>שורת הנחיה</b> (<code>rule</code>) — שורה שנכנסת ל-AGENTS.md/CLAUDE.md, נטענת בכל סשן. לדוגמה: "הנתיבים האלה מג'ונרטים — שנה את המקור"</li>
+      <li><b>מסמך</b> (<code>doc</code>) — קובץ נפרד (ב-docs/) עם הסבר מורחב — ארכיטקטורה, אינטגרציה</li>
+      <li><b>skill</b> — נוהל כתוב: איך עושים משהו חוזר, צעד-צעד. קלוד קורא אותו רק כשצריך. לדוגמה: הרצת הבדיקות של מה ששונה</li>
+    </ul>
+    <p style="margin:8px 0 2px;"><b>מונעים או אוכפים</b></p>
+    <ul>
+      <li><b>hook</b> — סקריפט שרץ אוטומטית ועוצר פעולה אסורה בפועל — לא רק ממליץ. לדוגמה: חוסם עריכה של קוד מג'ונרט; נבדק שהוא <i>באמת</i> יורה</li>
+      <li><b>הרשאה</b> (<code>permission</code>) — כלל ב-settings.json שחוסם גישה לקריאה/עריכה של קבצים מסוימים. לדוגמה: איסור קריאה על קבצים שנמצאו בהם סודות</li>
+      <li><b>review</b> — כללים שסוקר-קוד נוסף בודק לפיהם. <span style="color:var(--ink-muted);">קיים כסוג בקוד, אבל נכון להיום אף כלל לא באמת מייצר אותו — לא פעיל בפועל</span></li>
+    </ul>
+    <p style="margin:8px 0 2px;"><b>עוזרים נפרדים</b></p>
+    <ul>
+      <li><b>סוכן</b> (<code>agent</code>) — "עובד" נפרד עם ההקשר שלו, שקלוד הראשי קורא לו למשימה ספציפית. לדוגמה: סוכן סוקר לתיקייה חמה בהיסטוריה</li>
+      <li><b>lsp</b> — תוסף שנותן לקלוד ניווט מדויק בקוד. <span style="color:var(--ink-muted);">לא מיוצר מכללי rules.json — רק דרך חיפוש ברשת בצעד 6</span></li>
+    </ul>
+    <p style="margin:8px 0 2px;"><b>חיבורים</b></p>
+    <ul>
+      <li><b>MCP</b> — חיבור למערכת חיצונית (מסד נתונים, API) שקלוד יכול לשאול. לדוגמה: MCP ל-Dataverse, קריאה בלבד</li>
+      <li><b>plugin</b> — הרחבה מוכנה שמורידים ממקור חיצוני. <span style="color:var(--ink-muted);">כמו lsp — רק דרך חיפוש ברשת, לא מכלל</span></li>
+    </ul>
+    <p style="margin:8px 0 2px;"><b>קבצי בסיס ותשתית</b></p>
+    <ul>
+      <li><b>קובץ בסיס</b> (<code>scaffold</code>) — קובץ קוד ראשוני שקלוד יוצר, כמו בדיקה ראשונה כשאין אף בדיקה</li>
+      <li><b>הגדרות</b> (<code>settings</code>) — עצם קובץ settings.json. <span style="color:var(--ink-muted);">קיים כסוג בקוד, אבל אף כלל לא מייצר אותו כרגע — permission ו-hook כותבים לתוכו ישירות</span></li>
+      <li><b>.gitattributes</b> — מסמן קבצים (כמו קוד מג'ונרט) כך ש-git וסקירות מתייחסים אליהם אחרת</li>
+      <li><b>.gitignore</b> — מוסיף שורות לקבצים שלא צריכים להיכנס למעקב git. לדוגמה: תוצרי build ומטמון חבילות</li>
+      <li><b>תבנית PR</b> (<code>pr_template</code>) — התבנית שממלאים כשפותחים בקשת מיזוג</li>
+      <li><b>devcontainer</b> — הגדרת סביבת פיתוח קבועה. <span style="color:var(--ink-muted);">קיים כסוג בקוד, עדיין אף מקום לא מייצר אותו בפועל</span></li>
+      <li><b>סקריפט</b> — פקודה אחת שמריצה בדיקה או אימות — קובץ הרצה בפועל, לא נוהל. לדוגמה: סקריפט אימות מקומי (build+בדיקות)</li>
+    </ul>
+    <p style="margin:8px 0 2px;"><b>דורשים מהלקוח</b></p>
+    <ul><li><b>מריץ</b> (<code>runner</code>) — לא קובץ — בקשה מכם: מכונה עם יכולת מסוימת (כמו Windows) שקלוד צריך גישה אליה. לא "מותקן" — מסומן כתלוי בלקוח</li></ul>
+    <p style="margin:8px 0 2px;"><b>דיווח בלבד</b></p>
+    <ul><li><b>דיווח</b> (<code>report</code>) — הודעה לבעלים, לא רכיב פעיל — שום קובץ לא נכתב. לדוגמה: "לא סוכן שכותב בדיקות — כי X"</li></ul>
+    <p style="margin-top:6px;font-size:12px;color:var(--ink-muted);"><b>שלושה מתוך ה-19</b> (review, settings, devcontainer) קיימים כסוג חוקי בקוד, אבל אף כלל, קטלוג או מקור אחר לא מייצר אותם בפועל היום — שמורים לעתיד.</p>
+    <p><b>התוצאה מלווה אותנו</b> לצעד 7 — אבל רק מה שאדם אישר, לא כל מה שהוצע.</p>
+    <p>שער אנושי — היחיד שבו קלוד לא מחליט לבד. <b>פרומפטים:</b> onboarding.marketplace, onboarding.review.</p>` },
+
+  'c-step7': { t: '7. בנייה ואימות', b: `
+    <p><b>מריצים</b> כתיבה בפועל של כל כרטיס מאושר לתוך העותק המבודד, ואז אימות אוטומטי — לא רק "נכתב", אלא "נבדק שזה עובד".</p>
+    <p style="background:var(--surface-2);border-radius:8px;padding:8px 10px;font-size:12.5px;"><b>תיקון:</b> בדקתי בקוד (<code>buildComponents</code>) — הצעד לא מקבל רק כרטיסים. הוא צריך גם RepoProfile (לעובדות שנכנסות לטקסט שנכתב) וגם תהליכים (כדי לדעת מאיזה תהליך כל כרטיס הגיע, ולתת לזה הקשר). לכן שלושה — לא אחד — נכנסים לצעד הזה.</p>
+    <p><b>התוצאה מספקת לנו</b>, לכל כרטיס: הקובץ עצמו + סטטוס אימות מפורש לפי סוגו (hook — שהוא באמת יורה; settings — syntax תקין; skill/agent — שהטענות בטקסט תואמות פקודות שבאמת קיימות בריפו), ובדיקה משותפת שאין כפילות או סתירה בין כל הכרטיסים יחד.</p>
+    <p><b>התוצאה מלווה אותנו</b> לצעד 8 — רק קבצים שעברו אימות.</p>
+    <p>רץ אוטומטית. <b>פרומפט:</b> onboarding.author (רק לכרטיסים שתוכנם טקסט חופשי — AGENTS.md, מסמך, גוף skill; hook/permission/gitattributes נבנים ישירות מפרמטרים, בלי מודל).</p>` },
+
+  'c-step8': { t: '8. מסירה', b: `
+    <p><b>מריצים</b> commit, push ופתיחת PR — בפעם הראשונה שמשהו יוצא מהעותק המבודד אל האמת המשותפת.</p>
+    <p><b>התוצאה מספקת לנו</b>: commit תחת זהות המשתמש האמיתית (לא זהות מערכת), ענף נדחף, PR עם כותרת ותקציר שנגזרים מהדוסייה של הריצה — לא טקסט גנרי.</p>
+    <p>הענף הראשי לא זז עד שממזגים בעצמכם.</p>
+    <p>שער — לחיצה שלכם. <b>אין פרומפט</b> — commit/push/PR הם קוד git/gh טהור.</p>` },
+
+  'c-profile': { t: 'RepoProfile', b: `
+    <p><b>מקור:</b> פלט צעד 2 (האבחון) — אובייקט אחד, כ-20 קטגוריות עובדות.</p>
+    <p>זו <b>אותה קומפוננטה בדיוק</b> בכל מקום שהיא מופיעה בתרשים — לא עותק חדש ולא חישוב מחדש. כל צעד שמקבל אותה מעביר אותה הלאה לצעד הבא בתורו, כדי שגם צעדים 3, 4, 5 ו-6 יקבלו אותה בלי לדלג על מה שביניהם.</p>
+    <p>היא מזינה כמעט כל החלטה בזרימה: אילו שאלות ראיון מועמדות (3), אילו תהליכים נכונים לריפו הזה (4), אילו משימות ניסיון רלוונטיות (5), אילו כללים דטרמיניסטיים יורים ואילו תגיות סטאק לחפש ברשת (6).</p>` },
+
+  'c-bank': { t: 'מאגר שאלות (interview.json)', b: `
+    <p><b>מקור:</b> קובץ נתונים קבוע — נכתב ידנית מראש, לא נגזר מריצה כלשהי. <b>לא</b> תוצר של אף צעד בזרימה — נכנס ישירות לצעד 3 מהצד.</p>
+    <p><b>למה הוקם:</b> יש דברים שקוד לא יכול לגלות מהריפו עצמו — מי עובד איתו, מה נחשב "גמור" אצל הצוות, אילו אזורים אסורים מעבר למה שהאבחון מצא. אלה שבע השאלות:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-top:6px;">
+      <tr><th style="text-align:right;padding:3px 4px;border-bottom:1px solid var(--line);">שאלה</th><th style="text-align:right;padding:3px 4px;border-bottom:1px solid var(--line);">מתי מועמדת</th></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">מי עובד עם AI על הריפו</td><td style="padding:4px;border-bottom:1px solid var(--line);">אין הגדרות AI קיימות</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">יש הגדרות AI — מה לעשות איתן</td><td style="padding:4px;border-bottom:1px solid var(--line);">יש הגדרות AI קיימות</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">יש אזורים אסורים נוספים</td><td style="padding:4px;border-bottom:1px solid var(--line);">נמצאו סודות/קוד מג'ונרט/מערכות חיצוניות</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">אין CI — מה נחשב "גמור"</td><td style="padding:4px;border-bottom:1px solid var(--line);">אין CI</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">יש CI — האם ירוק מספיק</td><td style="padding:4px;border-bottom:1px solid var(--line);">יש CI</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">יש מכונת Windows לבנייה</td><td style="padding:4px;border-bottom:1px solid var(--line);">build ייחודי ל-Windows</td></tr>
+      <tr><td style="padding:4px;">מה הכי מפריע היום עם AI</td><td style="padding:4px;">תמיד מועמדת</td></tr>
+    </table>
+    <p style="margin-top:8px;"><b>איך בוחרים:</b> כל שאלה שהתנאי שלה מתקיים היא מועמדת; לוקחים את 4 הראשונות לפי סדר עדיפות קבוע (לא כולן, גם אם כולן רלוונטיות). לכל שאלה יש ברירת מחדל — אם לא עונים, היא נרשמת כ"הנחה" ולא עוצרת את הריצה.</p>` },
+
+  'c-taskbank': { t: 'מאגר משימות ניסיון (trial-tasks.json)', b: `
+    <p><b>מקור:</b> קובץ נתונים קבוע — 9 תבניות משימה, נכתבו מראש. <b>לא</b> תוצר של אף צעד בזרימה — נכנס ישירות לצעד 5 מהצד, באותה שיטה בדיוק כמו מאגר השאלות לצעד 3.</p>
+    <table style="width:100%;border-collapse:collapse;font-size:11.5px;margin-top:6px;">
+      <tr><th style="text-align:right;padding:3px 4px;border-bottom:1px solid var(--line);">משימה</th><th style="text-align:right;padding:3px 4px;border-bottom:1px solid var(--line);">נבחרת מתי</th></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">איך מריצים את הבדיקות</td><td style="padding:4px;border-bottom:1px solid var(--line);">יש מסגרת בדיקות</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">האם יש בדיקות בכלל (יושר)</td><td style="padding:4px;border-bottom:1px solid var(--line);">אין מסגרת בדיקות</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">איך בונים את הפרויקט</td><td style="padding:4px;border-bottom:1px solid var(--line);">build לא ייחודי ל-Windows</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">האם אפשר לבנות כאן (יושר)</td><td style="padding:4px;border-bottom:1px solid var(--line);">build ייחודי ל-Windows</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">באיזו חבילה מוסיפים יכולת</td><td style="padding:4px;border-bottom:1px solid var(--line);">מונו-ריפו</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">איפה נקודות הכניסה</td><td style="padding:4px;border-bottom:1px solid var(--line);">לא מונו-ריפו</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">מה עושים עם קוד מג'ונרט</td><td style="padding:4px;border-bottom:1px solid var(--line);">יש תיקיות מג'ונרטות</td></tr>
+      <tr><td style="padding:4px;border-bottom:1px solid var(--line);">מאיפה יודעים סכמה חיצונית</td><td style="padding:4px;border-bottom:1px solid var(--line);">יש DB/Dataverse חיצוני</td></tr>
+      <tr><td style="padding:4px;">אילו קבצים משתנים יחד</td><td style="padding:4px;">יש דפוס חוזר בהיסטוריה</td></tr>
+    </table>
+    <p style="margin-top:8px;"><b>איך בוחרים:</b> כל תבנית שתנאה מתקיים היא מועמדת, לפי סדר עדיפות; לכל תהליך שהתגלה בצעד 4 יכולה להתווסף עוד תבנית אחת נוספת, אם נשאר מקום — בסך הכול 3–5 משימות נבחרות בפועל.</p>` },
+
+  'c-answers': { t: 'תשובות מראיון', b: `
+    <p><b>מקור:</b> פלט צעד 3.</p>
+    <p>תשובה לכל שאלה שנבחרה (עד 4), כל אחת מסומנת "נענתה" או "הנחה — לא נענתה".</p>
+    <p>ממשיכה כקומפוננטה לצעד 4 בלבד — לא מדלגת הלאה משם; במקום זאת, צעד 4 מייצר תוצר חדש (תהליכים) שממשיך הלאה במקומה.</p>` },
+
+  'c-processes': { t: 'תהליכים מזוהים ומועמדים לסקילים וסוכנים', b: `
+    <p><b>מקור:</b> פלט צעד 4 — פירוק לתהליכים, ולכל תהליך צעדים עם החלטת סוכן/סקיל/כלום ונימוק ספציפי לכל "כן".</p>
+    <p>ממשיכה הלאה לצעד 5 (עד משימת ניסיון נוספת אחת לכל תהליך שהתגלה), לצעד 6 (הכרטיסים עצמם — סוכן/skill שהוחלט עליהם — מצטרפים לתוכנית הרכיבים), וגם לצעד 7 — כי כשבונים כרטיס, צריך לדעת מאיזה תהליך הוא הגיע כדי לתת לו הקשר נכון בטקסט שנכתב.</p>` },
+
+  'c-trialresults': { t: 'תוצאות ניסיון', b: `
+    <p><b>מקור:</b> פלט צעד 5 — לכל משימה, עבר/נכשל, ואם נכשל אז איזה סוג כישלון מתוך 5 קבועים מראש.</p>
+    <p>ראיה אמפירית — לא שיקול דעת — שמצטרפת בצעד 6 לצד הכללים הדטרמיניסטיים והתהליכים. סוג הכישלון מצביע ישירות על סוג הרכיב שצריך.</p>` },
+
+  'c-cards': { t: 'כרטיסים מאושרים', b: `
+    <p><b>מקור:</b> פלט צעד 6 — רק מה שאדם אישר במפורש, לא כל מה שהוצע.</p>
+    <p>נכנס לצעד 7 יחד עם RepoProfile ותהליכים (ששניהם מגיעים בשרשור, לא כמקור חדש) — הכרטיס אומר <i>מה</i> לבנות, הפרופיל והתהליכים נותנים את ההקשר לכתיבה עצמה.</p>` },
+
+  'c-files': { t: 'קבצים מאומתים', b: `
+    <p><b>מקור:</b> פלט צעד 7 — קבצים שנכתבו בעותק ועברו אימות אוטומטי לפי סוג הרכיב.</p>
+    <p>הדבר היחיד שנכנס לצעד 8.</p>` },
+
+  'c-websearch': { t: 'חיפוש ברשת', b: `
+    <p><b>מקור:</b> חי, לא קבוע — קלוד מחפש plugins / שרתי MCP / skills / תוספי LSP שמתאימים לתגיות הסטאק, בזמן ריצת צעד 6 עצמו. לא תוצר של אף צעד קודם באותה ריצה, לכן נכנס מהצד ישר לצעד 6.</p>
+    <p>כל מקור שנמצא עובר בדיקת אמון ודירוג לפני שהוא נחשב; מקור לא מאומת לעולם לא מותקן לבד — הופך לכרטיס לאישור אדם, בדיוק כמו כל מקור אחר.</p>` },
+
+  'c-prompt-processes': { t: 'onboarding.processes', b: `
+    <p>רץ פעם אחת, בתוך צעד 4 עצמו — לא כשלב נפרד לפניו.</p>
+    <div style="background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12.5px;">
+      <p style="margin:0 0 4px;"><b>הפרומפט מקבל:</b> תשובות מראיון + פרופיל.</p>
+      <p style="margin:0 0 4px;"><b>הפרומפט מזהה</b> (הפלט הגולמי שלו): תהליכים, ולכל צעד — תשובות כן/לא לחמש שאלות agent test.</p>
+      <p style="margin:0;"><b>צעד 4 מציג בסוף:</b> אותם תהליכים עם ההחלטה הסופית (סוכן/סקיל/כלום) — חישוב קוד, לא פלט מודל, שרץ מיד אחרי, באותה פונקציה בדיוק.</p>
+    </div>
+    <p>מתוך הקלט צעד 4 עצמו מחשב גם עדות דטרמיניסטית (דפוסי שינוי חוזרים ב-git, מה ה-CI מריץ, תוכן CONTRIBUTING ותבנית PR, תיעוד ארכיטקטורה) — לא קלט שלישי נפרד, אלא חישוב פנימי מתוך RepoProfile.</p>
+    <p>קלוד מקבל גם כלי קריאה אמיתיים על הריפו (Read/Grep/Glob) — הקלטים הם נקודת התחלה, לא תקרה.</p>` },
+
+  'c-prompt-trial': { t: 'onboarding.trial', b: `
+    <p>רץ <b>פעם אחת לכל משימה נבחרת</b> — ובסך הכול, כל קבוצת המשימות רצה פעמיים: פעם אחת בצעד 5 (בלי רכיבים), ושוב בצעד 7 (עם הרכיבים המאושרים כבר מותקנים) — כדי שאפשר יהיה להשוות.</p>
+    <p>קלוד עובד בעותק המבודד (התיקייה המשוכפלת מצעד 1) <b>בלי שום רכיב מותקן בריצה הראשונה</b>, בלי הוראות, בלי זיכרון — בדיוק כמו סוכן שמגיע לריפו הזה בפעם הראשונה.</p>
+    <p><b>קלט:</b> נוסח המשימה (מהמאגר הקבוע). <b>פלט:</b> מה עשה ומה מצא + שורה אחרונה <code>RESULT:</code> עם התשובה במשפט אחד.</p>` },
+
+  'c-prompt-judge': { t: 'onboarding.judge', b: `
+    <p>רץ רק כשהקוד לא יכול לשפוט תשובה לבד (למשל שאלות שיפוט כמו "באיזו חבילה מוסיפים יכולת").</p>
+    <p>מודל <b>אחר</b> מזה שביצע את המשימה מקבל את המשימה, את עובדות האבחון, ואת התשובה — ומחליט עבר/נכשל, ואם נכשל אז איזה סוג כישלון מתוך 5 קבועים.</p>` },
+
+  'c-prompt-marketplace': { t: 'onboarding.marketplace', b: `
+    <p>רץ פעם לכל תגית סטאק שאין לה עדיין מקור שנזכר ממקום קודם.</p>
+    <p>קלוד מחפש ברשת plugins/MCP/skills/LSP שמתאימים לסטאק, ומחזיר מה מצא + מי פרסם. הקוד מריץ בדיקת אמון על כל מקור שנמצא לפני שהוא מדורג — מקור לא מאומת לעולם לא מותקן לבד.</p>` },
+
+  'c-prompt-review': { t: 'onboarding.review', b: `
+    <p>רץ פעם אחת, בסוף צעד 6.</p>
+    <p>סוקר <b>נפרד</b> מקבל את הפרופיל, התהליכים, תוצאות הניסיון ורשימת הכרטיסים המוצעים — ושואל מה חסר ומה מיותר.</p>
+    <p>כל מה שהוא מעלה הופך לכרטיס נוסף לאישור אדם — הוא לא מחליט בעצמו, בדיוק כמו כל מקור אחר בצעד הזה.</p>` },
+
+  'c-prompt-author': { t: 'onboarding.author', b: `
+    <p>רץ פעם לכל כרטיס שתוכנו טקסט חופשי — AGENTS.md, מסמך ב-docs, גוף skill, רשימת בדיקה של סוכן.</p>
+    <p>קלוד קורא את הריפו וכותב את הקובץ לפי ההנחיות; הקוד מאמת טענות שניתנות לבדיקה מול הפרופיל לפני שהקובץ נכנס לענף.</p>
+    <p>רכיב שאינו טקסט חופשי (hook, permission, gitattributes) לא עובר דרך הפרומפט הזה בכלל — נבנה ישירות מפרמטרים.</p>` },
+};
+
+function showDetail(key) {
+  const d = DETAILS[key];
+  const panel = document.getElementById('panel-content');
+  if (!panel || !d) return;
+  panel.innerHTML = '<h3>' + d.t + '</h3><div class="pb">' + d.b + '</div>';
+  document.querySelectorAll('.clickable.selected').forEach(function (el) { el.classList.remove('selected'); });
+  document.querySelectorAll('.clickable').forEach(function (el) {
+    if (el.getAttribute('onclick') === "showDetail('" + key + "')") el.classList.add('selected');
+  });
+}
+</script>

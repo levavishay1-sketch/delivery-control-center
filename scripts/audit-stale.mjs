@@ -218,5 +218,26 @@ nested.length
 const unusedConcepts = concepts.filter((c) => !used.some((u) => u.key === c.key) && !(c.screens?.length));
 unusedConcepts.length ? note(`concepts no screen uses and no chat lists (${unusedConcepts.length})`, unusedConcepts.map((c) => c.key).slice(0, 25)) : ok("every concept is used by a screen or listed by a chat screen");
 
+// 8. The onboarding spec moves with the process (CLAUDE.md): a branch that changes how onboarding works — its
+//    engine, its dossier screen, its concepts, its prompts — changes docs/onboarding-spec.html too, or says why
+//    not in a commit message (`Spec-unchanged: <why>`). Compared with master, so master itself always passes.
+const SPEC = "docs/onboarding-spec.html";
+const gitOut = (...a) => { try { return execFileSync("git", a, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }); } catch { return null; } };
+const specBase = gitOut("merge-base", "HEAD", "origin/master")?.trim();
+if (!specBase) note("the onboarding spec check did not run — there is no origin/master to compare with", []);
+else {
+  const lines = (s) => (s ?? "").split("\n").map((x) => x.trim()).filter(Boolean);
+  const changed = new Set([...lines(gitOut("diff", "--name-only", specBase)), ...lines(gitOut("ls-files", "--others", "--exclude-standard"))]);
+  const isProcess = (f) =>
+    (f.startsWith("packages/core/src/repo-onboarding/") && !f.endsWith(".test.ts")) || f.startsWith("apps/web/src/screens/repo/") ||
+    f === "packages/core/src/glossary/concepts/onboarding.ts" || (/^packages\/db\/migrations\/.*\.sql$/.test(f) && existsSync(f) && /'onboarding\./.test(readFileSync(f, "utf8")));
+  const touchedProcess = [...changed].filter(isProcess);
+  const waived = gitOut("log", "--format=%B", `${specBase}..HEAD`)?.match(/^Spec-unchanged:\s*(.+)$/m)?.[1];
+  if (!touchedProcess.length) ok("the onboarding spec: this branch does not touch the onboarding process");
+  else if (changed.has(SPEC)) ok(`the onboarding spec moved with the process (${touchedProcess.length} process file(s) changed)`);
+  else if (waived) ok(`the onboarding spec is unchanged on purpose — ${waived.slice(0, 100)}`);
+  else fail(`the onboarding process changed but ${SPEC} did not — update it (and republish its artifact), or say why not with a "Spec-unchanged: <why>" line in a commit message`, touchedProcess.slice(0, 12));
+}
+
 console.log(failures ? `\n${failures} check(s) failed.` : "\nAll checks passed.");
 process.exit(failures ? 1 : 0);
