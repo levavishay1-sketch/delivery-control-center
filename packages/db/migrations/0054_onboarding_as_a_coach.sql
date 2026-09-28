@@ -229,8 +229,10 @@ Task: list the processes — the recurring kinds of change made here (for exampl
 - failsToday: does the evidence or the trial show it going wrong today?
 Answer yes only when it is clearly true for THIS step in THIS repository — most steps of most processes get five no's; a yes needs a concrete reason in `why`. Do not decide agent/skill/none — the code decides from your answers. Do not invent processes to fill a list: a repository with one commit and no CI may have two processes.
 
+The reader is a Hebrew speaker who does not read code. Every "title", "what" and "why" you write must be plain Hebrew, in a person's own words — never the English name of a file, job or command. A process about "Add or modify a CRM (Dataverse) plugin" is titled "הוספה או שינוי של פלאגין ל-CRM (Dataverse)", not the English phrase. The English or technical original (a file path, a commit message, a CI job name) belongs in "evidence" only, quoted as found — that field may be English because it is a citation, not a description.
+
 Answer with ONLY this JSON, nothing before or after it:
-{"processes": [{"key": "snake_case", "title": "short English title", "source": "git|ci|contributing|pr_template|docs|tracker|interview|model", "evidence": ["what showed it, with file paths or counts"], "steps": [{"key": "snake_case", "title": "short English title", "what": "one sentence: what happens in this step here", "agentTest": {"judgment": false, "externalInfo": false, "readsALot": false, "parallel": false, "failsToday": false, "why": "one sentence"}}]}]}$p$,
+{"processes": [{"key": "snake_case", "title": "כותרת קצרה בעברית", "source": "git|ci|contributing|pr_template|docs|tracker|interview|model", "evidence": ["what showed it, with file paths or counts — quoted as found, English where the repository is English"], "steps": [{"key": "snake_case", "title": "כותרת קצרה בעברית", "what": "משפט אחד בעברית: מה קורה בצעד הזה כאן", "agentTest": {"judgment": false, "externalInfo": false, "readsALot": false, "parallel": false, "failsToday": false, "why": "משפט אחד בעברית"}}]}]}$p$,
 NULL
 ) ON CONFLICT ("key") DO NOTHING;--> statement-breakpoint
 
