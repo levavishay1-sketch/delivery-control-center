@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { RepoProfile } from "../types.ts";
-import { evalContext, evalTasksFor, exercised, globMatch, MAX_EVAL_TASKS, MIN_EVAL_TASKS } from "./tasks.ts";
+import { commentLine, evalContext, evalTasksFor, exercised, globMatch, MAX_EVAL_TASKS, MIN_EVAL_TASKS } from "./tasks.ts";
 
 /**
  * The bank on the eleven research diagnoses: every repository gets a set of
@@ -104,5 +104,18 @@ describe("the dependency probe", () => {
     expect(ctx.dep_target).toBe("tokio");
     const go = evalContext({ ...trade, package_managers: ["go"] } as RepoProfile);
     expect(go.dep_name).toBe("github.com/google/uuid");
+  });
+});
+
+describe("a task's setup", () => {
+  it("plants the typo the task is about, as a comment of the file's kind, and drops the task when the file is unknown", () => {
+    expect(commentLine("src/a.cs", "TODO: x")).toBe("// TODO: x");
+    expect(commentLine("scripts/run.py", "TODO: x")).toBe("# TODO: x");
+    expect(commentLine("docs/readme.md", "TODO: x")).toBe("<!-- TODO: x -->");
+    expect(commentLine("db/init.sql", "TODO: x")).toBe("-- TODO: x");
+    const p = { ...trade, layout: { model_dirs: [], node_packages: [], unit_groups: [], small_source_files: ["BusinessLogicLayer/Crm/Alt.BusinessLogicLayer.Crm/SubjectsBL.cs"] } } as RepoProfile;
+    const typo = evalTasksFor(p).find((t) => t.key === "typo_fix")!;
+    expect(typo.setup).toMatchObject({ type: "append_comment", file: expect.stringMatching(/\.(cs|js|ts)$/), text: expect.stringContaining("recieve") });
+    expect(typo.graders.some((g) => g.type === "diff_contains" && g.pattern === "receive the response and process it")).toBe(true);
   });
 });

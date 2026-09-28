@@ -181,10 +181,12 @@
       "key": "typo_fix", "kind": "action", "priority": 8, "allowsEdits": true,
       "when": { "path": "layout.small_source_files", "empty": false },
       "title_he": "לתקן שגיאת כתיב בלי לגעת בשאר",
-      "prompt": "In `{typo_file}`, fix any spelling mistake in its comments; if there is none, improve the wording of one comment. Change nothing else in the repository.",
+      "prompt": "The last line of `{typo_file}` is a comment with two spelling mistakes. Fix those two words in that comment, keeping the line where it is, and change nothing else in the repository — no other file, no formatting, no build output.",
+      "setup": { "type": "append_comment", "fileFrom": "typo_file", "text": "TODO: recieve the response and proccess it before the next step" },
       "exercises": { "keys": ["match_style_rule"], "prefixes": ["init_line"], "kinds": ["rule"] },
       "graders": [
-        { "type": "diff_lines_max", "max": 4, "filesMax": 1 },
+        { "type": "diff_contains", "pattern": "receive the response and process it" },
+        { "type": "diff_lines_max", "max": 3, "filesMax": 1 },
         { "type": "files_changed_within", "pathsFrom": "typo_file_arr" }
       ]
     },

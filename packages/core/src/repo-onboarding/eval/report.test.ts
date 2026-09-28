@@ -9,7 +9,7 @@ import type { EvalTask } from "./tasks.ts";
  * when it changed nothing.
  */
 
-const t = (key: string, exercises: EvalTask["exercises"], kind: EvalTask["kind"] = "action"): EvalTask => ({ key, kind, title_he: key, prompt: "", allowsEdits: true, exercises, graders: [], judge: null, from: "test" });
+const t = (key: string, exercises: EvalTask["exercises"], kind: EvalTask["kind"] = "action"): EvalTask => ({ key, kind, title_he: key, prompt: "", allowsEdits: true, exercises, graders: [], judge: null, setup: null, from: "test" });
 const r = (taskKey: string, arm: "with" | "without", passed: boolean | null, o: Partial<EvalRunRecord> = {}): EvalRunRecord => ({ taskKey, title_he: taskKey, arm, runIndex: 0, passed, failureKind: passed ? null : "missing_fact", detail: "", costUsd: 0.3, numTurns: 8, graders: [], judgedBy: "code", callId: null, answer: "", ...o });
 
 const tasks = [t("gen", { keys: ["generated_paths_guard"], kinds: ["hook"] }), t("build", { keys: ["cannot_build_here_rule"] }), t("typo", { keys: ["match_style_rule"] }), t("secret", { keys: ["deny_read_secret_files"] })];

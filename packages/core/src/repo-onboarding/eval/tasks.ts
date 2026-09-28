@@ -40,13 +40,28 @@ export type EvalTask = {
   graders: GraderSpec[];
   /** A repository-grounded judge decides what the code cannot; `facts` are hints, never the truth. */
   judge: { expect: string; facts: string[] } | null;
+  /** What the runner plants in the copy before the task runs, in both arms — a known defect the task is about (a typo the agent must find is otherwise a guess). */
+  setup: TaskSetup | null;
   from: string;
 };
+
+export type TaskSetup = { type: "append_comment"; file: string; text: string };
+
+/** The line a comment takes in a file of that kind — what the setup appends. */
+export function commentLine(file: string, text: string): string {
+  const ext = (file.match(/\.([a-z0-9]+)$/i)?.[1] ?? "").toLowerCase();
+  if (["py", "rb", "sh", "bash", "yml", "yaml", "toml", "ps1", "r", "pl", "cmake", "dockerfile", "mk", "cfg", "ini"].includes(ext)) return `# ${text}`;
+  if (["html", "htm", "xml", "md", "svg", "csproj", "vbproj", "fsproj", "props", "targets", "config", "xaml"].includes(ext)) return `<!-- ${text} -->`;
+  if (["sql", "lua", "hs", "elm"].includes(ext)) return `-- ${text}`;
+  if (["bat", "cmd"].includes(ext)) return `REM ${text}`;
+  return `// ${text}`;
+}
 
 type RawGrader = Record<string, unknown> & { type: GraderSpec["type"]; armOnly?: EvalArm; when?: { ctx: string; is: boolean } };
 type Template = {
   key: string; kind: "knowledge" | "action"; priority: number; when?: Condition; title_he: string; prompt: string; allowsEdits?: boolean;
   exercises?: Exercises; graders: RawGrader[]; judge?: { expect: string; factsFrom?: string };
+  setup?: { type: "append_comment"; fileFrom: string; text: string };
 };
 
 const FILE = fileURLToPath(new URL("./tasks.json", import.meta.url));
@@ -191,10 +206,12 @@ export function evalTasksFor(profile: RepoProfile, processes: readonly Discovere
     const graders = t.graders.map((g) => resolveGrader(g, ctx)).filter(usable);
     const judge = t.judge ? { expect: t.judge.expect, facts: t.judge.factsFrom ? asStringArray(ctx[t.judge.factsFrom]) : [] } : null;
     if (!graders.length && !judge) continue;
+    const setupFile = t.setup ? String(ctx[t.setup.fileFrom] ?? "") : "";
+    if (t.setup && !setupFile) continue;
     out.push({
       key: t.key, kind: t.kind, title_he: fill(t.title_he, ctx), prompt, allowsEdits: !!t.allowsEdits,
       exercises: { ...(t.exercises ?? {}), files: (t.exercises?.files ?? []).map((f) => fill(f, ctx)).filter((f) => !/\{[a-z_0-9]+\}/.test(f)) },
-      graders, judge, from: "bank",
+      graders, judge, setup: t.setup ? { type: t.setup.type, file: setupFile, text: t.setup.text } : null, from: "bank",
     });
   }
   return out.slice(0, opts.max ?? MAX_EVAL_TASKS);

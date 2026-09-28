@@ -1,10 +1,11 @@
+import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { runClaudeRaw, type LedgerContext } from "../../ai-assist.ts";
 import { route } from "../../routing.ts";
 import { gradeRun, type EvalEvidence } from "./graders.ts";
 import { judgeWithRepo } from "./judge.ts";
 import { summarizeEval, tasksWorthRerun, type ComponentLike, type EvalRunRecord, type EvalSummary } from "./report.ts";
-import { EVAL_ARMS, type EvalArm, type EvalTask } from "./tasks.ts";
+import { EVAL_ARMS, commentLine, type EvalArm, type EvalTask } from "./tasks.ts";
 import { collectEvidence, copyDelivered, prepareArms, removeArms, resetArm, usableMcpConfig, type Arms } from "./workspace.ts";
 
 /**
@@ -78,6 +79,12 @@ export async function runEval(o: EvalOpts): Promise<EvalResult> {
       const dir = armDirs[arm];
       await resetArm(dir, o.baselineSha);
       if (arm === "with") copyDelivered(o.delivered.fromDir, dir, o.delivered.files);
+      // What the task is about is planted in the copy first, the same in both arms — a typo the agent must find is otherwise a guess.
+      if (task.setup?.type === "append_comment") {
+        const target = path.join(dir, task.setup.file);
+        try { appendFileSync(target, `${readFileSync(target, "utf8").endsWith("\n") ? "" : "\n"}${commentLine(task.setup.file, task.setup.text)}\n`); }
+        catch (e) { log(`  ההכנה של המשימה לא הצליחה (${task.setup.file}): ${(e as Error).message.slice(0, 120)}`); }
+      }
       const label = `מדידה ${arm === "with" ? "עם" : "בלי"} #${runIndex + 1}: ${task.title_he}`;
       log(`▶ ${label}`);
       const prompt = await o.render("onboarding.trial", { TASK: task.prompt, EDITS: task.allowsEdits });

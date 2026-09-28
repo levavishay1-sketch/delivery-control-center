@@ -15,7 +15,7 @@ const result = (id: string, text: string, isError = false) => ({ type: "user", m
 const say = (text: string) => ({ type: "assistant", message: { content: [{ type: "text", text }] } });
 const lastId = () => `t${n}`;
 
-const task = (graders: GraderSpec[], allowsEdits = true): EvalTask => ({ key: "t", kind: "action", title_he: "t", prompt: "p", allowsEdits, exercises: {}, graders, judge: null, from: "test" });
+const task = (graders: GraderSpec[], allowsEdits = true): EvalTask => ({ key: "t", kind: "action", title_he: "t", prompt: "p", allowsEdits, exercises: {}, graders, judge: null, setup: null, from: "test" });
 const evidence = (o: Partial<EvalEvidence>): EvalEvidence => ({ arm: "with", answer: "", events: [], changed: [], committed: [], diff: "", ctx: {}, ...o });
 
 describe("reading the transcript", () => {

@@ -89,6 +89,9 @@ const NEW_FILE_CAP = 20_000;
 const BINARY = /\.(dll|exe|pdb|png|jpg|jpeg|gif|zip|nupkg|jar|class|so|dylib|bin|ico|pfx|snk)$/i;
 
 /** What the run left behind in the arm, against the baseline: changed paths with line counts, the files it committed, the diff text. */
+/** Folders a build writes into — what changes there is the build's, not the agent's. */
+const BUILD_OUTPUT = /(^|\/)(bin|obj|dist|build|target|out|node_modules|\.vs|coverage|testresults|__pycache__|\.next|\.gradle|\.pytest_cache)(\/|$)/i;
+
 export async function collectEvidence(dir: string, baselineSha: string): Promise<{ changed: ChangedPath[]; committed: string[]; diff: string }> {
   const changed = new Map<string, ChangedPath>();
   const numstat = await git(["diff", "--numstat", baselineSha, "--"], dir, { timeoutMs: 120_000 });
@@ -121,6 +124,9 @@ export async function collectEvidence(dir: string, baselineSha: string): Promise
     }
     changed.set(p, { path: p, status: "?", additions: lines, deletions: 0 });
   }
+  // A build's outputs are never the agent's edit: a repository that tracks bin/ and obj/ (Trade, 3,064 binaries) made a
+  // one-line typo fix look like 836 lines in 19 files once the agent ran the build the instructions asked for.
+  for (const p of [...changed.keys()]) if (BUILD_OUTPUT.test(p)) changed.delete(p);
   const committedOut = await git(["diff", "--name-only", baselineSha, "HEAD", "--"], dir, { timeoutMs: 120_000 });
   const committed = committedOut.out.split("\n").map((l) => l.trim().replace(/\\/g, "/")).filter(Boolean);
   const diffOut = await git(["diff", baselineSha, "--", ".", ...["*.dll", "*.exe", "*.pdb", "*.png", "*.jpg", "*.zip", "*.nupkg"].map((g) => `:(exclude)${g}`)], dir, { timeoutMs: 120_000 });
