@@ -247,19 +247,22 @@ function AnswersGiven({ questions, answers }: { questions: InterviewQuestion[]; 
   );
 }
 
-function AgentTestIcons({ t }: { t: AgentTest }) {
-  return (
-    <span className="rd-at">
-      {AGENT_TEST_HE.map((a) => <span key={a.key} className={t[a.key] ? "y" : ""} title={`${a.label}: ${t[a.key] ? "כן" : "לא"}${t.why ? ` — ${t.why}` : ""}`}>{t[a.key] ? "✓" : "–"}</span>)}
-    </span>
-  );
+/** In words, not icons: which of the five agent-test questions came back "yes" — the thing itself, not a mark that needs a hover to read. */
+function AgentTestSummary({ t }: { t: AgentTest }) {
+  const yes = AGENT_TEST_HE.filter((a) => t[a.key]);
+  if (!yes.length) return <span className="ob-sub">לא — לא נדרש עזר מיוחד</span>;
+  return <span className="rd-tags">{yes.map((a) => <span className="rd-chip" key={a.key} title={t.why || undefined}>{a.label}</span>)}</span>;
 }
+
+/** `s.reason` already opens with the decision word ("סוכן: …"/"skill: …"/"כלום: …") — the chip beside it says that; showing only the rest avoids saying the same word twice. */
+const REASON_PREFIX = /^(סוכן|skill|כלום):\s*/;
+const reasonTail = (reason: string) => reason.replace(REASON_PREFIX, "");
 
 function ProcessList({ processes }: { processes: DiscoveredProcess[] }) {
   if (!processes.length) return <p className="ob-sub">לא נמצאו תהליכים חוזרים במאגר הזה.</p>;
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <CardTitle info="process_list">התהליכים שנמצאו ({processes.length})</CardTitle>
+      <CardTitle info="process_list">מועמדים לסקילים ולסוכנים, לפי התהליכים במאגר ({processes.length})</CardTitle>
       {processes.map((pr) => (
         <div className="rd-proc" key={pr.key}>
           <div className="ph"><span>{pr.title}</span><span className="rd-chip det">{PROCESS_SOURCE_HE[pr.source] ?? pr.source}</span>{pr.trialTaskKey && <span className="rd-chip">יש משימת ניסיון</span>}</div>
@@ -267,16 +270,17 @@ function ProcessList({ processes }: { processes: DiscoveredProcess[] }) {
           {pr.evidence.length > 0 && <ul>{pr.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul>}
           {pr.steps.length > 0 && (
             <table className="rd-table">
-              {/* no-info: the step, what it does and the reason say what they are; the agent test and the decision open theirs */}
-              <thead><tr><th>צעד</th><th>מה</th><th>מבחן הסוכן<Info k="agent_test" /></th><th>ההחלטה<Info k="step_decision" /></th><th>למה</th></tr></thead>
+              <thead><tr><th>צעד<Info k="process_step" /></th><th>פירוט השלב<Info k="process_step_detail" /></th><th>מבחן הסוכן<Info k="agent_test" /></th><th>ההחלטה<Info k="step_decision" /></th></tr></thead>
               <tbody>
                 {pr.steps.map((s) => (
                   <tr key={s.key}>
                     <td><b>{s.title}</b></td>
                     <td>{s.what}</td>
-                    <td><AgentTestIcons t={s.agentTest} /></td>
-                    <td><span className={`rd-chip ${DECISION_HE[s.decision].cls}`}>{DECISION_HE[s.decision].label}</span></td>
-                    <td className="dim">{s.reason}</td>
+                    <td><AgentTestSummary t={s.agentTest} /></td>
+                    <td>
+                      <span className={`rd-chip ${DECISION_HE[s.decision].cls}`}>{DECISION_HE[s.decision].label}</span>
+                      <div className="dim" style={{ marginTop: 4 }}>{reasonTail(s.reason)}</div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
