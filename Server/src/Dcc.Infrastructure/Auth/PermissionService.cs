@@ -62,6 +62,25 @@ public sealed class PermissionService(DccDbContext db, IMemoryCache cache) : IPe
         return capped;
     }
 
+    public async Task<IReadOnlySet<Guid>?> ClientsWithAsync(Guid userId, string permission, CancellationToken ct = default)
+    {
+        var own = (await GetEffectiveAsync(userId, ct)).ClientsWith(permission);
+        var owner = await DelegatedOwnerAsync(userId, ct);
+        if (owner is null) return own;
+
+        // A delegated agent reaches only where its owner does, too.
+        var ownerSet = (await GetEffectiveAsync(owner.Value, ct)).ClientsWith(permission);
+        if (own is null) return ownerSet;
+        if (ownerSet is null) return own;
+        return own.Intersect(ownerSet).ToHashSet();
+    }
+
+    public async Task<bool> HasAnywhereAsync(Guid userId, string permission, CancellationToken ct = default)
+    {
+        var claim = await ClaimForAsync(userId, ct);
+        return claim.Values.Any(codes => codes.Contains(permission));
+    }
+
     private async Task<List<(Scope, string)>> LoadGrantsAsync(Guid userId, CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;

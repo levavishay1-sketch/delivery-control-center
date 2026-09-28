@@ -21,8 +21,7 @@ API** (`openspec/changes/server-in-csharp`), with one cut-over at the end.
 - `OldServer/` — the retired TypeScript server (`apps/api`, `apps/mcp`,
   `packages/core`, `packages/db`): out of the npm workspaces and the build, kept
   **only as the reference being rewritten**. Never run it; never add to it. The
-  "i" glossary still lives in `OldServer/packages/core/src/glossary/concepts/`
-  until it moves to `Server/glossary` (task 4.1 of server-in-csharp).
+  "i" glossary lives in `Server/glossary` (JSON), served by `GlossaryService`.
 - A rewritten endpoint keeps the old route and JSON shape (`OldServer/apps/api/src/server.ts`,
   `Client/src/api.ts`), so the client changes only in how it authenticates.
 - Only `IEventLogWriter` writes to `event_log`; where the log is kept is decided
@@ -200,8 +199,8 @@ opens no explanation. An element that genuinely needs none opts out with
 `{/* no-info: why */}` above it (the audit counts these).
 
 - The wording lives in **one** place, keyed by **concept** and never by screen:
-  `OldServer/packages/core/src/glossary/concepts/` (moving to `Server/glossary`), read only through `getConcept` /
-  `allConcepts` / `glossaryFor` — the same entries the chat answers from.
+  `Server/glossary/concepts/<area>.json`, read only through the server's `GlossaryService`
+  and `scripts/glossary.mjs` — the same entries the chat answers from.
 - A new screen or component is not finished without it. How to add and word one,
   and which elements get an "i": the `info-hints` skill in `.claude/skills/`.
 - Run `npm run info:drift` before a pull request that touches a screen, and fix

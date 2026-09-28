@@ -6,10 +6,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Dcc.Api.Controllers;
 
-/// <summary>The record of every change to identity and permissions, newest first.</summary>
+/// <summary>
+/// The record of every change to identity and permissions, newest first. (<c>/audit</c> is the
+/// activity log of the work itself — a different record, served by its own controller.)
+/// </summary>
 [ApiController]
-[Route("audit")]
-public sealed class AuditController(DccDbContext db) : ControllerBase
+[Route("identity-audit")]
+public sealed class IdentityAuditController(DccDbContext db) : ControllerBase
 {
     [HttpGet]
     [RequirePermission(Permissions.Audit.Read)]

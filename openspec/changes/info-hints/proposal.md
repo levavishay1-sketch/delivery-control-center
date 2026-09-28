@@ -17,7 +17,7 @@ budgets screen, because it is one entry that all three point to.
 
 ## What this change does
 
-- **One registry, keyed by concept** (`packages/core/src/glossary/`). An entry
+- **One registry, keyed by concept** (`Server/glossary/`, one JSON file per area). An entry
   is flat — `key`, `kind`, `title`, `explain`, and for a button `press` — so it
   maps one-to-one to a table row later. Screens no longer own entries: a
   screen lists the concept keys it shows, and the chat answers about that
@@ -67,7 +67,7 @@ budgets screen, because it is one entry that all three point to.
 
 ## Impact
 
-- `packages/core/src/glossary/` restructured; `chat/`, `insights.ts` and the
+- the glossary (now `Server/glossary/`) restructured; `chat/`, `insights.ts` and the
   API's `/claude/glossary/:screen` read through the same surface; a new
   `GET /claude/glossary`.
 - `apps/web`: `Info` replaces the old hint component; `ui.tsx` / `forms.tsx`

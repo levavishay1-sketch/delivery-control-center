@@ -4,7 +4,7 @@
 // adds to master, plus what is not committed yet).
 //
 // The problem it solves (openspec/changes/info-hints, design §7): the wording
-// lives in `OldServer/packages/core/src/glossary/`, the thing it describes lives in a
+// lives in `Server/glossary/`, the thing it describes lives in a
 // screen. Nothing connects them, so a button that starts writing to TFS keeps
 // an "i" that says it does not. This does not try to understand the change —
 // it points at the exact explanations that sit on the lines that moved, and
@@ -14,7 +14,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { conceptsUsed, isScreenFile } from "./info-lint.mjs";
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -45,7 +44,7 @@ const merge = (a, b) => { for (const [f, s] of b) { if (!a.has(f)) a.set(f, new 
 const touched = merge(touchedLines([range]), touchedLines([]));           // committed on this branch + working tree
 merge(touched, touchedLines(["--cached"]));                                // and what is staged
 
-const { getConcept } = await import(pathToFileURL(path.resolve("OldServer/packages/core/src/glossary/index.ts")).href);
+const { getConcept } = await import("./glossary.mjs");
 
 /* ── 1. an explanation sitting on a line the change touched ──────────── */
 
@@ -64,7 +63,7 @@ for (const [file, lines] of touched) {
 
 /* ── 2. wording that was edited — does the screen still match it? ─────── */
 
-const reworded = [...touched.keys()].filter((f) => /^OldServer\/packages\/core\/src\/glossary\//.test(f));
+const reworded = [...touched.keys()].filter((f) => /^Server\/glossary\//.test(f));
 
 /* ── the report ──────────────────────────────────────────────────────── */
 
@@ -93,5 +92,5 @@ if (reworded.length) {
   console.log(`Wording edited in this change — check the screens that show it still match:\n${reworded.map((f) => "  " + f).join("\n")}\n`);
 }
 
-console.log("An explanation that no longer matches is fixed in OldServer/packages/core/src/glossary/concepts/,");
+console.log("An explanation that no longer matches is fixed in Server/glossary/concepts/,");
 console.log("in the same change — not left for whoever reads the screen next.");

@@ -225,7 +225,7 @@ export type ConversationView = {
   status: string; continuedFrom: string | null; continuesAs: string | null; createdBy: string; createdByName: string | null;
   lastMessageAt: string; createdAt: string; retainUntil: string | null; messageCount: number; costUsd: number; calls: number; lastText: string | null;
 };
-/** One explained concept — the same entry the "i" opens and the chat answers with (packages/core/src/glossary). */
+/** One explained concept — the same entry the "i" opens and the chat answers with (Server/glossary, served at GET /claude/glossary). */
 export type Concept = { key: string; title: string; aliases?: string[]; explain: string; press?: string; kind: "button" | "term" | "field" | "section" };
 export type ScreenGlossary = { screen: string; about: string; entries: Concept[] };
 export type ChatOpen = { topic: { key: string; kind: string; id: string | null; title: string; screen: string }; conversation: ConversationView | null; messages: ChatMessage[]; glossary: ScreenGlossary | null; suggestions: string[] };
@@ -903,12 +903,14 @@ export const onboardingTerminalUrl = (repoId: string, runId: string) =>
 /** A WebSocket cannot carry headers — its first message carries the same credentials. */
 export const terminalAuthMessage = () => JSON.stringify({ type: "auth", token: currentAccessToken() });
 
-/** The server refuses with `{ "error": "<message for the person>" }`. */
+/** The server refuses with `{ "error": "<code>", "message": "<sentence for the person>" }` — show the sentence. */
 export function errText(e: unknown): string {
   const s = e instanceof Error ? e.message : String(e);
   const body = s.replace(/^\d{3}\s+/, "");
   try {
-    const j = JSON.parse(body) as { error?: unknown };
+    // The C# server answers { error: code, message: sentence }; the sentence is for the person.
+    const j = JSON.parse(body) as { error?: unknown; message?: unknown };
+    if (typeof j.message === "string" && j.message) return j.message;
     if (typeof j.error === "string") return j.error;
   } catch { /* not JSON */ }
   return body;

@@ -12,9 +12,17 @@ public sealed class UsersController(DirectoryService directory, IGuestInvitation
 {
     public sealed record InviteGuestRequest(string Email, string DisplayName, DateTimeOffset? ExpiresAt);
 
+    /// <summary>
+    /// <c>{ users: [...] }</c>, as the old server answered — the web client's owner pickers
+    /// read it, so any signed-in user gets id, email and name; with users.read, the full record.
+    /// </summary>
     [HttpGet]
-    [RequirePermission(Permissions.Users.Read)]
-    public Task<IReadOnlyList<UserDto>> List([FromQuery] bool includeAgents, CancellationToken ct) => directory.ListUsersAsync(includeAgents, ct);
+    public async Task<object> List([FromQuery] bool includeAgents, [FromServices] Dcc.Application.Auth.IPermissionService permissions, CancellationToken ct)
+    {
+        var users = await directory.ListUsersAsync(includeAgents, ct);
+        if (await permissions.HasAsync(User.UserId(), Permissions.Users.Read, Dcc.Application.Auth.ScopeRef.Global, ct)) return new { users };
+        return new { users = users.Where(u => !u.Disabled).Select(u => new { u.Id, u.Email, u.DisplayName }) };
+    }
 
     [HttpGet("{id:guid}")]
     [RequirePermission(Permissions.Users.Read)]

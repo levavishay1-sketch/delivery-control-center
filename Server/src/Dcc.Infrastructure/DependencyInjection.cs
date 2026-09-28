@@ -1,10 +1,15 @@
 using Dcc.Application.Auth;
 using Dcc.Application.UserDirectory;
+using Dcc.Infrastructure.Ado;
 using Dcc.Infrastructure.Audit;
 using Dcc.Infrastructure.Auth;
 using Dcc.Infrastructure.UserDirectory;
 using Dcc.Infrastructure.Entra;
+using Dcc.Infrastructure.Clients;
 using Dcc.Infrastructure.Events;
+using Dcc.Infrastructure.Glossary;
+using Dcc.Infrastructure.Policy;
+using Dcc.Infrastructure.Prompts;
 using Dcc.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -41,6 +46,21 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<CatalogSeeder>();
         services.AddScoped<DirectoryService>();
+
+        // Clients, repositories, Azure DevOps connections (phase 4.1)
+        services.AddHttpClient(AdoClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
+        services.AddScoped<AdoClient>();
+        services.AddScoped<ClientService>();
+        services.AddScoped<ConnectionService>();
+
+        // What the organisation shares: the prompt library, the model policy, the "i" glossary
+        services.Configure<ModelPolicyOptions>(config.GetSection(ModelPolicyOptions.Section));
+        services.Configure<GlossaryOptions>(config.GetSection(GlossaryOptions.Section));
+        services.AddSingleton<ModelPolicyStore>();
+        services.AddSingleton<GlossaryService>();
+        services.AddScoped<PromptService>();
+        services.AddScoped<PolicyService>();
+        services.AddScoped<InternalClient>();
 
         services.AddSingleton<GraphClientFactory>();
         services.AddScoped<IGuestInvitationService, GraphGuestInvitationService>();

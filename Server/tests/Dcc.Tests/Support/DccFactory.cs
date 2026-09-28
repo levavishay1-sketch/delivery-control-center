@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 
 namespace Dcc.Tests.Support;
@@ -19,6 +20,7 @@ public sealed class DccFactory : WebApplicationFactory<Program>
     public const string TestDatabase = "dcc_test";
 
     public string OwnerConnectionString { get; }
+    public string PolicyPath { get; }
     public string AdminEmail => "admin@dcc.local";
     public string AdminPassword { get; private set; } = "";
 
@@ -40,12 +42,22 @@ public sealed class DccFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Auth__WebSocket__AuthTimeoutSeconds", "2");
         Environment.SetEnvironmentVariable("Auth__WebSocket__CheckIntervalSeconds", "1");
         Environment.SetEnvironmentVariable("Auth__WebSocket__ReauthGraceSeconds", "2");
+        // A copy of the routing policy: a test that saves it must never touch config/model-policy.json.
+        PolicyPath = Path.Combine(_tempDir, "model-policy.json");
+        File.Copy(Path.Combine(serverDir, "..", "config", "model-policy.json"), PolicyPath);
+        Environment.SetEnvironmentVariable("ModelPolicy__Path", PolicyPath);
         Environment.SetEnvironmentVariable("Entra__TenantId", "");
         Environment.SetEnvironmentVariable("Entra__ClientId", "");
         Environment.SetEnvironmentVariable("Entra__ClientSecret", "");
     }
 
-    protected override void ConfigureWebHost(IWebHostBuilder builder) => builder.UseEnvironment("Development");
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.UseEnvironment("Development");
+        // Azure DevOps is answered by FakeAdo — the tests never reach the internet.
+        builder.ConfigureServices(s => s.AddHttpClient(Dcc.Infrastructure.Ado.AdoClient.HttpClientName)
+            .ConfigurePrimaryHttpMessageHandler(() => new FakeAdo()));
+    }
 
     /// <summary>Starts the app (runs migrations and seeding) and reads the admin's one-time password.</summary>
     public async Task InitializeAsync()

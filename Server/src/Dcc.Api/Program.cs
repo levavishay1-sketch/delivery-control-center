@@ -35,6 +35,8 @@ var signingKey = JwtSigningKey.Load(Resolve(authOptions.SigningKeyPath), authOpt
 
 builder.Services.AddInfrastructure(builder.Configuration, signingKey);
 builder.Services.PostConfigure<BootstrapOptions>(o => o.InitialAdminPasswordFile = Resolve(o.InitialAdminPasswordFile));
+builder.Services.PostConfigure<Dcc.Infrastructure.Policy.ModelPolicyOptions>(o => o.Path = Resolve(o.Path));
+builder.Services.PostConfigure<Dcc.Infrastructure.Glossary.GlossaryOptions>(o => o.Path = Resolve(o.Path));
 builder.Services.Configure<SocketOptions>(builder.Configuration.GetSection("Auth:WebSocket"));
 
 // ── authentication: a JWT from us, or an API token (dcc_pat_…) ─────────
@@ -80,7 +82,15 @@ builder.Services.AddAuthorization(o =>
     o.FallbackPolicy = new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build();
 });
 
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .ConfigureApiBehaviorOptions(o =>
+        // A body that does not bind answers in the same { error, message } shape as every other refusal.
+        o.InvalidModelStateResponseFactory = ctx => new Microsoft.AspNetCore.Mvc.BadRequestObjectResult(new
+        {
+            error = "bad_request",
+            message = string.Join("; ", ctx.ModelState.Where(e => e.Value?.Errors.Count > 0)
+                .Select(e => $"{e.Key}: {e.Value!.Errors[0].ErrorMessage}")),
+        }));
 builder.Services.AddExceptionHandler<DccExceptionHandler>();
 builder.Services.AddProblemDetails();
 

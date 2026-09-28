@@ -50,6 +50,15 @@ public interface IPermissionService
 
     /// <summary>The token's <c>perms</c> claim: this user's own permissions only.</summary>
     Task<IReadOnlyDictionary<string, string[]>> ClaimForAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// The clients on which the user holds <paramref name="permission"/> — to filter a
+    /// list that spans clients. <c>null</c> means every client (a global grant).
+    /// </summary>
+    Task<IReadOnlySet<Guid>?> ClientsWithAsync(Guid userId, string permission, CancellationToken ct = default);
+
+    /// <summary>Whether the user holds <paramref name="permission"/> anywhere at all — for an org-wide library everyone who works with it may read.</summary>
+    Task<bool> HasAnywhereAsync(Guid userId, string permission, CancellationToken ct = default);
 }
 
 /// <summary>

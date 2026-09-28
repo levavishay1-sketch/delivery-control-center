@@ -24,7 +24,13 @@ one PR to `master` at the end, when the user asks.
 
 ## 4. The rest of the server, in dependency order
 
-- [ ] 4.1 Clients, repositories, settings, service connections, prompt library, model policy, glossary (the "i" registry as JSON in `Server/glossary`, served anonymously; the audit reads it there)
+- [x] 4.1 Clients, repositories, settings, service connections, prompt library, model policy, glossary
+  - Routes and JSON as the old server: `/health`, `/clients` (list filtered by clients.read), `/clients/:id`, PATCH/DELETE, `/admin/setup-client`, `/clients/:id/claude-retention`, `/repos`, PATCH/DELETE `/repos/:id`, `/clients/:id/repos`, `/connections`, `/connections/ado/projects`, `/clients/:id/connections/ado` (+ PATCH, check, DELETE), `/prompts`, PATCH `/prompts/:id`, `/claude/policy`, `/claude/glossary` (open without signing in, so the login screen has its "i"), `/claude/glossary/:screen`, `/dev/workitems`; `GET /users` answers `{ users }` for the owner pickers
+  - `SqlJson`: SQL rows as the JSON node-postgres produced (numeric/bigint as strings, ISO timestamps) — the tool for every endpoint still to come
+  - Azure DevOps HTTP with the api-version walk and a 20-second timeout; the policy file written back in its own layout (a test proves byte-for-byte); the prompt contract checked on save
+  - The glossary moved from TypeScript to `Server/glossary/concepts/*.json` + `screens.json`; the server (`GlossaryService`) and the scripts (`scripts/glossary.mjs`: audit-stale, info-drift) read it there. Swept: the scripts, the info-hint hook, the `info-hints` skill, `CLAUDE.md`, `openspec/changes/{info-hints,claude-in-dcc}`, `docs/wishlist.md`, `Client/src/api.ts`. Kept on purpose: `docs/research/**` and the `docs/fable-brief-*` notes (they describe the code as it was when written), and three files under `OldServer/` that still import the deleted TypeScript glossary (`core/src/index.ts`, `chat/index.ts`, `insights.ts`) — reference only, never built, deleted with `OldServer/` (5.2)
+  - The identity audit moved to `/identity-audit`: `/audit` is the activity log's route (4.8)
+  - Errors are `{ error: code, message }`; the client's `errText` shows the message
 - [ ] 4.2 Requirements, timeline, context brief, gaps, blockers, decisions, attachments, spec
 - [ ] 4.3 Tasks, flow, the checks pipeline, manual work, built-on, start-build, task ADO sync
 - [ ] 4.4 Azure DevOps: http, pull, sync, import

@@ -15,9 +15,9 @@ itself without sending them elsewhere. The design and its reasons are in
 
 | What | Where |
 |---|---|
-| The wording (one entry per **concept**) | `OldServer/packages/core/src/glossary/concepts/<area>.ts`, listed in `concepts/index.ts` |
-| What a chat-registered screen is for | `OldServer/packages/core/src/glossary/screens.ts` |
-| Reading the registry | `getConcept` / `allConcepts` / `glossaryFor` in `glossary/index.ts` — never the arrays |
+| The wording (one entry per **concept**) | `Server/glossary/concepts/<area>.json` — one JSON array per area |
+| What a chat-registered screen is for | `Server/glossary/screens.json` |
+| Reading the registry | the server's `GlossaryService` (`All` / `Get` / `For`) and `scripts/glossary.mjs` for the scripts — never the files directly |
 | The component | `Client/src/claude/Info.tsx` (`<Info k="key" />`) |
 | Shared components that carry it | `PageHead`, `CardTitle`, `StatTile` in `Client/src/ui.tsx` — prop `info` |
 | The rule itself, in code | `scripts/info-lint.mjs` — what counts as "names something", used by the audit and the hook |

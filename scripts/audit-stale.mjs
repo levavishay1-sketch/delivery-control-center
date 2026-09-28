@@ -7,7 +7,6 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
 import { conceptsUsed, infoInsideButton, isScreenFile, optedOut, rawHeadings, unexplained } from "./info-lint.mjs";
 
 const root = process.cwd();
@@ -147,7 +146,7 @@ depIssues.length ? note("dependencies never imported — verify, then remove", d
 // 7. The "i" (openspec/changes/info-hints): the registry is well-formed, every key a screen uses exists, every screen
 //    registered with the chat has a glossary, and no screen writes a heading that bypasses the shared components
 //    (they carry the "i"). The registry is read through its own access surface, as everything else does.
-const { allConcepts, glossaryScreens } = await import(pathToFileURL(path.resolve("OldServer/packages/core/src/glossary/index.ts")).href);
+const { allConcepts, glossaryScreens } = await import("./glossary.mjs");
 const concepts = allConcepts();
 const MAX_EXPLAIN = 240, MAX_PRESS = 320;
 const bad = [];
@@ -189,7 +188,7 @@ unknown.length ? fail(`an "i" points at a concept that does not exist (${unknown
 const registered = new Set();
 for (const [f, t] of webSrc) if (/useClaudeContext\(/.test(t) && !f.endsWith("claude/context.ts")) for (const m of t.matchAll(/\bscreen: "(\w+)"/g)) registered.add(m[1]);
 const noGlossary = [...registered].filter((s) => !glossaryScreens().includes(s));
-noGlossary.length ? fail("screens registered with the chat that have no glossary line in glossary/screens.ts", noGlossary) : ok(`every chat screen has a glossary (${registered.size})`);
+noGlossary.length ? fail("screens registered with the chat that have no glossary line in Server/glossary/screens.json", noGlossary) : ok(`every chat screen has a glossary (${registered.size})`);
 
 const screenFiles = webSrc.filter(([f]) => isScreenFile(f));
 const rawHead = [];
@@ -230,7 +229,7 @@ else {
   const changed = new Set([...lines(gitOut("diff", "--name-only", specBase)), ...lines(gitOut("ls-files", "--others", "--exclude-standard"))]);
   const isProcess = (f) =>
     (f.startsWith("OldServer/packages/core/src/repo-onboarding/") && !f.endsWith(".test.ts")) || f.startsWith("Client/src/screens/repo/") ||
-    f === "OldServer/packages/core/src/glossary/concepts/onboarding.ts" || (/^OldServer\/packages\/db\/migrations\/.*\.sql$/.test(f) && existsSync(f) && /'onboarding\./.test(readFileSync(f, "utf8")));
+    f === "Server/glossary/concepts/onboarding.json" || (/^OldServer\/packages\/db\/migrations\/.*\.sql$/.test(f) && existsSync(f) && /'onboarding\./.test(readFileSync(f, "utf8")));
   const touchedProcess = [...changed].filter(isProcess);
   const waived = gitOut("log", "--format=%B", `${specBase}..HEAD`)?.match(/^Spec-unchanged:\s*(.+)$/m)?.[1];
   if (!touchedProcess.length) ok("the onboarding spec: this branch does not touch the onboarding process");

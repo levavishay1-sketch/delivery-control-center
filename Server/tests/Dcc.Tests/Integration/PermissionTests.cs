@@ -191,7 +191,7 @@ public sealed class PermissionTests(DbFixture fx)
     {
         var (id, _, _) = await _f.NewUserAsync();
         await _f.AssignAsync("user", id, "reader", "global", null);
-        var audit = await _f.Client(await _f.AdminTokenAsync()).GetFromJsonAsync<JsonElement>($"/audit?targetType=user&targetId={id}");
+        var audit = await _f.Client(await _f.AdminTokenAsync()).GetFromJsonAsync<JsonElement>($"/identity-audit?targetType=user&targetId={id}");
         var actions = audit.EnumerateArray().Select(a => a.GetProperty("action").GetString()).ToList();
         Assert.Contains("user.created", actions);
         Assert.Contains("auth.password_changed", actions);

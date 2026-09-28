@@ -113,7 +113,7 @@ useClaudeContext({
 ```
 
 - The **glossary** is a static registry per screen in
-  `packages/core/src/glossary/`: for every button and term a Hebrew name, a
+  `Server/glossary/` (JSON): for every button and term a Hebrew name, a
   one-sentence explanation and "what happens if you press it". It serves
   the `?` hint next to the control, the chat, and the docs — one wording
   (§11.4). `audit:stale` fails on a screen registered without a glossary.

@@ -92,7 +92,7 @@ audit so an opt-out cannot quietly become the norm.
 
 ## 7. An explanation that stopped being true
 
-The harder half. The wording lives in `packages/core/src/glossary/`, the thing
+The harder half. The wording lives in `Server/glossary/`, the thing
 it describes lives in a screen, and nothing connects them — so a button that
 starts writing to TFS keeps an "i" that says it does not. A stale explanation
 is worse than a missing one, because it is believed.

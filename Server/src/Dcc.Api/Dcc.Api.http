@@ -100,5 +100,5 @@ Content-Type: application/json
 ### ── audit ───────────────────────────────────────────────────────────
 
 ### Every change to identity and permissions, newest first
-GET {{api}}/audit
+GET {{api}}/identity-audit
 Authorization: Bearer {{token}}
