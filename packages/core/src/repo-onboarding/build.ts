@@ -90,6 +90,21 @@ export function appendLines(dir: string, rel: string, lines: readonly string[], 
   return rel;
 }
 
+/** A block appended as it is — blank lines and repeated lines (a code fence) kept, unlike `appendLines`. Once: a block whose first line is already in the file is not added again. */
+export function appendBlock(dir: string, rel: string, block: string, marker: string, appended?: Appended): string {
+  const file = path.join(dir, rel);
+  const cur = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const first = block.trim().split("\n")[0]!.trim();
+  if (first && cur.split(/\r?\n/).some((l) => l.trim() === first)) return rel;
+  const body = `${cur.length && !cur.endsWith("\n") ? "\n" : ""}${cur.length ? "\n" : ""}${marker}\n${block.trim()}\n`;
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, cur + body, "utf8");
+  if (appended && cur.length) appended.set(rel, (appended.get(rel) ?? "") + body);
+  return rel;
+}
+
+const INIT_MARKER = "<!-- DCC onboarding: taken from the /init draft, approved on its card -->";
+
 function writeFile(dir: string, rel: string, content: string, mode?: number): string {
   const file = path.join(dir, rel);
   mkdirSync(path.dirname(file), { recursive: true });
@@ -139,6 +154,32 @@ function readmePurpose(dir: string): string | null {
   return null;
 }
 
+/** The builder's slots of an AGENTS.md skeleton, filled from the diagnosis. */
+function fillAgentsText(skeleton: string, f: { purpose: string | null; profile: RepoProfile; facts: RepoFacts; ruleLines: readonly string[]; hasGate: boolean }): string {
+  return skeleton
+    .replace("{{PURPOSE}}", f.purpose || "(not described in the repository)")
+    .replace("{{LAYOUT}}", layoutText(f.profile))
+    .replace("{{EXTERNAL}}", externalText(f.profile))
+    .replace("{{RULES}}", f.ruleLines.length ? f.ruleLines.map((r) => `- ${r}`).join("\n") : "- (no rules beyond the facts above)")
+    .replace("{{VERIFICATION}}", verificationText(f.facts, f.hasGate))
+    .replace(/\{\{[A-Z_]+\}\}/g, "");
+}
+
+/** What the build would write into AGENTS.md now, from the cards not declined and not taken from the `/init` draft — "ours" in the scan of the draft. No model: without a README paragraph, the purpose says the build writes it. */
+export function previewAgentsMd(dir: string, profile: RepoProfile, repoName: string, cards: readonly Component[]): string {
+  const facts = repoFacts(profile, repoName, null);
+  const live = cards.filter((c) => c.source !== "init" && c.status !== "declined" && c.status !== "removed");
+  const ruleLines = live.filter((c) => c.kind === "rule").map((c) => String(c.params.text ?? "").trim()).filter(Boolean);
+  const hasGate = live.some((c) => c.kind === "script");
+  const scaffold = live.find((c) => c.kind === "scaffold" && c.params.template === "agents-md");
+  const delta = live.find((c) => c.kind === "doc" && c.params.template === "agents-md-delta");
+  const purpose = readmePurpose(dir) ?? "(one paragraph the build writes from the code: what this repository is for)";
+  const fill = (skeleton: string) => fillAgentsText(skeleton, { purpose, profile, facts, ruleLines, hasGate });
+  if (scaffold) return fill(renderTemplate("agents-md", scaffold.params, facts).files.find((f) => f.path === "AGENTS.md")?.content ?? "# {{PURPOSE}}\n\n{{RULES}}\n");
+  if (delta) return `(appended to the repository's existing instructions file)\n${fill(renderTemplate("agents-md-delta", delta.params, facts).files[0]?.content ?? `${AGENTS_HEADER}\n{{RULES}}\n`)}`;
+  return ruleLines.length ? `${AGENTS_HEADER}\n${ruleLines.map((r) => `- ${r}`).join("\n")}\n` : "(no card of ours writes AGENTS.md)";
+}
+
 /* ── the build ────────────────────────────────────────────────────── */
 
 export async function buildComponents(input: BuildInput): Promise<BuildOutcome[]> {
@@ -155,18 +196,11 @@ export async function buildComponents(input: BuildInput): Promise<BuildOutcome[]
   const claudePath = path.join(dir, "CLAUDE.md");
 
   const fillAgents = async (c: Component, skeleton: string, forDelta: boolean): Promise<string> => {
-    let text = skeleton;
     let purpose = readmePurpose(dir);
     if (!purpose && !forDelta) {
       purpose = (await input.author({ component: c, format: "One paragraph of at most 60 words, plain text, no heading: what this repository is and what it is for, from the code itself. Nothing else." })).trim().split(/\n\s*\n/)[0] ?? "";
     }
-    text = text.replace("{{PURPOSE}}", purpose || "(not described in the repository)");
-    text = text.replace("{{LAYOUT}}", layoutText(profile));
-    text = text.replace("{{EXTERNAL}}", externalText(profile));
-    text = text.replace("{{RULES}}", ruleLines.length ? ruleLines.map((r) => `- ${r}`).join("\n") : "- (no rules beyond the facts above)");
-    text = text.replace("{{VERIFICATION}}", verificationText(facts, hasGate));
-    text = text.replace(/\{\{[A-Z_]+\}\}/g, "");
-    return text;
+    return fillAgentsText(skeleton, { purpose, profile, facts, ruleLines, hasGate });
   };
 
   for (const c of cards) {
@@ -176,6 +210,24 @@ export async function buildComponents(input: BuildInput): Promise<BuildOutcome[]
     try {
       log(`▸ ${FAMILY_HE[c.family]} · ${KIND_HE[c.kind]} · ${c.title_he}`);
       const template = String(c.params.template ?? "");
+      // Taken from the /init draft: the approved text, as it is on the card — a whole new file, or a section added to AGENTS.md after ours.
+      if (template === "init-file" || template === "init-section") {
+        const text = String(c.params.text ?? "");
+        if (template === "init-file") files.push(writeFile(dir, String(c.params.file), text.endsWith("\n") ? text : `${text}\n`));
+        else {
+          const heading = String(c.params.heading ?? c.title_he).replace(/^#+\s*/, "");
+          const had = existsSync(agentsPath);
+          files.push(appendBlock(dir, "AGENTS.md", `## ${heading}\n\n${text}`, INIT_MARKER, appended));
+          if (!had && !existsSync(claudePath)) files.push(writeFile(dir, "CLAUDE.md", "@AGENTS.md\n"));
+          else if (!had && !readFileSync(claudePath, "utf8").includes("@AGENTS.md")) files.push(appendLines(dir, "CLAUDE.md", ["@AGENTS.md"], "<!-- the shared instructions -->", appended));
+        }
+        const uniq = [...new Set(files)];
+        const validation = validateComponent({ ...c, files: uniq, status }, dir, knownCommands, appended);
+        const finalStatus: Component["status"] = validation.passed === false ? "failed" : validation.passed === true ? "verified" : "installed";
+        log(`  ${finalStatus === "verified" ? "✓" : finalStatus === "failed" ? "✗" : "·"} ${uniq.join(", ")} — ${validation.how}: ${validation.detail}`);
+        out.push({ key: c.key, status: finalStatus, files: uniq, validation, notes });
+        continue;
+      }
       switch (c.kind) {
         case "permission": {
           const r = renderTemplate("deny", { deny: c.params.deny }, facts);

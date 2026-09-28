@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
-  decideComponent, decideComponentSet, requestOnboardingComponent, startDraftSession, startOnboardingBuild,
-  type ComponentGroup, type OnboardingComponent, type PlanResult, type Readiness,
+  decideComponent, decideComponentSet, requestOnboardingComponent, scanInitDraft, startDraftSession, startOnboardingBuild,
+  type ComponentGroup, type InitScanState, type OnboardingComponent, type PlanResult, type Readiness,
 } from "../../api.ts";
 import { CardTitle } from "../../ui.tsx";
 import { Info } from "../../claude/Info.tsx";
@@ -134,17 +134,66 @@ function DraftCard(p: StepProps) {
   const s = p.view.run.session;
   const rec = p.view.recommended.draft;
   const { repoId, id: runId } = p.view.run;
+  const scan = p.view.plan?.initScan;
   const state = s.state === "live" ? "פעיל" : s.state === "ended" ? "הסשן נסגר" : s.state === "disconnected" ? "הסשן נותק" : "עוד לא נפתח";
   return (
     <div className="panel" style={{ display: "grid", gap: 10 }}>
       <CardTitle info="draft_init">טיוטת /init</CardTitle>
-      <p className="rd-lead" style={{ margin: 0 }}>Claude Code האמיתי רץ בטרמינל שלמטה, בעותק המבודד, עם /init — כמחולל טיוטה ל-AGENTS.md בלבד. מה שהוא כותב הוא טיוטה: הבנייה בודקת כל טענה מול הפרופיל לפני שהיא נכנסת, ורק רכיב מאושר מכניס אותה ל-PR.</p>
+      <p className="rd-lead" style={{ margin: 0 }}>Claude Code האמיתי רץ בטרמינל שלמטה, בעותק המבודד, עם /init — כמחולל טיוטה. מה שהוא כותב לא נכנס לבד: "סרוק" משווה אותו מול מה שהכרטיסים שלנו כותבים, ומה שכדאי לקחת הופך לכרטיסים לאישורך. לפני הבנייה הטיוטה מוזזת הצידה ונשמרת, ורק כרטיס מאושר מכניס ממנה משהו ל-PR.</p>
       <div className="ob-actions">
         {s.state !== "live" && <button className="btn btn-secondary" disabled={!!p.busy} onClick={() => void p.act("draft", () => startDraftSession(repoId, runId, { resume: s.state !== "none" }))}>{p.busy === "draft" ? "פותח…" : s.state === "none" ? "פתח סשן טיוטה" : "↻ חדש את הסשן"}</button>}
         <Info k="draft_start" />
+        {s.state !== "none" && <button className="btn btn-primary" disabled={!!p.busy || scan?.state === "running"} onClick={() => void p.act("scan", () => scanInitDraft(repoId, runId))}>{p.busy === "scan" || scan?.state === "running" ? "סורק…" : scan?.state === "done" ? "↻ סרוק שוב" : "סרוק מה ש-/init עשה"}</button>}
+        {s.state !== "none" && <Info k="draft_scan" />}
         <span className="ob-sub">{modelLabel(rec.model)} · מאמץ {effortLabel(rec.effort)} · {state}{s.status ? ` · ${fmtUsd(s.status.costUsd)} בסשן הזה` : ""}</span>
       </div>
+      {scan && <ScanResult scan={scan} />}
       {s.state !== "none" && <RunTerminal repoId={repoId} runId={runId} screenRef={p.screenRef} />}
+    </div>
+  );
+}
+
+const VERDICT_HE: Record<NonNullable<InitScanState["verdict"]>, { label: string; cls: string }> = {
+  adopt: { label: "הטיוטה טובה יותר — לוקחים את רובה", cls: "ai" }, merge: { label: "משלבים את שתיהן", cls: "ai" },
+  partial: { label: "שלנו הבסיס, תוספות מהטיוטה", cls: "det" }, keep_ours: { label: "נשארים עם שלנו", cls: "" },
+};
+const BETTER_HE: Record<string, string> = { ours: "שלנו", theirs: "הטיוטה", both: "שתיהן — לשלב", neither: "אף אחת" };
+const DECISION_HE: Record<string, string> = { take: "לקחת", check: "לבדוק", ask: "החלטה שלך" };
+
+/** What the scan of the draft decided: the verdict, topic by topic, the cards it made, what of ours it would drop, what it left out. */
+function ScanResult({ scan }: { scan: InitScanState }) {
+  const [more, setMore] = useState(false);
+  if (scan.state === "running") return <Working text={`העורך קורא את הטיוטה (${scan.files.length} קבצים) ובודק כל טענה מול הקוד… כמה דקות.`} />;
+  if (scan.state === "failed") return <div className="ob-note crit">הסריקה נכשלה: {scan.error}</div>;
+  const v = scan.verdict ? VERDICT_HE[scan.verdict] : null;
+  const asks = (scan.cards ?? []).filter((c) => c.decision === "ask").length;
+  return (
+    <div className="rd-card" style={{ display: "grid", gap: 8 }}>
+      <CardTitle info="draft_scan_result">תוצאת הסריקה</CardTitle>
+      {v && <div><span className={`rd-chip ${v.cls}`}>{v.label}</span><Info k="draft_scan_verdict" /></div>}
+      {scan.summary && <p className="rd-lead" style={{ margin: 0 }}>{scan.summary}</p>}
+      <div className="rd-tiles">
+        <Tile n={scan.cards?.length ?? 0} label="כרטיסים מהטיוטה, לאישורך" info="component_card" />
+        <Tile n={asks} label="החלטות שרק אתה מקבל" info="draft_scan_ask" tone={asks ? "warn" : undefined} />
+        <Tile n={scan.dropOurs?.length ?? 0} label="משלנו — מסומנים כמיותרים" info="draft_scan_result" />
+        <Tile n={(scan.reject?.length ?? 0) + (scan.refused?.length ?? 0)} label="מהטיוטה — לא נלקחו" info="draft_scan_result" />
+        <Tile n={fmtUsd(scan.costUsd ?? 0)} label="עלות הסריקה" info="draft_scan" />
+      </div>
+      <button type="button" className="ob-toggle" onClick={() => setMore((x) => !x)}>{more ? "הסתר את הפירוט" : "נושא אחר נושא, ומה לא נלקח ולמה"}</button>
+      {more && (
+        <div style={{ display: "grid", gap: 8 }}>
+          {(scan.compare?.length ?? 0) > 0 && (
+            <div>
+              <span className="ob-sub">השוואה<Info k="draft_scan_compare" /></span>
+              <ul className="rd-list">{scan.compare!.map((c, i) => <li key={i}><b>{c.topic}</b> — עדיף: {BETTER_HE[c.better] ?? c.better}. {c.why}<div className="ob-sub">שלנו: {c.ours || "—"} · הטיוטה: {c.theirs || "—"}</div></li>)}</ul>
+            </div>
+          )}
+          {(scan.cards?.length ?? 0) > 0 && <ul className="rd-list">{scan.cards!.map((c) => <li key={c.key}>{DECISION_HE[c.decision] ?? c.decision}: <b>{c.title}</b>{c.notRecommended ? <span className="ob-sub"> — נבדק מול הקוד ונמצאו נתיבים שלא קיימים; בקבוצת "לא מומלץ"</span> : null}</li>)}</ul>}
+          {(scan.dropOurs?.length ?? 0) > 0 && <ul className="rd-list">{scan.dropOurs!.map((d) => <li key={d.key}>משלנו, מיותר: <b>{d.title}</b> — {d.why}</li>)}</ul>}
+          {((scan.reject?.length ?? 0) + (scan.refused?.length ?? 0)) > 0 && <ul className="rd-list">{[...(scan.reject ?? []).map((r) => ({ t: r.what, w: r.why })), ...(scan.refused ?? []).map((r) => ({ t: r.title, w: r.why }))].map((r, i) => <li key={i} className="ob-sub">לא נלקח: <b>{r.t}</b> — {r.w}</li>)}</ul>}
+          <span className="ob-sub">נסרקו: {scan.files.join(", ")}</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
 import type { SessionStatus } from "./types.ts";
 
 /**
@@ -217,6 +218,24 @@ export function turnEnded(file: string): { ended: boolean; lineCount: number } {
   const real = entries.filter((e) => (e.type === "user" || e.type === "assistant") && !e.isMeta && !e.isSidechain);
   const last = real[real.length - 1];
   return { ended: last?.type === "assistant" && last.message?.stop_reason === "end_turn", lineCount };
+}
+
+/** Every file the session wrote or edited inside `dir`, relative to it — what the scan of the draft reads and the build sets aside. */
+export function writtenPaths(file: string, dir: string): string[] {
+  const { entries } = readEntries(file);
+  const root = path.resolve(dir);
+  const out = new Set<string>();
+  for (const e of entries) {
+    if (e.type !== "assistant" || !Array.isArray(e.message?.content)) continue;
+    for (const b of e.message!.content as Block[]) {
+      if (b.type !== "tool_use" || !/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(String(b.name))) continue;
+      const p = String(b.input?.file_path ?? b.input?.notebook_path ?? "").trim();
+      if (!p) continue;
+      const rel = path.relative(root, path.resolve(root, p));
+      if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) out.add(rel.split(path.sep).join("/"));
+    }
+  }
+  return [...out].sort();
 }
 
 /** The number of complete lines in the transcript now (where a later `promptSeenAfter` starts looking). */

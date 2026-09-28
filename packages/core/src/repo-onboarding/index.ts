@@ -1,6 +1,6 @@
 export {
   OnboardingError,
-  startOnboardingRun, runOnboardingStep, correctProfileFact, answerInterview, approveTrial, decideComponent, decideComponentSet, requestComponent, startBuild, deliverRun,
+  startOnboardingRun, runOnboardingStep, correctProfileFact, answerInterview, approveTrial, decideComponent, decideComponentSet, requestComponent, scanInitDraft, startBuild, deliverRun,
   cancelOnboardingRun, updateOnboardingAutomation, startDraftSession, sendToOnboardingSession,
   getOnboardingRunView, getOnboardingFileVersions, getOnboardingChangedFiles, listOnboardingRuns, getLatestOnboardingRun, onboardingStepCatalogue,
   onboardingChatFacts, authorizeOnboardingTerminal, recoverOnboardingRuns,

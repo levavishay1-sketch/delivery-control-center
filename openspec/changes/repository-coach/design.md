@@ -25,11 +25,43 @@ plan says so.
 
 | the code alone | a model |
 |---|---|
-| diagnosis, the rules, trust grading of sources, judging when checkable, grouping, build order, validation, the report, every stage transition, what gets installed, pass/fail when checkable, writing to the repository | trial tasks (executor), the judge where the code cannot judge (a different model than the executor), breaking processes into steps and answering the agent test, the open marketplace search, authoring text (AGENTS.md purpose, docs, skill bodies, agent checklists), the reviewer's two questions, turning a person's request into a card |
+| diagnosis, the rules, trust grading of sources, judging when checkable, grouping, build order, validation, the report, every stage transition, what gets installed, pass/fail when checkable, writing to the repository, which files are the `/init` draft, whether a path the draft names exists, setting the draft aside | trial tasks (executor), the judge where the code cannot judge (a different model than the executor), breaking processes into steps and answering the agent test, the open marketplace search, authoring text (AGENTS.md purpose, docs, skill bodies, agent checklists), the reviewer's two questions, turning a person's request into a card, the editor's reading of the `/init` draft against ours |
 
 Every model call is a row of the prompt library with a contract in
 `prompt-contract.ts`, a capability in `config/model-policy.json`, and a ledger
 row carrying its step.
+
+## The `/init` draft: scanned, never merged by itself
+
+`/init` improves over time and reads the code freely, so its draft may say
+something better than our templates — or something wrong, generic or unsafe.
+Neither side wins by default. The draft is every file the session wrote (from
+its transcript) plus every changed file where instructions live. The editor
+(`onboarding.init_scan`, the strongest tier, read-only tools in the copy) gets
+all the evidence, our AGENTS.md as the build would write it now, our cards, and
+the draft, and returns one plan: a verdict (adopt / merge / partial /
+keep_ours), a comparison per topic, and items — each with a decision (take,
+check, ask), a form (a line, a section of AGENTS.md, a new file), the exact
+text, and its need, evidence, alternative, verification and cost — plus which
+of our cards are redundant and what of the draft was left out and why.
+
+Knowledge is not authorisation: the editor decides what is true of the code,
+never what the agent may do (a client's environment, deployment, production,
+an organisation's policy). Such an item is "ask" — a card whose approval is
+the answer.
+
+The code then checks every path an item names against the copy (too many
+missing → not recommended), refuses a settings file, `.mcp.json` or a hook as
+a whole file and never overwrites a file the repository has, and puts every
+item in the approval group whatever the automation level. A card of ours the
+editor finds redundant gets a note; the person decides. A second scan keeps a
+decision already taken on the same text (the key is a hash of it).
+
+Before the build writes anything the draft is set aside — kept under the run's
+runtime folder, its files put back to the baseline — so it reaches the pull
+request only through an approved card. A card from the draft is built after
+ours in the same family: a section appended as written, a line among the
+rules, a new file as it is — and validated like every other text.
 
 ## The steps as state
 
