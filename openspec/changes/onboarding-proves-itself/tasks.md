@@ -25,7 +25,7 @@ API restart → proof on TRADE, five public repositories and DCC.
 - [x] 2.5 `workspace.ts` — two detached worktrees, reset between runs, the deliverable set copied without `enabledPlugins`, removed at the end
 - [x] 2.6 `run.ts` — task × arm × run, interleaved, the cap with paired partial data, a second pass of the tasks whose arms disagreed
 - [x] 2.7 `eval.run.ts` + `eval:onboarding` (tsx, a scratch database set before core loads)
-- [ ] 2.8 The TRADE baseline (the 33 files the old process would deliver) → `docs/research/2026-09-onboarding-eval-trade-before.{json,md}`
+- [x] 2.8 The TRADE baseline — measured in-run instead: the round-1 TRADE run (37 cards, the plan before its prunings) is the "before" of process-against-process; the standalone script's results on the old 33-file set stay in the session scratch (see `docs/research/onboarding-rounds/`)
 
 ## 3. Diagnosis, rules, templates
 
