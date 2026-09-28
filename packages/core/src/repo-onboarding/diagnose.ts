@@ -1217,6 +1217,8 @@ function gitFacts(root: string, trackedList: string[] | null): RepoProfile["git"
   const tracked = trackedList ?? run(["ls-files"]).split("\n").filter((x) => x);
   g.tracked_files = tracked.length;
   g.tracked_binaries_dll_exe_pdb = tracked.filter((x) => /\.(dll|exe|pdb|nupkg)$/i.test(x)).length;
+  g.tracked_dll = tracked.filter((x) => /\.dll$/i.test(x)).length;
+  g.tracked_exe = tracked.filter((x) => /\.exe$/i.test(x)).length;
   g.tracked_ide_junk = tracked.filter((x) => /(^|\/)(\.vs|\.idea|obj)\/|\.(suo|user)$/.test(x)).length;
   // `packages/` counts as a cache only when it is one (NuGet's `<Id>.<version>/` layout or `.nupkg` files); an npm
   // monorepo's `packages/` is the code itself, and counting it would deny the agent the repository it works on.
@@ -1350,5 +1352,8 @@ export async function diagnoseRepository(root: string, name: string, opts: Diagn
     profile.git = gitFacts(abs, tracked);
     log(`git: ${profile.git.commits_analyzed} commits analyzed, ${profile.git.tracked_files} tracked files`);
   }
+  // The walk skips bin/ and obj/, so "checked-in binaries" comes from git's list, not the walk (Trade tracks 3,064 and the walk said 0).
+  if (profile.git.tracked_dll !== undefined) profile.windows_build.dll_checked_in = Math.max(profile.windows_build.dll_checked_in, profile.git.tracked_dll);
+  if (profile.git.tracked_exe !== undefined) profile.windows_build.exe_checked_in = Math.max(profile.windows_build.exe_checked_in, profile.git.tracked_exe);
   return profile;
 }

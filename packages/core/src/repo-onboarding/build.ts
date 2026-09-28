@@ -644,7 +644,8 @@ export async function buildComponents(input: BuildInput): Promise<BuildRun> {
           const url = String(c.params.url ?? "");
           const gh = url.match(/github\.com\/([^/]+)\/([^/#?]+)/);
           const marketplace = gh ? `${gh[1]}/${gh[2]!.replace(/\.git$/, "")}` : url;
-          const pluginName = String(c.params.pluginName ?? c.params.name ?? nameFrom(c.key, c.key));
+          // A marketplace source's display name ("dotnet/skills — dotnet-test") is not a plugin id: the part after the dash, as a slug.
+          const pluginName = String(c.params.pluginName ?? c.params.name ?? nameFrom(c.key, c.key)).split(/\s+[—–-]\s+/).pop()!.trim().toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || nameFrom(c.key, c.key);
           const market = nameFrom(marketplace, c.key);
           const key = OFFICIAL.test(url) ? `${pluginName}@claude-plugins-official` : `${pluginName}@${market}`;
           s.extra.pluginKey = key;

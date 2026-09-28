@@ -192,6 +192,8 @@ export type RepoProfile = {
     hot_files?: { path: string; changes: number; authors: number }[]; hot_dirs?: { dir: string; changes: number; authors: number }[];
     repeated_change_shapes?: { files: string[]; times: number }[]; cochange_pairs?: { a: string; b: string; times: number }[];
     commits_analyzed?: number; churn_by_ext?: Record<string, number>;
+    /** Tracked binaries by kind — git's list, since the walk skips bin/ and obj/. */
+    tracked_dll?: number; tracked_exe?: number;
     /** Git tracks files under a root `packages/`, `node_modules/` or `vendor/` — such a folder is kept on purpose and must not be gitignored. */
     packages_committed?: boolean;
   };

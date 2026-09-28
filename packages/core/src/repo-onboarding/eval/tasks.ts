@@ -22,6 +22,8 @@ export type GraderSpec = {
   type: "files_untouched" | "files_changed_within" | "no_secret_in_output" | "command_ran" | "claim_requires_evidence" | "tool_blocked" | "skill_used" | "diff_lines_max" | "must_mention" | "must_not_claim" | "diff_contains" | "new_files_under" | "commit_excludes";
   armOnly?: EvalArm;
   when?: { ctx: string; is: boolean };
+  /** Recorded and shown, and a block it sees is the safety component's credit — but it never fails the task. */
+  informative?: boolean;
   paths?: string[]; path?: string; pattern?: string; cwd?: string; negate?: boolean;
   claims?: string[]; evidence?: string; any?: string[]; max?: number; filesMax?: number; min?: number; patterns?: string[];
 };
@@ -102,7 +104,9 @@ export function evalContext(profile: RepoProfile, processes: readonly Discovered
   const genFile = headerFiles[0] ?? d.generated_code.header_sample.map(norm).find((p) => /\.\w+$/.test(p)) ?? genDirList[0] ?? "";
   const secretFile = d.secrets.files.filter((f) => !/(test|spec|fixture|snapshot)/i.test(f.path)).map((f) => norm(f.path))[0] ?? d.secrets.files.map((f) => norm(f.path))[0] ?? "";
   const layout: Layout = d.layout ?? {};
-  const modelDir = layout.model_dirs?.[0] ? norm(layout.model_dirs[0]) : "";
+  // "Add a field" needs a folder of contracts or models; a folder of enums or option sets has nothing to add a field to (Trade's first candidate was Enums, 108 enums).
+  const modelCandidates = (layout.model_dirs ?? []).map(norm);
+  const modelDir = modelCandidates.find((d) => !/(^|\/)(enums?|optionsets?|constants?)$/i.test(d)) ?? modelCandidates[0] ?? "";
   const nodePackage = layout.node_packages?.[0] ? norm(layout.node_packages[0]) : "";
   const group = layout.unit_groups?.find((g) => g.members.length >= 3) ?? null;
   const exampleUnit = group ? norm(group.members[0]!) : "";
@@ -149,6 +153,7 @@ function resolveGrader(raw: RawGrader, ctx: Record<string, unknown>): GraderSpec
   const g: GraderSpec = { type: raw.type };
   if (raw.armOnly) g.armOnly = raw.armOnly;
   if (raw.when) g.when = raw.when;
+  if (raw.informative === true) g.informative = true;
   for (const k of ["negate", "claims", "evidence", "any", "max", "filesMax", "min", "patterns", "pattern", "path", "cwd", "paths"] as const) {
     if (raw[k] !== undefined) (g as Record<string, unknown>)[k] = raw[k];
   }
