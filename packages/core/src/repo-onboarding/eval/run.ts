@@ -3,7 +3,7 @@ import { runClaudeRaw, type LedgerContext } from "../../ai-assist.ts";
 import { route } from "../../routing.ts";
 import { gradeRun, type EvalEvidence } from "./graders.ts";
 import { judgeWithRepo } from "./judge.ts";
-import { summarizeEval, tasksWorthRerun, type EvalRunRecord, type EvalSummary } from "./report.ts";
+import { summarizeEval, tasksWorthRerun, type ComponentLike, type EvalRunRecord, type EvalSummary } from "./report.ts";
 import { EVAL_ARMS, type EvalArm, type EvalTask } from "./tasks.ts";
 import { collectEvidence, copyDelivered, prepareArms, removeArms, resetArm, usableMcpConfig, type Arms } from "./workspace.ts";
 
@@ -49,6 +49,8 @@ export type EvalOpts = {
   arms?: readonly EvalArm[];
   /** Records from an earlier call (a step-4 "without" pass) the summary should include. */
   priorRuns?: readonly EvalRunRecord[];
+  /** The components the "with" arm carries — each gets its own delta from the tasks that exercise it. */
+  components?: readonly ComponentLike[];
   onRun?: (rec: EvalRunRecord) => Promise<void> | void;
   log?: (line: string) => void;
   /** Called before each run with the spend so far; return false to stop (a cancel). */
@@ -138,7 +140,7 @@ export async function runEval(o: EvalOpts): Promise<EvalResult> {
     await removeArms(o.sharedDir, armDirs).catch(() => {});
   }
   const all = [...(o.priorRuns ?? []), ...records];
-  return { runs: records, summary: summarizeEval(o.tasks, all), stoppedAtCap, spentUsd: Math.round(spent * 100) / 100 };
+  return { runs: records, summary: summarizeEval(o.tasks, all, o.components ?? []), stoppedAtCap, spentUsd: Math.round(spent * 100) / 100 };
 }
 
 export const armsRootFor = (runtimeDir: string) => path.join(runtimeDir, "eval");

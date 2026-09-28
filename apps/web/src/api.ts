@@ -670,7 +670,8 @@ export type OnboardingStepDefinition = {
   title_he: string; short_he: string; why_he: string; what_he: string; output_he: string; cost_he: string; you_he: string;
 };
 export type AutomationLevel = "reversible_auto" | "all_approval" | "locked";
-export type Automation = { level: AutomationLevel };
+/** The level, and the caps on the /init draft session — the one thing in a run with no per-call cap. */
+export type Automation = { level: AutomationLevel; draftCapUsd: number; draftCapMinutes: number };
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 export type SessionState = "none" | "live" | "ended" | "disconnected";
 export type OnboardingSession = {
@@ -687,19 +688,46 @@ export type DiscoveredProcess = { key: string; title: string; source: string; ev
 export type InterviewQuestion = { key: string; question_he: string; why_he: string; options: { value: string; label_he: string }[]; default: string };
 export type InterviewAnswer = { key: string; value: string; assumed: boolean };
 export type FailureKind = "missing_fact" | "rule_violated" | "needs_external" | "cannot_verify" | "bad_judgment";
-export type TrialOutcome = { taskKey: string; title_he: string; phase: "baseline" | "after"; passed: boolean | null; failureKind: FailureKind | null; detail: string; costUsd: number; callId: string | null; judgedBy: string };
+/** What one code grader of the measurement found on one run. */
+export type GraderResult = { type: string; passed: boolean; skipped: boolean; detail: string };
+/** One run of one measurement task in one arm: `baseline` = without the set (step 4), `after` = with exactly the set that ships (the build). A task may run more than once. */
+export type TrialOutcome = {
+  taskKey: string; title_he: string; phase: "baseline" | "after"; runIndex?: number; numTurns?: number | null; graders?: GraderResult[];
+  passed: boolean | null; failureKind: FailureKind | null; detail: string; costUsd: number; callId: string | null; judgedBy: string;
+};
 export type TrialDelta = { before: { passed: number; total: number; costUsd: number }; after: { passed: number; total: number; costUsd: number }; costPerTaskChange: number | null };
+export type EvalArm = "with" | "without";
+export type EvalTaskKind = "knowledge" | "action";
+export type EvalVerdict = "improved" | "same" | "worse" | "unmeasured";
+/** One arm of one task: how many runs, how many passed, whether every run passed (pass^k), mean cost and turns. */
+export type ArmSummary = { runs: number; passed: number; passK: boolean | null; passRate: number | null; meanCostUsd: number | null; meanTurns: number | null; blocked: boolean };
+export type EvalTaskSummary = { key: string; title_he: string; kind: EvalTaskKind; with: ArmSummary; without: ArmSummary; verdict: EvalVerdict; failureKinds: Partial<Record<FailureKind, number>> };
+export type ComponentDelta = { before: number; after: number; total: number; costPerTaskChange: number | null; verdict: EvalVerdict };
+export type EvalComponentSummary = { key: string; kind: ComponentKind; family: ComponentFamily; tasks: string[]; delta: ComponentDelta; removalProposed: boolean; why_he: string };
+/** The measurement "with" against "without" — the same shape as packages/core/src/repo-onboarding/eval/report.ts. */
+export type EvalSummary = {
+  tasks: EvalTaskSummary[];
+  components: EvalComponentSummary[];
+  totals: {
+    tasks: number; measured: number; improved: number; same: number; worse: number; unmeasured: number;
+    with: { passK: number; meanCostUsd: number | null; meanTurns: number | null };
+    without: { passK: number; meanCostUsd: number | null; meanTurns: number | null };
+    costChange: number | null; spentUsd: number;
+  };
+};
+/** The measurement waiting for approval on its cost: the tasks, the estimate and the cap it stops at. A run that waited before the measurement had arms carries only the tasks and the estimate. */
+export type TrialWaiting = { tasks: { key: string; title_he: string; kind?: EvalTaskKind; judge: string }[]; estimateUsd: number; capUsd?: number; arms?: EvalArm[]; runs?: number };
 export type ComponentKind = "rule" | "hook" | "permission" | "skill" | "agent" | "mcp" | "plugin" | "lsp" | "scaffold" | "doc" | "report" | "runner" | "settings" | "gitattributes" | "gitignore" | "review" | "pr_template" | "devcontainer" | "script";
 export type ComponentFamily = "safety" | "verification" | "knowledge" | "connections" | "skills" | "agents" | "enforcement" | "measurement";
 export type ComponentGroup = "auto" | "approval" | "not_recommended";
-export type ComponentStatus = "proposed" | "approved" | "declined" | "installed" | "verified" | "failed" | "removed" | "deferred" | "reported";
+export type ComponentStatus = "proposed" | "approved" | "declined" | "installed" | "verified" | "configured" | "failed" | "removed" | "deferred" | "reported";
 export type ClarifyingQuestion = { key: string; question_he: string; default: string; answer: string | null };
 export type OnboardingComponent = {
   id: string; key: string; kind: ComponentKind; family: ComponentFamily; title_he: string; why_he: string; what_he: string;
   source: "rule" | "trial" | "process" | "marketplace" | "reviewer" | "user" | "init" | "coach"; sourceRef: string | null;
   group: ComponentGroup; risk: "reversible" | "significant" | "external"; contextTokens: number | null; verifyHow_he: string; status: ComponentStatus;
   params: Record<string, unknown>; files: string[]; validation: { how: string; passed: boolean | null; detail: string; at: string } | null;
-  delta: { before: number; after: number; total: number; costPerTaskChange: number | null; verdict: string } | null;
+  delta: ComponentDelta | null;
   questions: ClarifyingQuestion[]; decidedBy: string | null; decidedAt: string | null; declineReason: string | null;
 };
 export type ReadinessItem = { key: string; title_he: string; ok: boolean; detail_he: string };
@@ -714,13 +742,18 @@ export type OnboardingEvent = { id: string; type: string; payload: Record<string
 export type ConnectResult = { branch: string; baselineSha: string; defaultBranch: string | null; baseFrom: "remote" | "local" | "head"; fileCount: number; existing: { claudeMdLines: number | null; agentsMd: boolean; rules: number; skills: number; hooks: number; agents: number; settings: boolean }; level: AutomationLevel };
 export type DiagnoseResult = { profileId: string; facts: number; durationMs: number; corrections: number };
 export type ProcessesResult = { processes: number; steps: number; agents: number; skills: number; questions: number; answered: number; assumed: number; costUsd: number; reused?: boolean };
-export type TrialStepResult = { phase: "baseline"; tasks: number; passed: number; costUsd: number; byKind: Record<string, number>; reused?: boolean };
+export type TrialStepResult = { phase: "baseline"; tasks: number; passed: number; costUsd: number; byKind: Record<string, number>; runs?: number; stoppedAtCap?: boolean; reused?: boolean };
+/** Where the plan step is: the draft first, then set aside, then scanned, then the cards open for decision. Absent on runs made before the draft came first. */
+export type PlanPhase = "draft" | "aside" | "scan" | "decide";
 export type PlanResult = {
   rulesFired: string[]; rulesSuppressed: { rule: string; fact: string }[]; components: number; byGroup: Record<ComponentGroup, number>;
   marketplace: { searched: boolean; found: number; remembered: number; skipped: string | null }; reviewer: { missing: number; redundant: number } | null; costUsd: number;
   firings?: { rule: string; signal: string; reason_he: string; components: { key: string; title_he: string }[] }[]; suppressed?: { rule: string; fact: string; note: string | null }[];
   approved?: number; declined?: number; deferred?: number; undecided?: number;
   initScan?: InitScanState;
+  phase?: PlanPhase;
+  /** What the build and its measurement will roughly cost, said before the decision. */
+  buildEstimateUsd?: number;
 };
 /** The scan of the /init draft — the same shape as packages/core/src/repo-onboarding/types.ts. */
 export type InitScanState = {
@@ -730,7 +763,14 @@ export type InitScanState = {
   cards?: { key: string; title: string; decision: string; notRecommended: boolean }[];
   dropOurs?: { key: string; title: string; why: string }[]; reject?: { what: string; why: string }[]; refused?: { title: string; why: string }[]; costUsd?: number;
 };
-export type BuildResult = { installed: number; verified: number; failed: number; skipped: number; files: string[]; delta: TrialDelta | null; jointCheck: { duplicates: string[]; contradictions: string[]; alwaysLoadedTokens: number }; costUsd: number };
+export type BuildResult = {
+  installed: number; verified: number; failed: number; skipped: number; files: string[]; delta: TrialDelta | null;
+  /** The measurement, per task and per component; null when there was no "without" arm to compare with. */
+  eval?: EvalSummary | null;
+  /** Files of failed cards the build deleted from the copy. */
+  removedFiles?: string[];
+  jointCheck: { duplicates: string[]; contradictions: string[]; alwaysLoadedTokens: number }; costUsd: number;
+};
 export type DeliverResult = { branch: string; base: string; commitSha: string | null; filesCommitted: number; remote: string | null; pushed: boolean; prNumber: number | null; prUrl: string | null; compareUrl: string | null; localOnly: boolean; note?: string; report: string };
 export type OnboardingCost = {
   totalCostUsd: number; liveUsd: number; calls: number; inputTokens: number; outputTokens: number;
@@ -867,7 +907,7 @@ export type OnboardingRunView = {
   profile: { id: string; facts: ProfileFact[]; corrections: ProfileCorrection[]; summary: string; tags: string[]; raw: unknown } | null;
   interview: { questions: InterviewQuestion[]; answers: InterviewAnswer[] };
   processes: DiscoveredProcess[];
-  trials: { baseline: TrialOutcome[]; after: TrialOutcome[]; delta: TrialDelta | null; waiting: { tasks: { key: string; title_he: string; judge: string }[]; estimateUsd: number } | null };
+  trials: { baseline: TrialOutcome[]; after: TrialOutcome[]; delta: TrialDelta | null; eval: EvalSummary | null; waiting: TrialWaiting | null };
   components: OnboardingComponent[]; plan: PlanResult | null; readiness: Readiness | null; build: BuildResult | null; deliver: DeliverResult | null;
   events: OnboardingEvent[]; codeMap: CodeMap | null; cost: OnboardingCost; recommended: { draft: { model: string; effort: Effort } }; coach: { openProposals: number };
 };
@@ -875,7 +915,7 @@ export type OnboardingRunSummary = { id: string; kind: "onboarding" | "coach"; s
 
 const ob = (repoId: string, runId: string) => `/repos/${repoId}/onboarding/runs/${runId}`;
 export const getOnboardingSteps = () => get<{ steps: OnboardingStepDefinition[]; levels: AutomationLevel[]; recommended: { draft: { model: string; effort: Effort } } }>("/onboarding/steps");
-export const startOnboardingRun = (repoId: string, body: { automation?: Automation; kind?: "onboarding" | "coach"; proposalIds?: string[] }) => post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, body);
+export const startOnboardingRun = (repoId: string, body: { automation?: Partial<Automation>; kind?: "onboarding" | "coach"; proposalIds?: string[] }) => post<{ runId: string }>(`/repos/${repoId}/onboarding/runs`, body);
 export const getLatestOnboardingRun = (repoId: string) =>
   get<{ runId: string; kind: string; status: OnboardingStatus; currentStepKey: OnboardingStepKey | null; completedAt: string | null } | null>(`/repos/${repoId}/onboarding/latest-run`);
 export const listOnboardingRuns = (repoId: string) => get<{ runs: OnboardingRunSummary[] }>(`/repos/${repoId}/onboarding/runs`);
@@ -891,6 +931,11 @@ export const requestOnboardingComponent = (repoId: string, runId: string, text: 
 export const startOnboardingBuild = (repoId: string, runId: string) => post<{ building: number }>(`${ob(repoId, runId)}/build`, {});
 export const deliverOnboardingRun = (repoId: string, runId: string) => post<{ delivering: boolean }>(`${ob(repoId, runId)}/deliver`, {});
 export const scanInitDraft = (repoId: string, runId: string) => post<{ scanning: boolean; files: number }>(`${ob(repoId, runId)}/draft/scan`, {});
+/** "בלי טיוטה": the plan's cards open for decision without a /init session. */
+export const skipDraft = (repoId: string, runId: string) => post<{ phase: PlanPhase }>(`${ob(repoId, runId)}/draft/skip`, {});
+/** A built card taken out before delivery: its files are deleted from the copy, the card is marked removed. */
+export const removeBuiltComponent = (repoId: string, runId: string, key: string, reason?: string | null) =>
+  post<{ key: string; removed: string[] }>(`${ob(repoId, runId)}/components/${encodeURIComponent(key)}/remove`, { reason: reason ?? null });
 export const startDraftSession = (repoId: string, runId: string, body: { resume?: boolean; model?: string; effort?: string } = {}) => post<{ started: boolean }>(`${ob(repoId, runId)}/draft/start`, body);
 export const cancelOnboardingRun = (repoId: string, runId: string) => post<{ cancelled: boolean }>(`${ob(repoId, runId)}/cancel`, {});
 export const updateOnboardingAutomation = (repoId: string, runId: string, automation: Automation) => patch<Automation>(`${ob(repoId, runId)}/automation`, { automation });

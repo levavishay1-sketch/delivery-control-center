@@ -261,11 +261,18 @@ describe("the facts the templates get", () => {
     const p = { build: { system: ["package.json scripts"], commands: ["npm run build   # -> tsc"] }, ci: { present: true, systems: ["github-actions"], workflows: [], commands: ["npm test"] }, tests: { frameworks: ["vitest"], test_files: 3, test_dirs: [] }, lint_format: ["eslint"], languages: [{ language: "TypeScript", files: 1, lines: 1 }], package_managers: ["npm"], windows_build: { windows_only_build: false } } as unknown as RepoProfile;
     expect(repoFacts(p, "r", "main")).toMatchObject({ buildCommand: "npm run build", testCommand: "npm test", lintCommand: "npx eslint .", packageManager: "npm", windowsOnly: false });
   });
-  it("writes `dotnet msbuild` when msbuild is not on this machine and nothing needs Visual Studio's own", () => {
-    const p = { ...profile({ msbuild: null, dotnet_msbuild: "C:/dotnet/dotnet.exe" }), build: { system: ["msbuild"], commands: ["msbuild App.sln"] } };
-    expect(repoFacts(p, "r", null).buildCommand).toBe("dotnet msbuild App.sln");
-    expect(repoFacts({ ...p, windows_build: { ...p.windows_build, web_app_projects: 2 } }, "r", null).buildCommand).toBe("msbuild App.sln");
-    expect(repoFacts({ ...p, environment: { ...p.environment, tools: { msbuild: "C:/VS/MSBuild.exe" } } }, "r", null).buildCommand).toBe("msbuild App.sln");
+  it("hands the templates what this machine has and what git tracks: the tools, the test projects and their commands, the solution, the web projects", () => {
+    const base = profile({ msbuild: null, dotnet: "C:/dotnet/dotnet.exe", dotnet_msbuild: "C:/dotnet/dotnet.exe" });
+    const p: RepoProfile = {
+      ...base, build: { system: ["msbuild"], commands: ["msbuild Altshuler.sln /t:Build"] },
+      tests: { frameworks: ["MSTest"], test_files: 4, test_dirs: [], projects: ["Test/Alt.Test.CrmApi"], commands: ["dotnet test Test/Alt.Test.CrmApi/Alt.Test.CrmApi.csproj"] },
+      windows_build: { ...base.windows_build, windows_only_build: true, web_app_projects: 2 },
+    };
+    expect(repoFacts(p, "r", null)).toMatchObject({
+      buildCommand: "msbuild Altshuler.sln /t:Build", windowsOnly: true, tools: { msbuild: null, dotnet: "C:/dotnet/dotnet.exe", dotnet_msbuild: "C:/dotnet/dotnet.exe" },
+      testProjects: ["Test/Alt.Test.CrmApi"], testCommands: ["dotnet test Test/Alt.Test.CrmApi/Alt.Test.CrmApi.csproj"], solution: "Altshuler.sln", webAppProjects: 2,
+    });
+    expect(repoFacts(profile(), "r", null)).toMatchObject({ testProjects: null, testCommands: null, solution: null, webAppProjects: null });
   });
 });
 
@@ -315,6 +322,10 @@ describe("the build: shared files from what passed, failures taken out, one seco
     expect(agents).toContain("Change `src/a.ts` only through its exports.");
     expect(agents).not.toContain("src/gen/Entities.ts");
     expect(agents).not.toContain("dcc-verify");
+    // The layout is the map from the diagnosis, and the verification section says only how a change is checked.
+    expect(agents).toContain("- `src/`");
+    expect(agents).not.toMatch(/Packages \(\d+\)|\{\{[A-Za-z_]+\}\}/);
+    expect(agents).toContain("run the build and the tests above");
     const settings = JSON.parse(readFileSync(path.join(repo, ".claude/settings.json"), "utf8")) as { permissions: { deny: string[] }; hooks?: unknown; enabledPlugins: Record<string, boolean> };
     expect(settings.permissions.deny).toEqual(["Read(.env)", "Edit(.env)"]);
     expect(settings.hooks).toBeUndefined();

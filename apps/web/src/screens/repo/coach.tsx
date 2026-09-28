@@ -102,7 +102,7 @@ export function CoachPanel({ repoId, busy, onRunStarted, onError }: { repoId: st
         </div>
       )}
       <p className="ob-sub" style={{ margin: 0 }}>
-        הצעה חדשה מהמאמן אפשר לבקש גם בלי אות — <a style={{ cursor: "pointer" }} onClick={() => { if (busy) return; void startOnboardingRun(repoId, { kind: "coach" }).then((r) => onRunStarted(r.runId)).catch((e) => onError(errText(e))); }}>פתח הרצת מאמן</a>: היא רצה על הפרופיל הנוכחי, בלי ראיון ובלי ריצת ניסיון.
+        הצעה חדשה מהמאמן אפשר לבקש גם בלי אות — <a style={{ cursor: "pointer" }} onClick={() => { if (busy) return; void startOnboardingRun(repoId, { kind: "coach" }).then((r) => onRunStarted(r.runId)).catch((e) => onError(errText(e))); }}>פתח הרצת מאמן</a>: היא רצה על הפרופיל הנוכחי, בלי ראיון ובלי מדידה.
       </p>
     </div>
   );

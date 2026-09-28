@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ClarifyingQuestion, ComponentGroup, OnboardingComponent } from "../../api.ts";
 import { CardTitle } from "../../ui.tsx";
 import { Info } from "../../claude/Info.tsx";
-import { COMPONENT_STATUS_HE, FAMILY_HE, GROUP_HE, KIND_HE, RISK_HE, SOURCE_HE, TRUST_HE, fmtDate, fmtInt, validationLabel } from "./labels.ts";
+import { COMPONENT_STATUS_HE, DELTA_HE, FAMILY_HE, GROUP_HE, KIND_HE, RISK_HE, SOURCE_HE, TRUST_HE, fmtDate, fmtInt, validationLabel } from "./labels.ts";
 
 /**
  * The component cards of the plan: "שמתי X כי ראיתי Y", in three groups.
@@ -22,7 +22,14 @@ const GROUP_SUB: Record<ComponentGroup, string> = {
 
 const GROUP_INFO: Record<ComponentGroup, string> = { auto: "group_auto", approval: "group_approval", not_recommended: "group_not_recommended" };
 
-const DELTA_VERDICT: Record<string, string> = { improved: "שיפר", same: "לא שינה", worse: "הרע", unmeasured: "לא נמדד" };
+/** The scan of the /init draft declines a card of ours with a reason that opens "הסריקה:" — the card shows the rest. */
+const scanReason = (reason: string | null) => (reason ?? "").replace(/^הסריקה:\s*/, "");
+
+/** A component's measured verdict, "with" against "without" on the tasks that exercise it — the card and the build step say it the same way. */
+export function DeltaLine({ d }: { d: NonNullable<OnboardingComponent["delta"]> }) {
+  const v = DELTA_HE[d.verdict];
+  return <><span className={`rd-chip ${v.cls}`}>{v.label}</span>{d.total > 0 && <span className="ob-sub"> עם {d.after}/{d.total} · בלי {d.before}/{d.total} משימות</span>}</>;
+}
 
 export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
   c: OnboardingComponent; open: boolean; busy: boolean; who: string | null; onDecide: Decide; onAsk: (c: OnboardingComponent) => void;
@@ -35,11 +42,14 @@ export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
   const trust = typeof c.params.trust === "string" ? TRUST_HE[c.params.trust] : undefined;
   const decidable = open && c.group === "approval" && c.kind !== "report";
   const v = c.validation ? validationLabel(c.validation.passed) : null;
+  // Declined by the scan of the /init draft, not by a person: the reason, and "בכל זאת" to take it back.
+  const byScan = c.status === "declined" && c.params.declinedBy === "scan";
   return (
     <div className={`rd-card ${c.status}`}>
       <div className="head">
         <b>{c.title_he}</b>
-        <span className={`rd-chip ${st.cls}`}>{st.label}</span>
+        <span className={`rd-chip ${st.cls}`}>{byScan ? "נדחה בסריקה" : st.label}</span>
+        {c.status === "configured" && <Info k="status_configured" />}
       </div>
       <div className="meta">
         <span><span className="rd-chip det">{KIND_HE[c.kind]}</span><Info k="component_kind" /></span>
@@ -67,9 +77,20 @@ export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
         </div>
       )}
       {c.validation && v && <div className="why"><b>אימות<Info k="validation_result" /></b><span className={`rd-chip ${v.cls}`}>{v.label}</span> {c.validation.how}{c.validation.detail ? ` — ${c.validation.detail}` : ""}</div>}
-      {c.delta && <div className="why"><b>לפני / אחרי<Info k="trial_before_after" /></b>{c.delta.before}/{c.delta.total} → {c.delta.after}/{c.delta.total} · {DELTA_VERDICT[c.delta.verdict] ?? c.delta.verdict}</div>}
+      {c.delta && <div className="why"><b>מה המדידה אמרה<Info k="component_delta" /></b><DeltaLine d={c.delta} /></div>}
       {c.files.length > 0 && <div className="why"><b>קבצים</b><span className="ob-code">{c.files.join("  ")}</span></div>}
-      {c.status === "declined" && c.declineReason && <div className="why"><b>{c.group === "not_recommended" ? "למה לא" : "סיבת הדחייה"}</b>{c.declineReason}</div>}
+      {byScan && (
+        <div className="why">
+          <b>נדחה בסריקה<Info k="scan_declined" /></b>{scanReason(c.declineReason) || "הסריקה מצאה שהוא מיותר."}
+          {open && (
+            <div className="acts" style={{ marginTop: 6 }}>
+              <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onDecide(c.key, "undo", {})}>בכל זאת</button><Info k="scan_declined_undo" />
+              <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onAsk(c)}>שאל</button>
+            </div>
+          )}
+        </div>
+      )}
+      {c.status === "declined" && c.declineReason && !byScan && <div className="why"><b>{c.group === "not_recommended" ? "למה לא" : "סיבת הדחייה"}</b>{c.declineReason}</div>}
       {decidable && c.status === "proposed" && !declining && (
         <div className="acts">
           <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => onDecide(c.key, "approve", { answers })}>אשר</button><Info k="card_approve" />
@@ -84,14 +105,14 @@ export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
           <button className="btn btn-secondary btn-sm" onClick={() => setDeclining(false)}>ביטול</button>
         </div>
       )}
-      {decidable && c.status !== "proposed" && (
+      {decidable && c.status !== "proposed" && !byScan && (
         <div className="decided">
           <span>{st.label}{who ? ` · ${who}` : ""}{c.decidedAt ? ` · ${fmtDate(c.decidedAt)}` : ""}</span>
           <a style={{ cursor: "pointer" }} onClick={() => !busy && onDecide(c.key, "undo", {})}>בטל</a>
           <button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onAsk(c)}>שאל</button>
         </div>
       )}
-      {open && !decidable && c.group !== "not_recommended" && <div className="acts"><button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onAsk(c)}>שאל</button></div>}
+      {open && !decidable && !byScan && c.group !== "not_recommended" && <div className="acts"><button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onAsk(c)}>שאל</button></div>}
     </div>
   );
 }

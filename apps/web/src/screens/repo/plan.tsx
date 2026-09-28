@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  decideComponent, decideComponentSet, requestOnboardingComponent, scanInitDraft, startDraftSession, startOnboardingBuild,
+  decideComponent, decideComponentSet, requestOnboardingComponent, scanInitDraft, skipDraft, startDraftSession, startOnboardingBuild,
   type ComponentGroup, type InitScanState, type OnboardingComponent, type PlanResult, type Readiness,
 } from "../../api.ts";
 import { CardTitle } from "../../ui.tsx";
@@ -9,13 +9,15 @@ import { chatCommand } from "../../claude/context.ts";
 import { RunTerminal } from "./Terminal.tsx";
 import { ApprovalTools, CardGroup } from "./cards.tsx";
 import { NotYet, Tile, Working, isOver, type StepProps } from "./shared.tsx";
-import { effortLabel, fmtUsd, modelLabel } from "./labels.ts";
+import { PLAN_PHASE_HE, effortLabel, fmtUsd, modelLabel } from "./labels.ts";
 
 /**
- * Step 4, the heart of the dossier: the component plan. Every card with its
- * evidence, in three groups; the readiness gate and the honesty card; the
- * /init draft session as a window inside the step; and the one button that
- * closes the plan and starts the build.
+ * Step 4, the heart of the dossier: the component plan. The cards are drawn
+ * first but decided only after the /init draft — so the plan moves through
+ * its phases on the screen: the draft (or "without a draft"), the draft set
+ * aside, the draft scanned, and only then every card with its evidence, in
+ * three groups; the readiness gate and the honesty card; and the one button
+ * that closes the plan and starts the build.
  */
 
 const GROUPS: ComponentGroup[] = ["auto", "approval", "not_recommended"];
@@ -25,13 +27,25 @@ export function PlanBody(p: StepProps) {
   if (step.status === "Running") return <Working text="כללי ההחלטה רצים על הפרופיל, קלוד מחפש רכיבים מוכנים לסטאק, והסוקר בודק מה חסר ומה מיותר… שתיים-שלוש קריאות למודל." />;
   if (step.status !== "WaitingForUser" && step.status !== "Completed") return <NotYet runnable={p.runnable} />;
   const open = step.status === "WaitingForUser" && !isOver(view);
+  // A run made before the draft came first has no phase: its cards are open, with the draft card as it was.
+  const phase = view.plan?.phase;
+  if (open && phase === "draft") return <DraftPhase {...p} />;
+  if (open && (phase === "aside" || phase === "scan")) {
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        {view.plan && <PlanSummary plan={view.plan} />}
+        <div className="rd-inline"><Working text={phase === "aside" ? "הטיוטה מוזזת הצידה… הקבצים שלה נשמרים בצד, והעותק חוזר לנקודת ההתחלה." : "הטיוטה נסרקת מול הכרטיסים ומול הקוד… כמה דקות. הכרטיסים ייפתחו להחלטה מיד אחר כך."} /><Info k="plan_phase" /></div>
+      </div>
+    );
+  }
   const { repoId, id: runId } = view.run;
   const cards = view.components;
   const approved = cards.filter((c) => c.status === "approved").length;
   const proposed = cards.filter((c) => c.status === "proposed").length;
   // A question only you decide (the draft scan's "ask") is never approved as part of the set.
   const settable = cards.filter((c) => c.status === "proposed" && c.params.decision !== "ask").length;
-  const unscanned = view.run.session.state !== "none" && view.plan?.initScan?.state !== "done";
+  const unscanned = !phase && view.run.session.state !== "none" && view.plan?.initScan?.state !== "done";
+  const estimate = view.plan?.buildEstimateUsd;
   const decide = (key: string, decision: "approve" | "decline" | "defer" | "undo", extra: { reason?: string; answers?: Record<string, string> }) =>
     void p.act(`card:${key}`, () => decideComponent(repoId, runId, key, { decision, reason: extra.reason ?? null, answers: extra.answers }));
   // "שאל" opens the one chat on this run with the question already in the box; the chat answers from the card itself, with no model call.
@@ -60,14 +74,66 @@ export function PlanBody(p: StepProps) {
           <ul className="rd-list">{view.readiness.honesty.map((h, i) => <li key={i}>{h}</li>)}</ul>
         </div>
       )}
-      {open && <DraftCard {...p} />}
+      {open && (phase ? view.plan?.initScan && <DraftOutcome scan={view.plan.initScan} /> : <DraftCard {...p} />)}
       {open && (
-        <div className="ob-actions">
-          <button className="btn btn-primary" disabled={busy || approved === 0} onClick={() => void p.act("build", () => startOnboardingBuild(repoId, runId))}>{p.busy === "build" ? "מתחיל בנייה…" : `בנה את מה שאושר (${approved})`}</button>
-          <Info k="start_build" />
-          <span className="ob-sub">{proposed > 0 ? `${proposed} כרטיסים עוד לא הוכרעו — הם נשארים בחוץ ולא נכתבים.` : "כל הכרטיסים הוכרעו."} סשן הטיוטה, אם פתוח, נסגר.{unscanned ? " טיוטת /init לא נסרקה — היא תוזז הצידה ושום דבר ממנה לא ייכנס; לסרוק קודם?" : ""}</span>
+        <div style={{ display: "grid", gap: 6 }}>
+          <div className="ob-actions">
+            <button className="btn btn-primary" disabled={busy || approved === 0} onClick={() => void p.act("build", () => startOnboardingBuild(repoId, runId))}>{p.busy === "build" ? "מתחיל בנייה…" : `בנה את מה שאושר (${approved})`}</button>
+            <Info k="start_build" />
+            {estimate != null && <span style={{ fontSize: 12.5 }}>הבנייה והמדידה יעלו בערך <b>{fmtUsd(estimate)}</b><Info k="build_estimate" /></span>}
+          </div>
+          <span className="ob-sub">{proposed > 0 ? `${proposed} כרטיסים עוד לא הוכרעו — הם נשארים בחוץ ולא נכתבים.` : "כל הכרטיסים הוכרעו."}{phase ? "" : " סשן הטיוטה, אם פתוח, נסגר."}{unscanned ? " טיוטת /init לא נסרקה — היא תוזז הצידה ושום דבר ממנה לא ייכנס; לסרוק קודם?" : ""}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The plan's first phase: the cards are drawn but not yet open. The /init draft session comes first — or is
+ * skipped — so that its scan reaches the cards before anyone decides on them.
+ */
+function DraftPhase(p: StepProps) {
+  const { view } = p;
+  const s = view.run.session;
+  const rec = view.recommended.draft;
+  const { repoId, id: runId } = view.run;
+  const a = view.automation;
+  const state = s.state === "live" ? "פעיל" : s.state === "ended" ? "הסשן נסגר" : s.state === "disconnected" ? "הסשן נותק" : "עוד לא נפתח";
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      {view.plan && <PlanSummary plan={view.plan} />}
+      <div className="rd-inline" style={{ fontSize: 12.5 }}>
+        <span className="rd-chip human">{PLAN_PHASE_HE.draft}</span><Info k="plan_phase" />
+        <span className="ob-sub">{view.components.length} כרטיסים מוכנים. הם ייפתחו להחלטה אחרי הטיוטה, או מיד אם בוחרים "בלי טיוטה".</span>
+      </div>
+      <div className="panel" style={{ display: "grid", gap: 10 }}>
+        <CardTitle info="draft_init">טיוטת /init — לפני ההחלטות</CardTitle>
+        <p className="rd-lead" style={{ margin: 0 }}>Claude Code האמיתי רץ בטרמינל שלמטה, בעותק המבודד, עם /init — כמחולל טיוטה. כשסוגרים אותו, או כשהוא מגיע לתקרה, הטיוטה מוזזת הצידה ונסרקת מול הכרטיסים שלנו: מה שכדאי לקחת ממנה הופך לכרטיס, ומה שלנו מיותר נדחה עם סיבה. רק אחר כך הכרטיסים נפתחים להחלטה.</p>
+        <div className="rd-inline" style={{ fontSize: 12.5 }}>
+          <span>תקרת הסשן<Info k="session_cap" />:</span><b>{fmtUsd(a.draftCapUsd)} · {a.draftCapMinutes} דקות</b>
+          <span className="ob-sub">— משנים בפאנל "מדרגת האוטומציה".</span>
+        </div>
+        <div className="ob-actions">
+          {s.state !== "live" && <button className="btn btn-primary" disabled={!!p.busy} onClick={() => void p.act("draft", () => startDraftSession(repoId, runId, { resume: s.state !== "none" }))}>{p.busy === "draft" ? "פותח…" : s.state === "none" ? "פתח סשן טיוטה" : "↻ חדש את הסשן"}</button>}
+          {s.state !== "live" && <Info k="draft_start" />}
+          {s.state !== "live" && <button className="btn btn-secondary" disabled={!!p.busy} onClick={() => void p.act("skip", () => skipDraft(repoId, runId))}>{p.busy === "skip" ? "פותח את הכרטיסים…" : "בלי טיוטה"}</button>}
+          {s.state !== "live" && <Info k="draft_skip" />}
+          <span className="ob-sub">{modelLabel(rec.model)} · מאמץ {effortLabel(rec.effort)} · {state}{s.status ? ` · ${fmtUsd(s.status.costUsd)} בסשן הזה` : ""}</span>
+        </div>
+        {s.state === "live" && <div className="ob-note info">כשמסיימים — כותבים /exit בטרמינל. הטיוטה תוזז הצידה ותיסרק לבד, והכרטיסים ייפתחו להחלטה.</div>}
+        {s.state !== "none" && <RunTerminal repoId={repoId} runId={runId} screenRef={p.screenRef} />}
+      </div>
+    </div>
+  );
+}
+
+/** After the draft was set aside and scanned: what the scan decided, read-only — its cards are already among the cards below. */
+function DraftOutcome({ scan }: { scan: InitScanState }) {
+  return (
+    <div className="panel" style={{ display: "grid", gap: 10 }}>
+      <CardTitle info="draft_init">טיוטת /init</CardTitle>
+      <ScanResult scan={scan} />
     </div>
   );
 }
@@ -180,7 +246,7 @@ function ScanResult({ scan }: { scan: InitScanState }) {
       <div className="rd-tiles">
         <Tile n={scan.cards?.length ?? 0} label="כרטיסים מהטיוטה, לאישורך" info="component_card" />
         <Tile n={asks} label="החלטות שרק אתה מקבל" info="draft_scan_ask" tone={asks ? "warn" : undefined} />
-        <Tile n={scan.dropOurs?.length ?? 0} label="משלנו — מסומנים כמיותרים" info="draft_scan_result" />
+        <Tile n={scan.dropOurs?.length ?? 0} label="משלנו — נדחו כמיותרים" info="scan_declined" />
         <Tile n={(scan.reject?.length ?? 0) + (scan.refused?.length ?? 0)} label="מהטיוטה — לא נלקחו" info="draft_scan_result" />
         <Tile n={fmtUsd(scan.costUsd ?? 0)} label="עלות הסריקה" info="draft_scan" />
       </div>

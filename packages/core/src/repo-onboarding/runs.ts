@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -423,7 +423,7 @@ export async function approveTrial(repoId: string, runId: string, by: Actor) {
  * Both arms are detached worktrees off the run's copy, loading only the copy's
  * own configuration; every run is a row and an event.
  */
-async function runEvalPhase(ctx: Ctx, run: RunRow, by: Actor, phase: TrialPhase): Promise<EvalSummary> {
+async function runEvalPhase(ctx: Ctx, run: RunRow, by: Actor, phase: TrialPhase, components: readonly Component[] = []): Promise<EvalSummary> {
   if (!run.workspacePath || !run.baselineSha) throw new OnboardingError("אין עותק מבודד");
   const dir = run.workspacePath;
   const { tasks, evalCtx, hints } = await evalSetup(ctx);
@@ -437,7 +437,7 @@ async function runEvalPhase(ctx: Ctx, run: RunRow, by: Actor, phase: TrialPhase)
   const res = await runEval({
     ledger: { clientId: ctx.clientId, userId: by.userId, trigger: "button", entity: { kind: "onboarding_run", id: ctx.runId }, screen: "onboarding", meta: { stepKey: phase === "baseline" ? "trial" : "build", phase } },
     sharedDir: dir, baselineSha: run.baselineSha, delivered: { fromDir: dir, files: delivered }, armsRoot: armsRootFor(runtimeDir(ctx.runId)), workDir: runtimeDir(ctx.runId),
-    tasks, ctx: evalCtx, hints, runsPerTask: 1, extraRunWhenDiffer: phase === "after", maxUsd: capUsd, arms: [arm], priorRuns: prior,
+    tasks, ctx: evalCtx, hints, runsPerTask: 1, extraRunWhenDiffer: phase === "after", maxUsd: capUsd, arms: [arm], priorRuns: prior, components: components.filter(deliverable),
     render: async (key, vars) => renderPrompt((await requirePrompt(key)).body, vars),
     log: (l) => terminalLine(ctx.runId, l),
     onRun: async (rec) => {
@@ -598,6 +598,13 @@ async function planPhase(ctx: Ctx): Promise<{ status: StepStatus | null; phase: 
   return { status: (plan?.status as StepStatus) ?? null, phase: ((plan?.result as PlanResult | null)?.phase ?? "decide") };
 }
 
+/** The cards open for decision once — after the draft was set aside and scanned, or skipped. Deciding earlier is what built six redundant cards in the Trade run. */
+async function requireDecidePhase(ctx: Ctx) {
+  const { phase } = await planPhase(ctx);
+  if (phase === "draft") throw new OnboardingError("ההחלטות נפתחות אחרי טיוטת ה-/init — סגרו את הסשן (הטיוטה תוזז הצידה ותיסרק) או דלגו על הטיוטה");
+  if (phase === "aside" || phase === "scan") throw new OnboardingError("הטיוטה מוזזת הצידה ונסרקת — ההחלטות נפתחות כשזה נגמר");
+}
+
 /** "בלי טיוטה": straight to the decisions. */
 export async function skipDraft(repoId: string, runId: string, by: Actor) {
   const { run, ctx } = await loadRun(repoId, runId);
@@ -676,6 +683,7 @@ export async function decideComponent(repoId: string, runId: string, by: Actor, 
   const { run, steps, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
   if (stepOf(steps, "plan")?.status !== "WaitingForUser") throw new OnboardingError("התוכנית לא ממתינה להחלטות");
+  await requireDecidePhase(ctx);
   const cards = await loadCards(ctx);
   const c = cards.find((x) => x.key === input.key);
   if (!c) throw new OnboardingError("הכרטיס לא נמצא");
@@ -692,6 +700,7 @@ export async function decideComponentSet(repoId: string, runId: string, by: Acto
   const { run, steps, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
   if (stepOf(steps, "plan")?.status !== "WaitingForUser") throw new OnboardingError("התוכנית לא ממתינה להחלטות");
+  await requireDecidePhase(ctx);
   // A question only a person decides (the scan's "ask": a permission, a policy) is never answered as part of a set.
   const cards = (await loadCards(ctx)).filter((c) => c.status === "proposed" && c.kind !== "report" && (input.keys ? input.keys.includes(c.key) : c.params.decision !== "ask"));
   const status = input.decision === "approve" ? "approved" : "declined";
@@ -748,6 +757,23 @@ async function draftOf(run: RunRow): Promise<DraftFile[]> {
   return out;
 }
 
+/** The draft after it was set aside: the kept copy, each file against its baseline version — what a re-scan reads. */
+async function draftFromAside(ctx: Ctx, run: RunRow): Promise<DraftFile[]> {
+  const keep = path.join(runtimeDir(ctx.runId), "init-draft");
+  if (!run.workspacePath || !run.baselineSha || !existsSync(keep)) return [];
+  const walk = (dir: string, rel = ""): string[] => readdirSync(dir, { withFileTypes: true }).flatMap((d) => (d.isDirectory() ? walk(path.join(dir, d.name), `${rel}${d.name}/`) : [`${rel}${d.name}`]));
+  const out: DraftFile[] = [];
+  for (const p of draftPaths([], walk(keep).map((x) => ({ path: x })))) {
+    const buf = readFileSync(path.join(keep, p));
+    if (buf.includes(0) || buf.length > 512 * 1024) continue;
+    const after = buf.toString("utf8");
+    const v = await fileVersions(run.workspacePath, run.baselineSha, p).catch(() => null);
+    if (!v || v.tooLarge || v.before?.trimEnd() === after.trimEnd()) continue;
+    out.push({ path: p, before: v.before, after });
+  }
+  return out;
+}
+
 /** Keys of the plan step's result set in one statement, the rest left as they are — so a scan and a replan never write back each other's stale copy. */
 const mergePlanResult = (ctx: Ctx, patch: Record<string, unknown>) =>
   withTenant(ctx.clientId, (tx) => tx.update(repositoryOnboardingStep)
@@ -769,20 +795,34 @@ async function failInitScan(ctx: Ctx, by: string | null, error: string, reason?:
 /** One of the two things that change the plan's cards from the draft at a time: the scan, or the start of the build. */
 const planBusy = new Set<string>();
 
-/** "סרוק מה ש-/init עשה": the editor runs in the background (minutes, it reads the code to check claims); the screen follows its state. */
+/**
+ * "סרוק מה ש-/init עשה". In the draft phase it is the same path the end of the session takes — the draft is set aside,
+ * scanned against the clean copy, and only then do the cards open (a live, idle session is closed first; its end runs
+ * that path). In the decide phase it is a re-scan of the draft that was set aside. Either way the editor runs in the
+ * background (minutes, it reads the code to check claims); the screen follows its state.
+ */
 export async function scanInitDraft(repoId: string, runId: string, by: Actor) {
   const { run, steps, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
   if (stepOf(steps, "plan")?.status !== "WaitingForUser") throw new OnboardingError("סריקת הטיוטה אפשרית כשהתוכנית פתוחה לאישור");
   if (!run.workspacePath || !run.baselineSha) throw new OnboardingError("אין עותק מבודד");
   if (planBusy.has(runId)) throw new OnboardingError("סריקה של הטיוטה או תחילת בנייה כבר רצות בהרצה הזו");
+  const { phase } = await planPhase(ctx);
+  if (phase === "aside" || phase === "scan") throw new OnboardingError("הטיוטה כבר מוזזת הצידה ונסרקת");
+  const s = sessionOf(run);
+  if (terminalState(runId) === "live" && s.transcriptPath && !sessionIdle(s.transcriptPath).idle) throw new OnboardingError("סשן הטיוטה עוד עובד — חכו שיסיים את התור (או עצרו אותו) ואז סרקו");
+  if (phase === "draft") {
+    const draft = await draftOf(run);
+    if (!draft.length) throw new OnboardingError("סשן הטיוטה עוד לא כתב כלום בעותק — אין מה לסרוק");
+    if (terminalState(runId) === "live") { await stopDraftSession(draftCtx(ctx), by.userId); return { scanning: true, files: draft.length }; }
+    void afterDraft(ctx, by.userId).catch((e) => console.error("[onboarding] the draft could not be set aside and scanned:", e));
+    return { scanning: true, files: draft.length };
+  }
   planBusy.add(runId);
   let files: string[];
   try {
-    const s = sessionOf(run);
-    if (terminalState(runId) === "live" && s.transcriptPath && !sessionIdle(s.transcriptPath).idle) throw new OnboardingError("סשן הטיוטה עוד עובד — חכו שיסיים את התור (או עצרו אותו) ואז סרקו");
-    const draft = await draftOf(run);
-    if (!draft.length) throw new OnboardingError("סשן הטיוטה עוד לא כתב כלום בעותק — אין מה לסרוק");
+    const draft = await draftFromAside(ctx, run);
+    if (!draft.length) throw new OnboardingError("אין טיוטה שהוזזה הצידה — אין מה לסרוק שוב");
     files = draft.map((f) => f.path);
     await beginScan(ctx, by.userId, files);
     void runInitScan(ctx, run, by, draft)
@@ -848,11 +888,11 @@ async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[])
   const drop = new Map(scan.dropOurs.filter((d) => stays.some((c) => c.key === d.key)).map((d) => [d.key, d.why]));
   // A card of ours the scan found redundant is DECLINED, with the reason and an undo — not annotated for a person to notice
   // (in the Trade run the six "redundant" cards were approved as a set an hour before the scan, and all were built).
-  // A decision a person already took stands.
+  // A decision a person already took stands; one the automation level took alone (an approved reversible card) does not.
   const now2 = new Date().toISOString();
   const noted = stays.map((c) => {
     const why = drop.get(c.key) ?? null;
-    if (why && !c.decidedBy && c.status === "proposed") return { ...c, status: "declined" as const, declineReason: `הסריקה: ${why.slice(0, 300)}`, decidedBy: ctx.triggeredBy, decidedAt: now2, params: { ...c.params, declinedBy: "scan" } };
+    if (why && !c.decidedBy && (c.status === "proposed" || c.status === "approved")) return { ...c, status: "declined" as const, declineReason: `הסריקה: ${why.slice(0, 300)}`, decidedBy: ctx.triggeredBy, decidedAt: now2, params: { ...c.params, declinedBy: "scan" } };
     return { ...c, why_he: withScanNote(c.why_he, why) };
   });
   const applied = noted.filter((c) => (c.params as { declinedBy?: string }).declinedBy === "scan" && !stays.find((s) => s.key === c.key)?.decidedBy).map((c) => c.key);
@@ -1008,7 +1048,7 @@ async function runBuild(ctx: Ctx, run: RunRow, by: Actor) {
   let evalSummary: EvalSummary | null = null;
   const baseline = await loadTrials(ctx, "baseline");
   if (baseline.length && run.kind !== "coach") {
-    evalSummary = await runEvalPhase(ctx, run, by, "after");
+    evalSummary = await runEvalPhase(ctx, run, by, "after", built);
     for (const cs of evalSummary.components) {
       const c = built.find((x) => x.key === cs.key);
       if (c) await withTenant(ctx.clientId, (tx) => tx.update(onboardingComponent).set({ delta: cs.delta, updatedAt: new Date() }).where(eq(onboardingComponent.id, c.id)));
@@ -1020,10 +1060,10 @@ async function runBuild(ctx: Ctx, run: RunRow, by: Actor) {
   const delta = evalSummary ? legacyDelta(evalSummary) : null;
   const withDelta = await loadCards(ctx);
   // The repository's own record (`.dcc/onboarding.json`), delivered with the components.
-  const dossier = writeDossier(dir, { profile: p.profile, corrections: p.corrections, cards: withDelta, trials: await loadTrials(ctx), processes, runId: ctx.runId, baselineSha: run.baselineSha, eval: evalSummary });
+  const dossier = writeDossier(dir, { cards: withDelta, runId: ctx.runId, baselineSha: run.baselineSha, eval: evalSummary });
   const files = [...new Set([...withDelta.flatMap((c) => c.files), ...dossier])];
   const result: BuildResult = {
-    installed: outcomes.filter((o) => o.status === "installed" || o.status === "verified" || o.status === "configured").length, verified: outcomes.filter((o) => o.status === "verified").length, failed: outcomes.filter((o) => o.status === "failed").length, skipped: outcomes.filter((o) => o.status === "deferred" || o.status === "reported").length,
+    installed: outcomes.filter((o) => o.status === "verified" || o.status === "configured").length, verified: outcomes.filter((o) => o.status === "verified").length, failed: outcomes.filter((o) => o.status === "failed").length, skipped: outcomes.filter((o) => o.status === "deferred" || o.status === "reported").length,
     files, delta, eval: evalSummary, removedFiles, jointCheck: joint, costUsd,
   };
   await event(ctx, "onboarding.build.done", { ...result, eval: evalSummary ? evalSummary.totals : null }, by.userId);
@@ -1284,7 +1324,7 @@ export async function onboardingChatFacts(runId: string, cursor: number): Promis
       "צעד נוכחי": step,
       "מצב ההרצה": row.status,
       "מה האבחון מצא": p ? profileFacts(p.profile, p.corrections).map((f) => `${f.label_he}: ${f.value_he}${f.corrected ? " (סומן כלא נכון)" : ""}`).slice(0, 16) : "(עדיין לא רץ)",
-      "כרטיסי הרכיבים": cards.length ? cards.map((c) => `[${c.key}] ${c.title_he} · ${KIND_HE[c.kind]} · ${c.group} · ${c.status}${c.status === "proposed" ? "" : ""} — למה: ${c.why_he} — מה: ${c.what_he} — איך נבדק: ${c.verifyHow_he}${c.validation ? ` — תוצאה: ${c.validation.passed === true ? "עבר" : c.validation.passed === false ? "נכשל" : "לא נבדק כאן"} (${c.validation.detail})` : ""}`).slice(0, 40) : "(עדיין אין)",
+      "כרטיסי הרכיבים": cards.length ? cards.map((c) => `[${c.key}] ${c.title_he} · ${KIND_HE[c.kind]} · ${c.group} · ${c.status}${c.status === "proposed" ? "" : ""} — למה: ${c.why_he} — מה: ${c.what_he} — איך נבדק: ${c.verifyHow_he}${c.validation ? ` — תוצאה: ${c.status === "configured" ? "הוגדר · יחובר אצל הלקוח" : c.validation.passed === true ? "עבר" : "נכשל"} (${c.validation.detail})` : ""}${c.delta ? ` — מדידה: ${c.delta.verdict === "improved" ? "השתפר" : c.delta.verdict === "worse" ? "הזיק" : c.delta.verdict === "same" ? "לא הוכיח תרומה" : "לא נמדד"} (${c.delta.after}/${c.delta.total} עם, ${c.delta.before}/${c.delta.total} בלי)` : ""}`).slice(0, 40) : "(עדיין אין)",
       "כרטיסים שמחכים להחלטה": waiting.length,
       "סשן טיוטת /init": s.state === "live" ? "פעיל" : s.state === "ended" ? "נסגר" : s.state === "disconnected" ? "נותק" : "לא נפתח",
       ...(digest.text ? { "מה סשן הטיוטה עשה מאז השאלה הקודמת": digest.text } : {}),

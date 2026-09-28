@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
   answerInterview, approveTrial, correctProfileFact,
-  type AgentTest, type ConnectResult, type DiagnoseResult, type DiscoveredProcess, type InterviewAnswer, type InterviewQuestion, type OnboardingStepKey,
-  type ProcessesResult, type ProfileCorrection, type ProfileFact, type TrialOutcome, type TrialStepResult,
+  type AgentTest, type ConnectResult, type DiagnoseResult, type DiscoveredProcess, type EvalTaskKind, type GraderResult, type InterviewAnswer, type InterviewQuestion, type OnboardingStepKey,
+  type ProcessesResult, type ProfileCorrection, type ProfileFact, type TrialOutcome, type TrialStepResult, type TrialWaiting,
 } from "../../api.ts";
 import { CardTitle } from "../../ui.tsx";
 import { Info } from "../../claude/Info.tsx";
@@ -10,7 +10,7 @@ import { CodeMapPanel } from "../../components/CodeMap.tsx";
 import { BuildBody, DeliverBody } from "./build.tsx";
 import { PlanBody } from "./plan.tsx";
 import { Kv, NotYet, Tile, Working, isOver, type StepProps } from "./shared.tsx";
-import { AGENT_TEST_HE, DECISION_HE, FAILURE_HE, JUDGE_HE, LEVEL_HE, PROCESS_SOURCE_HE, STEP_KIND_CHIP, fmtDate, fmtDuration, fmtInt, fmtUsd, shortSha } from "./labels.ts";
+import { AGENT_TEST_HE, ARM_HE, DECISION_HE, FAILURE_HE, GRADER_HE, JUDGE_HE, LEVEL_HE, PROCESS_SOURCE_HE, STEP_KIND_CHIP, TASK_KIND_HE, fmtDate, fmtDuration, fmtInt, fmtUsd, shortSha } from "./labels.ts";
 
 /**
  * One step of the dossier: its card (title, chips, the rerun button, the
@@ -331,10 +331,10 @@ function AgentTestSummary({ t, trial }: { t: AgentTest; trial: TrialLink }) {
           <b>{shown.label}:</b> {reason || "המודל לא כתב סיבה לשאלה הזו בשלב הזה."}
           {shown.key === "failsToday" && trial && (
             <div style={{ marginTop: 6 }}>
-              משימת הניסיון "{trial.title_he}": {trial.passed === false ? `נכשלה — ${trial.failureKind ? FAILURE_HE[trial.failureKind] : "כישלון"}` : trial.passed === true ? "עברה" : "לא הוכרעה"}{trial.detail ? ` · ${trial.detail}` : ""}
+              משימת המדידה "{trial.title_he}": {trial.passed === false ? `נכשלה — ${trial.failureKind ? FAILURE_HE[trial.failureKind] : "כישלון"}` : trial.passed === true ? "עברה" : "לא הוכרעה"}{trial.detail ? ` · ${trial.detail}` : ""}
             </div>
           )}
-          {shown.key === "failsToday" && !trial && <div className="ob-sub" style={{ marginTop: 4 }}>הראיה מההיסטוריה של המאגר; ריצת הניסיון עוד לא בדקה את התהליך הזה.</div>}
+          {shown.key === "failsToday" && !trial && <div className="ob-sub" style={{ marginTop: 4 }}>הראיה מההיסטוריה של המאגר; המדידה עוד לא בדקה את התהליך הזה.</div>}
         </div>
       )}
     </div>
@@ -357,7 +357,7 @@ function ProcessList({ processes, trials }: { processes: DiscoveredProcess[]; tr
       <p className="ob-sub" style={{ margin: 0 }}>לחצו על תשובת "כן" במבחן הסוכן כדי לראות מה בדיוק היא אומרת בשלב הזה.</p>
       {processes.map((pr) => (
         <div className="rd-proc" key={pr.key}>
-          <div className="ph"><span>{pr.title}</span><span className="rd-chip det">{PROCESS_SOURCE_HE[pr.source] ?? pr.source}</span>{pr.trialTaskKey && <span className="rd-chip">יש משימת ניסיון</span>}</div>
+          <div className="ph"><span>{pr.title}</span><span className="rd-chip det">{PROCESS_SOURCE_HE[pr.source] ?? pr.source}</span>{pr.trialTaskKey && <span className="rd-chip">יש משימת מדידה</span>}</div>
           {pr.impossible && <div className="ob-note warn"><b>אי אפשר כאן<Info k="process_impossible" /></b> — {pr.impossible}</div>}
           {pr.evidence.length > 0 && <ul>{pr.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul>}
           {pr.steps.length > 0 && (
@@ -384,76 +384,148 @@ function ProcessList({ processes, trials }: { processes: DiscoveredProcess[]; tr
   );
 }
 
-/* ── 3. the trial run ─────────────────────────────────────────────── */
+/* ── 3. the measurement, "without" ────────────────────────────────── */
 
 function TrialBody(p: StepProps) {
   const { step, view } = p;
   if (step.status === "WaitingForUser" && view.trials.waiting) return <TrialGate {...p} />;
+  const kinds = taskKinds(p);
   if (step.status === "Running") {
-    const planned = (step.result as { tasks?: unknown[] } | null)?.tasks?.length;
+    const planned = (step.result as Partial<TrialWaiting> | null)?.tasks?.length;
+    const cap = (step.result as Partial<TrialWaiting> | null)?.capUsd;
     return (
       <div style={{ display: "grid", gap: 10 }}>
-        <Working text={`מריץ את משימות הניסיון ב-Claude Code, בקריאה בלבד… ${view.trials.baseline.length}${planned ? ` מתוך ${planned}` : ""} הסתיימו.`} />
-        {view.trials.baseline.length > 0 && <TrialTable rows={view.trials.baseline} />}
+        <Working text={`מריץ את משימות המדידה ב-Claude Code על עותק נקי, בלי שום רכיב… ${view.trials.baseline.length}${planned ? ` הרצות מתוך ${planned} משימות` : " הרצות"} הסתיימו${cap ? ` · נעצר בתקרה של ${fmtUsd(cap)}` : ""}.`} />
+        {view.trials.baseline.length > 0 && <TrialRuns rows={view.trials.baseline} kinds={kinds} />}
       </div>
     );
   }
   if (step.status !== "Completed") return <NotYet runnable={p.runnable} />;
   const r = (step.result ?? {}) as Partial<TrialStepResult> & { reused?: boolean };
   const rows = view.trials.baseline;
-  const passed = rows.filter((t) => t.passed === true).length;
+  const tasks = view.trials.eval?.tasks ?? [];
+  const total = r.tasks ?? (tasks.length || new Set(rows.map((t) => t.taskKey)).size);
+  const passed = r.passed ?? tasks.filter((t) => t.without.passK).length;
   const cost = rows.reduce((a, t) => a + t.costUsd, 0);
   const byKind = Object.entries(r.byKind ?? {}).filter(([, n]) => n > 0);
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      {r.reused && <div className="ob-note info">נקודת ההתחלה נלקחה מההרצה הקודמת — משימות הניסיון לא רצו שוב.</div>}
-      <CardTitle info="trial_tasks">נקודת ההתחלה: {passed} מתוך {rows.length} עברו · {fmtUsd(cost)}</CardTitle>
+      {r.reused && <div className="ob-note info">נקודת ההתחלה נלקחה מההרצה הקודמת — משימות המדידה לא רצו שוב.</div>}
+      <CardTitle info="trial_tasks">בלי שום רכיב: {passed} מתוך {total} משימות עוברות · {fmtUsd(cost)}</CardTitle>
+      <p className="ob-sub" style={{ margin: 0 }}>משימה עוברת רק כשעברה בכל הרצה שלה<Info k="pass_k" />. אותן משימות ירוצו שוב אחרי הבנייה, עם בדיוק הסט שיימסר<Info k="eval_arms" />.</p>
+      {r.stoppedAtCap && <div className="ob-note warn">המדידה נעצרה בתקרה<Info k="cost_envelope" /> — מה שנמדד עד אז נשמר; משימה שלא הספיקה לרוץ לא נכנסת לחישוב.</div>}
       {byKind.length > 0 && (
         <div className="rd-inline"><span className="ob-sub">סוגי הכישלון<Info k="failure_kind" /></span>{byKind.map(([k, n]) => <span key={k} className="rd-chip bad">{FAILURE_HE[k as keyof typeof FAILURE_HE] ?? k} × {n}</span>)}</div>
       )}
-      {rows.length ? <TrialTable rows={rows} /> : <p className="ob-sub">לא נגזרו משימות ניסיון למאגר הזה.</p>}
+      {rows.length ? <TrialRuns rows={rows} kinds={kinds} /> : <p className="ob-sub">לא נגזרו משימות מדידה למאגר הזה.</p>}
     </div>
   );
+}
+
+/** Each task's kind (knowledge / action), from the measurement's summary or from the list that waited for approval. */
+function taskKinds(p: StepProps): Record<string, EvalTaskKind> {
+  const out: Record<string, EvalTaskKind> = {};
+  // While it waits or runs, the step's result is the list of tasks; once it completed, `tasks` is only their count.
+  const listed = (p.step.result as { tasks?: unknown } | null)?.tasks;
+  if (Array.isArray(listed)) for (const t of listed as TrialWaiting["tasks"]) if (t.kind) out[t.key] = t.kind;
+  for (const t of p.view.trials.eval?.tasks ?? []) out[t.key] = t.kind;
+  return out;
 }
 
 function TrialGate(p: StepProps) {
   const w = p.view.trials.waiting!;
   const { repoId, id: runId } = p.view.run;
+  // A run that waited here before the measurement had arms and a cap carries only the tasks and the estimate.
+  const arms = w.arms ?? ["without"];
+  const cap = typeof w.capUsd === "number" ? w.capUsd : null;
+  const runs = (w.runs ?? 1) > 1 ? `${w.runs} הרצות לכל משימה` : "הרצה אחת לכל משימה";
   return (
     <div style={{ display: "grid", gap: 10 }}>
-      <CardTitle info="trial_tasks">משימות הניסיון ({w.tasks.length})</CardTitle>
-      <ul className="rd-list plain" style={{ display: "grid", gap: 4 }}>
-        {w.tasks.map((t) => <li key={t.key} className="rd-inline"><span>{t.title_he}</span><span className="rd-chip det">{JUDGE_HE[t.judge] ?? t.judge}</span></li>)}
-      </ul>
-      <p className="ob-sub" style={{ margin: 0 }}>מי שופט<Info k="trial_judge" />: הקוד כשאפשר לבדוק את התשובה מול הפרופיל, ומודל אחר מזה שביצע כשאי אפשר.</p>
-      <div className="rd-inline" style={{ fontSize: 13 }}><span>עלות משוערת<Info k="trial_estimate" />:</span><b>{fmtUsd(w.estimateUsd)}</b></div>
+      <CardTitle info="trial_tasks">משימות המדידה ({w.tasks.length})</CardTitle>
+      <table className="rd-table">
+        {/* no-info: the task says what it is; the kind and the judge open theirs */}
+        <thead><tr><th>משימה</th><th>סוג<Info k="eval_task_kind" /></th><th>מי שופט<Info k="trial_judge" /></th></tr></thead>
+        <tbody>
+          {w.tasks.map((t) => (
+            <tr key={t.key}>
+              <td>{t.title_he}</td>
+              <td>{t.kind ? <span className="rd-chip">{TASK_KIND_HE[t.kind] ?? t.kind}</span> : "—"}</td>
+              <td><span className="rd-chip det">{JUDGE_HE[t.judge] ?? t.judge}</span></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="ob-sub" style={{ margin: 0 }}>זרוע "{arms.map((a) => ARM_HE[a]).join("\" ו-\"")}"<Info k="eval_arms" /> · {runs}; משימה שעוברת רק בחלק מההרצות לא נחשבת עוברת<Info k="pass_k" />.</p>
+      <div className="rd-inline" style={{ fontSize: 13 }}>
+        <span>עלות משוערת<Info k="trial_estimate" />:</span><b>{fmtUsd(w.estimateUsd)}</b>
+        {cap !== null && <><span style={{ marginInlineStart: 12 }}>תקרה<Info k="cost_envelope" />:</span><b>{fmtUsd(cap)}</b></>}
+      </div>
       <div className="ob-actions">
-        <button className="btn btn-primary" disabled={!!p.busy} onClick={() => void p.act("trial", () => approveTrial(repoId, runId))}>{p.busy === "trial" ? "מתחיל…" : `▶ הרץ את הניסיון (~${fmtUsd(w.estimateUsd)})`}</button>
+        <button className="btn btn-primary" disabled={!!p.busy} onClick={() => void p.act("trial", () => approveTrial(repoId, runId))}>{p.busy === "trial" ? "מתחיל…" : `▶ הרץ את המדידה (~${fmtUsd(w.estimateUsd)}${cap !== null ? `, עד ${fmtUsd(cap)}` : ""})`}</button>
         <Info k="trial_approve" />
-        <span className="ob-sub">בקריאה בלבד, בעותק המבודד. שום קובץ לא נכתב.</span>
+        <span className="ob-sub">על עותק זמני ונקי של המאגר. המאגר והענף לא משתנים.</span>
       </div>
     </div>
   );
 }
 
-/** The outcomes of one phase of the trial — the baseline, or the run after the build. */
-export function TrialTable({ rows }: { rows: TrialOutcome[] }) {
+const resultChip = (t: Pick<TrialOutcome, "passed" | "failureKind">) =>
+  t.passed === true ? <span className="rd-chip ok">✓ עבר</span>
+    : t.passed === false ? <span className="rd-chip bad">✕ נכשל{t.failureKind ? ` · ${FAILURE_HE[t.failureKind]}` : ""}</span>
+      : <span className="rd-chip">? לא הוכרע</span>;
+
+/**
+ * The runs of one arm of the measurement, grouped by task in the order they first ran: each run with its
+ * result and failure kind, cost, turns, the judge's detail and — on demand — what every code grader found.
+ */
+export function TrialRuns({ rows, kinds }: { rows: TrialOutcome[]; kinds?: Record<string, EvalTaskKind> }) {
+  const groups = new Map<string, TrialOutcome[]>();
+  for (const t of rows) groups.set(t.taskKey, [...(groups.get(t.taskKey) ?? []), t]);
   return (
     <table className="rd-table">
-      {/* no-info: the task and the detail say what they are; the failure kind, the judge and the cost open theirs */}
-      <thead><tr><th>משימה</th><th>תוצאה</th><th>סוג הכישלון<Info k="failure_kind" /></th><th>פירוט</th><th>מי שפט<Info k="trial_judge" /></th><th>עלות<Info k="ai_cost" /></th></tr></thead>
+      {/* no-info: the task, the run number and the detail say what they are; the rest open theirs */}
+      <thead><tr><th>משימה</th><th>הרצה</th><th>תוצאה<Info k="failure_kind" /></th><th>עלות<Info k="eval_run_cost" /></th><th>תורות<Info k="eval_turns" /></th><th>פירוט</th><th>הבודקים<Info k="graders_list" /></th></tr></thead>
       <tbody>
-        {rows.map((t) => (
-          <tr key={`${t.phase}:${t.taskKey}`}>
-            <td><b>{t.title_he}</b></td>
-            <td>{t.passed === true ? <span className="rd-chip ok">✓ עבר</span> : t.passed === false ? <span className="rd-chip bad">✕ נכשל</span> : <span className="rd-chip">? לא הוכרע</span>}</td>
-            <td>{t.failureKind ? FAILURE_HE[t.failureKind] : "—"}</td>
-            <td className="dim">{t.detail}</td>
-            <td className="dim">{t.judgedBy}</td>
+        {[...groups.entries()].map(([key, runs]) => [...runs].sort((a, b) => (a.runIndex ?? 0) - (b.runIndex ?? 0)).map((t, i) => (
+          <tr key={`${t.phase}:${key}:${t.runIndex ?? i}`}>
+            {i === 0 && (
+              <td rowSpan={runs.length}>
+                <b>{t.title_he}</b>
+                {kinds?.[key] && <div style={{ marginTop: 4 }}><span className="rd-chip">{TASK_KIND_HE[kinds[key]!]}</span></div>}
+              </td>
+            )}
+            <td className="num">{(t.runIndex ?? i) + 1}</td>
+            <td>{resultChip(t)}</td>
             <td className="num">{fmtUsd(t.costUsd)}</td>
+            <td className="num">{t.numTurns ?? "—"}</td>
+            <td className="dim">{t.detail}{t.judgedBy ? <div style={{ marginTop: 2 }}>שפט: {t.judgedBy}</div> : null}</td>
+            <td><Graders list={t.graders ?? []} /></td>
           </tr>
-        ))}
+        )))}
       </tbody>
     </table>
+  );
+}
+
+/** One run's code graders: a count that opens the list, ✓ or ✗ per grader with its detail. */
+function Graders({ list }: { list: GraderResult[] }) {
+  const [open, setOpen] = useState(false);
+  if (!list.length) return <span className="ob-sub">—</span>;
+  const ran = list.filter((g) => !g.skipped);
+  const ok = ran.filter((g) => g.passed).length;
+  return (
+    <div style={{ display: "grid", gap: 4 }}>
+      <button type="button" className="ob-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>{ok}✓ · {ran.length - ok}✗{list.length > ran.length ? ` · ${list.length - ran.length} דולגו` : ""} {open ? "▴" : "▾"}</button>
+      {open && (
+        <ul className="rd-list plain" style={{ display: "grid", gap: 3, minWidth: 220 }}>
+          {list.map((g, i) => (
+            <li key={i} style={{ color: g.skipped ? "var(--ink-500)" : g.passed ? "var(--status-healthy)" : "var(--status-critical)" }}>
+              <b>{g.skipped ? "—" : g.passed ? "✓" : "✗"}</b> {GRADER_HE[g.type] ?? g.type}
+              {g.detail ? <div className="ob-sub" style={{ marginInlineStart: 14 }}>{g.skipped ? "דולג: " : ""}{g.detail}</div> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

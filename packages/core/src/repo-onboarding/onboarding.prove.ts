@@ -100,12 +100,9 @@ try {
   const req = await core.requestComponent(repoId, runId, by, { text: "תכין skill לעדכון base.txt" });
   check("'תכין skill לתהליך X' became a skill card with at most three questions", req.kind === "skill" && req.questions.length >= 1 && req.questions.length <= 3);
 
-  // Decisions: everything as a set, then one declined with a reason, then the build.
-  await core.decideComponentSet(repoId, runId, by, { decision: "approve" });
-  await core.decideComponent(repoId, runId, by, { key: "mcp_random_mcp", decision: "decline", reason: "לא מאומת ויקר בהקשר" });
-  await core.decideComponent(repoId, runId, by, { key: req.key, decision: "approve", answers: { when: "לפני כל release" } });
-  v = await view(runId);
-  check("the decisions are recorded with who and why", v.components.find((c) => c.key === "mcp_random_mcp")?.status === "declined" && v.components.find((c) => c.key === "mcp_random_mcp")?.declineReason === "לא מאומת ויקר בהקשר" && v.components.filter((c) => c.status === "proposed").length === 0);
+  // The order: the cards are drawn, but no decision is taken before the /init draft was set aside and scanned (or skipped).
+  const early = await core.decideComponentSet(repoId, runId, by, { decision: "approve" }).then(() => null, (e: Error) => e.message);
+  check("no decision is taken before the draft is scanned: the plan waits in its draft phase and refuses one, saying what opens it", v.plan?.phase === "draft" && early !== null && /טיוטת ה-\/init/.test(early ?? ""), JSON.stringify([v.plan?.phase, early]));
 
   // The /init draft: a session left AGENTS.md and a settings file in the copy; the scan decides what of it to take.
   const ws = v.run.workspacePath!;
@@ -119,8 +116,10 @@ try {
   writeFileSync(path.join(ws, "package.json"), JSON.stringify({ ...pkg, sessionMarker: "from-the-session" }, null, 2));
   const callsBefore = k.calls().length;
   const started = await core.scanInitDraft(repoId, runId, by);
-  v = await waitFor(runId, (x) => x.plan?.initScan?.state === "done" || x.plan?.initScan?.state === "failed", "the scan of the draft");
+  v = await waitFor(runId, (x) => (x.plan?.initScan?.state === "done" && x.plan?.phase === "decide") || x.plan?.initScan?.state === "failed", "the scan of the draft");
   const scan = v.plan!.initScan!;
+  const at = (type: string) => v.events.findIndex((e) => e.type === type);
+  check("a scan asked for in the draft phase takes the session's path: the draft is set aside first, scanned against the clean copy, and only then do the cards open", at("onboarding.draft.set_aside") >= 0 && at("onboarding.draft.set_aside") < at("onboarding.draft.scan_started") && v.plan?.phase === "decide" && !existsSync(path.join(ws, ".claude/commands/ship.md")), JSON.stringify([at("onboarding.draft.set_aside"), at("onboarding.draft.scan_started"), v.plan?.phase]));
   check("the scan read the draft the session left, committed or not: its AGENTS.md, its settings file, its command", started.files === 3 && scan.state === "done" && ["AGENTS.md", ".claude/settings.json", ".claude/commands/ship.md"].every((f) => scan.files.includes(f)), JSON.stringify(scan));
   const scanCall = k.calls(callsBefore).find((x) => x.prompt.includes("You are the editor who decides"));
   check("the editor was handed our AGENTS.md, our cards and the draft, and a scan is a ledger row of the plan step", !!scanCall && /THEIRS[\s\S]*AGENTS\.md \(NEW/.test(scanCall.prompt) && scanCall.prompt.includes("[reviewer_1_doc]") && v.cost.rows.some((r) => r.capability === "onboarding_init_scan" && r.meta.stepKey === "plan"));
@@ -141,6 +140,12 @@ try {
   const now = (title: string) => v.components.find((c) => c.title_he === title);
   check("'approve all' approves what was taken but leaves a question to be answered on its own", now("איפה הדברים")?.status === "approved" && now("build לפני סיום")?.status === "approved" && now("פרסום אחרי מיזוג")?.status === "proposed");
   await core.decideComponent(repoId, runId, by, { key: taken("פרסום אחרי מיזוג")!.key, decision: "decline", reason: "לא — אין פרסום אוטומטי" });
+  // The rest of the decisions: one declined with a reason, the person's request approved with its answers.
+  await core.decideComponent(repoId, runId, by, { key: "mcp_random_mcp", decision: "decline", reason: "לא מאומת ויקר בהקשר" });
+  await core.decideComponent(repoId, runId, by, { key: req.key, decision: "approve", answers: { when: "לפני כל release" } });
+  v = await view(runId);
+  check("the decisions are recorded with who and why", v.components.find((c) => c.key === "mcp_random_mcp")?.status === "declined" && v.components.find((c) => c.key === "mcp_random_mcp")?.declineReason === "לא מאומת ויקר בהקשר" && v.components.filter((c) => c.status === "proposed").length === 0, JSON.stringify(v.components.filter((c) => c.status === "proposed").map((c) => c.key)));
+  // A re-scan in the decide phase reads the draft that was set aside — the copy stays clean.
   const rescan = await core.scanInitDraft(repoId, runId, by);
   v = await waitFor(runId, (x) => x.plan?.initScan?.state === "done" && x.events.filter((e) => e.type === "onboarding.draft.scanned").length === 2, "the second scan");
   check("the editor of a second scan is told what the first one took and what was decided", k.calls(callsBefore).filter((x) => x.prompt.includes("You are the editor who decides")).at(-1)?.prompt.includes("taken from the draft by an earlier scan") === true);
@@ -157,7 +162,7 @@ try {
   check("AGENTS.md carries the facts and the approved rule lines; CLAUDE.md is the one-line pointer", existsSync(path.join(dir, "AGENTS.md")) && readFileSync(path.join(dir, "AGENTS.md"), "utf8").includes("npm run build") && readFileSync(path.join(dir, "CLAUDE.md"), "utf8").trim() === "@AGENTS.md");
   check("the skill from the process and the skill the person asked for have a frontmatter Claude Code loads", c("skill_release_build").status === "verified" && c(req.key).status === "verified" && existsSync(path.join(dir, c(req.key).files[0]!)), JSON.stringify([c("skill_release_build").validation, c(req.key).validation]));
   check("the agent from the process is read-only with a checklist", c("agent_release_publish").status === "verified" && /קריאה בלבד/.test(c("agent_release_publish").validation?.detail ?? ""), JSON.stringify(c("agent_release_publish").validation));
-  check("the LSP plugin is registered in settings and honestly 'not verified here'", c("lsp_typescript_lsp").status === "installed" && c("lsp_typescript_lsp").validation?.passed === null && JSON.parse(readFileSync(path.join(dir, ".claude/settings.json"), "utf8")).enabledPlugins["typescript-lsp@claude-plugins-official"] === true);
+  check("the LSP plugin is registered in settings and is 'configured' — connected at the client, never 'installed but unchecked'", c("lsp_typescript_lsp").status === "configured" && c("lsp_typescript_lsp").validation?.passed === true && JSON.parse(readFileSync(path.join(dir, ".claude/settings.json"), "utf8")).enabledPlugins["typescript-lsp@claude-plugins-official"] === true, JSON.stringify(c("lsp_typescript_lsp").validation));
   check("the declined component was not built", c("mcp_random_mcp").status === "declined" && c("mcp_random_mcp").files.length === 0 && !existsSync(path.join(dir, ".mcp.json")));
   check("a first test for a language the catalog has no template for is deferred, not faked", c("first_tests_scaffold").status === "deferred");
   const agents = readFileSync(path.join(dir, "AGENTS.md"), "utf8");
@@ -171,9 +176,12 @@ try {
   check("the trial ran again and the delta is measured against the baseline", build.delta !== null && build.delta!.before.total === base.length && build.delta!.after.total === base.length, JSON.stringify(build.delta));
   check("the joint check counted the always-loaded context and found no duplicate owner of a file", build.jointCheck.alwaysLoadedTokens > 0 && build.jointCheck.duplicates.length === 0, JSON.stringify(build.jointCheck));
   const files = (stepOf(v, "deliver").result as { files: string[] }).files;
-  check("only the files of installed or verified components are offered for delivery, plus the repository's own dossier", files.includes("AGENTS.md") && files.includes(".claude/hooks/build-gate.mjs") && files.includes(".dcc/components.json") && !files.some((f) => f.includes(".mcp.json")), JSON.stringify(files));
-  const dossier = JSON.parse(readFileSync(path.join(dir, ".dcc/components.json"), "utf8")) as { components: { key: string; status: string; declineReason: string | null }[] };
-  check("the dossier in the repository records every card with its decision, the declined one included", dossier.components.some((x) => x.key === "mcp_random_mcp" && x.status === "declined" && x.declineReason) && !readFileSync(path.join(dir, ".dcc/profile.json"), "utf8").includes("Sup3r"));
+  check("only the files of verified or configured components are offered for delivery, plus the one record file", files.includes("AGENTS.md") && files.includes(".claude/hooks/build-gate.mjs") && files.includes(".dcc/onboarding.json") && !files.some((f) => f.includes(".mcp.json")) && !files.some((f) => /\.dcc\/(profile|components|processes|trials)\.json$/.test(f)), JSON.stringify(files));
+  const record = JSON.parse(readFileSync(path.join(dir, ".dcc/onboarding.json"), "utf8")) as { delivered: { key: string; files: string[] }[]; eval: unknown; profile?: unknown };
+  check("the record in the repository names what was delivered and the measurement — and nothing internal (no profile, no declined card, no secret)", record.delivered.some((x) => x.key === "build_gate_hook") && !record.delivered.some((x) => x.key === "mcp_random_mcp") && record.profile === undefined && !readFileSync(path.join(dir, ".dcc/onboarding.json"), "utf8").includes("Sup3r") && "eval" in record, JSON.stringify(Object.keys(record)));
+  const measured = v.trials.eval;
+  check("the measurement ran in both arms on the same tasks: a verdict per task and a delta per component, from the tasks that exercise it", measured !== null && measured!.totals.measured >= 3 && measured!.tasks.every((t) => t.with.runs >= 1 && t.without.runs >= 1) && built.some((x) => x.delta !== null), JSON.stringify(measured?.totals));
+  check("the always-loaded context is counted against the readiness limit", v.readiness!.items.some((i) => /3,000|3000/.test(i.title_he) || /נטען/.test(i.title_he)), JSON.stringify(v.readiness!.items.map((i) => [i.key, i.ok])));
 
   // 6. delivery: by name, in the person's identity, to the bare host, with the report from the cards.
   await core.deliverRun(repoId, runId, by);
@@ -183,7 +191,7 @@ try {
   const committed = g(k.work, "--git-dir", path.join(k.work, "origin.git"), "diff", "--name-only", `main..${v.run.branchName}`).split("\n").filter(Boolean);
   check("the commit holds exactly the delivered files — nothing else from the copy", committed.length === files.length && files.every((f) => committed.includes(f)), JSON.stringify({ committed, files }));
   check("nothing of the draft reached the host except what a card carried: no session command, no session commit", !committed.includes(".claude/commands/ship.md") && !g(k.work, "--git-dir", path.join(k.work, "origin.git"), "log", "--format=%s", `main..${v.run.branchName}`).includes("init: a command"));
-  check("the report reads 'התקנתי X כי Y', names what was declined and why, and the before/after", d.report.includes("## התקנתי") && d.report.includes("לא מאומת ויקר בהקשר") && d.report.includes("## לפני / אחרי") && d.report.includes("## כרטיס כנות ומוכנות"));
+  check("the report reads 'התקנתי X כי Y', names what was declined and why, and what was measured with and without", d.report.includes("## התקנתי") && d.report.includes("לא מאומת ויקר בהקשר") && d.report.includes("## מה נמדד") && d.report.includes("## כרטיס כנות ומוכנות"), d.report.slice(0, 600));
   check("the run is complete and every step ended", v.run.status === "Completed" && v.steps.every((s) => s.status === "Completed"));
   const events = v.events.map((e) => e.type);
   check("nothing was silent: the log has the profile, the correction, the interview, every trial task, the plan, every decision, every component built, the delivery", ["onboarding.profile.written", "onboarding.profile.corrected", "onboarding.interview.answered", "onboarding.trial.task", "onboarding.plan.drawn", "onboarding.card.decided", "onboarding.cards.decided_set", "onboarding.card.requested", "onboarding.draft.scanned", "onboarding.draft.set_aside", "onboarding.build.component", "onboarding.delivered", "onboarding.run.completed"].every((t) => events.includes(t)), JSON.stringify([...new Set(events)]));

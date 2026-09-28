@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, rmdirSync, wr
 import path from "node:path";
 import { renderTemplate, type RepoFacts, type Rendered } from "./catalog/index.ts";
 import { FAMILY_HE, KIND_HE, buildOrder, deliverable } from "./components.ts";
-import { checkClaims, mcpPlaceholder, runHookCheck, statusAfter, toolsOf, validateComponent, validateScript, withRouting, type HostTools } from "./verify.ts";
+import { checkClaims, mcpPlaceholder, runHookCheck, statusAfter, toolsOf, validateComponent, validateScript, withRouting } from "./verify.ts";
 import type { Component, ComponentValidation, DiscoveredProcess, RepoProfile } from "./types.ts";
 
 /**

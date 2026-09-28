@@ -165,6 +165,6 @@ export function seedFromSource(r: Pick<RememberedSource, "id" | "kind" | "name" 
       : kind === "lsp" ? `plugin של שרת שפה: ניווט מדויק בקוד ("מי קורא לזה"), שגיאות טיפוס בסשן. ${r.url}`
       : `ספריית skills: ${r.url}`,
     verifyHow_he: kind === "mcp" ? "חיבור וספירת הטוקנים שהכלים מוסיפים; תיאורי הכלים נסרקים שוב בכל עדכון." : kind === "plugin" ? "claude plugin validate, ואז eval עם ובלי על משימות הניסיון." : "התקנה; בדיקה שהסשן טוען אותו.",
-    params: { url: r.url, kind: r.kind, trust: r.trust, toolCount: r.toolCount, publisher: r.publisher, sourceId: r.id, tags: r.tags },
+    params: { name: r.name, url: r.url, kind: r.kind, trust: r.trust, toolCount: r.toolCount, publisher: r.publisher, sourceId: r.id, tags: r.tags },
   };
 }

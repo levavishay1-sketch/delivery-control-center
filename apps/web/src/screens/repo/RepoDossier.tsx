@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   cancelOnboardingRun, getOnboardingRun, getOnboardingSteps, getRepos, getUsers, listOnboardingRuns, runOnboardingStep, startOnboardingRun, updateOnboardingAutomation,
-  type AutomationLevel, type OnboardingCost, type OnboardingEvent, type OnboardingRunSummary, type OnboardingRunView, type OnboardingStep, type OnboardingStepDefinition, type OnboardingStepKey,
+  type Automation, type AutomationLevel, type OnboardingCost, type OnboardingEvent, type OnboardingRunSummary, type OnboardingRunView, type OnboardingStep, type OnboardingStepDefinition, type OnboardingStepKey,
 } from "../../api.ts";
 import { CardTitle, PageHead, Pill } from "../../ui.tsx";
 import { Info } from "../../claude/Info.tsx";
@@ -9,7 +9,7 @@ import { useClaudeContext } from "../../claude/context.ts";
 import { CoachPanel } from "./coach.tsx";
 import { StepCard } from "./steps.tsx";
 import { LevelChooser, type Act } from "./shared.tsx";
-import { LEVEL_HE, RUN_STATUS_HE, STEP_KIND_CHIP, STEP_STATUS_HE, errText, eventLabel, fmtDate, fmtInt, fmtTime, fmtUsd, shortSha } from "./labels.ts";
+import { LEVEL_HE, PLAN_PHASE_HE, RUN_STATUS_HE, STEP_KIND_CHIP, STEP_STATUS_HE, errText, eventLabel, fmtDate, fmtInt, fmtTime, fmtUsd, shortSha } from "./labels.ts";
 
 /**
  * The repository's dossier (`openspec/changes/repository-coach`): one fixed
@@ -76,6 +76,9 @@ export function RepoDossier({ id, nav }: { id: string; nav: (h: string) => void 
       "צעד נוכחי": view.run.currentStepKey ? (view.definitions.find((d) => d.key === view.run.currentStepKey)?.title_he ?? view.run.currentStepKey) : "—",
       "צעדים שהסתיימו": view.steps.filter((s) => s.status === "Completed").map((s) => view.definitions.find((d) => d.key === s.stepKey)?.title_he ?? s.stepKey),
       "מדרגת האוטומציה": LEVEL_HE[view.automation.level].title,
+      "תקרת סשן הטיוטה": `${fmtUsd(view.automation.draftCapUsd)} · ${view.automation.draftCapMinutes} דקות`,
+      ...(view.plan?.phase ? { "שלב התוכנית": PLAN_PHASE_HE[view.plan.phase] } : {}),
+      ...(view.trials.eval && view.trials.eval.totals.measured > 0 ? { "המדידה עם ובלי (עוברות בכל הרצה)": `עם ${view.trials.eval.totals.with.passK}/${view.trials.eval.totals.measured} · בלי ${view.trials.eval.totals.without.passK}/${view.trials.eval.totals.measured} · השתפרו ${view.trials.eval.totals.improved} · הורעו ${view.trials.eval.totals.worse}` } : {}),
       "כרטיסים": `${view.components.length} (${view.components.filter((c) => c.status === "proposed").length} מחכים להחלטה)`,
       "עלות ההרצה": fmtUsd(view.cost.totalCostUsd),
       aiCostUsd: view.cost.totalCostUsd,
@@ -85,7 +88,7 @@ export function RepoDossier({ id, nav }: { id: string; nav: (h: string) => void 
     suggestions: waitingStep === "plan"
       ? ["אילו כרטיסים מחכים לי ומה כל אחד עושה?", "מה יקרה אם אאשר את הכול?", "למה רכיב מסוים לא מומלץ כאן?", "מה הסוקר אמר שחסר?"]
       : waitingStep === "trial"
-        ? ["מה בודקות משימות הניסיון?", "כמה זה יעלה ולמה?", "מי שופט את התוצאה?"]
+        ? ["מה בודקות משימות המדידה?", "כמה זה יעלה ומה התקרה?", "מי שופט את התוצאה?"]
         : waitingStep === "deliver"
           ? ["מה בדיוק ייכנס ל-PR?", "מה לא נכנס ולמה?", "מה קורה אחרי המסירה?"]
           : ["מה הוא רוצה ממני עכשיו?", "מה נמצא עד עכשיו?", "מה עולה כסף בתהליך הזה?", "איך ממשיכים מכאן?"],
@@ -180,10 +183,10 @@ export function RepoDossier({ id, nav }: { id: string; nav: (h: string) => void 
         </div>
 
         <div className="rail">
-          <AutomationPanel level={view.automation.level} levels={view.levels} busy={busy === "automation"} disabled={runOver} onSave={(level) => void act("automation", () => updateOnboardingAutomation(id, run.id, { level }))} />
+          <AutomationPanel automation={view.automation} levels={view.levels} busy={busy === "automation"} disabled={runOver} onSave={(a) => void act("automation", () => updateOnboardingAutomation(id, run.id, a))} />
           <CostPanel cost={view.cost} title={title} nav={nav} />
           {(delivered || view.coach.openProposals > 0) && <CoachPanel repoId={id} busy={!!busy} onRunStarted={pickRun} onError={setErr} />}
-          <EventLogPanel events={view.events} title={title} users={users} />
+          <EventLogPanel events={view.events} title={title} card={(k) => view.components.find((c) => c.key === k)?.title_he ?? k} users={users} />
           <RunsPanel runs={runs} current={run.id} onPick={pickRun} />
         </div>
       </div>
@@ -204,6 +207,9 @@ function stepClass(s: OnboardingStep | undefined): StepClass {
   return "pend";
 }
 function stepStatusText(s: OnboardingStep, v: OnboardingRunView): string {
+  if (s.stepKey === "plan" && s.status === "WaitingForUser" && v.plan?.phase && v.plan.phase !== "decide") {
+    return v.plan.phase === "draft" ? (v.run.session.state === "live" ? "סשן טיוטה פעיל" : "טיוטה, או בלי") : v.plan.phase === "aside" ? "הטיוטה מוזזת הצידה" : "הטיוטה נסרקת";
+  }
   if (s.stepKey === "plan" && s.status === "WaitingForUser") {
     const proposed = v.components.filter((c) => c.status === "proposed").length;
     return proposed ? `${proposed} כרטיסים מחכים` : "מוכן לבנייה";
@@ -234,7 +240,7 @@ function PreStart({ repoId, repoName, crumb, onCancel, onStarted, onError, err }
       <div className="panel" style={{ display: "grid", gap: 16 }}>
         <div>
           <CardTitle info="onboarding_intro">מה עושים כאן</CardTitle>
-          <p className="rd-lead">DCC קורא את המאגר, מבין איך עובדים בו, מריץ ניסיון קטן כדי לראות איפה קלוד נכשל היום, ומציע רכיב לכל כישלון וכל צעד חוזר — כל אחד עם הראיה שלו. אתם מאשרים כרטיסים, לא קבצים. מה שאושר נבנה בעותק מבודד, נבדק, ונמסר כבקשת מיזוג. הענף הראשי לא משתנה עד שתמזגו.</p>
+          <p className="rd-lead">DCC קורא את המאגר, מבין איך עובדים בו, מודד על משימות אמיתיות מה קלוד מצליח כאן היום, ומציע רכיב לכל כישלון וכל צעד חוזר — כל אחד עם הראיה שלו. אתם מאשרים כרטיסים, לא קבצים. מה שאושר נבנה בעותק מבודד, נבדק, נמדד שוב עם הסט — ונמסר כבקשת מיזוג רק מה שאומת. הענף הראשי לא משתנה עד שתמזגו.</p>
           <p className="ob-sub">שום דבר לא רץ עד שתלחצו "התחל". שום קובץ לא יוצא מהמחשב לפני צעד המסירה, וגם הוא מחכה ללחיצה.</p>
         </div>
         <div>
@@ -261,7 +267,7 @@ function PreStart({ repoId, repoName, crumb, onCancel, onStarted, onError, err }
         </div>
         <div>
           <CardTitle info="fixed_layout">מה ייכתב במאגר</CardTitle>
-          <p className="ob-sub" style={{ margin: 0 }}>רק מה שאושר, ורק במקומות הקבועים של Claude Code: <span className="ob-code">AGENTS.md</span> עם <span className="ob-code">CLAUDE.md</span> דק שמצביע עליו, <span className="ob-code">.claude/</span> (הגדרות, hooks, skills, סוכנים), <span className="ob-code">.mcp.json</span>, ותיק <span className="ob-code">.dcc/</span> עם הפרופיל, הכרטיסים והראיות — כדי שהמאמן ידע מה הותקן ולמה.</p>
+          <p className="ob-sub" style={{ margin: 0 }}>רק מה שאושר, ורק במקומות הקבועים של Claude Code: <span className="ob-code">AGENTS.md</span> עם <span className="ob-code">CLAUDE.md</span> דק שמצביע עליו, <span className="ob-code">.claude/</span> (הגדרות, hooks, skills, סוכנים), <span className="ob-code">.mcp.json</span>, וקובץ אחד <span className="ob-code">.dcc/onboarding.json</span>: מה נמסר, איך אומת ומה נמדד — כדי שהמאמן ידע מה הותקן ולמה. נמסר רק רכיב שאומת או הוגדר.</p>
         </div>
         <div className="ob-actions">
           <button className="btn btn-primary" disabled={starting || !defs} onClick={() => void start()}>{starting ? "מתחיל…" : "התחל — חיבור ואבחון"}</button>
@@ -275,22 +281,31 @@ function PreStart({ repoId, repoName, crumb, onCancel, onStarted, onError, err }
 
 /* ── the rail ─────────────────────────────────────────────────────── */
 
-function AutomationPanel({ level, levels, busy, disabled, onSave }: { level: AutomationLevel; levels: AutomationLevel[]; busy: boolean; disabled: boolean; onSave: (l: AutomationLevel) => void }) {
+/** The run's automation: the level, and the two caps of the /init draft session — dollars and minutes — edited together. */
+function AutomationPanel({ automation: a, levels, busy, disabled, onSave }: { automation: Automation; levels: AutomationLevel[]; busy: boolean; disabled: boolean; onSave: (a: Automation) => void }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(level);
-  useEffect(() => { if (!editing) setDraft(level); }, [level, editing]);
+  const [draft, setDraft] = useState(a);
+  useEffect(() => { if (!editing) setDraft(a); }, [a, editing]);
+  const same = draft.level === a.level && draft.draftCapUsd === a.draftCapUsd && draft.draftCapMinutes === a.draftCapMinutes;
+  const num = (v: string, fallback: number) => { const n = Number(v); return Number.isFinite(n) && v.trim() !== "" ? n : fallback; };
   return (
     <div className="panel">
       <CardTitle info="automation_level">מדרגת האוטומציה</CardTitle>
-      <p style={{ fontSize: 12.5, marginBottom: 8 }}><b>{LEVEL_HE[level].title}</b> — {LEVEL_HE[level].desc}</p>
+      <p style={{ fontSize: 12.5, marginBottom: 8 }}><b>{LEVEL_HE[a.level].title}</b> — {LEVEL_HE[a.level].desc}</p>
+      <div className="rd-inline" style={{ fontSize: 12.5, marginBottom: 8 }}><span>תקרת סשן הטיוטה<Info k="session_cap" />:</span><b>{fmtUsd(a.draftCapUsd)} · {fmtInt(a.draftCapMinutes)} דקות</b></div>
       {!editing
-        ? <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={() => { setDraft(level); setEditing(true); }}>שנה מדרגה</button>
+        ? <button className="btn btn-secondary btn-sm" disabled={disabled} onClick={() => { setDraft(a); setEditing(true); }}>שנה מדרגה או תקרה</button>
         : (
           <div style={{ display: "grid", gap: 10 }}>
-            <LevelChooser value={draft} levels={levels} onChange={setDraft} />
-            <p className="ob-sub">השינוי חל מהצעד הבא. כרטיסים שכבר צוירו לא משנים קבוצה.</p>
+            <LevelChooser value={draft.level} levels={levels} onChange={(level) => setDraft((d) => ({ ...d, level }))} />
+            <div className="rd-inline" style={{ fontSize: 12.5 }}>
+              <span>תקרת סשן הטיוטה<Info k="session_cap" />:</span>
+              <span>$<input className="rd-input" style={{ minWidth: 0, width: 64 }} type="number" min={0.5} max={50} step={0.5} aria-label="תקרה בדולרים" value={draft.draftCapUsd} onChange={(e) => setDraft((d) => ({ ...d, draftCapUsd: num(e.target.value, d.draftCapUsd) }))} /></span>
+              <span><input className="rd-input" style={{ minWidth: 0, width: 64 }} type="number" min={5} max={240} step={5} aria-label="תקרה בדקות" value={draft.draftCapMinutes} onChange={(e) => setDraft((d) => ({ ...d, draftCapMinutes: num(e.target.value, d.draftCapMinutes) }))} /> דקות</span>
+            </div>
+            <p className="ob-sub">המדרגה חלה מהצעד הבא; כרטיסים שכבר צוירו לא משנים קבוצה. התקרה חלה על סשן הטיוטה של ההרצה הזו: בין ‎$0.5 ל-‎$50, ובין 5 ל-240 דקות.</p>
             <div className="ob-actions">
-              <button className="btn btn-primary btn-sm" disabled={busy || draft === level} onClick={() => { onSave(draft); setEditing(false); }}>{busy ? "שומר…" : "שמור"}</button>
+              <button className="btn btn-primary btn-sm" disabled={busy || same} onClick={() => { onSave(draft); setEditing(false); }}>{busy ? "שומר…" : "שמור"}</button>
               <button className="btn btn-secondary btn-sm" onClick={() => setEditing(false)}>ביטול</button>
             </div>
           </div>
@@ -336,15 +351,16 @@ function CostPanel({ cost, title, nav }: { cost: OnboardingCost; title: (key: st
   );
 }
 
-function EventLogPanel({ events, title, users }: { events: OnboardingEvent[]; title: (key: string) => string; users: Record<string, string> }) {
-  const list = [...events].reverse();
+function EventLogPanel({ events, title, card, users }: { events: OnboardingEvent[]; title: (key: string) => string; card: (key: string) => string; users: Record<string, string> }) {
+  // By time, the newest first.
+  const list = [...events].sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
   return (
     <div className="panel">
       <CardTitle info="decision_log">יומן החלטות ואירועים</CardTitle>
       {list.length === 0 ? <p className="ob-sub">עדיין אין אירועים.</p> : (
         <div className="ob-timeline">
           {list.slice(0, 80).map((e) => {
-            const l = eventLabel(e, title);
+            const l = eventLabel(e, title, card);
             const color = l.tone === "critical" ? "var(--status-critical)" : l.tone === "warning" ? "var(--status-warning)" : l.tone === "ai" ? "var(--status-ai)" : l.tone === "healthy" ? "var(--status-healthy)" : "var(--ink-700)";
             const who = e.actorUserId ? users[e.actorUserId] : null;
             return (

@@ -202,7 +202,7 @@ const FILE_EXT = new Set([
 const OUTPUT_DIRS = new Set(["bin", "obj", "node_modules", "dist", "build", "out", "target", ".vs", "coverage", ".next", "__pycache__", ".venv", "venv", "testresults", ".pytest_cache", ".gradle"]);
 const SHELL_FENCE = /^(sh|bash|shell|console|zsh|powershell|pwsh|ps1?|cmd|bat|bash-session|)$/i;
 /** A clause that says not to, or that it is a person's to do — the thing it names is not an instruction for Claude to run here. */
-const NEGATION = /\b(?:never|not|no|don't|doesn't|do not|cannot|can't|won't|avoid|instead of|rather than|without|unavailable|forbidden|isn't|aren't|a person|by hand|manually|human)\b|(?:^|[\s(])(?:לא|אל|אסור|בלי|אין|אף פעם|ידנית|אדם)(?=[\s,.:;)]|$)/i;
+const NEGATION = /\b(?:never|not|no|neither|nor|don't|doesn't|do not|cannot|can't|won't|avoid|instead of|rather than|without|unavailable|forbidden|isn't|aren't|a person|by hand|manually|human)\b|(?:^|[\s(])(?:לא|אל|אסור|בלי|אין|אף פעם|ידנית|אדם)(?=[\s,.:;)]|$)/i;
 
 /** What a text's claims are checked against. */
 export type ClaimContext = {
