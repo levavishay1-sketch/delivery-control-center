@@ -157,3 +157,11 @@ describe("an informative grader", () => {
     expect(stopped.blocked).toBe(true);
   });
 });
+
+describe("a command that did not run, said why", () => {
+  it("passes when the answer names the honest reason the task allows, and fails when it just did not run", () => {
+    const t = task([{ type: "command_ran", pattern: "npm run build", cwd: "Pcf/Grid", orMention: ["node_modules", "npm install"] }]);
+    expect(gradeRun(t, evidence({ answer: "RESULT: I changed the label but did not build: Pcf/Grid has no node_modules and npm install needs the network." })).passed).toBe(true);
+    expect(gradeRun(t, evidence({ answer: "RESULT: I changed the label." })).passed).toBe(false);
+  });
+});

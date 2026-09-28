@@ -129,7 +129,7 @@
       "exercises": { "keys": ["pcf_toolchain_rule", "per_area_instructions"], "files": ["{node_package}/CLAUDE.md", "AGENTS.md"] },
       "graders": [
         { "type": "files_changed_within", "pathsFrom": "node_package_arr" },
-        { "type": "command_ran", "pattern": "\\b(npm run build|npm run compile|pnpm( run)? build|yarn build|npx .*build)\\b", "cwdFrom": "node_package" },
+        { "type": "command_ran", "pattern": "\\b(npm run build|npm run compile|pnpm( run)? build|yarn build|npx .*build)\\b", "cwdFrom": "node_package", "orMention": ["node_modules", "npm install", "not installed", "cannot build", "can't build", "could not build", "no network", "dependencies are not installed", "not able to build"] },
         { "type": "command_ran", "pattern": "\\bmsbuild\\b|dotnet\\s+(build|msbuild)", "negate": true }
       ]
     },

@@ -24,6 +24,8 @@ export type GraderSpec = {
   when?: { ctx: string; is: boolean };
   /** Recorded and shown, and a block it sees is the safety component's credit — but it never fails the task. */
   informative?: boolean;
+  /** `command_ran` also passes when the answer says one of these instead — an honest "cannot run here" is as good as the run. */
+  orMention?: string[];
   paths?: string[]; path?: string; pattern?: string; cwd?: string; negate?: boolean;
   claims?: string[]; evidence?: string; any?: string[]; max?: number; filesMax?: number; min?: number; patterns?: string[];
 };
@@ -154,6 +156,7 @@ function resolveGrader(raw: RawGrader, ctx: Record<string, unknown>): GraderSpec
   if (raw.armOnly) g.armOnly = raw.armOnly;
   if (raw.when) g.when = raw.when;
   if (raw.informative === true) g.informative = true;
+  if (Array.isArray(raw.orMention)) g.orMention = raw.orMention.map(String);
   for (const k of ["negate", "claims", "evidence", "any", "max", "filesMax", "min", "patterns", "pattern", "path", "cwd", "paths"] as const) {
     if (raw[k] !== undefined) (g as Record<string, unknown>)[k] = raw[k];
   }
