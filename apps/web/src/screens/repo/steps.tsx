@@ -169,9 +169,9 @@ function ComponentKindCatalog() {
         <br />רכיבים אפשריים שיוקמו בעקבות השלב הזה:
       </p>
       {KIND_CATALOG.map((g) => (
-        <div key={g.group} style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 8 }}>{g.group}</div>
-          <ul className="rd-list plain" style={{ display: "grid", gap: 2 }}>
+        <div key={g.group} style={{ marginBottom: 8 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 2 }}>{g.group}</div>
+          <ul className="rd-list plain" style={{ display: "grid", gap: 2, paddingInlineStart: 20 }}>
             {g.items.map((it) => <li key={it.name}><b>{it.name}</b> — {it.what}</li>)}
           </ul>
         </div>
