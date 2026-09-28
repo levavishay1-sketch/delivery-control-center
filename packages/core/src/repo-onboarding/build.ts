@@ -139,6 +139,32 @@ function readmePurpose(dir: string): string | null {
   return null;
 }
 
+/** The builder's slots of an AGENTS.md skeleton, filled from the diagnosis. */
+function fillAgentsText(skeleton: string, f: { purpose: string | null; profile: RepoProfile; facts: RepoFacts; ruleLines: readonly string[]; hasGate: boolean }): string {
+  return skeleton
+    .replace("{{PURPOSE}}", f.purpose || "(not described in the repository)")
+    .replace("{{LAYOUT}}", layoutText(f.profile))
+    .replace("{{EXTERNAL}}", externalText(f.profile))
+    .replace("{{RULES}}", f.ruleLines.length ? f.ruleLines.map((r) => `- ${r}`).join("\n") : "- (no rules beyond the facts above)")
+    .replace("{{VERIFICATION}}", verificationText(f.facts, f.hasGate))
+    .replace(/\{\{[A-Z_]+\}\}/g, "");
+}
+
+/** What the build would write into AGENTS.md now, from the cards not declined and not taken from the `/init` draft — "ours" in the scan of the draft. No model: without a README paragraph, the purpose says the build writes it. */
+export function previewAgentsMd(dir: string, profile: RepoProfile, repoName: string, cards: readonly Component[]): string {
+  const facts = repoFacts(profile, repoName, null);
+  const live = cards.filter((c) => c.source !== "init" && c.status !== "declined" && c.status !== "removed");
+  const ruleLines = live.filter((c) => c.kind === "rule").map((c) => String(c.params.text ?? "").trim()).filter(Boolean);
+  const hasGate = live.some((c) => c.kind === "script");
+  const scaffold = live.find((c) => c.kind === "scaffold" && c.params.template === "agents-md");
+  const delta = live.find((c) => c.kind === "doc" && c.params.template === "agents-md-delta");
+  const purpose = readmePurpose(dir) ?? "(one paragraph the build writes from the code: what this repository is for)";
+  const fill = (skeleton: string) => fillAgentsText(skeleton, { purpose, profile, facts, ruleLines, hasGate });
+  if (scaffold) return fill(renderTemplate("agents-md", scaffold.params, facts).files.find((f) => f.path === "AGENTS.md")?.content ?? "# {{PURPOSE}}\n\n{{RULES}}\n");
+  if (delta) return `(appended to the repository's existing instructions file)\n${fill(renderTemplate("agents-md-delta", delta.params, facts).files[0]?.content ?? `${AGENTS_HEADER}\n{{RULES}}\n`)}`;
+  return ruleLines.length ? `${AGENTS_HEADER}\n${ruleLines.map((r) => `- ${r}`).join("\n")}\n` : "(no card of ours writes AGENTS.md)";
+}
+
 /* ── the build ────────────────────────────────────────────────────── */
 
 export async function buildComponents(input: BuildInput): Promise<BuildOutcome[]> {
@@ -155,18 +181,11 @@ export async function buildComponents(input: BuildInput): Promise<BuildOutcome[]
   const claudePath = path.join(dir, "CLAUDE.md");
 
   const fillAgents = async (c: Component, skeleton: string, forDelta: boolean): Promise<string> => {
-    let text = skeleton;
     let purpose = readmePurpose(dir);
     if (!purpose && !forDelta) {
       purpose = (await input.author({ component: c, format: "One paragraph of at most 60 words, plain text, no heading: what this repository is and what it is for, from the code itself. Nothing else." })).trim().split(/\n\s*\n/)[0] ?? "";
     }
-    text = text.replace("{{PURPOSE}}", purpose || "(not described in the repository)");
-    text = text.replace("{{LAYOUT}}", layoutText(profile));
-    text = text.replace("{{EXTERNAL}}", externalText(profile));
-    text = text.replace("{{RULES}}", ruleLines.length ? ruleLines.map((r) => `- ${r}`).join("\n") : "- (no rules beyond the facts above)");
-    text = text.replace("{{VERIFICATION}}", verificationText(facts, hasGate));
-    text = text.replace(/\{\{[A-Z_]+\}\}/g, "");
-    return text;
+    return fillAgentsText(skeleton, { purpose, profile, facts, ruleLines, hasGate });
   };
 
   for (const c of cards) {
