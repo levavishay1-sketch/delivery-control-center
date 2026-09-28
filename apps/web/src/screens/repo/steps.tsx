@@ -182,7 +182,7 @@ function ProcessesBody(p: StepProps) {
         </div>
       )}
       <AnswersGiven questions={view.interview.questions} answers={view.interview.answers} />
-      <ProcessList processes={view.processes} />
+      <ProcessList processes={view.processes} trials={view.trials.baseline} />
     </div>
   );
 }
@@ -247,22 +247,56 @@ function AnswersGiven({ questions, answers }: { questions: InterviewQuestion[]; 
   );
 }
 
-/** In words, not icons: which of the five agent-test questions came back "yes" — the thing itself, not a mark that needs a hover to read. */
-function AgentTestSummary({ t }: { t: AgentTest }) {
+/** A trial outcome the process is tied to, when the trial already ran — so "already failed" can show the real task, not only a sentence. */
+type TrialLink = { title_he: string; passed: boolean | null; failureKind: TrialOutcome["failureKind"]; detail: string } | null;
+
+/**
+ * Each question that came back "yes" is a button; pressing it opens what it
+ * means for THIS step — the model's own reason for that question, and for
+ * "already failed" the trial task that shows it when there is one.
+ */
+function AgentTestSummary({ t, trial }: { t: AgentTest; trial: TrialLink }) {
+  const [open, setOpen] = useState<string | null>(null);
   const yes = AGENT_TEST_HE.filter((a) => t[a.key]);
-  if (!yes.length) return <span className="ob-sub">לא — לא נדרש עזר מיוחד</span>;
-  return <span className="rd-tags">{yes.map((a) => <span className="rd-chip" key={a.key} title={t.why || undefined}>{a.label}</span>)}</span>;
+  if (!yes.length) return <span className="ob-sub">אף תשובה לא "כן" — השלב לא צריך עזרה מיוחדת</span>;
+  const shown = yes.find((a) => a.key === open);
+  const reason = shown ? (t.reasons?.[shown.key] ?? t.why) : "";
+  return (
+    <div style={{ display: "grid", gap: 6 }}>
+      <span className="rd-tags">
+        {yes.map((a) => (
+          <button key={a.key} type="button" className="rd-chip" aria-pressed={open === a.key} style={{ cursor: "pointer", border: open === a.key ? "1px solid var(--status-ai)" : undefined }} onClick={() => setOpen(open === a.key ? null : a.key)}>{a.label} ▾</button>
+        ))}
+      </span>
+      {shown && (
+        <div className="ob-note info" style={{ fontSize: 12.5 }}>
+          <b>{shown.label}:</b> {reason || "המודל לא כתב סיבה לשאלה הזו בשלב הזה."}
+          {shown.key === "failsToday" && trial && (
+            <div style={{ marginTop: 6 }}>
+              משימת הניסיון "{trial.title_he}": {trial.passed === false ? `נכשלה — ${trial.failureKind ? FAILURE_HE[trial.failureKind] : "כישלון"}` : trial.passed === true ? "עברה" : "לא הוכרעה"}{trial.detail ? ` · ${trial.detail}` : ""}
+            </div>
+          )}
+          {shown.key === "failsToday" && !trial && <div className="ob-sub" style={{ marginTop: 4 }}>הראיה מההיסטוריה של המאגר; ריצת הניסיון עוד לא בדקה את התהליך הזה.</div>}
+        </div>
+      )}
+    </div>
+  );
 }
 
-/** `s.reason` already opens with the decision word ("סוכן: …"/"skill: …"/"כלום: …") — the chip beside it says that; showing only the rest avoids saying the same word twice. */
-const REASON_PREFIX = /^(סוכן|skill|כלום):\s*/;
+/** `s.reason` opens with the decision words — the chip beside it says them; showing only the rest avoids saying it twice. */
+const REASON_PREFIX = /^(סוכן|skill|כלום|אין צורך בסוכן או סקיל):\s*/;
 const reasonTail = (reason: string) => reason.replace(REASON_PREFIX, "");
 
-function ProcessList({ processes }: { processes: DiscoveredProcess[] }) {
+function ProcessList({ processes, trials }: { processes: DiscoveredProcess[]; trials: TrialOutcome[] }) {
   if (!processes.length) return <p className="ob-sub">לא נמצאו תהליכים חוזרים במאגר הזה.</p>;
+  const trialOf = (key: string | null): TrialLink => {
+    const o = key ? trials.find((x) => x.taskKey === key) : undefined;
+    return o ? { title_he: o.title_he, passed: o.passed, failureKind: o.failureKind, detail: o.detail } : null;
+  };
   return (
     <div style={{ display: "grid", gap: 10 }}>
       <CardTitle info="process_list">מועמדים לסקילים ולסוכנים, לפי התהליכים במאגר ({processes.length})</CardTitle>
+      <p className="ob-sub" style={{ margin: 0 }}>לחצו על תשובת "כן" במבחן הסוכן כדי לראות מה בדיוק היא אומרת בשלב הזה.</p>
       {processes.map((pr) => (
         <div className="rd-proc" key={pr.key}>
           <div className="ph"><span>{pr.title}</span><span className="rd-chip det">{PROCESS_SOURCE_HE[pr.source] ?? pr.source}</span>{pr.trialTaskKey && <span className="rd-chip">יש משימת ניסיון</span>}</div>
@@ -270,13 +304,13 @@ function ProcessList({ processes }: { processes: DiscoveredProcess[] }) {
           {pr.evidence.length > 0 && <ul>{pr.evidence.map((e, i) => <li key={i}>{e}</li>)}</ul>}
           {pr.steps.length > 0 && (
             <table className="rd-table">
-              <thead><tr><th>צעד<Info k="process_step" /></th><th>פירוט השלב<Info k="process_step_detail" /></th><th>מבחן הסוכן<Info k="agent_test" /></th><th>ההחלטה<Info k="step_decision" /></th></tr></thead>
+              <thead><tr><th>שלב<Info k="process_step" /></th><th>פירוט השלב<Info k="process_step_detail" /></th><th>מבחן הסוכן<Info k="agent_test" /></th><th>ההחלטה<Info k="step_decision" /></th></tr></thead>
               <tbody>
                 {pr.steps.map((s) => (
                   <tr key={s.key}>
                     <td><b>{s.title}</b></td>
                     <td>{s.what}</td>
-                    <td><AgentTestSummary t={s.agentTest} /></td>
+                    <td><AgentTestSummary t={s.agentTest} trial={trialOf(pr.trialTaskKey)} /></td>
                     <td>
                       <span className={`rd-chip ${DECISION_HE[s.decision].cls}`}>{DECISION_HE[s.decision].label}</span>
                       <div className="dim" style={{ marginTop: 4 }}>{reasonTail(s.reason)}</div>

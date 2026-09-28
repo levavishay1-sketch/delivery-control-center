@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { agentScore, capAgents, decideStep, gatherEvidence, interviewFor, parseProcesses, processesFromEvidence, resolveAnswers } from "./processes.ts";
+import { NO_HELPER, agentScore, capAgents, decideStep, gatherEvidence, interviewFor, isProcedural, parseProcesses, processesFromEvidence, resolveAnswers } from "./processes.ts";
 import type { RepoProfile } from "./types.ts";
 
 const DIR = fileURLToPath(new URL("../../../../docs/research/sources/onboarding-v2/repos/diagnosis/", import.meta.url));
@@ -79,5 +79,28 @@ describe("evidence without a model", () => {
     expect(ps.some((p) => p.key === "verify_like_ci" && p.steps[0]!.decision === "skill")).toBe(true);
     expect(gatherEvidence(load("cline"), null).map((e) => e.source)).toEqual(expect.arrayContaining(["git", "ci"]));
     expect(processesFromEvidence(load("altshuler_trade"))).toEqual([]);
+  });
+});
+
+describe("the agent test explains itself per question", () => {
+  it("keeps one reason per 'yes', drops a reason given for a 'no'", () => {
+    const raw = `{"processes":[{"key":"crm_plugin","title":"הוספה או שינוי של פלאגין ל-CRM","source":"git","evidence":["plugins/ changed 9 times"],"steps":[{"key":"register","title":"רישום הפלאגין","what":"לרשום את הפלאגין בפתרון ואז לפרוס","agentTest":{"judgment":false,"externalInfo":true,"readsALot":false,"parallel":false,"failsToday":false,"why":"כללי","reasons":{"externalInfo":"הרישום חי בסביבת Dataverse, לא במאגר","judgment":"לא אמור להופיע"}}}]}]}`;
+    const s = parseProcesses(raw)[0]!.steps[0]!;
+    expect(s.agentTest.reasons).toEqual({ externalInfo: "הרישום חי בסביבת Dataverse, לא במאגר" });
+  });
+
+  it("a step the trial caught failing says so even when the model gave no reason", () => {
+    const raw = `{"processes":[{"key":"p","title":"תהליך","source":"git","steps":[{"key":"s","title":"שלב","what":"x","agentTest":{}}]}]}`;
+    const s = parseProcesses(raw, new Set(["p.s"]))[0]!.steps[0]!;
+    expect(s.agentTest.failsToday).toBe(true);
+    expect(s.agentTest.reasons?.failsToday).toContain("משימת הניסיון");
+  });
+
+  it("recognises a procedure written in Hebrew, and names the no-helper decision in words", () => {
+    expect(isProcedural("לעדכן את הסכמה ואז להריץ את המחולל")).toBe(true);
+    expect(isProcedural("שינוי קטן בקובץ אחד")).toBe(false);
+    const none = decideStep({ judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "" }, true, "שינוי קטן בקובץ אחד");
+    expect(none).toEqual({ decision: "none", reason: `${NO_HELPER}: פעולה אחת שהסוכן הראשי עושה לבד.` });
+    expect(decideStep({ judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "" }, true, "לעדכן את הסכמה ואז להריץ את המחולל").decision).toBe("skill");
   });
 });

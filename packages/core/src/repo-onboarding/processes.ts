@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { evaluate, shapes, type Condition } from "./rules.ts";
-import type { AgentTest, DiscoveredProcess, InterviewAnswer, InterviewQuestion, ProcessStep, RepoProfile, StepDecision } from "./types.ts";
+import type { AgentCriterion, AgentTest, DiscoveredProcess, InterviewAnswer, InterviewQuestion, ProcessStep, RepoProfile, StepDecision } from "./types.ts";
 
 /**
  * The repository's own processes — how a change of some kind is made HERE —
@@ -100,15 +100,22 @@ const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(
  * process came from the history, the CI or a written rule (it repeats), or
  * the step names a procedure of several actions.
  */
+/** The decision word when a step needs neither an agent nor a skill. */
+export const NO_HELPER = "אין צורך בסוכן או סקיל";
+const CRITERIA: readonly AgentCriterion[] = ["judgment", "externalInfo", "readsALot", "parallel", "failsToday"];
+
+/** A step that is a procedure — several actions in order — in either language: the model now writes `what` in Hebrew, the history-only fallback may still carry English. */
+const PROCEDURAL = /\b(then|after|before|run|update|regenerate|register|deploy|bump|sync|generate|migrat|import|export|publish|release|apply|commit|push)\b|(^|\s)(ואז|אחרי|לפני|להריץ|הרצת|לעדכן|עדכון|ליצור|לייצר|לרשום|רישום|לפרוס|פריסה|לפרסם|פרסום|לשחרר|שחרור|לסנכרן|לייבא|לייצא|מיגרציה|להעלות|לבנות|commit|push)/i;
+export const isProcedural = (what: string) => PROCEDURAL.test(what) || what.split(/[,;،]| and | ואז /).length >= 2;
+
 export function decideStep(test: AgentTest, recurring: boolean, what: string): { decision: StepDecision; reason: string } {
   const yes = (["judgment", "externalInfo", "readsALot", "parallel", "failsToday"] as const).filter((k) => test[k]);
   if (yes.length) {
-    const he: Record<string, string> = { judgment: "צריך שיפוט עצמאי", externalInfo: "צריך מידע או גישה שאין לסוכן הראשי", readsALot: "צריך לקרוא הרבה", parallel: "יכול לרוץ במקביל", failsToday: "נכשל היום" };
+    const he: Record<string, string> = { judgment: "צריך שיפוט עצמאי", externalInfo: "צריך מידע או גישה שאין לסוכן הראשי", readsALot: "צריך לקרוא הרבה", parallel: "יכול לרוץ במקביל", failsToday: "כבר נכשל בפועל" };
     return { decision: "agent", reason: `סוכן: ${yes.map((k) => he[k]).join(", ")}.` };
   }
-  const procedural = /\b(then|after|before|run|update|regenerate|register|deploy|bump|sync|generate|migrat|import|export|publish|release)\b/i.test(what) || what.split(/[,;]| and /).length >= 2;
-  if (recurring && procedural) return { decision: "skill", reason: "skill: נוהל חוזר עם כמה פעולות, בלי צורך בשיפוט נפרד." };
-  return { decision: "none", reason: "כלום: פעולה אחת שהסוכן הראשי עושה לבד." };
+  if (recurring && isProcedural(what)) return { decision: "skill", reason: "skill: נוהל חוזר עם כמה פעולות, בלי צורך בשיפוט נפרד." };
+  return { decision: "none", reason: `${NO_HELPER}: פעולה אחת שהסוכן הראשי עושה לבד.` };
 }
 
 /** How strongly a step's answers call for an agent of its own: what fails today and what needs judgment or access weigh most. */
@@ -126,9 +133,8 @@ export const MAX_AGENTS_PER_RUN = 4;
 export function capAgents(processes: DiscoveredProcess[], max = MAX_AGENTS_PER_RUN): DiscoveredProcess[] {
   const demote = (p: DiscoveredProcess, s: ProcessStep, why: string) => {
     const recurring = p.source !== "model" && p.source !== "interview";
-    const procedural = /\b(then|after|before|run|update|regenerate|register|deploy|bump|sync|generate|migrat|import|export|publish|release|apply|commit|push)\b/i.test(s.what) || s.what.split(/[,;]| and /).length >= 2;
-    s.decision = recurring && procedural ? "skill" : "none";
-    s.reason = `${s.decision === "skill" ? "skill" : "כלום"}: ${why}`;
+    s.decision = recurring && isProcedural(s.what) ? "skill" : "none";
+    s.reason = `${s.decision === "skill" ? "skill" : NO_HELPER}: ${why}`;
   };
   const winners: { p: DiscoveredProcess; s: ProcessStep; score: number }[] = [];
   for (const p of processes) {
@@ -165,7 +171,12 @@ export function parseProcesses(raw: string, trialsFailingSteps: ReadonlySet<stri
       const st = str(s.title, 120);
       if (!st) continue;
       const t = (s.agentTest ?? {}) as Record<string, unknown>;
-      const test: AgentTest = { judgment: bool(t.judgment), externalInfo: bool(t.externalInfo), readsALot: bool(t.readsALot), parallel: bool(t.parallel), failsToday: bool(t.failsToday) || trialsFailingSteps.has(`${key}.${slug(str(s.key) || st)}`), why: str(t.why, 400) };
+      const failedInTrial = trialsFailingSteps.has(`${key}.${slug(str(s.key) || st)}`);
+      const r = (t.reasons && typeof t.reasons === "object" ? t.reasons : {}) as Record<string, unknown>;
+      const reasons: Partial<Record<AgentCriterion, string>> = {};
+      for (const c of CRITERIA) { const v = str(r[c], 400); if (v && bool(t[c])) reasons[c] = v; }
+      if (failedInTrial && !reasons.failsToday) reasons.failsToday = "משימת הניסיון שבודקת את התהליך הזה נכשלה.";
+      const test: AgentTest = { judgment: bool(t.judgment), externalInfo: bool(t.externalInfo), readsALot: bool(t.readsALot), parallel: bool(t.parallel), failsToday: bool(t.failsToday) || failedInTrial, why: str(t.why, 400), reasons };
       const what = str(s.what, 400);
       const d = decideStep(test, recurring, what);
       steps.push({ key: slug(str(s.key) || st), title: st, what, agentTest: test, decision: d.decision, reason: d.reason });
@@ -183,9 +194,9 @@ export function processesFromEvidence(profile: RepoProfile): DiscoveredProcess[]
     const files = s.files.slice(0, 6);
     const key = slug(`change_${files[0]!.split("/").pop() ?? "shape"}`);
     out.push({
-      key, title: `Change that touches ${files.map((f) => f.split("/").pop()).join(", ")}`, source: "git",
+      key, title: `שינוי שנוגע יחד ב-${files.map((f) => f.split("/").pop()).join(", ")}`, source: "git",
       evidence: [`${files.join(" + ")} changed together ${s.times} times`],
-      steps: files.map((f, i) => ({ key: slug(`edit_${f.split("/").pop() ?? i}`), title: `Update ${f}`, what: `Edit ${f} consistently with the others`, agentTest: { judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "from the history alone" }, decision: "none" as StepDecision, reason: "כלום: מהמתכון." })),
+      steps: files.map((f, i) => ({ key: slug(`edit_${f.split("/").pop() ?? i}`), title: `עדכון ${f.split("/").pop()}`, what: `לעדכן את ${f} כך שיתאים לשאר הקבצים שמשתנים איתו`, agentTest: { judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "מההיסטוריה בלבד" }, decision: "none" as StepDecision, reason: `${NO_HELPER}: חלק מהמתכון.` })),
       trialTaskKey: null, impossible: null,
     });
     // The recipe is the skill: the process as a whole repeats, so its first step carries the decision.
@@ -194,8 +205,8 @@ export function processesFromEvidence(profile: RepoProfile): DiscoveredProcess[]
   }
   if (profile.ci.present && profile.ci.commands.length) {
     out.push({
-      key: "verify_like_ci", title: "Verify a change the way CI does", source: "ci", evidence: profile.ci.commands.slice(0, 4),
-      steps: [{ key: "run_ci_commands", title: "Run the CI commands locally", what: `Run ${profile.ci.commands.slice(0, 3).join("; ")} before declaring the change done`, agentTest: { judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "the CI defines green" }, decision: "skill", reason: "skill: נוהל חוזר מה-CI." }],
+      key: "verify_like_ci", title: "בדיקת שינוי כמו שה-CI בודק", source: "ci", evidence: profile.ci.commands.slice(0, 4),
+      steps: [{ key: "run_ci_commands", title: "הרצת פקודות ה-CI מקומית", what: `להריץ ${profile.ci.commands.slice(0, 3).join("; ")} לפני שמכריזים שהשינוי גמור`, agentTest: { judgment: false, externalInfo: false, readsALot: false, parallel: false, failsToday: false, why: "ה-CI מגדיר מה נחשב תקין" }, decision: "skill", reason: "skill: נוהל חוזר מה-CI." }],
       trialTaskKey: null, impossible: null,
     });
   }
