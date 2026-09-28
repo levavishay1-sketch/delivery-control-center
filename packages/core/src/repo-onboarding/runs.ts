@@ -1,6 +1,8 @@
+import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, withTenant } from "@dcc/db";
 import { onboardingComponent, onboardingProcess, onboardingTrial, repo, repoAiEvent, repoProfile, repoCoachProposal, repositoryOnboardingRun, repositoryOnboardingStep } from "@dcc/db/schema";
@@ -41,6 +43,8 @@ import { ensureOnboardingWorkspace, existingSetup, runtimeDir, trackedFileCount 
  * pass/fail wherever it can check; a model only does what code cannot —
  * trial tasks, authoring, the open search, the reviewer's questions.
  */
+
+const execFileAsync = promisify(execFile);
 
 /** A message meant for the person — the API returns it as-is (409). */
 export class OnboardingError extends Error {}
@@ -154,7 +158,11 @@ async function advance(ctx: Ctx, by: Actor) {
 
 /* ── the Claude calls of a run ────────────────────────────────────── */
 
-type CallOpts = { capability: Capability; label: string; stepKey: StepKey; by: string; cwd: string; lean?: boolean; tools?: string; commands?: boolean; maxTurns?: number; timeoutMs?: number; extraArgs?: string[] };
+type CallOpts = {
+  capability: Capability; label: string; stepKey: StepKey; by: string; cwd: string; lean?: boolean; tools?: string; commands?: boolean; maxTurns?: number; timeoutMs?: number; extraArgs?: string[];
+  /** A lean call's read-only tools, the folders they may read, and whether it may think (a lean call answers in one turn without thinking unless told). */
+  leanTools?: string; addDirs?: string[]; think?: boolean;
+};
 
 /** One instruction from the library, rendered, sent — and a ledger row with the step it belongs to. A lean call carries the whole prompt as its system prompt (no CLI preamble, no tools). */
 async function callModel(ctx: Ctx, promptKey: string, vars: Record<string, string | boolean | undefined>, o: CallOpts): Promise<{ text: string; costUsd: number; callId: string | null }> {
@@ -166,7 +174,7 @@ async function callModel(ctx: Ctx, promptKey: string, vars: Record<string, strin
     mkdirSync(dir, { recursive: true });
     const sys = path.join(dir, `${promptKey.replace(/\W/g, "_")}-${randomUUID().slice(0, 8)}.txt`);
     writeFileSync(sys, body, "utf8");
-    res = await runClaudeRaw(dir, "Answer now, exactly in the format the instructions require.", { ledger, maxTurns: 1, timeoutMs: o.timeoutMs ?? 180_000, env: { MAX_THINKING_TOKENS: "0" }, lean: { systemPromptFile: sys } });
+    res = await runClaudeRaw(dir, "Answer now, exactly in the format the instructions require.", { ledger, maxTurns: o.maxTurns ?? 1, timeoutMs: o.timeoutMs ?? 180_000, env: o.think ? {} : { MAX_THINKING_TOKENS: "0" }, lean: { systemPromptFile: sys, tools: o.leanTools, addDirs: o.addDirs } });
   } else {
     res = await runClaudeRaw(o.cwd, body, { ledger, maxTurns: o.maxTurns ?? 40, timeoutMs: o.timeoutMs ?? 480_000, commands: o.commands, tools: o.tools });
   }
@@ -563,9 +571,8 @@ async function replan(ctx: Ctx, by: Actor, why: string) {
   const nonRule = existing.filter((c) => c.source !== "rule");
   const cards = [...rules.fired.flatMap((f) => f.components).map((s) => cardFromSeed(s, level)), ...nonRule];
   await upsertCards(ctx, cards, true);
-  const prev = (plan.result ?? {}) as PlanResult & PlanExtras;
   const byGroup = { auto: cards.filter((c) => c.group === "auto").length, approval: cards.filter((c) => c.group === "approval").length, not_recommended: cards.filter((c) => c.group === "not_recommended").length };
-  await patchStep(ctx, "plan", { result: { ...prev, rulesFired: rules.fired.map((f) => f.rule), rulesSuppressed: rules.suppressed.map((s) => ({ rule: s.rule, fact: s.fact })), firings: rules.fired, suppressed: rules.suppressed, components: cards.length, byGroup } });
+  await mergePlanResult(ctx, { rulesFired: rules.fired.map((f) => f.rule), rulesSuppressed: rules.suppressed.map((s) => ({ rule: s.rule, fact: s.fact })), firings: rules.fired, suppressed: rules.suppressed, components: cards.length, byGroup });
   await event(ctx, "onboarding.plan.redrawn", { why, rulesFired: rules.fired.map((f) => f.rule), suppressed: rules.suppressed }, by.userId);
 }
 
@@ -601,7 +608,8 @@ export async function decideComponentSet(repoId: string, runId: string, by: Acto
   const { run, steps, ctx } = await loadRun(repoId, runId);
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
   if (stepOf(steps, "plan")?.status !== "WaitingForUser") throw new OnboardingError("התוכנית לא ממתינה להחלטות");
-  const cards = (await loadCards(ctx)).filter((c) => c.status === "proposed" && c.kind !== "report" && (!input.keys || input.keys.includes(c.key)));
+  // A question only a person decides (the scan's "ask": a permission, a policy) is never answered as part of a set.
+  const cards = (await loadCards(ctx)).filter((c) => c.status === "proposed" && c.kind !== "report" && (input.keys ? input.keys.includes(c.key) : c.params.decision !== "ask"));
   const status = input.decision === "approve" ? "approved" : "declined";
   for (const c of cards) await withTenant(ctx.clientId, (tx) => tx.update(onboardingComponent).set({ status, decidedBy: by.userId, decidedAt: new Date(), declineReason: input.decision === "decline" ? input.reason?.trim() || null : null, updatedAt: new Date() }).where(eq(onboardingComponent.id, c.id)));
   await event(ctx, "onboarding.cards.decided_set", { decision: input.decision, keys: cards.map((c) => c.key) }, by.userId);
@@ -650,20 +658,32 @@ async function draftOf(run: RunRow): Promise<DraftFile[]> {
   const out: DraftFile[] = [];
   for (const p of paths) {
     const v = await fileVersions(run.workspacePath, run.baselineSha, p).catch(() => null);
-    if (!v || v.binary || v.tooLarge || v.before === v.after) continue;
+    if (!v || v.binary || v.tooLarge || v.before?.trimEnd() === v.after?.trimEnd()) continue;
     out.push({ path: p, before: v.before, after: v.after });
   }
   return out;
 }
 
+/** Keys of the plan step's result set in one statement, the rest left as they are — so a scan and a replan never write back each other's stale copy. */
+const mergePlanResult = (ctx: Ctx, patch: Record<string, unknown>) =>
+  withTenant(ctx.clientId, (tx) => tx.update(repositoryOnboardingStep)
+    .set({ result: sql`coalesce(${repositoryOnboardingStep.result}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb`, updatedAt: new Date() })
+    .where(and(eq(repositoryOnboardingStep.runId, ctx.runId), eq(repositoryOnboardingStep.stepKey, "plan"))));
+
 /** The scan's state lives in the plan step's result, next to the rest of the plan — the screen polls it. */
-async function patchInitScan(ctx: Ctx, scan: InitScanState) {
+const patchInitScan = (ctx: Ctx, scan: InitScanState) => mergePlanResult(ctx, { initScan: scan });
+
+/** A failed scan keeps the last one's result beside the error, so the cards on the screen still have their reasons. */
+async function failInitScan(ctx: Ctx, by: string | null, error: string, reason?: string) {
   const { steps } = await loadRun(ctx.repoId, ctx.runId);
-  const prev = (stepOf(steps, "plan")?.result ?? {}) as Record<string, unknown>;
-  await patchStep(ctx, "plan", { result: { ...prev, initScan: scan } });
+  const prev = ((stepOf(steps, "plan")?.result ?? {}) as { initScan?: InitScanState }).initScan;
+  await patchInitScan(ctx, { ...(prev?.verdict ? prev : { startedAt: prev?.startedAt ?? new Date().toISOString(), by: by ?? "", files: prev?.files ?? [] }), state: "failed", error, failedAt: new Date().toISOString() } as InitScanState);
+  await event(ctx, "onboarding.draft.scan_failed", { error, reason: reason ?? null }, by);
+  terminalLine(ctx.runId, `✗ סריקת טיוטת /init נכשלה: ${error}`);
 }
 
-const scanning = new Set<string>();
+/** One of the two things that change the plan's cards from the draft at a time: the scan, or the start of the build. */
+const planBusy = new Set<string>();
 
 /** "סרוק מה ש-/init עשה": the editor runs in the background (minutes, it reads the code to check claims); the screen follows its state. */
 export async function scanInitDraft(repoId: string, runId: string, by: Actor) {
@@ -671,24 +691,26 @@ export async function scanInitDraft(repoId: string, runId: string, by: Actor) {
   if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
   if (stepOf(steps, "plan")?.status !== "WaitingForUser") throw new OnboardingError("סריקת הטיוטה אפשרית כשהתוכנית פתוחה לאישור");
   if (!run.workspacePath || !run.baselineSha) throw new OnboardingError("אין עותק מבודד");
-  if (scanning.has(runId)) throw new OnboardingError("הסריקה כבר רצה");
-  const s = sessionOf(run);
-  if (terminalState(runId) === "live" && s.transcriptPath && !sessionIdle(s.transcriptPath).idle) throw new OnboardingError("סשן הטיוטה עוד עובד — חכו שיסיים את התור (או עצרו אותו) ואז סרקו");
-  const draft = await draftOf(run);
-  if (!draft.length) throw new OnboardingError("סשן הטיוטה עוד לא כתב כלום בעותק — אין מה לסרוק");
-  scanning.add(runId);
-  const files = draft.map((f) => f.path);
-  await patchInitScan(ctx, { state: "running", startedAt: new Date().toISOString(), by: by.userId, files });
-  await event(ctx, "onboarding.draft.scan_started", { files }, by.userId);
-  terminalLine(runId, `סריקת טיוטת /init: ${files.length} קבצים — ${files.slice(0, 6).join(", ")}`);
-  void runInitScan(ctx, run, by, draft)
-    .catch(async (e) => {
-      const error = (e as Error).message.slice(0, 300);
-      await patchInitScan(ctx, { state: "failed", startedAt: new Date().toISOString(), by: by.userId, files, error });
-      await event(ctx, "onboarding.draft.scan_failed", { error }, by.userId);
-      terminalLine(runId, `✗ סריקת טיוטת /init נכשלה: ${error}`);
-    })
-    .finally(() => scanning.delete(runId));
+  if (planBusy.has(runId)) throw new OnboardingError("סריקה של הטיוטה או תחילת בנייה כבר רצות בהרצה הזו");
+  planBusy.add(runId);
+  let files: string[];
+  try {
+    const s = sessionOf(run);
+    if (terminalState(runId) === "live" && s.transcriptPath && !sessionIdle(s.transcriptPath).idle) throw new OnboardingError("סשן הטיוטה עוד עובד — חכו שיסיים את התור (או עצרו אותו) ואז סרקו");
+    const draft = await draftOf(run);
+    if (!draft.length) throw new OnboardingError("סשן הטיוטה עוד לא כתב כלום בעותק — אין מה לסרוק");
+    files = draft.map((f) => f.path);
+    const prev = ((stepOf(steps, "plan")?.result ?? {}) as { initScan?: InitScanState }).initScan;
+    await patchInitScan(ctx, { ...(prev?.verdict ? prev : {}), state: "running", startedAt: new Date().toISOString(), by: by.userId, files, error: undefined, failedAt: undefined });
+    await event(ctx, "onboarding.draft.scan_started", { files }, by.userId);
+    terminalLine(runId, `סריקת טיוטת /init: ${files.length} קבצים — ${files.slice(0, 6).join(", ")}`);
+    void runInitScan(ctx, run, by, draft)
+      .catch((e) => failInitScan(ctx, by.userId, (e as Error).message.slice(0, 300)).catch((x) => console.error("[onboarding] a failed scan could not be recorded:", x)))
+      .finally(() => planBusy.delete(runId));
+  } catch (e) {
+    planBusy.delete(runId);
+    throw e;
+  }
   return { scanning: true, files: files.length };
 }
 
@@ -700,6 +722,7 @@ async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[])
   const trials = await loadTrials(ctx, "baseline");
   const cards = await loadCards(ctx);
   const ours = cards.filter((c) => c.source !== "init");
+  const earlier = cards.filter((c) => c.source === "init" && c.status !== "proposed");
   const { steps } = await loadRun(ctx.repoId, ctx.runId);
   const interview = (stepOf(steps, "processes")?.result ?? {}) as { questions?: InterviewQuestion[]; answers?: InterviewAnswer[] };
   const said = (await runEvents(ctx)).filter((e) => e.type === "onboarding.session.answer").map((e) => { const q = e.payload as { question?: string; answer?: string }; return `- ${q.question ?? ""} → ${q.answer ?? ""}`; });
@@ -709,9 +732,13 @@ async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[])
     INTERVIEW: renderInterview(interview.questions ?? [], interview.answers ?? []), PROCESSES: renderProcesses(processes), TRIALS: renderTrials(trials),
     SESSION_ANSWERS: said.length ? said.join("\n") : "(the person answered no question in the session)",
     OURS_AGENTS: previewAgentsMd(dir, p.profile, ctx.repoName, cards),
-    OUR_CARDS: ours.map((c) => `- [${c.key}] ${c.kind} · ${c.status} · ${c.title_he} — ${c.why_he.slice(0, 280)}${c.kind === "rule" && c.params.text ? ` — the line: "${String(c.params.text).slice(0, 300)}"` : ""}`).join("\n") || "(no cards)",
-    DRAFT: renderDraft(draft),
-  }, { capability: "onboarding_init_scan", label: "סריקת טיוטת /init", stepKey: "plan", by: by.userId, cwd: dir, maxTurns: 40, timeoutMs: 900_000 });
+    OUR_CARDS: [
+      ...ours.map((c) => `- [${c.key}] ${c.kind} · ${c.status} · ${c.title_he} — ${c.why_he.slice(0, 280)}${c.kind === "rule" && c.params.text ? ` — the line: "${String(c.params.text).slice(0, 300)}"` : ""}`),
+      // What an earlier scan already took and a person decided: not to be proposed again; a better text names it in "replaces".
+      ...earlier.map((c) => `- [${c.key}] ${c.kind} · ${c.status} · taken from the draft by an earlier scan · ${c.title_he} — the text: "${String(c.params.text ?? "").slice(0, 400)}"`),
+    ].join("\n") || "(no cards)",
+    DRAFT: `The isolated copy of the repository, to read with Read, Grep and Glob: ${dir}\n\n${renderDraft(draft)}`,
+  }, { capability: "onboarding_init_scan", label: "סריקת טיוטת /init", stepKey: "plan", by: by.userId, cwd: dir, lean: true, leanTools: "Read,Grep,Glob", addDirs: [dir], think: true, maxTurns: 40, timeoutMs: 900_000 });
   const scan = parseInitScan(res.text);
   const f = repoFacts(p.profile, ctx.repoName, null);
   const knownCommands = [...p.profile.build.commands, ...p.profile.ci.commands, f.testCommand ?? "", f.lintCommand ?? ""].filter(Boolean);
@@ -720,47 +747,79 @@ async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[])
   // The call takes minutes; a person may have decided, asked for a card or corrected a fact meanwhile — write against the cards as they are now.
   const now = await loadCards(ctx);
   const oursNow = now.filter((c) => c.source !== "init");
-  const { seeds, refused } = seedsFromScan({ scan, dir, knownCommands, ours: oursNow, inBaseline: (x) => inBase.has(x) });
+  const { seeds, refused } = seedsFromScan({ scan, dir, knownCommands, ours: now, inBaseline: (x) => inBase.has(x) });
   // What the scan takes always waits for a person, whatever the automation level.
   const level = normalizeAutomation(run.automation).level;
   const taken = seeds.map((sd) => { const c = cardFromSeed(sd, level); if (c.group !== "not_recommended") { c.group = "approval"; c.status = "proposed"; } return c; });
   // A card of an earlier scan that a person already decided on stays; an undecided one is replaced by this scan.
   const kept = now.filter((c) => c.source === "init" && c.decidedBy && !taken.some((t) => t.key === c.key));
-  const drop = new Map(scan.dropOurs.filter((d) => oursNow.some((c) => c.key === d.key)).map((d) => [d.key, d.why]));
-  const noted = oursNow.map((c) => ({ ...c, why_he: withScanNote(c.why_he, drop.get(c.key) ?? null) }));
-  await upsertCards(ctx, [...noted, ...kept, ...taken], true);
+  const removed = now.filter((c) => c.source === "init" && !c.decidedBy && !taken.some((t) => t.key === c.key)).map((c) => c.key);
+  const stays = [...oursNow, ...kept];
+  const drop = new Map(scan.dropOurs.filter((d) => stays.some((c) => c.key === d.key)).map((d) => [d.key, d.why]));
+  const noted = stays.map((c) => ({ ...c, why_he: withScanNote(c.why_he, drop.get(c.key) ?? null) }));
+  await upsertCards(ctx, [...noted, ...taken], true);
   const done: InitScanState = {
     state: "done", startedAt, finishedAt: new Date().toISOString(), by: by.userId, files: draft.map((d) => d.path),
     verdict: scan.verdict, summary: scan.summary, compare: scan.compare,
     cards: taken.map((c) => ({ key: c.key, title: c.title_he, decision: String(c.params.decision ?? "take"), notRecommended: c.group === "not_recommended" })),
-    dropOurs: [...drop].map(([key, why]) => ({ key, title: oursNow.find((c) => c.key === key)!.title_he, why })), reject: scan.reject, refused, costUsd: res.costUsd,
+    dropOurs: [...drop].map(([key, why]) => ({ key, title: stays.find((c) => c.key === key)!.title_he, why })), reject: scan.reject, refused, costUsd: res.costUsd,
   };
   await patchInitScan(ctx, done);
-  await event(ctx, "onboarding.draft.scanned", { verdict: scan.verdict, cards: taken.length, asks: taken.filter((c) => c.params.decision === "ask").length, dropOurs: drop.size, rejected: scan.reject.length + refused.length, costUsd: res.costUsd }, by.userId);
+  await event(ctx, "onboarding.draft.scanned", {
+    verdict: scan.verdict, cards: taken.length, asks: taken.filter((c) => c.params.decision === "ask").length, dropOurs: drop.size, rejected: scan.reject.length + refused.length, costUsd: res.costUsd,
+    created: taken.map((c) => c.key), removed, noted: [...drop.keys()],
+  }, by.userId);
   terminalLine(ctx.runId, `סריקת טיוטת /init: ${VERDICT_HE[scan.verdict]} · ${taken.length} כרטיסים חדשים לאישור · ${drop.size} משלנו מסומנים כמיותרים · ${scan.reject.length + refused.length} לא נלקחו`);
 }
 
 const VERDICT_HE: Record<InitScan["verdict"], string> = { adopt: "הטיוטה טובה יותר — לוקחים את רובה", merge: "משלבים את שתיהן", partial: "שלנו הבסיס, תוספות מהטיוטה", keep_ours: "נשארים עם שלנו" };
 
 /**
- * Before the build writes anything: the draft is set aside — kept under the run's runtime folder, and the copy put
- * back to the baseline for those files — so what the session wrote reaches the pull request only through a card
- * a person approved. Recorded; nothing is lost.
+ * Before the build writes anything, the copy goes back to where the run started: nothing but DCC's own `.dcc/`
+ * differs from the baseline before the build, so every difference is the draft — what the session wrote with any
+ * tool, committed or not. Commits the session made are undone first (their changes stay in the files), every
+ * changed file is kept under the run's runtime folder, and each is put back to the baseline or removed. So what
+ * the session wrote reaches the pull request only through a card a person approved. Recorded; nothing is lost.
  */
 async function setDraftAside(ctx: Ctx, by: Actor): Promise<string[]> {
   const { run } = await loadRun(ctx.repoId, ctx.runId);
-  if (!run.workspacePath || !run.baselineSha) return [];
-  const draft = await draftOf(run);
-  if (!draft.length) return [];
+  const dir = run.workspacePath;
+  const base = run.baselineSha;
+  if (!dir || !base) return [];
+  // stdout alone: a warning git prints on stderr (line endings on Windows) must not become a file name.
+  const g = async (args: string[], what: string) => {
+    try {
+      const r = await execFileAsync("git", ["-c", "core.longpaths=true", "-c", "core.quotepath=off", "--literal-pathspecs", ...args], { cwd: dir, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true, timeout: 120_000, env: { ...process.env, GIT_TERMINAL_PROMPT: "0" } });
+      return r.stdout;
+    } catch (e) {
+      throw new OnboardingError(`לא ניתן להזיז את טיוטת /init הצידה (${what}): ${String((e as { stderr?: string }).stderr || (e as Error).message).slice(0, 200)}`);
+    }
+  };
+  const nul = (out: string) => out.split("\0").map((x) => x.trim()).filter(Boolean);
+  const commits = (await g(["rev-list", `${base}..HEAD`], "רשימת ה-commits")).split("\n").map((x) => x.trim()).filter(Boolean);
+  const changed = new Map<string, string>();
+  const status = nul(await g(["diff", "--name-status", "--no-renames", "-z", base], "מה השתנה"));
+  for (let i = 0; i + 1 < status.length; i += 2) changed.set(status[i + 1]!, status[i]!);
+  for (const p of nul(await g(["ls-files", "--others", "--exclude-standard", "-z"], "קבצים חדשים"))) changed.set(p, "?");
+  for (const p of [...changed.keys()]) if (p.startsWith(".dcc/")) changed.delete(p);
+  if (!changed.size && !commits.length) return [];
   const keep = path.join(runtimeDir(ctx.runId), "init-draft");
-  for (const f of draft) {
-    if (f.after !== null) { const to = path.join(keep, f.path); mkdirSync(path.dirname(to), { recursive: true }); writeFileSync(to, f.after, "utf8"); }
-    if (f.before !== null) await git(["checkout", run.baselineSha, "--", f.path], run.workspacePath);
-    else rmSync(path.join(run.workspacePath, f.path), { force: true });
+  for (const p of changed.keys()) {
+    const from = path.join(dir, p);
+    if (existsSync(from) && statSync(from).isFile()) { const to = path.join(keep, p); mkdirSync(path.dirname(to), { recursive: true }); copyFileSync(from, to); }
   }
-  const files = draft.map((f) => f.path);
-  await event(ctx, "onboarding.draft.set_aside", { files, keptAt: keep }, by.userId);
-  terminalLine(ctx.runId, `טיוטת /init הוזזה הצידה (${files.length} קבצים, נשמרו ב-${keep}) — רק מה שאושר בכרטיס נכנס`);
+  const files = [...changed.keys()];
+  await event(ctx, "onboarding.draft.set_aside", { files: files.slice(0, 200), count: files.length, commitsUndone: commits, keptAt: keep }, by.userId);
+  try {
+    if (commits.length) await g(["reset", "--quiet", "--mixed", base], "ביטול ה-commits של הסשן");
+    const restore = files.filter((p) => changed.get(p) !== "A" && changed.get(p) !== "?");
+    for (let i = 0; i < restore.length; i += 100) await g(["checkout", base, "--", ...restore.slice(i, i + 100)], "החזרת קבצים");
+    for (const p of files.filter((x) => !restore.includes(x))) rmSync(path.join(dir, p), { force: true });
+  } catch (e) {
+    await event(ctx, "onboarding.draft.set_aside_failed", { error: (e as Error).message.slice(0, 300) }, by.userId);
+    throw e;
+  }
+  terminalLine(ctx.runId, `טיוטת /init הוזזה הצידה (${files.length} קבצים${commits.length ? `, ${commits.length} commits בוטלו` : ""}; נשמרו ב-${keep}) — רק מה שאושר בכרטיס נכנס`);
   return files;
 }
 
@@ -774,10 +833,18 @@ export async function startBuild(repoId: string, runId: string, by: Actor) {
   const cards = await loadCards(ctx);
   const approved = cards.filter((c) => c.status === "approved");
   if (!approved.length) throw new OnboardingError("שום רכיב לא אושר — אשרו לפחות אחד, או בטלו את ההרצה");
-  if (scanning.has(runId)) throw new OnboardingError("סריקת טיוטת /init עוד רצה — חכו שתסתיים, או בנו אחריה");
-  if (terminalState(runId) === "live") await stopDraftSession(draftCtx(ctx), by.userId);
-  await setDraftAside(ctx, by);
-  await completeStep(ctx, "plan", { ...((plan.result ?? {}) as object), decided: cards.filter((c) => c.status !== "proposed").length, approved: approved.length, declined: cards.filter((c) => c.status === "declined" && c.group !== "not_recommended").length, deferred: cards.filter((c) => c.status === "deferred").length, undecided: cards.filter((c) => c.status === "proposed").length }, by.userId);
+  if (planBusy.has(runId)) throw new OnboardingError("סריקת טיוטת /init עוד רצה — חכו שתסתיים, או בנו אחריה");
+  planBusy.add(runId);
+  try {
+    if (terminalState(runId) === "live") await stopDraftSession(draftCtx(ctx), by.userId);
+    await setDraftAside(ctx, by);
+  } catch (e) {
+    planBusy.delete(runId);
+    throw e;
+  }
+  planBusy.delete(runId);
+  const planNow = stepOf((await loadRun(repoId, runId)).steps, "plan")?.result ?? plan.result ?? {};
+  await completeStep(ctx, "plan", { ...(planNow as object), decided: cards.filter((c) => c.status !== "proposed").length, approved: approved.length, declined: cards.filter((c) => c.status === "declined" && c.group !== "not_recommended").length, deferred: cards.filter((c) => c.status === "deferred").length, undecided: cards.filter((c) => c.status === "proposed").length }, by.userId);
   await runOnboardingStep(repoId, runId, "build", by, { automated: true });
   return { building: approved.length };
 }
@@ -1036,7 +1103,7 @@ export async function onboardingChatFacts(runId: string, cursor: number): Promis
   const digest = s.transcriptPath ? digestTranscript(s.transcriptPath, cursor, cursor ? 10_000 : 14_000) : { text: "", cursor, entries: 0 };
   const step = row.currentStepKey ? stepDefinition(row.currentStepKey as StepKey)?.title_he ?? row.currentStepKey : "—";
   const waiting = cards.filter((c) => c.status === "proposed");
-  const [planRow] = await db.select({ result: repositoryOnboardingStep.result }).from(repositoryOnboardingStep).where(and(eq(repositoryOnboardingStep.runId, runId), eq(repositoryOnboardingStep.stepKey, "plan"))).limit(1);
+  const [planRow] = await withTenant(row.clientId, (tx) => tx.select({ result: repositoryOnboardingStep.result }).from(repositoryOnboardingStep).where(and(eq(repositoryOnboardingStep.runId, runId), eq(repositoryOnboardingStep.stepKey, "plan"))).limit(1));
   const initScan = (planRow?.result as { initScan?: InitScanState } | null)?.initScan;
   return {
     facts: {
@@ -1077,7 +1144,7 @@ export async function recoverOnboardingRuns(): Promise<number> {
     const plan = steps.find((s) => s.stepKey === "plan");
     const scan = (plan?.result as { initScan?: InitScanState } | null)?.initScan;
     if (plan?.status === "WaitingForUser" && scan?.state === "running") {
-      await patchInitScan(ctx, { ...scan, state: "failed", error: "הסריקה הופסקה כשהשרת הופעל מחדש — אפשר לסרוק שוב" });
+      await failInitScan(ctx, null, "הסריקה הופסקה כשהשרת הופעל מחדש — אפשר לסרוק שוב", "api_restart");
       touched++;
     }
     if (await recoverDraftSession(draftCtx(ctx), run)) touched++;
