@@ -92,13 +92,15 @@ export function summarizeEval(tasks: readonly EvalTask[], runs: readonly EvalRun
     const costB = mean(mine.map((t) => t.without.meanCostUsd).filter((x): x is number => x !== null));
     const costA = mean(mine.map((t) => t.with.meanCostUsd).filter((x): x is number => x !== null));
     const verdict: ComponentDelta["verdict"] = mine.length === 0 ? "unmeasured" : after > before ? "improved" : after < before ? "worse" : blocked ? "improved" : "same";
-    const delta: ComponentDelta = { before, after, total: mine.length, costPerTaskChange: costA !== null && costB ? Math.round(((costA - costB) / costB) * 100) / 100 : null, verdict };
+    const delta: ComponentDelta = { before, after, total: mine.length, costPerTaskChange: costA !== null && costB ? Math.round(((costA - costB) / costB) * 100) / 100 : null, verdict, helped: mine.filter((t) => t.verdict === "improved").map((t) => t.key), harmed: mine.filter((t) => t.verdict === "worse").map((t) => t.key) };
     const removalProposed = (KNOWLEDGE_KINDS.has(c.kind) && (verdict === "same" || verdict === "worse")) || (SAFETY_KINDS.has(c.kind) && verdict === "worse");
     const why_he = mine.length === 0
       ? "אף משימה במדידה לא נגעה ברכיב הזה — לא נמדד"
       : verdict === "improved"
         ? blocked && after <= before ? `נראה חוסם בפועל בזרוע "עם" (${mine.filter((t) => t.with.blocked).map((t) => t.title_he).join(", ")})` : `${after} מתוך ${mine.length} משימות עוברות עם הרכיב, ${before} בלעדיו`
-        : verdict === "worse" ? `עם הרכיב עוברות ${after} משימות, בלעדיו ${before} — הוא מזיק` : `אותן ${after} משימות עוברות עם ובלי — הרכיב לא הוכיח תרומה`;
+        : verdict === "worse" ? `עם הרכיב עוברות ${after} משימות, בלעדיו ${before} — הוא מזיק (${delta.harmed!.join(", ")})`
+        : delta.harmed!.length ? `${after} משימות עוברות עם ובלי, אבל לא אותן: הסט עזר ב-${delta.helped!.join(", ")} והזיק ב-${delta.harmed!.join(", ")} — הרכיב לא הוכיח תרומה`
+        : `אותן ${after} משימות עוברות עם ובלי — הרכיב לא הוכיח תרומה`;
     return { key: c.key, kind: c.kind, family: c.family, tasks: mine.map((t) => t.key), delta, removalProposed, why_he };
   });
 

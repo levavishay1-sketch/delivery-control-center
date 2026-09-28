@@ -332,7 +332,11 @@ export type ClarifyingQuestion = { key: string; question_he: string; default: st
 
 export type ComponentValidation = { how: string; passed: boolean | null; detail: string; at: string };
 
-export type ComponentDelta = { before: number; after: number; total: number; costPerTaskChange: number | null; verdict: "improved" | "same" | "worse" | "unmeasured" };
+export type ComponentDelta = {
+  before: number; after: number; total: number; costPerTaskChange: number | null; verdict: "improved" | "same" | "worse" | "unmeasured";
+  /** The tasks that flipped with the set on: from failing to passing (helped) and from passing to failing (harmed) — "same" can hide one of each. */
+  helped?: string[]; harmed?: string[];
+};
 
 export type Component = {
   key: string;

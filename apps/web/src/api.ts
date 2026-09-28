@@ -702,7 +702,7 @@ export type EvalVerdict = "improved" | "same" | "worse" | "unmeasured";
 /** One arm of one task: how many runs, how many passed, whether every run passed (pass^k), mean cost and turns. */
 export type ArmSummary = { runs: number; passed: number; passK: boolean | null; passRate: number | null; meanCostUsd: number | null; meanTurns: number | null; blocked: boolean };
 export type EvalTaskSummary = { key: string; title_he: string; kind: EvalTaskKind; with: ArmSummary; without: ArmSummary; verdict: EvalVerdict; failureKinds: Partial<Record<FailureKind, number>> };
-export type ComponentDelta = { before: number; after: number; total: number; costPerTaskChange: number | null; verdict: EvalVerdict };
+export type ComponentDelta = { before: number; after: number; total: number; costPerTaskChange: number | null; verdict: EvalVerdict; helped?: string[]; harmed?: string[] };
 export type EvalComponentSummary = { key: string; kind: ComponentKind; family: ComponentFamily; tasks: string[]; delta: ComponentDelta; removalProposed: boolean; why_he: string };
 /** The measurement "with" against "without" — the same shape as packages/core/src/repo-onboarding/eval/report.ts. */
 export type EvalSummary = {

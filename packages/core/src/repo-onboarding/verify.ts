@@ -350,7 +350,11 @@ function commandHolds(toks: string[], dir: string, cwd: Cwd, ctx: ClaimContext, 
   // What the diagnosis found on this machine decides first: `dotnet msbuild` is its own entry, then `dotnet`.
   const pair = second && !second.startsWith("-") ? lookupTool(ctx.tools, `${head} ${second}`) : undefined;
   const known = pair !== undefined ? pair : lookupTool(ctx.tools, head);
-  if (known === null) return false;
+  // A tool this machine lacks is still the repository's own when its manifests say so: `cargo test` is true of a Cargo
+  // workspace whether or not cargo is installed here (the first research round rejected every line of a Rust
+  // repository, AGENTS.md included, on a machine without cargo). Only a command whose toolchain the repository does not
+  // have is a false claim. Whether it can run *here* is the honesty line's business, not the claim's.
+  if (known === null) return repoToolchainHas(head, index);
   if (PACKAGE_RUNNERS.has(head)) {
     const script = scriptOf([head, ...toks.slice(1)]);
     if (script && !/[<>{}]/.test(script)) {
@@ -370,6 +374,27 @@ function commandHolds(toks: string[], dir: string, cwd: Cwd, ctx: ClaimContext, 
   const dep = NODE_LOCAL[head];
   if (dep && (packagesUp(dir, from).some((p) => !!(p.dependencies?.[dep] ?? p.devDependencies?.[dep])) || existsSync(path.join(dir, "node_modules", ".bin", head)))) return true;
   return onPath(head);
+}
+
+/** The manifests that make a tool the repository's own toolchain — what the copy carries, not what this machine has. */
+const TOOLCHAIN_MANIFESTS: Record<string, RegExp> = {
+  cargo: /(^|\/)cargo\.toml$/i, rustc: /(^|\/)cargo\.toml$/i,
+  go: /(^|\/)go\.mod$/i,
+  mvn: /(^|\/)pom\.xml$/i, mvnw: /(^|\/)pom\.xml$/i, gradle: /(^|\/)(build|settings)\.gradle(\.kts)?$/i, gradlew: /(^|\/)(build|settings)\.gradle(\.kts)?$/i,
+  java: /(^|\/)(pom\.xml|(build|settings)\.gradle(\.kts)?)$/i, javac: /(^|\/)(pom\.xml|(build|settings)\.gradle(\.kts)?)$/i,
+  python: /(^|\/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt|pytest\.ini|tox\.ini)$/i, python3: /(^|\/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt)$/i, py: /(^|\/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt)$/i,
+  pip: /(^|\/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt)$/i, pip3: /(^|\/)(pyproject\.toml|setup\.py|requirements[^/]*\.txt)$/i, pytest: /(^|\/)(pyproject\.toml|pytest\.ini|tox\.ini|setup\.cfg|conftest\.py)$/i,
+  uv: /(^|\/)(pyproject\.toml|uv\.lock)$/i, poetry: /(^|\/)(pyproject\.toml|poetry\.lock)$/i, ruff: /(^|\/)(pyproject\.toml|ruff\.toml)$/i, black: /(^|\/)pyproject\.toml$/i, mypy: /(^|\/)(pyproject\.toml|mypy\.ini|setup\.cfg)$/i, tox: /(^|\/)(tox\.ini|pyproject\.toml)$/i,
+  dotnet: /\.(sln|csproj|fsproj|vbproj|props)$/i, msbuild: /\.(sln|csproj|fsproj|vbproj|proj)$/i, "vstest.console": /\.(sln|csproj)$/i, nuget: /(^|\/)(packages\.config|nuget\.config)$|\.csproj$/i, csc: /\.csproj$/i,
+  pac: /\.(pcfproj|cdsproj)$/i, sqlpackage: /\.sqlproj$/i, func: /(^|\/)host\.json$/i,
+  make: /(^|\/)(gnu)?makefile$/i, cmake: /(^|\/)cmakelists\.txt$/i,
+  composer: /(^|\/)composer\.json$/i, php: /(^|\/)composer\.json$/i, bundle: /(^|\/)gemfile$/i, rake: /(^|\/)(gemfile|rakefile)$/i, ruby: /(^|\/)gemfile$/i,
+  docker: /(^|\/)(dockerfile|docker-compose[^/]*\.ya?ml|compose\.ya?ml)$/i, terraform: /\.tf$/i,
+};
+function repoToolchainHas(head: string, index: () => RepoIndex): boolean {
+  const re = TOOLCHAIN_MANIFESTS[head];
+  if (!re) return false;
+  return index().paths.some((p) => re.test(p));
 }
 
 /** A text in a folder of its own (`Pcf/CLAUDE.md`) speaks from that folder; one at the root, in `.claude/` or `docs/` speaks for the whole repository. */

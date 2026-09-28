@@ -251,9 +251,9 @@ function windowsBuildText(sln: string, tools: Tools, webApps: number | null | un
     ].join("\n\n");
   }
   if (dotnet) return [`Build — the class libraries build with \`dotnet msbuild\`${web}:`, fence([`dotnet msbuild ${target}`])].join("\n\n");
-  // Neither tool is here: said in words, with no command in a code block — a command the machine cannot run would
-  // fail the strict check and take the whole file out, and an agent reading it would try to run it.
-  return `Build: ${target} is a Windows solution that builds with Visual Studio's MSBuild (Developer PowerShell, or the MSBuild.exe of a Visual Studio install)${web}. Neither MSBuild nor the dotnet SDK is installed on this machine, so no build can run here — say so plainly; never claim a build or a test run.`;
+  // Neither tool is here: the command is still the repository's (the check accepts a command of the repository's own
+  // toolchain), and the line after it says plainly that it cannot run on this machine.
+  return [`Build (Windows, Visual Studio's MSBuild — from a Developer PowerShell, or MSBuild.exe by its full path)${web}:`, fence([`msbuild ${target}`]), "Neither MSBuild nor the dotnet SDK is installed on this machine, so no build can run here — say so plainly; never claim a build or a test run."].join("\n\n");
 }
 
 /** Is a command's first word a tool this machine has (or one the check treats as always present)? Unknown tools → true, the check decides later. */
@@ -269,10 +269,10 @@ function runnableHere(cmd: string, tools: Tools | null): boolean {
 function testsText(projects: string[], commands: string[] | null, fallback: string, tools: Tools | null = null): string {
   if (!projects.length) return "Tests: no test project is tracked in git — there is nothing to run. Say so rather than claim a test run.";
   const cmds = commands?.length ? commands : fallback ? [fallback] : [];
-  const runnable = cmds.filter((c) => runnableHere(c, tools));
+  // The commands are the repository's whatever this machine has; a runner missing here is said on the line after them.
   const missing = cmds.filter((c) => !runnableHere(c, tools)).map((c) => c.trim().split(/\s+/)[0]!.replace(/\.exe$/, ""));
   const head = `Tests — the projects tracked in git: ${projects.map((d) => code(d === "." ? "(root)" : `${d}/`)).join(", ")}${cmds.length ? "" : ". Run them with the runner their framework uses."}`;
-  const parts = [head, ...(runnable.length ? [fence(runnable)] : [])];
+  const parts = [head, ...(cmds.length ? [fence(cmds)] : [])];
   if (missing.length) parts.push(`The test runner (${[...new Set(missing)].join(", ")}) is not installed on this machine, so those tests cannot run here — say so instead of claiming a test run.`);
   return parts.join("\n\n");
 }

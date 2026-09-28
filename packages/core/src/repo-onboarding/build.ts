@@ -210,6 +210,23 @@ export function setFrontmatterName(text: string, name: string): string {
   return `---\n${fm}\n---${text.slice(m[0].length)}`;
 }
 
+/**
+ * A skill or an agent Claude Code will load needs a frontmatter; when the author
+ * wrote the body without one (it happened after a retry in the first research
+ * round), the frontmatter is made from the card — the name, the card's own
+ * "when to use me" sentence, the tools the kind allows — and the body is kept.
+ * The validation then judges the body's claims, not the model's formatting.
+ */
+export function ensureFrontmatter(text: string, c: Pick<Component, "kind" | "title_he" | "why_he" | "what_he">, name: string): string {
+  if (/^---\r?\n[\s\S]*?\r?\n---/.test(text)) return setFrontmatterName(text, name);
+  const oneLine = (s: string) => s.replace(/\s+/g, " ").replace(/"/g, "'").trim();
+  const description = oneLine(`${c.title_he}. ${c.what_he}`).slice(0, 400);
+  const fm = c.kind === "agent"
+    ? [`name: ${name}`, `description: "${description}"`, "tools: Glob, Grep, Read, Bash", "model: sonnet"]
+    : [`name: ${name}`, `description: "${description}"`, "allowed-tools: Read, Grep, Glob, Bash"];
+  return `---\n${fm.join("\n")}\n---\n\n${text.replace(/^\s+/, "")}`;
+}
+
 /* ── AGENTS.md: the one file every tool reads, and the thin CLAUDE.md ── */
 
 const AGENTS_HEADER = "## Rules for this repository (from DCC's diagnosis)";
@@ -510,7 +527,9 @@ export async function buildComponents(input: BuildInput): Promise<BuildRun> {
             });
             notes.push(...r.notes);
           } else {
-            const r = renderTemplate(template || "docs-set", c.params, facts);
+            const rendered = renderTemplate(template || "docs-set", c.params, facts);
+            // A document the reviewer (or a person) asked for names no catalog doc: it gets its own file under docs/, titled by the card — never "nothing written".
+            const r = rendered.files.length ? rendered : { files: [{ path: `docs/${componentName(c)}.md`, content: `# ${c.title_he}\n\n{{BODY}}\n` }], notes: [...rendered.notes.filter((n) => !/nothing written/.test(n)), `written as docs/${componentName(c)}.md — the card named no catalog document`] };
             const writeDoc = async (f: { path: string; content: string }, fix?: string) => {
               const body = await input.author({ component: c, fix, format: `The body of the Markdown document "${f.path}" (no title line — it is already there): specific to this repository, every path and command checkable, at most 120 lines. Sections with ## headings.` });
               writeOwn(s, f.path, f.content.replace("{{BODY}}", body.trim()).replace(/\{\{[A-Z_]+\}\}/g, ""));
@@ -536,7 +555,7 @@ export async function buildComponents(input: BuildInput): Promise<BuildRun> {
                 component: c, process: proc, fix,
                 format: `A Claude Code skill file (SKILL.md) with YAML frontmatter between --- lines, the first line of the file being ---: name: ${name}; description: one paragraph saying what the skill does and WHEN to use it (Claude Code triggers on this sentence); allowed-tools: Read, Grep, Glob, Bash. Then a Markdown body: the steps of the procedure in order, each naming the exact files and commands as they are in this repository, what to check before saying it is done, and what NOT to do. At most 90 lines.`,
               });
-              writeOwn(s, file, setFrontmatterName(asFile(text, true), name));
+              writeOwn(s, file, ensureFrontmatter(asFile(text, true), c, name));
             };
             await write();
             rewrite = write;
@@ -558,7 +577,7 @@ export async function buildComponents(input: BuildInput): Promise<BuildRun> {
                 component: c, process: proc, fix, evidence: Array.isArray(c.params.evidence) ? (c.params.evidence as string[]).join("\n") : undefined,
                 format: `A Claude Code subagent definition (Markdown) with YAML frontmatter between --- lines, the first line of the file being ---: name: ${name}; description: one paragraph that says what this agent checks or does and WHEN the main agent should call it — this sentence is the "when to call me" test; tools: Glob, Grep, Read, Bash (read-only — never Edit or Write); model: sonnet. Body: the role in two sentences; the scope (the folders and files, from the process); a checklist of 5 to 10 concrete checks, each with the evidence that justifies it (a review comment, a bug, a convention seen in the code) — no generic advice; and the output format: a JSON array of findings {file, line, severity: block|warn|info, note}. At most 90 lines.`,
               });
-              writeOwn(s, file, setFrontmatterName(asFile(text, true), name));
+              writeOwn(s, file, ensureFrontmatter(asFile(text, true), c, name));
             };
             await write();
             rewrite = write;

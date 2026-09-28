@@ -28,7 +28,7 @@ const scanReason = (reason: string | null) => (reason ?? "").replace(/^(הסרי
 /** A component's measured verdict, "with" against "without" on the tasks that exercise it — the card and the build step say it the same way. */
 export function DeltaLine({ d }: { d: NonNullable<OnboardingComponent["delta"]> }) {
   const v = DELTA_HE[d.verdict];
-  return <><span className={`rd-chip ${v.cls}`}>{v.label}</span>{d.total > 0 && <span className="ob-sub"> עם {d.after}/{d.total} · בלי {d.before}/{d.total} משימות</span>}</>;
+  return <><span className={`rd-chip ${v.cls}`}>{v.label}</span>{d.total > 0 && <span className="ob-sub"> עם {d.after}/{d.total} · בלי {d.before}/{d.total} משימות{d.harmed?.length ? ` · הזיק ב: ${d.harmed.join(", ")}` : ""}{d.helped?.length ? ` · עזר ב: ${d.helped.join(", ")}` : ""}</span>}</>;
 }
 
 export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {

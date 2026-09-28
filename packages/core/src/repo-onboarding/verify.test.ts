@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { DOSSIER_FILE, appendLines, buildComponents, componentName, mergeSettings, nameFrom, repoFacts, setFrontmatterName, stripFence, stripPreamble, writeDossier, type Author } from "./build.ts";
+import { DOSSIER_FILE, appendLines, buildComponents, componentName, ensureFrontmatter, mergeSettings, nameFrom, repoFacts, setFrontmatterName, stripFence, stripPreamble, writeDossier, type Author } from "./build.ts";
 import { checkClaims, hookRouting, jointCheck, mcpPlaceholder, statusAfter, validateAgent, validateGitattributes, validateMcp, validateScript, validateSettings, validateSkill, validateText } from "./verify.ts";
 import type { Component, RepoProfile } from "./types.ts";
 
@@ -64,6 +64,12 @@ describe("a model's answer, as a file", () => {
     expect(nameFrom("סוכן", "סוכן")).toMatch(/^c-[0-9a-f]{8}$/);
     expect(setFrontmatterName("---\nname: Wrong Name\ndescription: d\n---\nb", "right")).toBe("---\nname: right\ndescription: d\n---\nb");
     expect(setFrontmatterName("---\ndescription: d\n---\nb", "right")).toBe("---\nname: right\ndescription: d\n---\nb");
+    // No frontmatter at all (the author wrote the body alone): one is made from the card, and the body is kept.
+    const agentCard = { kind: "agent" as const, title_he: "סוקר שינויי פלאגין", why_he: "כי", what_he: "בודק כל שינוי בפלאגין מול הרישום." };
+    const made = ensureFrontmatter("## Role\nChecks plugins.\n", agentCard, "plugin-reviewer");
+    expect(made.startsWith("---\nname: plugin-reviewer\ndescription: \"סוקר שינויי פלאגין. בודק כל שינוי בפלאגין מול הרישום.\"\ntools: Glob, Grep, Read, Bash\nmodel: sonnet\n---\n")).toBe(true);
+    expect(made.endsWith("## Role\nChecks plugins.\n")).toBe(true);
+    expect(ensureFrontmatter("---\nname: x\ndescription: d\n---\nbody", { ...agentCard, kind: "skill" as const }, "right")).toBe("---\nname: right\ndescription: d\n---\nbody");
   });
 });
 
@@ -399,5 +405,18 @@ describe("the dossier in the repository", () => {
     ]);
     expect(body.eval).toEqual({ tasks: 12 });
     expect(readFileSync(path.join(repo, DOSSIER_FILE), "utf8")).not.toContain("Users");
+  });
+});
+
+describe("a command of the repository's own toolchain, on a machine without that tool", () => {
+  it("holds when the copy's manifests show the toolchain, and fails when they do not", () => {
+    const repo = scratch();
+    write(repo, "Cargo.toml", "[workspace]\nmembers = [\"tokio\"]\n");
+    write(repo, "tokio/Cargo.toml", "[package]\nname = \"tokio\"\n");
+    write(repo, "AGENTS.md", "# tokio\n");
+    const none = { cargo: null, pytest: null, dotnet: null } as const;
+    expect(checkClaims("Run `cargo test --all-features` from the root; `cargo hack test --each-feature` in CI.", repo, { tools: none, file: "AGENTS.md" }).missing).toEqual([]);
+    expect(checkClaims("Run `pytest tests/` before a PR.", repo, { tools: none, file: "AGENTS.md" }).missing).toEqual(["pytest tests/"]);
+    expect(checkClaims("Build with `dotnet build`.", repo, { tools: none, file: "AGENTS.md" }).missing).toEqual(["dotnet build"]);
   });
 });
