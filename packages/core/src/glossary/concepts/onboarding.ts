@@ -26,6 +26,7 @@ export const ONBOARDING_CONCEPTS: Concept[] = [
   { key: "existing_ai_setup", kind: "field", title: "הגדרות AI קיימות", aliases: ["CLAUDE.md קיים"], screens: ["onboarding"], explain: "מה כבר יש במאגר בשביל Claude Code: CLAUDE.md, AGENTS.md, rules, skills, hooks, agents. ההטמעה מוסיפה רק מה שחסר ולא דורסת." },
 
   /* the profile */
+  { key: "step_description", kind: "section", title: "תיאור השלב", screens: ["onboarding"], explain: "מה הצעד הזה עושה באופן כללי, וכל סוגי הרכיבים שהוא בעיקרון יכול להוביל אליהם — לא רק מה שנמצא במאגר הזה." },
   { key: "profile_card", kind: "section", title: "מה מצאנו", aliases: ["פרופיל הריפו"], screens: ["onboarding"], explain: "הפרופיל של המאגר כפי שהאבחון קרא אותו, עובדה-עובדה. עובדה שלא נכונה מסמנים ב'זה לא נכון', והכלל שנשען עליה לא יופעל." },
   { key: "fact_wrong", kind: "button", title: "זה לא נכון", aliases: ["תיקון עובדה", "correction"], screens: ["onboarding"], explain: "מסמן עובדה בפרופיל כלא נכונה, עם הערה אם רוצים. התיקון נרשם ביומן.", press: "הכללים שנשענים על העובדה הזאת לא יופעלו, והתוכנית מצוירת מחדש אם היא כבר פתוחה. הפרופיל עצמו לא משתנה — התיקון מוצג לצדו." },
   { key: "profile_languages", kind: "field", title: "שפות", screens: ["onboarding"], explain: "השפות שנמצאו במאגר לפי סיומות הקבצים, עם מספר הקבצים והשורות. מכאן נגזרים תוספי השפה (LSP) ומשימות הניסיון." },

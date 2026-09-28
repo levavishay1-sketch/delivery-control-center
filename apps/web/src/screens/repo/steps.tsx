@@ -109,8 +109,9 @@ function DiagnoseBody(p: StepProps) {
   const { repoId, id: runId } = view.run;
   return (
     <div style={{ display: "grid", gap: 12 }}>
-      <CardTitle info="profile_card">מה מצאנו</CardTitle>
+      <CardTitle info="step_description">תיאור השלב</CardTitle>
       <ComponentKindCatalog />
+      <CardTitle info="profile_card">מה מצאנו</CardTitle>
       <ProfileFacts
         facts={profile.facts} corrections={profile.corrections} users={p.users} busy={p.busy} disabled={isOver(view)}
         onCorrect={(path, note) => void p.act(`fact:${path}`, () => correctProfileFact(repoId, runId, { path, note: note || null }))}
@@ -168,8 +169,8 @@ function ComponentKindCatalog() {
         <br />רכיבים אפשריים שיוקמו בעקבות השלב הזה:
       </p>
       {KIND_CATALOG.map((g) => (
-        <div key={g.group} style={{ marginBottom: 8 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 2 }}>{g.group}</div>
+        <div key={g.group} style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 650, marginBottom: 8 }}>{g.group}</div>
           <ul className="rd-list plain" style={{ display: "grid", gap: 2 }}>
             {g.items.map((it) => <li key={it.name}><b>{it.name}</b> — {it.what}</li>)}
           </ul>
