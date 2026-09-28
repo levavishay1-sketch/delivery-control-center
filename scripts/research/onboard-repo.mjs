@@ -45,7 +45,9 @@ if (!repoId) {
 // 2. the run
 const latest = await call("GET", `/repos/${repoId}/onboarding/latest-run`);
 let runId = args["run-id"];
-if (!runId && latest && ["Pending", "Running", "WaitingForUser"].includes(latest.status)) { runId = latest.runId; log(`resuming live run ${runId}`); }
+// --fresh: a live run of an earlier round (waiting at its delivery gate) is cancelled so a new one can start; its data stays as the record.
+if (args.fresh === "true" && latest && ["Pending", "Running", "WaitingForUser"].includes(latest.status)) { await call("POST", `/repos/${repoId}/onboarding/runs/${latest.runId}/cancel`, {}); log(`cancelled the earlier live run ${latest.runId}`); }
+else if (!runId && latest && ["Pending", "Running", "WaitingForUser"].includes(latest.status)) { runId = latest.runId; log(`resuming live run ${runId}`); }
 if (!runId) { runId = (await call("POST", `/repos/${repoId}/onboarding/runs`, { automation: { level, draftCapUsd: 3, draftCapMinutes: 40 } })).runId; log(`run ${runId} started (level ${level})`); }
 
 const view = () => call("GET", `/repos/${repoId}/onboarding/runs/${runId}`);
