@@ -111,7 +111,8 @@ export const ONBOARDING_CONCEPTS: Concept[] = [
   /* delivery */
   { key: "deliver_button", kind: "button", title: "מסור: commit, push ו-PR", aliases: ["מסירה", "פתח PR"], screens: ["onboarding"], explain: "עושה commit של הקבצים המאושרים על שמכם, דוחף את הענף ופותח בקשת מיזוג עם הדו\"ח.", press: "הענף יוצא לשרת ונפתחת בקשת מיזוג בשמכם. הענף הראשי לא משתנה עד שתמזגו. אי אפשר לבטל את ה-push, אבל אפשר לסגור את ה-PR." },
   { key: "pr_report", kind: "section", title: "הדו\"ח שב-PR", aliases: ["דוח", "התקנתי כי"], screens: ["onboarding"], explain: "נכתב מהכרטיסים, לא מניסוח חופשי: התקנתי X כי Y ונבדק כך; לא התקנתי W כי; לפני/אחרי; וכרטיס הכנות. מי שקורא את ה-PR מבין בלי לפתוח קבצים." },
-  { key: "deliver_files", kind: "field", title: "מה ייכנס למסירה", screens: ["onboarding"], explain: "רשימת הקבצים שיעברו commit — רק של רכיבים שאושרו ואומתו. קבצים אחרים בעותק המבודד, כולל טיוטת /init שלא אושרה, נשארים בחוץ." },
+  { key: "deliver_files", kind: "field", title: "מה ייכנס למסירה", screens: ["onboarding"], explain: "עץ הקבצים שיעברו commit, במקום שבו יישבו בריפו — רק של רכיבים שאושרו ואומתו. לחיצה על קובץ מציגה את התוכן שלו בצד. טיוטת /init שלא אושרה נשארת בחוץ." },
+  { key: "deliver_file_content", kind: "field", title: "תוכן הקובץ", aliases: ["תוכן הקובץ במסירה"], screens: ["onboarding"], explain: "הקובץ בדיוק כפי שייכנס ל-PR. \"קובץ חדש\" לא היה בריפו; \"קובץ קיים שמשתנה\" כבר היה, ואפשר להשוות לגרסה שהוא מחליף." },
 
   /* the rail */
   { key: "run_cost", kind: "field", title: "עלות ההרצה", aliases: ["עלות", "כמה עלה"], screens: ["onboarding"], explain: "כמה ההרצה עלתה עד עכשיו, מיומן הקריאות, לפי צעד. חלק שסשן הטיוטה הוציא ועדיין לא נרשם מסומן בנפרד." },
