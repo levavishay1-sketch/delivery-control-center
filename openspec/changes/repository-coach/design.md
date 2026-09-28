@@ -57,9 +57,14 @@ item in the approval group whatever the automation level. A card of ours the
 editor finds redundant gets a note; the person decides. A second scan keeps a
 decision already taken on the same text (the key is a hash of it).
 
-Before the build writes anything the draft is set aside — kept under the run's
-runtime folder, its files put back to the baseline — so it reaches the pull
-request only through an approved card. A card from the draft is built after
+Before the build writes anything the copy goes back to the baseline: nothing
+but DCC's own `.dcc/` differs from it before the build, so every difference is
+the draft, whatever tool wrote it. The session's commits are undone, every
+changed file is kept under the run's runtime folder, and each is put back or
+removed; if that fails, the build does not start. So the draft reaches the pull
+request only through an approved card. The editor itself runs apart from the
+draft — its own instructions, no project settings or hooks, the copy readable
+through an added folder. A card from the draft is built after
 ours in the same family: a section appended as written, a line among the
 rules, a new file as it is — and validated like every other text.
 

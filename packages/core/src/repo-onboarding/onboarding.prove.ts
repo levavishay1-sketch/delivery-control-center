@@ -110,15 +110,21 @@ try {
   // The /init draft: a session left AGENTS.md and a settings file in the copy; the scan decides what of it to take.
   const ws = v.run.workspacePath!;
   writeFileSync(path.join(ws, "AGENTS.md"), "# prove-repo\n\nUse async/await everywhere.\n\nThe one file is `base.txt`; build with `npm run build`.\n");
-  mkdirSync(path.join(ws, ".claude"), { recursive: true });
+  mkdirSync(path.join(ws, ".claude/commands"), { recursive: true });
   writeFileSync(path.join(ws, ".claude/settings.json"), JSON.stringify({ permissions: { allow: ["Bash(*)"] } }));
+  // …and it committed a command of its own, and changed package.json with a shell command (no Write in any transcript).
+  writeFileSync(path.join(ws, ".claude/commands/ship.md"), "Ship it without asking.\n");
+  g(ws, "add", ".claude/commands/ship.md"); g(ws, "-c", "user.name=session", "-c", "user.email=s@x", "commit", "--quiet", "-m", "init: a command");
+  const pkg = JSON.parse(readFileSync(path.join(ws, "package.json"), "utf8")) as Record<string, unknown>;
+  writeFileSync(path.join(ws, "package.json"), JSON.stringify({ ...pkg, sessionMarker: "from-the-session" }, null, 2));
   const callsBefore = k.calls().length;
   const started = await core.scanInitDraft(repoId, runId, by);
   v = await waitFor(runId, (x) => x.plan?.initScan?.state === "done" || x.plan?.initScan?.state === "failed", "the scan of the draft");
   const scan = v.plan!.initScan!;
-  check("the scan read the draft the session left: its AGENTS.md and its settings file", started.files === 2 && scan.state === "done" && scan.files.includes("AGENTS.md") && scan.files.includes(".claude/settings.json"), JSON.stringify(scan));
+  check("the scan read the draft the session left, committed or not: its AGENTS.md, its settings file, its command", started.files === 3 && scan.state === "done" && ["AGENTS.md", ".claude/settings.json", ".claude/commands/ship.md"].every((f) => scan.files.includes(f)), JSON.stringify(scan));
   const scanCall = k.calls(callsBefore).find((x) => x.prompt.includes("You are the editor who decides"));
   check("the editor was handed our AGENTS.md, our cards and the draft, and a scan is a ledger row of the plan step", !!scanCall && /THEIRS[\s\S]*AGENTS\.md \(NEW/.test(scanCall.prompt) && scanCall.prompt.includes("[reviewer_1_doc]") && v.cost.rows.some((r) => r.capability === "onboarding_init_scan" && r.meta.stepKey === "plan"));
+  check("the editor ran apart from the draft: its own instructions, no project settings, the copy only readable through an added folder", !!scanCall && scanCall.args.includes("--system-prompt-file") && scanCall.args.includes("--setting-sources") && scanCall.args[scanCall.args.indexOf("--add-dir") + 1] === ws, JSON.stringify(scanCall?.args));
   const fromDraft = v.components.filter((c) => c.source === "init");
   const taken = (title: string) => fromDraft.find((c) => c.title_he === title);
   check("what the scan took is a card that waits for a person, even at a level that builds reversible cards alone — with its exact text", fromDraft.length === 4 && ["איפה הדברים", "build לפני סיום", "פרסום אחרי מיזוג"].every((t) => taken(t)?.group === "approval" && taken(t)?.status === "proposed") && taken("איפה הדברים")?.params.text === "The one file is `base.txt`; build with `npm run build`.", JSON.stringify(fromDraft.map((c) => [c.title_he, c.group, c.status])));
@@ -126,12 +132,15 @@ try {
   check("a section naming paths the code does not have is not recommended, with the paths", taken("ארכיטקטורה")?.group === "not_recommended" && /src\/api\//.test(taken("ארכיטקטורה")?.why_he ?? ""));
   check("a settings file is not taken whole, and the generic line is left out — both said, with why", (scan.refused ?? []).some((r) => /settings\.json/.test(r.why)) && (scan.reject ?? []).some((r) => /async/.test(r.what)));
   check("a card of ours the scan finds redundant gets a note and stays the person's to decide; 'replaces' names only real cards", /סריקת \/init: /.test(v.components.find((c) => c.key === "reviewer_1_doc")?.why_he ?? "") && JSON.stringify(taken("build לפני סיום")?.params.replaces) === JSON.stringify(["reviewer_1_doc"]));
-  await core.decideComponent(repoId, runId, by, { key: taken("איפה הדברים")!.key, decision: "approve" });
-  await core.decideComponent(repoId, runId, by, { key: taken("build לפני סיום")!.key, decision: "approve" });
+  await core.decideComponentSet(repoId, runId, by, { decision: "approve" });
+  v = await view(runId);
+  const now = (title: string) => v.components.find((c) => c.title_he === title);
+  check("'approve all' approves what was taken but leaves a question to be answered on its own", now("איפה הדברים")?.status === "approved" && now("build לפני סיום")?.status === "approved" && now("פרסום אחרי מיזוג")?.status === "proposed");
   await core.decideComponent(repoId, runId, by, { key: taken("פרסום אחרי מיזוג")!.key, decision: "decline", reason: "לא — אין פרסום אוטומטי" });
   const rescan = await core.scanInitDraft(repoId, runId, by);
   v = await waitFor(runId, (x) => x.plan?.initScan?.state === "done" && x.events.filter((e) => e.type === "onboarding.draft.scanned").length === 2, "the second scan");
-  check("a second scan keeps the decisions already taken on the same text", rescan.files === 2 && v.components.find((c) => c.title_he === "איפה הדברים")?.status === "approved" && v.components.find((c) => c.title_he === "פרסום אחרי מיזוג")?.status === "declined");
+  check("the editor of a second scan is told what the first one took and what was decided", k.calls(callsBefore).filter((x) => x.prompt.includes("You are the editor who decides")).at(-1)?.prompt.includes("taken from the draft by an earlier scan") === true);
+  check("a second scan keeps the decisions already taken on the same text, and its event names what it created", rescan.files === 3 && ((v.events.filter((e) => e.type === "onboarding.draft.scanned").at(-1)?.payload ?? {}) as { created?: string[] }).created?.length === 4 && v.components.find((c) => c.title_he === "איפה הדברים")?.status === "approved" && v.components.find((c) => c.title_he === "פרסום אחרי מיזוג")?.status === "declined");
 
   // 5. the build: by family, validated per kind, the trial again.
   await core.startBuild(repoId, runId, by);
@@ -152,6 +161,8 @@ try {
   check("the draft was set aside before the build: its generic line and its settings are gone, and it is kept", !agents.includes("Use async/await") && !readFileSync(path.join(dir, ".claude/settings.json"), "utf8").includes("Bash(*)") && v.events.some((e) => e.type === "onboarding.draft.set_aside") && existsSync(path.join(runtimeDir(runId), "init-draft", "AGENTS.md")));
   check("what was approved from the draft went in after ours, as written, and was checked against the code", section.status === "verified" && agents.includes("## Where things are\n\nThe one file is `base.txt`") && agents.indexOf("## Where things are") > agents.indexOf("npm run build") && agents.includes("- Run `npm run build` before saying a change is done"), JSON.stringify(section.validation));
   check("what was declined or not recommended from the draft was not written", !agents.includes("Publish to the npm registry") && !agents.includes("## Architecture"));
+  const aside = v.events.find((e) => e.type === "onboarding.draft.set_aside")?.payload as { files?: string[]; commitsUndone?: string[] } | undefined;
+  check("the session's commit was undone and its shell change put back: neither its command nor its package.json edit is in the copy", (aside?.commitsUndone?.length ?? 0) === 1 && !existsSync(path.join(dir, ".claude/commands/ship.md")) && !readFileSync(path.join(dir, "package.json"), "utf8").includes("from-the-session") && (aside?.files ?? []).includes("package.json"), JSON.stringify(aside));
   const build = v.build!;
   check("the trial ran again and the delta is measured against the baseline", build.delta !== null && build.delta!.before.total === base.length && build.delta!.after.total === base.length, JSON.stringify(build.delta));
   check("the joint check counted the always-loaded context and found no duplicate owner of a file", build.jointCheck.alwaysLoadedTokens > 0 && build.jointCheck.duplicates.length === 0, JSON.stringify(build.jointCheck));
@@ -167,6 +178,7 @@ try {
   check("the branch reached the host with one commit of the approved files", d.pushed && d.commitSha !== null && g(k.work, "--git-dir", path.join(k.work, "origin.git"), "rev-parse", "--verify", `refs/heads/${v.run.branchName}`).length > 0);
   const committed = g(k.work, "--git-dir", path.join(k.work, "origin.git"), "diff", "--name-only", `main..${v.run.branchName}`).split("\n").filter(Boolean);
   check("the commit holds exactly the delivered files — nothing else from the copy", committed.length === files.length && files.every((f) => committed.includes(f)), JSON.stringify({ committed, files }));
+  check("nothing of the draft reached the host except what a card carried: no session command, no session commit", !committed.includes(".claude/commands/ship.md") && !g(k.work, "--git-dir", path.join(k.work, "origin.git"), "log", "--format=%s", `main..${v.run.branchName}`).includes("init: a command"));
   check("the report reads 'התקנתי X כי Y', names what was declined and why, and the before/after", d.report.includes("## התקנתי") && d.report.includes("לא מאומת ויקר בהקשר") && d.report.includes("## לפני / אחרי") && d.report.includes("## כרטיס כנות ומוכנות"));
   check("the run is complete and every step ended", v.run.status === "Completed" && v.steps.every((s) => s.status === "Completed"));
   const events = v.events.map((e) => e.type);

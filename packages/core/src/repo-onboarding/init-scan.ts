@@ -124,8 +124,13 @@ export function parseInitScan(raw: string): InitScan {
 
 /* ── from what it takes to cards ──────────────────────────────────── */
 
+/** A path a model wrote stays inside the copy: relative, forward slashes, no `.`/`..` segment, no drive. */
+export const insideCopy = (p: string): boolean =>
+  !!p && !p.startsWith("/") && !p.includes("\\") && !/^[A-Za-z]:/.test(p) && p.split("/").every((seg) => seg !== "" && seg !== "." && seg !== "..");
+
 /** A whole file of the draft is taken only where DCC can build and verify it as that kind; settings, `.mcp.json` and hooks have cards of their own that are tested. */
 export function fileKind(target: string): ComponentKind | null {
+  if (!insideCopy(target)) return null;
   if (/^\.claude\/skills\/[\w.-]+\/SKILL\.md$/.test(target)) return "skill";
   if (/^\.claude\/agents\/[\w.-]+\.md$/.test(target)) return "agent";
   if (/^\.claude\/(?:commands|rules)\/[\w./-]+\.md$/.test(target)) return "doc";
@@ -164,6 +169,7 @@ export function seedsFromScan(i: ScanSeedsInput): { seeds: ComponentSeed[]; refu
   const seeds: ComponentSeed[] = [];
   const refused: { title: string; why: string }[] = [];
   const ourTitle = new Map(i.ours.map((c) => [c.key, c.title_he]));
+  const seen = new Set<string>();
   for (const t of i.scan.items) {
     const replaces = t.replaces.filter((k) => ourTitle.has(k));
     const text = t.form === "line" ? t.text.replace(/^\s*[-*]\s+/, "").replace(/\s+/g, " ").trim() : t.text;
@@ -184,6 +190,9 @@ export function seedsFromScan(i: ScanSeedsInput): { seeds: ComponentSeed[]; refu
     const origin = t.origin === "merged" ? "שילוב של שלנו ושל /init" : "מטיוטת /init";
     const heading = t.form === "section" ? (t.heading ?? t.title).replace(/^#+\s*/, "") : null;
     const lines = text.split("\n").length;
+    const key = `init_${t.form}_${hash(`${target}\n${heading ?? ""}\n${text}`)}`;
+    if (seen.has(key)) continue; // the same text twice in one answer is one card
+    seen.add(key);
     const reasoning = [
       t.decision === "ask" && t.question ? `צריך החלטה שלך: ${t.question} (אישור = כן, דחייה = לא).` : null,
       t.decision === "check" ? "לבדוק לפני שמאשרים — יש בו טענה שהסריקה לא הצליחה לאמת." : null,
@@ -195,7 +204,7 @@ export function seedsFromScan(i: ScanSeedsInput): { seeds: ComponentSeed[]; refu
       claims.missing.length && !tooMany ? `שים לב: ${claims.missing.slice(0, 3).map((m) => `\`${m}\``).join(", ")} לא נמצא בקוד.` : null,
     ].filter(Boolean).join(" ");
     seeds.push({
-      key: `init_${t.form}_${hash(`${target}\n${heading ?? ""}\n${text}`)}`, kind, family: familyOf(kind),
+      key, kind, family: familyOf(kind),
       risk: kind === "rule" || kind === "doc" ? "reversible" : "significant", source: "init", sourceRef: target,
       title_he: t.title,
       why_he: tooMany ? `נבדק מול הקוד ונמצאו ${claims.missing.length} נתיבים שלא קיימים (${claims.missing.slice(0, 4).join(", ")}) — לא מומלץ. ${origin}. ${reasoning}` : `${origin}. ${reasoning}`,

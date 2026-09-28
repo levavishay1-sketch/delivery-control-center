@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { appendBlock, buildComponents, previewAgentsMd } from "./build.ts";
 import { buildOrder, cardFromSeed } from "./components.ts";
-import { draftPaths, fileKind, parseInitScan, renderDraft, seedsFromScan, withScanNote, type InitScan } from "./init-scan.ts";
+import { draftPaths, fileKind, insideCopy, parseInitScan, renderDraft, seedsFromScan, withScanNote, type InitScan } from "./init-scan.ts";
 import { writtenPaths } from "./transcript.ts";
 import { scratchDir } from "./verify.ts";
 import type { Component, RepoProfile } from "./types.ts";
@@ -78,6 +78,16 @@ describe("from what it takes to cards", () => {
     expect(fileKind("AGENTS.md")).toBeNull();
   });
 
+  it("never lets a path the model wrote leave the copy", () => {
+    for (const p of ["../../.claude/CLAUDE.md", "../other/CLAUDE.md", "docs/../../../tmp/x.md", "/etc/CLAUDE.md", "C:/x/CLAUDE.md", "a\\CLAUDE.md", "./CLAUDE.md", "a//CLAUDE.md"]) expect(fileKind(p), p).toBeNull();
+    expect(insideCopy("docs/v1..v2.md")).toBe(true);
+  });
+
+  it("makes one card of the same text given twice", () => {
+    const scan = scanOf([item({ text: "Use `npm test`" }), item({ text: "- Use `npm test`" })]);
+    expect(seedsFromScan({ scan, dir, knownCommands: [], ours, inBaseline: () => false }).seeds).toHaveLength(1);
+  });
+
   it("makes a card per item with its reasoning, the same key for the same text, and says what it refused", () => {
     const scan = scanOf([
       item({ text: "- Handlers live in `src/app.ts`", need: "the trial missed it", evidence: "src/app.ts", replaces: ["agents_md", "not_a_card"] }),
@@ -126,6 +136,13 @@ describe("building what was taken", () => {
     expect(text).toContain("## Run\n\n```");
   });
 
+  it("adds a section under a heading the file already has — the text is new, only the same block is skipped", () => {
+    const dir = scratchDir();
+    writeFileSync(path.join(dir, "AGENTS.md"), "# Repo\n\n## Verification\n\n- Build: `npm run build`\n");
+    appendBlock(dir, "AGENTS.md", "## Verification\n\nRun the smoke test too.", "<!-- m -->");
+    expect(readFileSync(path.join(dir, "AGENTS.md"), "utf8")).toContain("Run the smoke test too.");
+  });
+
   it("builds the draft's cards after ours in the same family", () => {
     const c = (key: string, source: Component["source"]) => ({ ...cardFromSeed({ key, kind: "doc", family: "knowledge", title_he: key, why_he: "", what_he: "", source, sourceRef: null, risk: "reversible", verifyHow_he: "", params: {} }, "all_approval"), status: "approved" as const });
     expect(buildOrder([c("a_init", "init"), c("z_ours", "rule")]).map((x) => x.key)).toEqual(["z_ours", "a_init"]);
@@ -141,6 +158,21 @@ describe("building what was taken", () => {
     expect(out[0]!.status).toBe("verified");
     expect(readFileSync(path.join(dir, "AGENTS.md"), "utf8")).toContain("## Where things are\n\nThe entry is `src/app.ts`.");
     expect(existsSync(path.join(dir, "CLAUDE.md"))).toBe(true);
+  });
+
+  it("takes a section that fails its check out of AGENTS.md again, and never writes outside the copy", async () => {
+    const dir = scratchDir();
+    writeFileSync(path.join(dir, "AGENTS.md"), "# Ours\n");
+    const approved = (text: string, extra: Record<string, unknown> = {}) => {
+      const seed = seedsFromScan({ scan: scanOf([item({ form: "section", heading: "Where", text })]), dir, knownCommands: [], ours: [], inBaseline: () => false }).seeds[0]!;
+      return { ...cardFromSeed({ ...seed, notRecommended: false }, "all_approval"), status: "approved" as const, params: { ...seed.params, ...extra } };
+    };
+    const [bad] = await buildComponents({ dir, repoName: "r", profile, cards: [approved("See `src/nope/a.ts`, `lib/nope.ts` and `x/nope.ts`.")], processes: [], author: async () => "", log: () => {} });
+    expect(bad!.status).toBe("failed");
+    expect(readFileSync(path.join(dir, "AGENTS.md"), "utf8")).toBe("# Ours\n");
+    const [escape] = await buildComponents({ dir, repoName: "r", profile, cards: [approved("x", { template: "init-file", file: "../escaped.md" })], processes: [], author: async () => "", log: () => {} });
+    expect(escape!.status).toBe("failed");
+    expect(existsSync(path.join(dir, "..", "escaped.md"))).toBe(false);
   });
 
   it("previews our AGENTS.md from the cards not declined, leaving the draft's out", () => {

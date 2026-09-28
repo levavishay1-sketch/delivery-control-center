@@ -29,6 +29,9 @@ export function PlanBody(p: StepProps) {
   const cards = view.components;
   const approved = cards.filter((c) => c.status === "approved").length;
   const proposed = cards.filter((c) => c.status === "proposed").length;
+  // A question only you decide (the draft scan's "ask") is never approved as part of the set.
+  const settable = cards.filter((c) => c.status === "proposed" && c.params.decision !== "ask").length;
+  const unscanned = view.run.session.state !== "none" && view.plan?.initScan?.state !== "done";
   const decide = (key: string, decision: "approve" | "decline" | "defer" | "undo", extra: { reason?: string; answers?: Record<string, string> }) =>
     void p.act(`card:${key}`, () => decideComponent(repoId, runId, key, { decision, reason: extra.reason ?? null, answers: extra.answers }));
   // "שאל" opens the one chat on this run with the question already in the box; the chat answers from the card itself, with no model call.
@@ -43,7 +46,7 @@ export function PlanBody(p: StepProps) {
           key={g} group={g} cards={cards.filter((c) => c.group === g)} open={open} busy={busy} users={p.users} onDecide={decide} onAsk={ask}
           tools={g === "approval" && open ? (
             <ApprovalTools
-              proposed={proposed} busy={busy}
+              proposed={settable} busy={busy}
               onApproveAll={() => void p.act("approve-set", () => decideComponentSet(repoId, runId, { decision: "approve" }))}
               onRequest={(text) => p.act("request", () => requestOnboardingComponent(repoId, runId, text))}
             />
@@ -62,7 +65,7 @@ export function PlanBody(p: StepProps) {
         <div className="ob-actions">
           <button className="btn btn-primary" disabled={busy || approved === 0} onClick={() => void p.act("build", () => startOnboardingBuild(repoId, runId))}>{p.busy === "build" ? "מתחיל בנייה…" : `בנה את מה שאושר (${approved})`}</button>
           <Info k="start_build" />
-          <span className="ob-sub">{proposed > 0 ? `${proposed} כרטיסים עוד לא הוכרעו — הם נשארים בחוץ ולא נכתבים.` : "כל הכרטיסים הוכרעו."} סשן הטיוטה, אם פתוח, נסגר.</span>
+          <span className="ob-sub">{proposed > 0 ? `${proposed} כרטיסים עוד לא הוכרעו — הם נשארים בחוץ ולא נכתבים.` : "כל הכרטיסים הוכרעו."} סשן הטיוטה, אם פתוח, נסגר.{unscanned ? " טיוטת /init לא נסרקה — היא תוזז הצידה ושום דבר ממנה לא ייכנס; לסרוק קודם?" : ""}</span>
         </div>
       )}
     </div>
@@ -164,11 +167,13 @@ const DECISION_HE: Record<string, string> = { take: "לקחת", check: "לבדו
 function ScanResult({ scan }: { scan: InitScanState }) {
   const [more, setMore] = useState(false);
   if (scan.state === "running") return <Working text={`העורך קורא את הטיוטה (${scan.files.length} קבצים) ובודק כל טענה מול הקוד… כמה דקות.`} />;
-  if (scan.state === "failed") return <div className="ob-note crit">הסריקה נכשלה: {scan.error}</div>;
+  const failed = scan.state === "failed" ? <div className="ob-note crit">הסריקה נכשלה: {scan.error}{scan.verdict ? " — למטה התוצאה של הסריקה הקודמת." : ""}</div> : null;
+  if (failed && !scan.verdict) return failed;
   const v = scan.verdict ? VERDICT_HE[scan.verdict] : null;
   const asks = (scan.cards ?? []).filter((c) => c.decision === "ask").length;
   return (
     <div className="rd-card" style={{ display: "grid", gap: 8 }}>
+      {failed}
       <CardTitle info="draft_scan_result">תוצאת הסריקה</CardTitle>
       {v && <div><span className={`rd-chip ${v.cls}`}>{v.label}</span><Info k="draft_scan_verdict" /></div>}
       {scan.summary && <p className="rd-lead" style={{ margin: 0 }}>{scan.summary}</p>}

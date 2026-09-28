@@ -91,7 +91,7 @@ export const PROMPT_USES: Record<string, PromptUse> = {
   "onboarding.review": { capability: "onboarding_review", vars: ["REPO_NAME", "PROFILE_SUMMARY", "PROCESSES", "TRIALS", "COMPONENTS"], keeps: ['"missing"', '"redundant"'] },
   "onboarding.init_scan": {
     capability: "onboarding_init_scan", vars: ["REPO_NAME", "PROFILE_SUMMARY", "FACTS", "INTERVIEW", "PROCESSES", "TRIALS", "SESSION_ANSWERS", "OURS_AGENTS", "OUR_CARDS", "DRAFT"],
-    keeps: ['"verdict"', '"summary"', '"compare"', '"items"', '"decision"', '"form"', '"text"', '"replaces"', '"drop_ours"', '"reject"'],
+    keeps: ['"verdict"', '"summary"', '"compare"', '"items"', '"decision"', '"form"', '"target"', '"heading"', '"text"', '"origin"', '"question"', '"replaces"', '"drop_ours"', '"reject"'],
   },
   "onboarding.request": { capability: "onboarding_processes", vars: ["REPO_NAME", "REQUEST", "PROFILE_SUMMARY", "PROCESSES"], keeps: ['"kind"', '"title"', '"questions"'] },
 };

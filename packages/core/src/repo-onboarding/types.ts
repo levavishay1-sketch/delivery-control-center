@@ -433,6 +433,7 @@ export type InitScanState = {
   /** The files of the draft it read. */
   files: string[];
   error?: string;
+  failedAt?: string;
   verdict?: "adopt" | "merge" | "partial" | "keep_ours";
   summary?: string;
   compare?: { topic: string; ours: string; theirs: string; better: "ours" | "theirs" | "both" | "neither"; why: string }[];
