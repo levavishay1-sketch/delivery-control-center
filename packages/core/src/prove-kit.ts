@@ -67,6 +67,18 @@ function answer(rawInput) {
       { kind: "mcp", name: "Random MCP", url: "https://github.com/someone/random-mcp", publisher: "someone", description: "73 tools", tags: ["npm"], official: true, why: "everything", toolCount: 73, readOnly: false, license: null, lastActivity: "2020-01" }] };
   } else if (input.includes("You review a plan for setting up an AI coding agent")) {
     out = { missing: [{ kind: "doc", title: "מסמך הרצה", why: "אין README ואין הוראות הרצה" }], redundant: [] };
+  } else if (input.includes("You are the editor who decides what goes into the AI instructions")) {
+    // The scan of the /init draft: a section and a line taken, a permission left to the person, a settings file
+    // DCC does not take whole, a section naming paths the code does not have, one of ours marked redundant.
+    out = { verdict: "merge", summary: "הטיוטה מדויקת יותר על מבנה הריפו; ההנחיה הכללית שלה לא נלקחה.",
+      compare: [{ topic: "מבנה", ours: "רשימת תיקיות", theirs: "הקובץ היחיד והפקודה", better: "theirs", why: "base.txt ו-npm run build קיימים" }],
+      items: [
+        { decision: "take", form: "section", title: "איפה הדברים", target: "AGENTS.md", heading: "Where things are", text: "The one file is \`base.txt\`; build with \`npm run build\`.", origin: "theirs", need: "ניסיון נקודות הכניסה נכשל", evidence: "base.txt", alternative: "אין בשלנו", verify: "ניסיון חוזר", cost: "שתי שורות" },
+        { decision: "take", form: "line", title: "build לפני סיום", target: "AGENTS.md", text: "Run \`npm run build\` before saying a change is done", origin: "merged", need: "אין CI", evidence: "package.json", alternative: "סקריפט האימות", verify: "ה-build gate", cost: "שורה", replaces: ["reviewer_1_doc", "no_such_card"] },
+        { decision: "ask", form: "line", title: "פרסום אחרי מיזוג", target: "AGENTS.md", text: "Publish to the npm registry after every merge", origin: "theirs", need: "תהליך release", evidence: "תהליך release", alternative: "ידני", verify: "—", cost: "הרשאת פרסום", question: "מותר לסוכן לפרסם ל-npm? ידוע: יש תהליך release. חסר: מדיניות" },
+        { decision: "take", form: "file", title: "הגדרות", target: ".claude/settings.json", text: "{}", origin: "theirs" },
+        { decision: "take", form: "section", title: "ארכיטקטורה", target: "AGENTS.md", heading: "Architecture", text: "Handlers are in \`src/api/\`, models in \`lib/models.ts\`, and \`base.txt\` is the data.", origin: "theirs" } ],
+      drop_ours: [{ key: "reviewer_1_doc", why: "הסעיף מהטיוטה מכסה את זה" }], reject: [{ what: "Use async/await everywhere", why: "כללי — לא ספציפי לריפו" }] };
   } else if (input.includes("A person asked, in their own words, for a helper")) {
     out = { kind: "skill", title: "skill: עדכון base.txt", what: "נוהל לעדכון הקובץ", questions: [{ key: "when", question_he: "מתי מריצים?", default: "אחרי כל שינוי" }] };
   } else if (input.includes("You write ONE file for an AI coding agent's setup")) {

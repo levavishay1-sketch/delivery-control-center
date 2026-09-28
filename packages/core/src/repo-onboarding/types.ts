@@ -420,6 +420,31 @@ export type PlanResult = {
   marketplace: { searched: boolean; found: number; remembered: number; skipped: string | null };
   reviewer: { missing: number; redundant: number } | null;
   costUsd: number;
+  /** The scan of the /init draft, when it was asked for: running, done with its decisions, or failed. */
+  initScan?: InitScanState;
+};
+
+/** What the scan of the /init draft decided — kept on the plan step, shown in the draft card. */
+export type InitScanState = {
+  state: "running" | "done" | "failed";
+  startedAt: string;
+  finishedAt?: string;
+  by: string;
+  /** The files of the draft it read. */
+  files: string[];
+  error?: string;
+  verdict?: "adopt" | "merge" | "partial" | "keep_ours";
+  summary?: string;
+  compare?: { topic: string; ours: string; theirs: string; better: "ours" | "theirs" | "both" | "neither"; why: string }[];
+  /** The cards it made; "ask" is a decision only a person can take. */
+  cards?: { key: string; title: string; decision: string; notRecommended: boolean }[];
+  /** Cards of ours it says should not be kept — a note on each, the person decides. */
+  dropOurs?: { key: string; title: string; why: string }[];
+  /** What it left out of the draft, and why. */
+  reject?: { what: string; why: string }[];
+  /** What it wanted to take and DCC could not (a settings file, a file that exists, too long). */
+  refused?: { title: string; why: string }[];
+  costUsd?: number;
 };
 
 export type BuildResult = {

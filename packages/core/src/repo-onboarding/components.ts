@@ -140,8 +140,9 @@ export function mergeSeeds(...lists: readonly (readonly ComponentSeed[])[]): Com
 
 /* ── the build order and the readiness gate ───────────────────────── */
 
+/** By family; within a family, what was taken from the `/init` draft comes after ours, so it is added to the files ours wrote and never shapes them. */
 export const buildOrder = (cards: readonly Component[]): Component[] =>
-  [...cards].sort((a, b) => FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) || a.key.localeCompare(b.key));
+  [...cards].sort((a, b) => FAMILY_ORDER.indexOf(a.family) - FAMILY_ORDER.indexOf(b.family) || Number(a.source === "init") - Number(b.source === "init") || a.key.localeCompare(b.key));
 
 export type ReadinessInput = {
   cards: readonly Component[];

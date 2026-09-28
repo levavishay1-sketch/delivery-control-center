@@ -90,6 +90,21 @@ export function appendLines(dir: string, rel: string, lines: readonly string[], 
   return rel;
 }
 
+/** A block appended as it is — blank lines and repeated lines (a code fence) kept, unlike `appendLines`. Once: a block whose first line is already in the file is not added again. */
+export function appendBlock(dir: string, rel: string, block: string, marker: string, appended?: Appended): string {
+  const file = path.join(dir, rel);
+  const cur = existsSync(file) ? readFileSync(file, "utf8") : "";
+  const first = block.trim().split("\n")[0]!.trim();
+  if (first && cur.split(/\r?\n/).some((l) => l.trim() === first)) return rel;
+  const body = `${cur.length && !cur.endsWith("\n") ? "\n" : ""}${cur.length ? "\n" : ""}${marker}\n${block.trim()}\n`;
+  mkdirSync(path.dirname(file), { recursive: true });
+  writeFileSync(file, cur + body, "utf8");
+  if (appended && cur.length) appended.set(rel, (appended.get(rel) ?? "") + body);
+  return rel;
+}
+
+const INIT_MARKER = "<!-- DCC onboarding: taken from the /init draft, approved on its card -->";
+
 function writeFile(dir: string, rel: string, content: string, mode?: number): string {
   const file = path.join(dir, rel);
   mkdirSync(path.dirname(file), { recursive: true });
@@ -195,6 +210,24 @@ export async function buildComponents(input: BuildInput): Promise<BuildOutcome[]
     try {
       log(`▸ ${FAMILY_HE[c.family]} · ${KIND_HE[c.kind]} · ${c.title_he}`);
       const template = String(c.params.template ?? "");
+      // Taken from the /init draft: the approved text, as it is on the card — a whole new file, or a section added to AGENTS.md after ours.
+      if (template === "init-file" || template === "init-section") {
+        const text = String(c.params.text ?? "");
+        if (template === "init-file") files.push(writeFile(dir, String(c.params.file), text.endsWith("\n") ? text : `${text}\n`));
+        else {
+          const heading = String(c.params.heading ?? c.title_he).replace(/^#+\s*/, "");
+          const had = existsSync(agentsPath);
+          files.push(appendBlock(dir, "AGENTS.md", `## ${heading}\n\n${text}`, INIT_MARKER, appended));
+          if (!had && !existsSync(claudePath)) files.push(writeFile(dir, "CLAUDE.md", "@AGENTS.md\n"));
+          else if (!had && !readFileSync(claudePath, "utf8").includes("@AGENTS.md")) files.push(appendLines(dir, "CLAUDE.md", ["@AGENTS.md"], "<!-- the shared instructions -->", appended));
+        }
+        const uniq = [...new Set(files)];
+        const validation = validateComponent({ ...c, files: uniq, status }, dir, knownCommands, appended);
+        const finalStatus: Component["status"] = validation.passed === false ? "failed" : validation.passed === true ? "verified" : "installed";
+        log(`  ${finalStatus === "verified" ? "✓" : finalStatus === "failed" ? "✗" : "·"} ${uniq.join(", ")} — ${validation.how}: ${validation.detail}`);
+        out.push({ key: c.key, status: finalStatus, files: uniq, validation, notes });
+        continue;
+      }
       switch (c.kind) {
         case "permission": {
           const r = renderTemplate("deny", { deny: c.params.deny }, facts);

@@ -135,6 +135,7 @@ import {
   decideComponent,
   decideComponentSet,
   requestComponent,
+  scanInitDraft,
   startBuild,
   deliverRun,
   startDraftSession,
@@ -438,6 +439,12 @@ app.post("/repos/:id/onboarding/runs/:runId/components/request", async (req) => 
   const { id, runId } = req.params as RunParams;
   const b = z.object({ text: z.string().min(1).max(2000) }).parse(req.body);
   return requestComponent(id, runId, { userId: dev.id }, b);
+});
+
+app.post("/repos/:id/onboarding/runs/:runId/draft/scan", async (req) => {
+  const dev = await actingUser(req);
+  const { id, runId } = req.params as RunParams;
+  return scanInitDraft(id, runId, { userId: dev.id });
 });
 
 app.post("/repos/:id/onboarding/runs/:runId/build", async (req) => {

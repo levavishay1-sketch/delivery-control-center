@@ -141,6 +141,10 @@ export function eventLabel(e: OnboardingEvent, title: (key: string) => string): 
     case "onboarding.session.prompt": return { text: `נכתב ל-Claude: ${s("text")}`, tone: "ai" };
     case "onboarding.session.command": return { text: `פקודה בסשן: ${s("command")}`, tone: "ai" };
     case "onboarding.session.answer": return { text: `${s("question")} → ${s("answer")}`, tone: "" };
+    case "onboarding.draft.scan_started": return { text: `סריקת טיוטת /init התחילה: ${Array.isArray(p.files) ? p.files.length : 0} קבצים`, tone: "ai" };
+    case "onboarding.draft.scanned": return { text: `טיוטת /init נסרקה: ${n("cards")} כרטיסים לאישורך${n("asks") ? ` (${n("asks")} החלטות שלך)` : ""}, ${n("dropOurs")} משלנו מסומנים כמיותרים, ${n("rejected")} לא נלקחו · ${fmtUsd(n("costUsd"))}`, tone: "ai" };
+    case "onboarding.draft.scan_failed": return { text: `סריקת טיוטת /init נכשלה: ${s("error")}`, tone: "critical" };
+    case "onboarding.draft.set_aside": return { text: `טיוטת /init הוזזה הצידה לפני הבנייה (${Array.isArray(p.files) ? p.files.length : 0} קבצים, נשמרו) — נכנס רק מה שאושר בכרטיס`, tone: "" };
     case "onboarding.session.instructed": return { text: `נשלחה לסשן הוראה מהצ'אט${p.forced ? " (למרות שהסשן נראה עסוק)" : ""}: ${s("text")}`, tone: "ai" };
     case "coach.proposal.created": return { text: `המאמן הציע: ${s("title")} (${PROPOSAL_KIND_HE[s("kind") as CoachProposal["kind"]] ?? s("kind")})`, tone: "ai" };
     case "coach.proposal.decided": return { text: `הצעת המאמן ${p.decision === "approve" ? "אושרה" : "נדחתה"}: ${s("title")}${p.reason ? ` — ${s("reason")}` : ""}`, tone: p.decision === "approve" ? "healthy" : "" };

@@ -7,9 +7,10 @@ import type { ChangedFile, Component, ComponentKind, ComponentSeed } from "./typ
  * The scan of the `/init` draft: what the interactive session wrote in the
  * isolated copy is set against what DCC's own cards would write, and an
  * editor (the `onboarding.init_scan` prompt) decides topic by topic — take
- * theirs, merge, keep ours, drop some of ours. Whatever it takes becomes a
- * card like every other: its exact text on the card, checked against the
- * code here, approved by a person, built and verified. Nothing of the draft
+ * theirs, merge, keep ours, drop some of ours, or leave a decision that is
+ * not technical (an authorisation, a policy) to a person. Whatever it takes
+ * becomes a card like every other: its exact text and reasoning on the card,
+ * checked against the code here, approved by a person, built and verified. Nothing of the draft
  * reaches the pull request any other way — the build sets the draft aside
  * before it writes. Pure except for reading the copy's files through
  * `checkClaims`; the model call and the storage are in `runs.ts`.
@@ -52,12 +53,35 @@ export function renderDraft(files: readonly DraftFile[], maxPerFile = 16_000, ma
 
 export type InitScanVerdict = "adopt" | "merge" | "partial" | "keep_ours";
 export type InitScanBetter = "ours" | "theirs" | "both" | "neither";
-export type InitScanTake = { form: "line" | "section" | "file"; title: string; target: string; heading: string | null; text: string; origin: "theirs" | "merged"; why: string; replaces: string[] };
+/** take — true and useful, goes in as written; check — worth it, but a claim in it still needs the build's check; ask — only a person can decide (an authorisation, a policy, the environment). */
+export type InitScanDecision = "take" | "check" | "ask";
+export type InitScanItem = {
+  decision: InitScanDecision;
+  form: "line" | "section" | "file";
+  title: string;
+  target: string;
+  heading: string | null;
+  text: string;
+  origin: "theirs" | "merged";
+  /** The real problem it solves here. */
+  need: string;
+  /** The file, path, command, finding or answer that makes it true. */
+  evidence: string;
+  /** Whether it could be solved without a new component, and why this is still the better way. */
+  alternative: string;
+  /** How we will know it helps. */
+  verify: string;
+  /** What it costs: tokens in every session, upkeep, permissions, complexity. */
+  cost: string;
+  /** For "ask": the question the person decides, with what is known and what is missing. */
+  question: string | null;
+  replaces: string[];
+};
 export type InitScan = {
   verdict: InitScanVerdict;
   summary: string;
   compare: { topic: string; ours: string; theirs: string; better: InitScanBetter; why: string }[];
-  take: InitScanTake[];
+  items: InitScanItem[];
   dropOurs: { key: string; why: string }[];
   reject: { what: string; why: string }[];
 };
@@ -75,21 +99,24 @@ export function parseInitScan(raw: string): InitScan {
   if (start < 0 || end <= start) throw new Error("הסריקה לא החזירה JSON");
   const o = JSON.parse(body.slice(start, end + 1)) as Record<string, unknown>;
   const arr = (v: unknown) => (Array.isArray(v) ? (v as Record<string, unknown>[]).filter((x) => x && typeof x === "object") : []);
-  const take: InitScanTake[] = arr(o.take).map((t): InitScanTake | null => {
+  const items: InitScanItem[] = arr(o.items).map((t): InitScanItem | null => {
     const form = t.form === "line" || t.form === "section" || t.form === "file" ? t.form : null;
+    const decision: InitScanDecision | null = t.decision === "take" || t.decision === "check" || t.decision === "ask" ? t.decision : null;
     const text = String(t.text ?? "").replace(/\r\n/g, "\n").trim();
-    if (!form || !text) return null;
+    if (!form || !decision || !text) return null;
     return {
-      form, title: s(t.title, 120) || text.split("\n")[0]!.slice(0, 80), target: s(t.target, 200) || "AGENTS.md", heading: s(t.heading, 120) || null,
-      text, origin: t.origin === "merged" ? "merged" : "theirs", why: s(t.why, 600),
+      decision, form, title: s(t.title, 120) || text.split("\n")[0]!.slice(0, 80), target: s(t.target, 200) || "AGENTS.md", heading: s(t.heading, 120) || null,
+      text, origin: t.origin === "merged" ? "merged" : "theirs",
+      need: s(t.need, 400), evidence: s(t.evidence, 500), alternative: s(t.alternative, 400), verify: s(t.verify, 400), cost: s(t.cost, 300),
+      question: decision === "ask" ? s(t.question, 500) || null : null,
       replaces: Array.isArray(t.replaces) ? t.replaces.map((k) => s(k, 80)).filter(Boolean).slice(0, 8) : [],
     };
-  }).filter((t): t is InitScanTake => !!t).slice(0, 12);
+  }).filter((t): t is InitScanItem => !!t).slice(0, 12);
   return {
-    verdict: VERDICTS.includes(o.verdict as InitScanVerdict) ? (o.verdict as InitScanVerdict) : take.length ? "partial" : "keep_ours",
+    verdict: VERDICTS.includes(o.verdict as InitScanVerdict) ? (o.verdict as InitScanVerdict) : items.length ? "partial" : "keep_ours",
     summary: s(o.summary, 1200),
     compare: arr(o.compare).map((c) => ({ topic: s(c.topic, 120), ours: s(c.ours, 300), theirs: s(c.theirs, 300), better: BETTER.includes(c.better as InitScanBetter) ? (c.better as InitScanBetter) : "neither", why: s(c.why, 500) })).filter((c) => c.topic).slice(0, 20),
-    take,
+    items,
     dropOurs: arr(o.drop_ours).map((d) => ({ key: s(d.key, 80), why: s(d.why, 500) })).filter((d) => d.key).slice(0, 20),
     reject: arr(o.reject).map((r) => ({ what: s(r.what, 300), why: s(r.why, 500) })).filter((r) => r.what).slice(0, 20),
   };
@@ -121,12 +148,23 @@ export type ScanSeedsInput = {
   inBaseline: (path: string) => boolean;
 };
 
-/** What the scan takes becomes cards (the same key for the same text, so a second scan keeps the person's decision); what cannot be taken is said, with the reason. */
+const BUILD_CHECK_HE: Partial<Record<ComponentKind, string>> = {
+  skill: "frontmatter וגוף ה-skill, וכל נתיב שהוא מזכיר — מול הקוד.",
+  agent: "frontmatter, קריאה בלבד, ורשימת בדיקה — כמו כל סוכן.",
+};
+
+/**
+ * What the scan takes becomes cards: the same key for the same text, so a second scan keeps the person's
+ * decision. Every card carries the scan's reasoning — the need, the evidence, the alternative, the cost —
+ * and waits for a person whatever the automation level (the caller puts it in the approval group). A
+ * question only a person can answer becomes a card whose approval IS the answer. What cannot be taken
+ * is said, with the reason.
+ */
 export function seedsFromScan(i: ScanSeedsInput): { seeds: ComponentSeed[]; refused: { title: string; why: string }[] } {
   const seeds: ComponentSeed[] = [];
   const refused: { title: string; why: string }[] = [];
   const ourTitle = new Map(i.ours.map((c) => [c.key, c.title_he]));
-  for (const t of i.scan.take) {
+  for (const t of i.scan.items) {
     const replaces = t.replaces.filter((k) => ourTitle.has(k));
     const text = t.form === "line" ? t.text.replace(/^\s*[-*]\s+/, "").replace(/\s+/g, " ").trim() : t.text;
     if (text.length > MAX_TEXT[t.form]) { refused.push({ title: t.title, why: `ארוך מדי (${text.length.toLocaleString("en-US")} תווים) — ${t.form === "line" ? "שורה" : t.form === "section" ? "סעיף" : "קובץ"} עד ${MAX_TEXT[t.form].toLocaleString("en-US")}` }); continue; }
@@ -146,17 +184,29 @@ export function seedsFromScan(i: ScanSeedsInput): { seeds: ComponentSeed[]; refu
     const origin = t.origin === "merged" ? "שילוב של שלנו ושל /init" : "מטיוטת /init";
     const heading = t.form === "section" ? (t.heading ?? t.title).replace(/^#+\s*/, "") : null;
     const lines = text.split("\n").length;
+    const reasoning = [
+      t.decision === "ask" && t.question ? `צריך החלטה שלך: ${t.question} (אישור = כן, דחייה = לא).` : null,
+      t.decision === "check" ? "לבדוק לפני שמאשרים — יש בו טענה שהסריקה לא הצליחה לאמת." : null,
+      t.need ? `הצורך: ${t.need}` : null,
+      t.evidence ? `ראיה: ${t.evidence}` : null,
+      t.alternative ? `בלי רכיב חדש? ${t.alternative}` : null,
+      t.cost ? `עלות: ${t.cost}` : null,
+      replaces.length ? `מחליף את: ${replaces.map((k) => ourTitle.get(k)).join(", ")} — אם מאשרים את זה, לדחות אותו.` : null,
+      claims.missing.length && !tooMany ? `שים לב: ${claims.missing.slice(0, 3).map((m) => `\`${m}\``).join(", ")} לא נמצא בקוד.` : null,
+    ].filter(Boolean).join(" ");
     seeds.push({
       key: `init_${t.form}_${hash(`${target}\n${heading ?? ""}\n${text}`)}`, kind, family: familyOf(kind),
       risk: kind === "rule" || kind === "doc" ? "reversible" : "significant", source: "init", sourceRef: target,
       title_he: t.title,
-      why_he: `${origin}: ${t.why}${replaces.length ? ` מחליף את: ${replaces.map((k) => ourTitle.get(k)).join(", ")} — אם מאשרים את זה, לדחות אותו.` : ""}${claims.missing.length && !tooMany ? ` שים לב: ${claims.missing.slice(0, 3).map((m) => `\`${m}\``).join(", ")} לא נמצא בקוד.` : ""}`,
-      what_he: t.form === "line" ? `שורה בכללי AGENTS.md, כלשונה.` : t.form === "section" ? `סעיף "${heading}" שנוסף לסוף AGENTS.md, בנוסח שבכרטיס (${lines} שורות).` : `הקובץ ${target}, כלשונו בכרטיס (${lines} שורות).`,
-      verifyHow_he: kind === "skill" ? "frontmatter וגוף ה-skill, וכל נתיב שהוא מזכיר — מול הקוד." : kind === "agent" ? "frontmatter, קריאה בלבד, ורשימת בדיקה — כמו כל סוכן." : "כל נתיב ופקודה בנוסח נבדקים מול הקוד בבנייה; טענה שלא נמצאה מכשילה את הכרטיס.",
-      params: { template: t.form === "line" ? undefined : t.form === "section" ? "init-section" : "init-file", text, heading, file: t.form === "file" ? target : undefined, origin: t.origin, replaces, claims: { checked: claims.checked, missing: claims.missing } },
+      why_he: tooMany ? `נבדק מול הקוד ונמצאו ${claims.missing.length} נתיבים שלא קיימים (${claims.missing.slice(0, 4).join(", ")}) — לא מומלץ. ${origin}. ${reasoning}` : `${origin}. ${reasoning}`,
+      what_he: t.form === "line" ? "שורה בכללי AGENTS.md, כלשונה בכרטיס." : t.form === "section" ? `סעיף "${heading}" שנוסף לסוף AGENTS.md, בנוסח שבכרטיס (${lines} שורות).` : `הקובץ ${target}, כלשונו בכרטיס (${lines} שורות).`,
+      verifyHow_he: [t.verify, BUILD_CHECK_HE[kind] ?? "כל נתיב ופקודה בנוסח נבדקים מול הקוד בבנייה; טענה שלא נמצאה מכשילה את הכרטיס."].filter(Boolean).join(" "),
+      params: {
+        template: t.form === "line" ? undefined : t.form === "section" ? "init-section" : "init-file", text, heading, file: t.form === "file" ? target : undefined,
+        decision: t.decision, origin: t.origin, replaces, question: t.question, claims: { checked: claims.checked, missing: claims.missing },
+      },
       notRecommended: tooMany,
     });
-    if (tooMany) seeds[seeds.length - 1]!.why_he = `נבדק מול הקוד ונמצאו ${claims.missing.length} נתיבים שלא קיימים (${claims.missing.slice(0, 4).join(", ")}) — לא מומלץ. ${origin}: ${t.why}`;
   }
   return { seeds, refused };
 }

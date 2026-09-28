@@ -1,6 +1,6 @@
 # Repository onboarding as a coach — a fixed process, a different result for every repository
 
-Status: **done** — implemented, verified by unit tests, the proof script and a live run on this repository, 2026-09-27 (see `tasks.md`).
+Status: **done** — implemented, verified by unit tests, the proof script and a live run on this repository, 2026-09-27; the scan of the `/init` draft added 2026-09-28 (see `tasks.md`).
 
 Appetite: **large** (user-directed: replace the whole onboarding, engine and
 screen, in one pass, no leftovers).
@@ -52,7 +52,11 @@ eleven deliberately different repositories (eleven different sets).
    נעשה ודווח / מחכה לאישורך / לא מומלץ כאן ולמה. Approve, ask (the chat
    answers from the card), decline with a reason, or approve as a set. The
    readiness gate and the honesty card say what is done and what cannot be
-   verified here. The `/init` draft session is a window inside this step.
+   verified here. The `/init` draft session is a window inside this step;
+   what it writes enters only through "סרוק מה ש-/init עשה" — an editor sets
+   it against what our cards write and takes, merges, checks, asks or leaves
+   out, topic by topic — as cards a person approves. The build sets the draft
+   aside before it writes.
 5. **בנייה ואימות** — approved cards become files by family in dependency
    order (safety → verification → knowledge → connections → skills → agents
    → enforcement), from the operator catalog's parameterised templates

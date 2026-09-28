@@ -720,6 +720,15 @@ export type PlanResult = {
   marketplace: { searched: boolean; found: number; remembered: number; skipped: string | null }; reviewer: { missing: number; redundant: number } | null; costUsd: number;
   firings?: { rule: string; signal: string; reason_he: string; components: { key: string; title_he: string }[] }[]; suppressed?: { rule: string; fact: string; note: string | null }[];
   approved?: number; declined?: number; deferred?: number; undecided?: number;
+  initScan?: InitScanState;
+};
+/** The scan of the /init draft — the same shape as packages/core/src/repo-onboarding/types.ts. */
+export type InitScanState = {
+  state: "running" | "done" | "failed"; startedAt: string; finishedAt?: string; by: string; files: string[]; error?: string;
+  verdict?: "adopt" | "merge" | "partial" | "keep_ours"; summary?: string;
+  compare?: { topic: string; ours: string; theirs: string; better: "ours" | "theirs" | "both" | "neither"; why: string }[];
+  cards?: { key: string; title: string; decision: string; notRecommended: boolean }[];
+  dropOurs?: { key: string; title: string; why: string }[]; reject?: { what: string; why: string }[]; refused?: { title: string; why: string }[]; costUsd?: number;
 };
 export type BuildResult = { installed: number; verified: number; failed: number; skipped: number; files: string[]; delta: TrialDelta | null; jointCheck: { duplicates: string[]; contradictions: string[]; alwaysLoadedTokens: number }; costUsd: number };
 export type DeliverResult = { branch: string; base: string; commitSha: string | null; filesCommitted: number; remote: string | null; pushed: boolean; prNumber: number | null; prUrl: string | null; compareUrl: string | null; localOnly: boolean; note?: string; report: string };
@@ -881,6 +890,7 @@ export const decideComponentSet = (repoId: string, runId: string, body: { decisi
 export const requestOnboardingComponent = (repoId: string, runId: string, text: string) => post<{ key: string; kind: string; title: string; questions: ClarifyingQuestion[] }>(`${ob(repoId, runId)}/components/request`, { text });
 export const startOnboardingBuild = (repoId: string, runId: string) => post<{ building: number }>(`${ob(repoId, runId)}/build`, {});
 export const deliverOnboardingRun = (repoId: string, runId: string) => post<{ delivering: boolean }>(`${ob(repoId, runId)}/deliver`, {});
+export const scanInitDraft = (repoId: string, runId: string) => post<{ scanning: boolean; files: number }>(`${ob(repoId, runId)}/draft/scan`, {});
 export const startDraftSession = (repoId: string, runId: string, body: { resume?: boolean; model?: string; effort?: string } = {}) => post<{ started: boolean }>(`${ob(repoId, runId)}/draft/start`, body);
 export const cancelOnboardingRun = (repoId: string, runId: string) => post<{ cancelled: boolean }>(`${ob(repoId, runId)}/cancel`, {});
 export const updateOnboardingAutomation = (repoId: string, runId: string, automation: Automation) => patch<Automation>(`${ob(repoId, runId)}/automation`, { automation });

@@ -1,31 +1,32 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, withTenant } from "@dcc/db";
 import { onboardingComponent, onboardingProcess, onboardingTrial, repo, repoAiEvent, repoProfile, repoCoachProposal, repositoryOnboardingRun, repositoryOnboardingStep } from "@dcc/db/schema";
-import { runClaudeRaw } from "../ai-assist.ts";
+import { git, runClaudeRaw } from "../ai-assist.ts";
 import { callsForEntity } from "../claude-center.ts";
 import { codeMapForWorkspace, type CodeMap } from "../code-map.ts";
 import { renderPrompt, requirePrompt } from "../prompts.ts";
 import { estimateUsd, recommend, type Capability } from "../routing.ts";
-import { buildComponents, writeDossier, type Author } from "./build.ts";
+import { buildComponents, previewAgentsMd, repoFacts, writeDossier, type Author } from "./build.ts";
 import { changedFiles, fileVersions } from "./changes.ts";
 import { KIND_HE, cardFromSeed, familyOf, mergeSeeds, pullRequestReport, readiness, seedsFromProcesses, seedsFromTrials, stepsDeciding } from "./components.ts";
 import { diagnoseRepository } from "./diagnose.ts";
 import { deliverWorkspace } from "./deliver.ts";
 import { DraftError, launchDraftSession, recoverDraftSession, sendToDraftSession, sessionEffort, sessionModelId, sessionOf, stopDraftSession, type DraftCtx } from "./draft.ts";
 import { appendRepoAiEvent } from "./events.ts";
+import { draftPaths, parseInitScan, renderDraft, seedsFromScan, withScanNote, type DraftFile, type InitScan } from "./init-scan.ts";
 import { checkTrust, countSourceUse, fetchPage, parseSources, rememberSource, rememberedFor, seedFromSource, tagsToSearch, type RememberedSource } from "./marketplace.ts";
 import { gatherEvidence, interviewFor, parseProcesses, processesFromEvidence, renderEvidence, renderInterview, renderProcesses, resolveAnswers } from "./processes.ts";
 import { factsForJudge, profileFacts, profileSummary } from "./profile.ts";
 import { applyRules, stackTags, type RuleFiring, type RuleSuppression } from "./rules.ts";
 import { terminalLine, terminalState } from "./session.ts";
-import { digestTranscript } from "./transcript.ts";
+import { digestTranscript, sessionIdle, writtenPaths } from "./transcript.ts";
 import { FAILURE_HE, byKind, judgeByCode, parseJudge, renderTrials, trialDelta, trialTasksFor } from "./trials.ts";
 import {
   AUTOMATION_LEVELS, LIVE_RUN_STATUSES, STEPS, isStepKey, normalizeAutomation, sessionTotals, stepDefinition,
-  type Automation, type BuildResult, type ClarifyingQuestion, type Component, type ComponentSeed, type ConnectResult, type DeliverResult, type DiagnoseResult, type DiscoveredProcess, type InterviewAnswer, type InterviewQuestion,
+  type Automation, type BuildResult, type ClarifyingQuestion, type Component, type ComponentSeed, type ConnectResult, type DeliverResult, type DiagnoseResult, type DiscoveredProcess, type InitScanState, type InterviewAnswer, type InterviewQuestion,
   type PlanResult, type ProcessesResult, type ProfileCorrection, type Readiness, type RepoProfile, type RunStatus, type StepKey, type StepStatus, type TrialDelta, type TrialOutcome, type TrialPhase, type TrialResult, type TrialTask,
 } from "./types.ts";
 import { jointCheck } from "./verify.ts";
@@ -638,6 +639,131 @@ export async function requestComponent(repoId: string, runId: string, by: Actor,
   return { key: card.key, kind, title, questions };
 }
 
+/* ── the scan of the /init draft: what to take, merge, or leave out ─── */
+
+/** The draft as it is now in the copy: the files the session wrote, and the changed files where instructions live, before and after. */
+async function draftOf(run: RunRow): Promise<DraftFile[]> {
+  if (!run.workspacePath || !run.baselineSha) return [];
+  const s = sessionOf(run);
+  const written = s.transcriptPath ? writtenPaths(s.transcriptPath, run.workspacePath) : [];
+  const paths = draftPaths(written, await changedFiles(run.workspacePath, run.baselineSha));
+  const out: DraftFile[] = [];
+  for (const p of paths) {
+    const v = await fileVersions(run.workspacePath, run.baselineSha, p).catch(() => null);
+    if (!v || v.binary || v.tooLarge || v.before === v.after) continue;
+    out.push({ path: p, before: v.before, after: v.after });
+  }
+  return out;
+}
+
+/** The scan's state lives in the plan step's result, next to the rest of the plan — the screen polls it. */
+async function patchInitScan(ctx: Ctx, scan: InitScanState) {
+  const { steps } = await loadRun(ctx.repoId, ctx.runId);
+  const prev = (stepOf(steps, "plan")?.result ?? {}) as Record<string, unknown>;
+  await patchStep(ctx, "plan", { result: { ...prev, initScan: scan } });
+}
+
+const scanning = new Set<string>();
+
+/** "סרוק מה ש-/init עשה": the editor runs in the background (minutes, it reads the code to check claims); the screen follows its state. */
+export async function scanInitDraft(repoId: string, runId: string, by: Actor) {
+  const { run, steps, ctx } = await loadRun(repoId, runId);
+  if (RUN_OVER.includes(run.status as RunStatus)) throw new OnboardingError("ההרצה הסתיימה");
+  if (stepOf(steps, "plan")?.status !== "WaitingForUser") throw new OnboardingError("סריקת הטיוטה אפשרית כשהתוכנית פתוחה לאישור");
+  if (!run.workspacePath || !run.baselineSha) throw new OnboardingError("אין עותק מבודד");
+  if (scanning.has(runId)) throw new OnboardingError("הסריקה כבר רצה");
+  const s = sessionOf(run);
+  if (terminalState(runId) === "live" && s.transcriptPath && !sessionIdle(s.transcriptPath).idle) throw new OnboardingError("סשן הטיוטה עוד עובד — חכו שיסיים את התור (או עצרו אותו) ואז סרקו");
+  const draft = await draftOf(run);
+  if (!draft.length) throw new OnboardingError("סשן הטיוטה עוד לא כתב כלום בעותק — אין מה לסרוק");
+  scanning.add(runId);
+  const files = draft.map((f) => f.path);
+  await patchInitScan(ctx, { state: "running", startedAt: new Date().toISOString(), by: by.userId, files });
+  await event(ctx, "onboarding.draft.scan_started", { files }, by.userId);
+  terminalLine(runId, `סריקת טיוטת /init: ${files.length} קבצים — ${files.slice(0, 6).join(", ")}`);
+  void runInitScan(ctx, run, by, draft)
+    .catch(async (e) => {
+      const error = (e as Error).message.slice(0, 300);
+      await patchInitScan(ctx, { state: "failed", startedAt: new Date().toISOString(), by: by.userId, files, error });
+      await event(ctx, "onboarding.draft.scan_failed", { error }, by.userId);
+      terminalLine(runId, `✗ סריקת טיוטת /init נכשלה: ${error}`);
+    })
+    .finally(() => scanning.delete(runId));
+  return { scanning: true, files: files.length };
+}
+
+async function runInitScan(ctx: Ctx, run: RunRow, by: Actor, draft: DraftFile[]) {
+  const dir = run.workspacePath!;
+  const startedAt = new Date().toISOString();
+  const p = await requireProfile(ctx);
+  const processes = await loadProcesses(ctx);
+  const trials = await loadTrials(ctx, "baseline");
+  const cards = await loadCards(ctx);
+  const ours = cards.filter((c) => c.source !== "init");
+  const { steps } = await loadRun(ctx.repoId, ctx.runId);
+  const interview = (stepOf(steps, "processes")?.result ?? {}) as { questions?: InterviewQuestion[]; answers?: InterviewAnswer[] };
+  const said = (await runEvents(ctx)).filter((e) => e.type === "onboarding.session.answer").map((e) => { const q = e.payload as { question?: string; answer?: string }; return `- ${q.question ?? ""} → ${q.answer ?? ""}`; });
+  const res = await callModel(ctx, "onboarding.init_scan", {
+    REPO_NAME: ctx.repoName, PROFILE_SUMMARY: profileSummary(p.profile),
+    FACTS: profileFacts(p.profile, p.corrections).map((f) => `- ${f.label_he}: ${f.value_he}${f.corrected ? " (marked wrong by a person)" : ""}`).join("\n"),
+    INTERVIEW: renderInterview(interview.questions ?? [], interview.answers ?? []), PROCESSES: renderProcesses(processes), TRIALS: renderTrials(trials),
+    SESSION_ANSWERS: said.length ? said.join("\n") : "(the person answered no question in the session)",
+    OURS_AGENTS: previewAgentsMd(dir, p.profile, ctx.repoName, cards),
+    OUR_CARDS: ours.map((c) => `- [${c.key}] ${c.kind} · ${c.status} · ${c.title_he} — ${c.why_he.slice(0, 280)}${c.kind === "rule" && c.params.text ? ` — the line: "${String(c.params.text).slice(0, 300)}"` : ""}`).join("\n") || "(no cards)",
+    DRAFT: renderDraft(draft),
+  }, { capability: "onboarding_init_scan", label: "סריקת טיוטת /init", stepKey: "plan", by: by.userId, cwd: dir, maxTurns: 40, timeoutMs: 900_000 });
+  const scan = parseInitScan(res.text);
+  const f = repoFacts(p.profile, ctx.repoName, null);
+  const knownCommands = [...p.profile.build.commands, ...p.profile.ci.commands, f.testCommand ?? "", f.lintCommand ?? ""].filter(Boolean);
+  const inBase = new Set<string>();
+  for (const it of scan.items) if (it.form === "file" && (await git(["cat-file", "-e", `${run.baselineSha}:${it.target.replace(/^\.\//, "")}`], dir)).code === 0) inBase.add(it.target.replace(/^\.\//, ""));
+  // The call takes minutes; a person may have decided, asked for a card or corrected a fact meanwhile — write against the cards as they are now.
+  const now = await loadCards(ctx);
+  const oursNow = now.filter((c) => c.source !== "init");
+  const { seeds, refused } = seedsFromScan({ scan, dir, knownCommands, ours: oursNow, inBaseline: (x) => inBase.has(x) });
+  // What the scan takes always waits for a person, whatever the automation level.
+  const level = normalizeAutomation(run.automation).level;
+  const taken = seeds.map((sd) => { const c = cardFromSeed(sd, level); if (c.group !== "not_recommended") { c.group = "approval"; c.status = "proposed"; } return c; });
+  // A card of an earlier scan that a person already decided on stays; an undecided one is replaced by this scan.
+  const kept = now.filter((c) => c.source === "init" && c.decidedBy && !taken.some((t) => t.key === c.key));
+  const drop = new Map(scan.dropOurs.filter((d) => oursNow.some((c) => c.key === d.key)).map((d) => [d.key, d.why]));
+  const noted = oursNow.map((c) => ({ ...c, why_he: withScanNote(c.why_he, drop.get(c.key) ?? null) }));
+  await upsertCards(ctx, [...noted, ...kept, ...taken], true);
+  const done: InitScanState = {
+    state: "done", startedAt, finishedAt: new Date().toISOString(), by: by.userId, files: draft.map((d) => d.path),
+    verdict: scan.verdict, summary: scan.summary, compare: scan.compare,
+    cards: taken.map((c) => ({ key: c.key, title: c.title_he, decision: String(c.params.decision ?? "take"), notRecommended: c.group === "not_recommended" })),
+    dropOurs: [...drop].map(([key, why]) => ({ key, title: oursNow.find((c) => c.key === key)!.title_he, why })), reject: scan.reject, refused, costUsd: res.costUsd,
+  };
+  await patchInitScan(ctx, done);
+  await event(ctx, "onboarding.draft.scanned", { verdict: scan.verdict, cards: taken.length, asks: taken.filter((c) => c.params.decision === "ask").length, dropOurs: drop.size, rejected: scan.reject.length + refused.length, costUsd: res.costUsd }, by.userId);
+  terminalLine(ctx.runId, `סריקת טיוטת /init: ${VERDICT_HE[scan.verdict]} · ${taken.length} כרטיסים חדשים לאישור · ${drop.size} משלנו מסומנים כמיותרים · ${scan.reject.length + refused.length} לא נלקחו`);
+}
+
+const VERDICT_HE: Record<InitScan["verdict"], string> = { adopt: "הטיוטה טובה יותר — לוקחים את רובה", merge: "משלבים את שתיהן", partial: "שלנו הבסיס, תוספות מהטיוטה", keep_ours: "נשארים עם שלנו" };
+
+/**
+ * Before the build writes anything: the draft is set aside — kept under the run's runtime folder, and the copy put
+ * back to the baseline for those files — so what the session wrote reaches the pull request only through a card
+ * a person approved. Recorded; nothing is lost.
+ */
+async function setDraftAside(ctx: Ctx, by: Actor): Promise<string[]> {
+  const { run } = await loadRun(ctx.repoId, ctx.runId);
+  if (!run.workspacePath || !run.baselineSha) return [];
+  const draft = await draftOf(run);
+  if (!draft.length) return [];
+  const keep = path.join(runtimeDir(ctx.runId), "init-draft");
+  for (const f of draft) {
+    if (f.after !== null) { const to = path.join(keep, f.path); mkdirSync(path.dirname(to), { recursive: true }); writeFileSync(to, f.after, "utf8"); }
+    if (f.before !== null) await git(["checkout", run.baselineSha, "--", f.path], run.workspacePath);
+    else rmSync(path.join(run.workspacePath, f.path), { force: true });
+  }
+  const files = draft.map((f) => f.path);
+  await event(ctx, "onboarding.draft.set_aside", { files, keptAt: keep }, by.userId);
+  terminalLine(ctx.runId, `טיוטת /init הוזזה הצידה (${files.length} קבצים, נשמרו ב-${keep}) — רק מה שאושר בכרטיס נכנס`);
+  return files;
+}
+
 /* ── 5. build: install by family, verify per kind, trial again ─────── */
 
 export async function startBuild(repoId: string, runId: string, by: Actor) {
@@ -648,7 +774,9 @@ export async function startBuild(repoId: string, runId: string, by: Actor) {
   const cards = await loadCards(ctx);
   const approved = cards.filter((c) => c.status === "approved");
   if (!approved.length) throw new OnboardingError("שום רכיב לא אושר — אשרו לפחות אחד, או בטלו את ההרצה");
+  if (scanning.has(runId)) throw new OnboardingError("סריקת טיוטת /init עוד רצה — חכו שתסתיים, או בנו אחריה");
   if (terminalState(runId) === "live") await stopDraftSession(draftCtx(ctx), by.userId);
+  await setDraftAside(ctx, by);
   await completeStep(ctx, "plan", { ...((plan.result ?? {}) as object), decided: cards.filter((c) => c.status !== "proposed").length, approved: approved.length, declined: cards.filter((c) => c.status === "declined" && c.group !== "not_recommended").length, deferred: cards.filter((c) => c.status === "deferred").length, undecided: cards.filter((c) => c.status === "proposed").length }, by.userId);
   await runOnboardingStep(repoId, runId, "build", by, { automated: true });
   return { building: approved.length };
@@ -908,6 +1036,8 @@ export async function onboardingChatFacts(runId: string, cursor: number): Promis
   const digest = s.transcriptPath ? digestTranscript(s.transcriptPath, cursor, cursor ? 10_000 : 14_000) : { text: "", cursor, entries: 0 };
   const step = row.currentStepKey ? stepDefinition(row.currentStepKey as StepKey)?.title_he ?? row.currentStepKey : "—";
   const waiting = cards.filter((c) => c.status === "proposed");
+  const [planRow] = await db.select({ result: repositoryOnboardingStep.result }).from(repositoryOnboardingStep).where(and(eq(repositoryOnboardingStep.runId, runId), eq(repositoryOnboardingStep.stepKey, "plan"))).limit(1);
+  const initScan = (planRow?.result as { initScan?: InitScanState } | null)?.initScan;
   return {
     facts: {
       "צעד נוכחי": step,
@@ -917,6 +1047,7 @@ export async function onboardingChatFacts(runId: string, cursor: number): Promis
       "כרטיסים שמחכים להחלטה": waiting.length,
       "סשן טיוטת /init": s.state === "live" ? "פעיל" : s.state === "ended" ? "נסגר" : s.state === "disconnected" ? "נותק" : "לא נפתח",
       ...(digest.text ? { "מה סשן הטיוטה עשה מאז השאלה הקודמת": digest.text } : {}),
+      ...(initScan?.state === "done" ? { "סריקת טיוטת /init": `${initScan.summary ?? ""} — ${initScan.cards?.length ?? 0} כרטיסים מהטיוטה, ${initScan.dropOurs?.length ?? 0} משלנו סומנו כמיותרים${initScan.reject?.length ? `; לא נלקח: ${initScan.reject.map((r) => `${r.what} (${r.why})`).join("; ").slice(0, 900)}` : ""}` } : {}),
     },
     cursor: digest.cursor,
   };
@@ -930,7 +1061,7 @@ export async function authorizeOnboardingTerminal(repoId: string, runId: string)
 
 /* ── restart ──────────────────────────────────────────────────────── */
 
-/** After an API restart: a step that was mid-flight is marked failed (its button reruns it); a draft session that was live is marked disconnected. */
+/** After an API restart: a step that was mid-flight is marked failed (its button reruns it); a scan of the draft that was running says it stopped; a draft session that was live is marked disconnected. */
 export async function recoverOnboardingRuns(): Promise<number> {
   const live = await db.select().from(repositoryOnboardingRun).where(inArray(repositoryOnboardingRun.status, [...LIVE_RUN_STATUSES]));
   let touched = 0;
@@ -942,6 +1073,12 @@ export async function recoverOnboardingRuns(): Promise<number> {
         await failStep(ctx, s.stepKey as StepKey, new Error("הצעד הופסק כשהשרת הופעל מחדש — הריצו אותו שוב"), null);
         touched++;
       }
+    }
+    const plan = steps.find((s) => s.stepKey === "plan");
+    const scan = (plan?.result as { initScan?: InitScanState } | null)?.initScan;
+    if (plan?.status === "WaitingForUser" && scan?.state === "running") {
+      await patchInitScan(ctx, { ...scan, state: "failed", error: "הסריקה הופסקה כשהשרת הופעל מחדש — אפשר לסרוק שוב" });
+      touched++;
     }
     if (await recoverDraftSession(draftCtx(ctx), run)) touched++;
   }

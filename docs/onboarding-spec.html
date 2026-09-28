@@ -29,6 +29,7 @@
     --files: #1f8a4c; --files-soft: #dcf3e4;
     --bank: #a8631f; --bank-soft: #f6e6d0;
     --search: #a52368; --search-soft: #f6e0ec;
+    --draft: #5f6f14; --draft-soft: #eef2d4;
     color-scheme: light;
   }
   @media (prefers-color-scheme: dark) {
@@ -42,6 +43,7 @@
       --files: #6fd39a; --files-soft: #17301f;
       --bank: #e0a862; --bank-soft: #3a2712;
       --search: #e888b8; --search-soft: #3a1a2a;
+      --draft: #c5d66a; --draft-soft: #2b3010;
       color-scheme: dark;
     }
   }
@@ -55,6 +57,7 @@
     --files: #6fd39a; --files-soft: #17301f;
     --bank: #e0a862; --bank-soft: #3a2712;
     --search: #e888b8; --search-soft: #3a1a2a;
+      --draft: #c5d66a; --draft-soft: #2b3010;
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -146,7 +149,7 @@
   <div id="panel-content"><p class="placeholder">לחצו על כל תיבה, חץ-קומפוננטה, מאגר או פרומפט בתרשים כדי לראות כאן בדיוק מאיפה היא מגיעה, מה היא, ולאן היא ממשיכה.</p></div>
 </aside>
 <figure style="margin:0;">
-  <svg viewBox="0 0 820 1280" role="img" aria-label="תרשים זרימה: שמונה הצעדים ברצף אחד, כל פלט רוכב כקומפוננטה קטנה על החץ בין הצעדים, בלי חץ שמדלג על צעד שבאמצע" style="width:100%; height:auto; color:var(--ink); font-family:'Heebo','Segoe UI',sans-serif;">
+  <svg viewBox="0 0 820 1366" role="img" aria-label="תרשים זרימה: שמונה הצעדים ברצף אחד, כל פלט רוכב כקומפוננטה קטנה על החץ בין הצעדים, בלי חץ שמדלג על צעד שבאמצע" style="width:100%; height:auto; color:var(--ink); font-family:'Heebo','Segoe UI',sans-serif;">
     <defs>
       <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -226,31 +229,31 @@
     <!-- step 6 → step 7: THREE components — profile and processes, relayed again (build.ts's
          buildComponents() takes profile+processes+cards, not cards alone), plus step 6's own
          new output (only what a person approved) -->
-    <path d="M600,820 V830" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M600,884 V894" fill="none" stroke="var(--hub)" stroke-width="1.6" marker-end="url(#arrow)"/>
     <g class="clickable" onclick="showDetail('c-profile')">
-      <rect x="530" y="830" width="140" height="32" rx="7" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.3"/>
-      <text x="600" y="850" text-anchor="middle" font-size="11" font-weight="700" fill="var(--hub)">RepoProfile</text>
+      <rect x="530" y="894" width="140" height="32" rx="7" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.3"/>
+      <text x="600" y="914" text-anchor="middle" font-size="11" font-weight="700" fill="var(--hub)">RepoProfile</text>
     </g>
-    <path d="M600,862 V872" fill="none" stroke="var(--ai)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M600,926 V936" fill="none" stroke="var(--ai)" stroke-width="1.6" marker-end="url(#arrow)"/>
     <g class="clickable" onclick="showDetail('c-processes')">
-      <rect x="530" y="872" width="140" height="32" rx="7" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.3"/>
-      <text x="600" y="885" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ai)">תהליכים מזוהים</text>
-      <text x="600" y="897" text-anchor="middle" font-size="8" font-weight="700" fill="var(--ai)">ומועמדים לסקילים וסוכנים</text>
+      <rect x="530" y="936" width="140" height="32" rx="7" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.3"/>
+      <text x="600" y="949" text-anchor="middle" font-size="9" font-weight="700" fill="var(--ai)">תהליכים מזוהים</text>
+      <text x="600" y="961" text-anchor="middle" font-size="8" font-weight="700" fill="var(--ai)">ומועמדים לסקילים וסוכנים</text>
     </g>
-    <path d="M600,904 V914" fill="none" stroke="var(--gate)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M600,968 V978" fill="none" stroke="var(--gate)" stroke-width="1.6" marker-end="url(#arrow)"/>
     <g class="clickable" onclick="showDetail('c-cards')">
-      <rect x="530" y="914" width="140" height="32" rx="7" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.3"/>
-      <text x="600" y="934" text-anchor="middle" font-size="11" font-weight="700" fill="var(--gate)">כרטיסים מאושרים</text>
+      <rect x="530" y="978" width="140" height="32" rx="7" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.3"/>
+      <text x="600" y="998" text-anchor="middle" font-size="11" font-weight="700" fill="var(--gate)">כרטיסים מאושרים</text>
     </g>
-    <path d="M600,946 V970" fill="none" stroke="var(--gate)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M600,1010 V1034" fill="none" stroke="var(--gate)" stroke-width="1.6" marker-end="url(#arrow)"/>
 
     <!-- step 7 → step 8: ONE component — only what was verified -->
-    <path d="M600,1016 V1026" fill="none" stroke="var(--files)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M600,1080 V1090" fill="none" stroke="var(--files)" stroke-width="1.6" marker-end="url(#arrow)"/>
     <g class="clickable" onclick="showDetail('c-files')">
-      <rect x="530" y="1026" width="140" height="32" rx="7" fill="var(--files-soft)" stroke="var(--files)" stroke-width="1.3"/>
-      <text x="600" y="1046" text-anchor="middle" font-size="11" font-weight="700" fill="var(--files)">קבצים מאומתים</text>
+      <rect x="530" y="1090" width="140" height="32" rx="7" fill="var(--files-soft)" stroke="var(--files)" stroke-width="1.3"/>
+      <text x="600" y="1110" text-anchor="middle" font-size="11" font-weight="700" fill="var(--files)">קבצים מאומתים</text>
     </g>
-    <path d="M600,1058 V1070" fill="none" stroke="var(--files)" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <path d="M600,1122 V1134" fill="none" stroke="var(--files)" stroke-width="1.6" marker-end="url(#arrow)"/>
 
     <!-- fixed, external side inputs — same category as the question bank: not a flow output,
          so they enter straight into the step that uses them, never through the pipe -->
@@ -301,11 +304,23 @@
     </g>
     <path d="M220,813 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
 
-    <g class="clickable" onclick="showDetail('c-prompt-author')">
-      <rect x="60" y="978" width="160" height="30" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
-      <text x="140" y="997" text-anchor="middle" font-size="11" font-weight="600">onboarding.author</text>
+    <g class="clickable" onclick="showDetail('c-initdraft')">
+      <rect x="60" y="836" width="160" height="26" rx="7" fill="var(--draft-soft)" stroke="var(--draft)" stroke-width="1.2"/>
+      <text x="140" y="853" text-anchor="middle" font-size="11" font-weight="600" fill="var(--draft)">טיוטת /init (סשן חי)</text>
     </g>
-    <path d="M220,993 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+    <path d="M220,849 H420" fill="none" stroke="var(--draft)" stroke-width="1.6" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-prompt-initscan')">
+      <rect x="60" y="866" width="160" height="26" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="883" text-anchor="middle" font-size="11" font-weight="600">onboarding.init_scan</text>
+    </g>
+    <path d="M220,876 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
+
+    <g class="clickable" onclick="showDetail('c-prompt-author')">
+      <rect x="60" y="1042" width="160" height="30" rx="7" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="140" y="1061" text-anchor="middle" font-size="11" font-weight="600">onboarding.author</text>
+    </g>
+    <path d="M220,1057 H420" fill="none" stroke="currentColor" stroke-width="1.4" marker-end="url(#arrow)"/>
 
     <!-- main spine boxes -->
     <g font-size="13" font-weight="700" text-anchor="middle">
@@ -340,19 +355,22 @@
       </g>
 
       <g class="clickable" onclick="showDetail('c-step6')">
-        <rect x="420" y="748" width="360" height="72" rx="9" fill="var(--surface)" stroke="var(--gate)" stroke-width="1.6"/>
+        <rect x="420" y="748" width="360" height="136" rx="9" fill="var(--surface)" stroke="var(--gate)" stroke-width="1.6"/>
         <text x="600" y="776" fill="var(--gate)">6. תוכנית הרכיבים</text>
         <text x="600" y="798" font-size="10.5" font-weight="400" fill="var(--gate)">שער אנושי — אדם מחליט לכל כרטיס</text>
+        <text x="600" y="830" font-size="9.5" font-weight="400" fill="var(--gate)">טיוטת /init נסרקת מול מה שהכרטיסים שלנו כותבים:</text>
+        <text x="600" y="844" font-size="9.5" font-weight="400" fill="var(--gate)">מה שנלקח ממנה הוא עוד כרטיס לאישור, עם הנוסח המדויק</text>
+        <text x="600" y="866" font-size="9.5" font-weight="400" fill="var(--gate)">onboarding.marketplace · onboarding.review · onboarding.init_scan</text>
       </g>
 
       <g class="clickable" onclick="showDetail('c-step7')">
-        <rect x="420" y="970" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
-        <text x="600" y="998">7. בנייה ואימות</text>
+        <rect x="420" y="1034" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
+        <text x="600" y="1062">7. בנייה ואימות</text>
       </g>
 
       <g class="clickable" onclick="showDetail('c-step8')">
-        <rect x="420" y="1070" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
-        <text x="600" y="1098">8. מסירה</text>
+        <rect x="420" y="1134" width="360" height="46" rx="9" fill="var(--surface)" stroke="currentColor" stroke-width="1.4"/>
+        <text x="600" y="1162">8. מסירה</text>
       </g>
     </g>
 
@@ -362,31 +380,34 @@
       <text x="670" y="86">נתיב העותק</text>
     </g>
 
-    <!-- legend: every output has its own unique color; steps are always white; prompts always gray -->
-    <g font-size="10.5">
-      <text x="760" y="1150" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--ink-muted)">מקרא הצבעים</text>
+    <!-- legend: every output has its own unique color; steps are always white; prompts always gray.
+         direction ltr: in the page's rtl, text-anchor="end" would anchor on the left and run over the swatch -->
+    <g font-size="10.5" style="direction:ltr">
+      <text x="760" y="1214" text-anchor="end" font-size="10.5" font-weight="700" fill="var(--ink-muted)">מקרא הצבעים</text>
 
-      <rect x="740" y="1162" width="20" height="14" rx="4" fill="var(--surface)" stroke="currentColor" stroke-width="1.3"/>
-      <text x="732" y="1173" text-anchor="end">שלב — תמיד לבן</text>
-      <rect x="740" y="1184" width="20" height="14" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
-      <text x="732" y="1195" text-anchor="end">פרומפט — תמיד אפור</text>
-      <rect x="740" y="1206" width="20" height="14" rx="4" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.2"/>
-      <text x="732" y="1217" text-anchor="end" fill="var(--hub)">RepoProfile</text>
-      <rect x="740" y="1228" width="20" height="14" rx="4" fill="var(--answers-soft)" stroke="var(--answers)" stroke-width="1.2"/>
-      <text x="732" y="1239" text-anchor="end" fill="var(--answers)">תשובות מראיון</text>
-      <rect x="740" y="1250" width="20" height="14" rx="4" fill="var(--bank-soft)" stroke="var(--bank)" stroke-width="1.2"/>
-      <text x="732" y="1261" text-anchor="end" fill="var(--bank)">מאגר שאלות</text>
+      <rect x="740" y="1226" width="20" height="14" rx="4" fill="var(--surface)" stroke="currentColor" stroke-width="1.3"/>
+      <text x="732" y="1237" text-anchor="end">שלב — תמיד לבן</text>
+      <rect x="740" y="1248" width="20" height="14" rx="4" fill="var(--surface-2)" stroke="currentColor" stroke-width="1.2"/>
+      <text x="732" y="1259" text-anchor="end">פרומפט — תמיד אפור</text>
+      <rect x="740" y="1270" width="20" height="14" rx="4" fill="var(--hub-soft)" stroke="var(--hub)" stroke-width="1.2"/>
+      <text x="732" y="1281" text-anchor="end" fill="var(--hub)">RepoProfile</text>
+      <rect x="740" y="1292" width="20" height="14" rx="4" fill="var(--answers-soft)" stroke="var(--answers)" stroke-width="1.2"/>
+      <text x="732" y="1303" text-anchor="end" fill="var(--answers)">תשובות מראיון</text>
+      <rect x="740" y="1314" width="20" height="14" rx="4" fill="var(--bank-soft)" stroke="var(--bank)" stroke-width="1.2"/>
+      <text x="732" y="1325" text-anchor="end" fill="var(--bank)">מאגר שאלות</text>
 
-      <rect x="440" y="1162" width="20" height="14" rx="4" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.2"/>
-      <text x="432" y="1173" text-anchor="end" fill="var(--ai)">תהליכים ומועמדויות</text>
-      <rect x="440" y="1184" width="20" height="14" rx="4" fill="var(--trial-soft)" stroke="var(--trial)" stroke-width="1.2"/>
-      <text x="432" y="1195" text-anchor="end" fill="var(--trial)">תוצאות ניסיון</text>
-      <rect x="440" y="1206" width="20" height="14" rx="4" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.2"/>
-      <text x="432" y="1217" text-anchor="end" fill="var(--gate)">כרטיסים מאושרים</text>
-      <rect x="440" y="1228" width="20" height="14" rx="4" fill="var(--files-soft)" stroke="var(--files)" stroke-width="1.2"/>
-      <text x="432" y="1239" text-anchor="end" fill="var(--files)">קבצים מאומתים</text>
-      <rect x="440" y="1250" width="20" height="14" rx="4" fill="var(--search-soft)" stroke="var(--search)" stroke-width="1.2"/>
-      <text x="432" y="1261" text-anchor="end" fill="var(--search)">חיפוש ברשת</text>
+      <rect x="440" y="1226" width="20" height="14" rx="4" fill="var(--ai-soft)" stroke="var(--ai)" stroke-width="1.2"/>
+      <text x="432" y="1237" text-anchor="end" fill="var(--ai)">תהליכים ומועמדויות</text>
+      <rect x="440" y="1248" width="20" height="14" rx="4" fill="var(--trial-soft)" stroke="var(--trial)" stroke-width="1.2"/>
+      <text x="432" y="1259" text-anchor="end" fill="var(--trial)">תוצאות ניסיון</text>
+      <rect x="440" y="1270" width="20" height="14" rx="4" fill="var(--gate-soft)" stroke="var(--gate)" stroke-width="1.2"/>
+      <text x="432" y="1281" text-anchor="end" fill="var(--gate)">כרטיסים מאושרים</text>
+      <rect x="440" y="1292" width="20" height="14" rx="4" fill="var(--files-soft)" stroke="var(--files)" stroke-width="1.2"/>
+      <text x="432" y="1303" text-anchor="end" fill="var(--files)">קבצים מאומתים</text>
+      <rect x="440" y="1314" width="20" height="14" rx="4" fill="var(--search-soft)" stroke="var(--search)" stroke-width="1.2"/>
+      <text x="432" y="1325" text-anchor="end" fill="var(--search)">חיפוש ברשת</text>
+      <rect x="440" y="1336" width="20" height="14" rx="4" fill="var(--draft-soft)" stroke="var(--draft)" stroke-width="1.2"/>
+      <text x="432" y="1347" text-anchor="end" fill="var(--draft)">טיוטת /init</text>
     </g>
   </svg>
   <figcaption style="font-size:12.5px; color:var(--ink-muted); margin-top:6px;">
@@ -633,6 +654,8 @@
       <div class="label">הבעיה שהצעד פותר</div>
       עד כאן נאספו ארבע ראיות נפרדות (כללים, תהליכים, ניסיון, חיפוש ברשת) — בלי נקודה
       אחת שמאחדת אותן להחלטה, ובלי בן אדם שמאשר. זה הצעד היחיד שבו לקלוד אין מילה אחרונה.
+      בנוסף, /init של Claude Code יכול לכתוב כאן טיוטה משלו — שעשויה להיות טובה משלנו בחלקים
+      מסוימים, ושגויה בחלקים אחרים. צריך דרך להכריע ביניהן לפי ראיות, בלי שהטיוטה תיכנס לבד.
     </div>
     <div class="row">
       <div class="label">למה זה בא אחרי כל הצעדים הקודמים</div>
@@ -644,14 +667,17 @@
     </div>
     <div class="impl">
       <div class="label">הדרישה מהצעד</div>
-      <div class="must">קלט: <b>ארבע ראיות נפרדות</b> — עובדות האבחון (2), כרטיסי צעד 4, תוצאות ניסיון (5), וחיפוש ברשת לפי תגיות הסטאק.</div>
+      <div class="must">קלט: <b>ארבע ראיות נפרדות</b> — עובדות האבחון (2), כרטיסי צעד 4, תוצאות ניסיון (5), וחיפוש ברשת לפי תגיות הסטאק. <b>ומקור חמישי, לפי בחירה:</b> טיוטת /init מסשן חי בעותק.</div>
       <div class="must">פלט חובה:</div>
       <ul>
         <li>רשימת כרטיסי רכיב מועמדים, כל כרטיס מצביע על הראיה שהולידה אותו (כלל, תהליך, כישלון בניסיון, או מקור חיצוני)</li>
         <li>בדיקה שאין כפילות או סתירה בין הכרטיסים</li>
         <li>אדם מחליט לכל כרטיס: לבנות / לדחות — קלוד לא מחליט לבד</li>
+        <li>סריקת טיוטת /init (בלחיצה): השוואה נושא אחר נושא מול שלנו; כל מה שנלקח הוא כרטיס לאישור עם הנוסח המדויק, הצורך, הראיה, החלופה, האימות והעלות — גם במדרגה "הפיך = עושה ומדווח"</li>
+        <li>הסריקה לא מחליטה על הרשאה או מדיניות (גישה לסביבה של הלקוח, פריסה, ייצור) — כאלה עוברים לאדם כשאלה</li>
+        <li>כרטיס שלנו שהסריקה סימנה כמיותר מקבל הערה — הוא לא נדחה לבד</li>
       </ul>
-      <div class="must">תנאי גמר: יש רק את הכרטיסים שאדם אישר במפורש — שום דבר לא עובר לבנייה בלי אישור.</div>
+      <div class="must">תנאי גמר: יש רק את הכרטיסים שאדם אישר במפורש — שום דבר לא עובר לבנייה בלי אישור, וגם לא מטיוטת /init.</div>
     </div>
     <div class="bank">
       <div class="label">מאגר הכללים — 34 כללים דטרמיניסטיים, מקובצים ב-8 משפחות</div>
@@ -674,6 +700,8 @@
       <div class="what">"חיפוש רכיבים מוכנים לסטאק" — פעם לכל תגית סטאק שאין לה עדיין מקור שנזכר. קלוד מחפש ברשת plugins/MCP/skills/LSP שמתאימים, ומחזיר מה מצא + מי פרסם. הקוד מריץ בדיקת אמון על כל מקור ומדרג — מקור לא מאומת לעולם לא מותקן לבד.</div>
       <span class="key">onboarding.review</span>
       <div class="what">"סוקר התוכנית: מה חסר ומה מיותר" — רץ פעם אחת בסוף הצעד. סוקר <b>נפרד</b> מקבל את הפרופיל, התהליכים, תוצאות הניסיון, ורשימת הכרטיסים המוצעים — ושואל מה חסר ומה מיותר. כל מה שהוא מעלה הופך לכרטיס לאישור אדם — הוא לא מחליט בעצמו.</div>
+      <span class="key">onboarding.init_scan</span>
+      <div class="what">"סריקת טיוטת /init" — רק בלחיצה על "סרוק מה ש-/init עשה". עורך מקבל את כל הראיות, את AGENTS.md כפי שהכרטיסים שלנו היו כותבים אותו, ואת הטיוטה — ומחליט נושא אחר נושא מה לקחת, מה לשלב, מה לבדוק, מה לשאול את האדם ומה להשאיר בחוץ, ואילו מהכרטיסים שלנו מיותרים. לכל פריט: צורך, ראיה, חלופה, אימות ועלות. הוא קורא את הקוד כדי לבדוק טענות, ולא מחליט על הרשאות.</div>
     </div>
   </div>
 </div>
@@ -698,9 +726,11 @@
     <div class="impl">
       <div class="label">הדרישה מהצעד</div>
       <div class="must">קלט: <b>כרטיסים שאושרו</b> בצעד 6 + RepoProfile + תהליכים (שני האחרונים מגיעים בשרשור מצעדים קודמים, לא כמקור חדש).</div>
+      <div class="must">לפני הכתיבה: טיוטת /init, אם נכתבה, מוזזת הצידה (נשמרת, והעותק חוזר לנקודת ההתחלה בקבצים שלה) — ונרשם ביומן. ממנה נכנס רק מה שאושר בכרטיס.</div>
       <div class="must">פלט חובה — לכל כרטיס:</div>
       <ul>
         <li>הקובץ נכתב בפועל בעותק (לא רק "מתוכנן")</li>
+        <li>כרטיס מטיוטת /init נבנה אחרי שלנו באותה משפחה, בנוסח שאושר כלשונו — ונבדק מול הקוד כמו כל טקסט</li>
         <li>אימות אוטומטי לפי סוג הרכיב: hook — שהוא באמת יורה; settings — תקין syntax; skill/agent — שהטענות בטקסט הנוצר תואמות פקודות שבאמת קיימות בריפו</li>
         <li>בדיקה משותפת על כל הכרטיסים יחד: אין כפילות, אין סתירה בין רכיבים</li>
         <li>ריצת הניסיון (מצעד 5) חוזרת — כדי להוכיח שהרכיבים באמת משפרים את מה שנכשל</li>
@@ -875,13 +905,15 @@ const DETAILS = {
     <p style="margin:8px 0 2px;"><b>דיווח בלבד</b></p>
     <ul><li><b>דיווח</b> (<code>report</code>) — הודעה לבעלים, לא רכיב פעיל — שום קובץ לא נכתב. לדוגמה: "לא סוכן שכותב בדיקות — כי X"</li></ul>
     <p style="margin-top:6px;font-size:12px;color:var(--ink-muted);"><b>שלושה מתוך ה-19</b> (review, settings, devcontainer) קיימים כסוג חוקי בקוד, אבל אף כלל, קטלוג או מקור אחר לא מייצר אותם בפועל היום — שמורים לעתיד.</p>
+    <p><b>טיוטת /init — מקור חמישי, מהצד:</b> בתוך הצעד אפשר לפתוח סשן Claude Code אמיתי שמריץ /init בעותק המבודד. מה שהוא כותב הוא טיוטה בלבד. הכפתור "סרוק מה ש-/init עשה" מריץ עורך (<code>onboarding.init_scan</code>) שמשווה את הטיוטה מול מה שהכרטיסים שלנו היו כותבים, ומחליט נושא אחר נושא: לקחת, לשלב, לבדוק, לשאול את האדם, או להשאיר בחוץ; וגם אילו מהכרטיסים <i>שלנו</i> מיותרים. כל מה שהוא לוקח הופך לכרטיס נוסף לאישור — עם הנוסח המדויק שייכתב — בלי קשר למדרגת האוטומציה.</p>
     <p><b>התוצאה מלווה אותנו</b> לצעד 7 — אבל רק מה שאדם אישר, לא כל מה שהוצע.</p>
-    <p>שער אנושי — היחיד שבו קלוד לא מחליט לבד. <b>פרומפטים:</b> onboarding.marketplace, onboarding.review.</p>` },
+    <p>שער אנושי — היחיד שבו קלוד לא מחליט לבד. <b>פרומפטים:</b> onboarding.marketplace, onboarding.review, onboarding.init_scan (רק כשלוחצים "סרוק").</p>` },
 
   'c-step7': { t: '7. בנייה ואימות', b: `
     <p><b>מריצים</b> כתיבה בפועל של כל כרטיס מאושר לתוך העותק המבודד, ואז אימות אוטומטי — לא רק "נכתב", אלא "נבדק שזה עובד".</p>
     <p style="background:var(--surface-2);border-radius:8px;padding:8px 10px;font-size:12.5px;"><b>תיקון:</b> בדקתי בקוד (<code>buildComponents</code>) — הצעד לא מקבל רק כרטיסים. הוא צריך גם RepoProfile (לעובדות שנכנסות לטקסט שנכתב) וגם תהליכים (כדי לדעת מאיזה תהליך כל כרטיס הגיע, ולתת לזה הקשר). לכן שלושה — לא אחד — נכנסים לצעד הזה.</p>
     <p><b>התוצאה מספקת לנו</b>, לכל כרטיס: הקובץ עצמו + סטטוס אימות מפורש לפי סוגו (hook — שהוא באמת יורה; settings — syntax תקין; skill/agent — שהטענות בטקסט תואמות פקודות שבאמת קיימות בריפו), ובדיקה משותפת שאין כפילות או סתירה בין כל הכרטיסים יחד.</p>
+    <p><b>לפני שכותבים משהו:</b> טיוטת /init מוזזת הצידה — נשמרת בתיקיית הריצה, והקבצים שלה בעותק חוזרים לנקודת ההתחלה — כדי שממנה ייכנס רק מה שאושר בכרטיס. כרטיס מהטיוטה נבנה אחרי שלנו באותה משפחה, והנוסח שלו נכתב כלשונו ונבדק מול הקוד כמו כל טקסט.</p>
     <p><b>התוצאה מלווה אותנו</b> לצעד 8 — רק קבצים שעברו אימות.</p>
     <p>רץ אוטומטית. <b>פרומפט:</b> onboarding.author (רק לכרטיסים שתוכנם טקסט חופשי — AGENTS.md, מסמך, גוף skill; hook/permission/gitattributes נבנים ישירות מפרמטרים, בלי מודל).</p>` },
 
@@ -941,7 +973,7 @@ const DETAILS = {
     <p>ראיה אמפירית — לא שיקול דעת — שמצטרפת בצעד 6 לצד הכללים הדטרמיניסטיים והתהליכים. סוג הכישלון מצביע ישירות על סוג הרכיב שצריך.</p>` },
 
   'c-cards': { t: 'כרטיסים מאושרים', b: `
-    <p><b>מקור:</b> פלט צעד 6 — רק מה שאדם אישר במפורש, לא כל מה שהוצע.</p>
+    <p><b>מקור:</b> פלט צעד 6 — רק מה שאדם אישר במפורש, לא כל מה שהוצע. כולל כרטיסים שהסריקה לקחה מטיוטת /init — כל אחד עם הנוסח המדויק שאושר.</p>
     <p>נכנס לצעד 7 יחד עם RepoProfile ותהליכים (ששניהם מגיעים בשרשור, לא כמקור חדש) — הכרטיס אומר <i>מה</i> לבנות, הפרופיל והתהליכים נותנים את ההקשר לכתיבה עצמה.</p>` },
 
   'c-files': { t: 'קבצים מאומתים', b: `
@@ -979,6 +1011,21 @@ const DETAILS = {
     <p>רץ פעם אחת, בסוף צעד 6.</p>
     <p>סוקר <b>נפרד</b> מקבל את הפרופיל, התהליכים, תוצאות הניסיון ורשימת הכרטיסים המוצעים — ושואל מה חסר ומה מיותר.</p>
     <p>כל מה שהוא מעלה הופך לכרטיס נוסף לאישור אדם — הוא לא מחליט בעצמו, בדיוק כמו כל מקור אחר בצעד הזה.</p>` },
+
+  'c-initdraft': { t: 'טיוטת /init', b: `
+    <p><b>מקור:</b> חי, מבחוץ — סשן Claude Code אמיתי בטרמינל, שמריץ /init בעותק המבודד בתוך צעד 6. לא תוצר של צעד קודם, לכן נכנס מהצד ישר לצעד 6.</p>
+    <p><b>מה נחשב טיוטה:</b> כל קובץ שהסשן כתב או ערך בעותק, וכל קובץ הנחיות שהשתנה (AGENTS.md, CLAUDE.md, ‎.claude/…) — לפני ואחרי.</p>
+    <p><b>מה נדרש:</b> שום דבר מהטיוטה לא נכנס לבד. הוא נכנס רק דרך הסריקה (<code>onboarding.init_scan</code>) → כרטיס → אישור אדם → בנייה ואימות. לפני הבנייה הטיוטה מוזזת הצידה ונשמרת, כך שגם לא "נדבקת" לקבצים שאנחנו כותבים.</p>
+    <p><b>למה בכלל:</b> /init משתפר עם הזמן ויכול לראות בקוד דברים שהתבניות שלנו לא רואות. במקום לבחור בינו לבינינו, משווים ולוקחים את הטוב — עם ראיות.</p>` },
+
+  'c-prompt-initscan': { t: 'onboarding.init_scan', b: `
+    <p>רץ כשלוחצים "סרוק מה ש-/init עשה" בצעד 6 — לא אוטומטית. במודל החזק, עם כלי קריאה בעותק (Read/Grep/Glob) כדי לבדוק כל טענה בקוד עצמו.</p>
+    <div style="background:var(--surface-2);border-radius:8px;padding:8px 10px;margin:8px 0;font-size:12.5px;">
+      <p style="margin:0 0 4px;"><b>הפרומפט מקבל:</b> הפרופיל ועובדותיו (כולל תיקונים של אדם), תשובות הראיון, התהליכים, תוצאות הניסיון, מה שהאדם ענה בתוך סשן /init, AGENTS.md כפי שהכרטיסים שלנו היו כותבים אותו, כל הכרטיסים שלנו — ואת הטיוטה (קובץ חדש שלם; קובץ ששונה — לפני ואחרי).</p>
+      <p style="margin:0 0 4px;"><b>הפרומפט מחליט:</b> הכרעה כללית (הטיוטה טובה יותר / משלבים / שלנו הבסיס עם תוספות / נשארים עם שלנו), השוואה נושא אחר נושא, ולכל פריט: החלטה (לקחת / לבדוק / לשאול את האדם), צורה (שורה / סעיף / קובץ חדש), הנוסח המדויק, <b>צורך, ראיה, חלופה בלי רכיב חדש, איך נדע שעזר, ועלות</b>. וגם אילו מהכרטיסים שלנו מיותרים, ומה מהטיוטה לא נלקח ולמה.</p>
+      <p style="margin:0;"><b>חוק שלא עוקפים:</b> ידע אינו הרשאה. הסריקה מחליטה מה נכון לגבי הקוד, אבל לא מה מותר לסוכן — חיבור לסביבה של הלקוח, פריסה, ייצור, מדיניות. כאלה הם "לשאול": כרטיס שהאישור שלו הוא התשובה.</p>
+    </div>
+    <p><b>אחרי הקריאה, הקוד:</b> בודק כל נתיב שבנוסח מול העותק (הרבה נתיבים שלא קיימים → "לא מומלץ"); לא מאמץ קובץ הגדרות, ‎.mcp.json או hook כקובץ שלם, ולא דורס קובץ שכבר קיים בריפו; שם הערה על כרטיס שלנו שסומן כמיותר (האדם מחליט). סריקה חוזרת שומרת החלטה שכבר ניתנה על אותו נוסח.</p>` },
 
   'c-prompt-author': { t: 'onboarding.author', b: `
     <p>רץ פעם לכל כרטיס שתוכנו טקסט חופשי — AGENTS.md, מסמך ב-docs, גוף skill, רשימת בדיקה של סוכן.</p>

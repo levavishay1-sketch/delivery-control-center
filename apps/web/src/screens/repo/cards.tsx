@@ -51,6 +51,7 @@ export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
       </div>
       <div className="why"><b>כי ראיתי<Info k="component_why" /></b>{c.why_he}</div>
       <div className="why"><b>מה</b>{c.what_he}</div>
+      {c.source === "init" && typeof c.params.text === "string" && <CardText c={c} />}
       <div className="why"><b>איך נבדוק<Info k="verify_how" /></b>{c.verifyHow_he}</div>
       {c.questions.length > 0 && (
         <div className="qs">
@@ -91,6 +92,22 @@ export function ComponentCard({ c, open, busy, who, onDecide, onAsk }: {
         </div>
       )}
       {open && !decidable && c.group !== "not_recommended" && <div className="acts"><button className="btn btn-secondary btn-sm" disabled={busy} onClick={() => onAsk(c)}>שאל</button></div>}
+    </div>
+  );
+}
+
+/** A card taken from the /init draft carries the exact text it writes — what the person approves, word for word. */
+function CardText({ c }: { c: OnboardingComponent }) {
+  const text = String(c.params.text);
+  const short = !text.includes("\n") && text.length <= 300;
+  const [open, setOpen] = useState(short);
+  const where = typeof c.params.file === "string" ? c.params.file : typeof c.params.heading === "string" ? `AGENTS.md › ${c.params.heading}` : "AGENTS.md";
+  return (
+    <div className="why">
+      <b>הנוסח<Info k="card_text" /></b>
+      <span className="ob-sub">{where} · </span>
+      {!short && <a style={{ cursor: "pointer" }} onClick={() => setOpen((x) => !x)}>{open ? "הסתר" : `הצג (${text.split("\n").length} שורות)`}</a>}
+      {open && <pre className="ob-code" style={{ whiteSpace: "pre-wrap", maxHeight: 320, overflowY: "auto", margin: "6px 0 0", padding: 8, background: "var(--surface-2, rgba(0,0,0,.04))", borderRadius: 8 }}>{text}</pre>}
     </div>
   );
 }

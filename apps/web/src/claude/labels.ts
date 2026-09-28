@@ -32,6 +32,7 @@ export const CAPABILITY_HE: Record<string, string> = {
   onboarding_marketplace: "הטמעת מאגר — חיפוש רכיבים",
   onboarding_author: "הטמעת מאגר — כתיבת רכיב",
   onboarding_review: "הטמעת מאגר — סוקר התוכנית",
+  onboarding_init_scan: "הטמעת מאגר — סריקת טיוטת /init",
   chat: "צ'אט",
   chat_code_read: "קריאה בקוד מהצ'אט",
   conversation_summary: "סיכום שיחה",
