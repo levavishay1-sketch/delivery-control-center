@@ -1,0 +1,5492 @@
+{
+ "seed": 20260929,
+ "power": 0.8,
+ "alpha": 0.025,
+ "conf": 0.95,
+ "falseFire": [
+  {
+   "scenario": "p=0.3",
+   "m": 5,
+   "byR": [
+    0.6922943601,
+    0.20189081657912944,
+    0.04545524487945041,
+    0.0020403831929863836,
+    0.00001891128662423469
+   ]
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 10,
+   "byR": [
+    0.9053172391737315,
+    0.3630217313392712,
+    0.08884431047185004,
+    0.004076603222398667,
+    0.00003782221561177135
+   ]
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 20,
+   "byR": [
+    0.9910351748023156,
+    0.5942586852539803,
+    0.1697953094404815,
+    0.008136587750964486,
+    0.00007564300070350694
+   ]
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 40,
+   "byR": [
+    0.999919631909175,
+    0.8353739855081714,
+    0.3107601717729741,
+    0.01620697144169969,
+    0.00015128027954347534
+   ]
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 5,
+   "byR": [
+    0.7626953125,
+    0.2758035659790039,
+    0.07572144363075495,
+    0.004873285065515098,
+    0.0000762916170415906
+   ]
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 10,
+   "byR": [
+    0.9436864852905273,
+    0.47553952495127305,
+    0.1457091502359843,
+    0.009722821223700384,
+    0.00015257741367236122
+   ]
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 20,
+   "byR": [
+    0.996828788061066,
+    0.7249412101116637,
+    0.27018714400947597,
+    0.019351109194852834,
+    0.0003051315474775773
+   ]
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 40,
+   "byR": [
+    0.9999899434148384,
+    0.924342662105164,
+    0.46737319523095455,
+    0.038327752962634465,
+    0.0006101699896937651
+   ]
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 5,
+   "byR": [
+    0.6922943601,
+    0.20189081657912944,
+    0.04545524487945041,
+    0.0020403831929863836,
+    0.00001891128662423469
+   ]
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 10,
+   "byR": [
+    0.9053172391737315,
+    0.3630217313392712,
+    0.08884431047185004,
+    0.004076603222398667,
+    0.00003782221561177135
+   ]
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 20,
+   "byR": [
+    0.9910351748023156,
+    0.5942586852539803,
+    0.1697953094404815,
+    0.008136587750964486,
+    0.00007564300070350694
+   ]
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 40,
+   "byR": [
+    0.999919631909175,
+    0.8353739855081714,
+    0.3107601717729741,
+    0.01620697144169969,
+    0.00015128027954347534
+   ]
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 5,
+   "byR": [
+    0.37596785489999984,
+    0.03984919292150735,
+    0.0036396894627928056,
+    0.00002952415132340125,
+    2.1523360094199973e-8
+   ]
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 10,
+   "byR": [
+    0.6105838818818924,
+    0.0781104276665191,
+    0.007266131586200153,
+    0.00005904743097140397,
+    4.3046719744310735e-8
+   ]
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 20,
+   "byR": [
+    0.8483550869498241,
+    0.1501196164227918,
+    0.014479466504172311,
+    0.00011809137534368741,
+    8.609343771226463e-8
+   ]
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 40,
+   "byR": [
+    0.9770038203460046,
+    0.27770333361065735,
+    0.028749278058099126,
+    0.00023616880511434513,
+    1.721868680970573e-7
+   ]
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 5,
+   "byR": [
+    0.7173992360522634,
+    0.22716885311324808,
+    0.0556307544787521,
+    0.002985399722839066,
+    0.00003803835611160267
+   ]
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 10,
+   "byR": [
+    0.9201368082161557,
+    0.4027320184017076,
+    0.10816672811362904,
+    0.005961886834173091,
+    0.00007607526530661879
+   ]
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 20,
+   "byR": [
+    0.9936218705980969,
+    0.6432709581575018,
+    0.20463341515645028,
+    0.011888229573722597,
+    0.00015214474316727067
+   ]
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 40,
+   "byR": [
+    0.9999593194653326,
+    0.8727443907061332,
+    0.36739199571430836,
+    0.02363512914504773,
+    0.00030426633831159844
+   ]
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 5,
+   "byR": [
+    0.4063869388265964,
+    0.09434684531926207,
+    0.02338442466912838,
+    0.0014642793247857666,
+    0.000022888001246723633
+   ]
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 10,
+   "byR": [
+    0.647623533604341,
+    0.17979236341682736,
+    0.04622201802115056,
+    0.0029264145356305837,
+    0.00004577547863293674
+   ]
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 20,
+   "byR": [
+    0.875830825930509,
+    0.3272594328906463,
+    0.0903075610923536,
+    0.005844265169226759,
+    0.00009154886187145994
+   ]
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 40,
+   "byR": [
+    0.9845820162109005,
+    0.5474201293653851,
+    0.17245966659425793,
+    0.011654374903085185,
+    0.00018308934254873677
+   ]
+  }
+ ],
+ "mcChecksA": [
+  {
+   "scenario": "p=0.5",
+   "m": 10,
+   "r": 3,
+   "x": 0,
+   "expected": 0.1457091502359843,
+   "observed": 0.148275,
+   "lo": 0.14482619334133806,
+   "hi": 0.15179135702654845,
+   "z": 1.4545040321041807
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 5,
+   "r": 1,
+   "x": 0,
+   "expected": 0.7626953125,
+   "observed": 0.76325,
+   "lo": 0.7590590625587063,
+   "hi": 0.7673903790950115,
+   "z": 0.2607652268882015
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 20,
+   "r": 3,
+   "x": 0,
+   "expected": 0.014479466504172311,
+   "observed": 0.014225,
+   "lo": 0.013110298233203234,
+   "hi": 0.015432997039979145,
+   "z": -0.42604110290456815
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 10,
+   "r": 3,
+   "x": 0,
+   "expected": 0.04622201802115056,
+   "observed": 0.046925,
+   "lo": 0.044895701766462744,
+   "hi": 0.049041313324674325,
+   "z": 0.6696164128533141
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 10,
+   "r": 3,
+   "x": 0.4,
+   "expected": 0.4819067810921902,
+   "observed": 0.483575,
+   "lo": 0.47867954668848595,
+   "hi": 0.4884736078066239,
+   "z": 0.6677248852750723
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 10,
+   "r": 2,
+   "x": 0.3,
+   "expected": 0.7841271964606089,
+   "observed": 0.7855,
+   "lo": 0.7814501025610894,
+   "hi": 0.7894950658800746,
+   "z": 0.6673384702502358
+  }
+ ],
+ "mdrRepo": [
+  {
+   "scenario": "p=0.3",
+   "m": 5,
+   "r": 1,
+   "falseFire": 0.6922943601,
+   "additive": {
+    "status": "reached",
+    "x": 0.21740150451660156,
+    "fireAtZero": 0.6922943601
+   },
+   "additiveMeanDrop": 0.21740150451660156,
+   "relative": {
+    "status": "reached",
+    "x": 0.72467041015625,
+    "fireAtZero": 0.6922943601
+   },
+   "relativeMeanDrop": 0.21740112304687498
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 5,
+   "r": 3,
+   "falseFire": 0.04545524487945041,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.04545524487945041
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.04545524487945041
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 5,
+   "r": 5,
+   "falseFire": 0.0020403831929863836,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.0020403831929863836
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.0020403831929863836
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 10,
+   "r": 1,
+   "falseFire": 0.9053172391737315,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9053172391737315
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9053172391737315
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 10,
+   "r": 3,
+   "falseFire": 0.08884431047185004,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.08884431047185004
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.08884431047185004
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 10,
+   "r": 5,
+   "falseFire": 0.004076603222398667,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.004076603222398667
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.004076603222398667
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 20,
+   "r": 1,
+   "falseFire": 0.9910351748023156,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9910351748023156
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9910351748023156
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 20,
+   "r": 3,
+   "falseFire": 0.1697953094404815,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.1697953094404815
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.1697953094404815
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 20,
+   "r": 5,
+   "falseFire": 0.008136587750964486,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.008136587750964486
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.008136587750964486
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 40,
+   "r": 1,
+   "falseFire": 0.999919631909175,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.999919631909175
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.999919631909175
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 40,
+   "r": 3,
+   "falseFire": 0.3107601717729741,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.3107601717729741
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.3107601717729741
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.3",
+   "m": 40,
+   "r": 5,
+   "falseFire": 0.01620697144169969,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.01620697144169969
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.01620697144169969
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 5,
+   "r": 1,
+   "falseFire": 0.7626953125,
+   "additive": {
+    "status": "reached",
+    "x": 0.05044078826904297,
+    "fireAtZero": 0.7626953125
+   },
+   "additiveMeanDrop": 0.05044078826904297,
+   "relative": {
+    "status": "reached",
+    "x": 0.10088157653808594,
+    "fireAtZero": 0.7626953125
+   },
+   "relativeMeanDrop": 0.05044078826904297
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 5,
+   "r": 3,
+   "falseFire": 0.07572144363075495,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.07572144363075495
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.07572144363075495
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 5,
+   "r": 5,
+   "falseFire": 0.004873285065515098,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.004873285065515098
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.004873285065515098
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 10,
+   "r": 1,
+   "falseFire": 0.9436864852905273,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9436864852905273
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9436864852905273
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 10,
+   "r": 3,
+   "falseFire": 0.1457091502359843,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.1457091502359843
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.1457091502359843
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 10,
+   "r": 5,
+   "falseFire": 0.009722821223700384,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.009722821223700384
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.009722821223700384
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 20,
+   "r": 1,
+   "falseFire": 0.996828788061066,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.996828788061066
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.996828788061066
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 20,
+   "r": 3,
+   "falseFire": 0.27018714400947597,
+   "additive": {
+    "status": "reached",
+    "x": 0.3520383834838867,
+    "fireAtZero": 0.27018714400947597
+   },
+   "additiveMeanDrop": 0.3520383834838867,
+   "relative": {
+    "status": "reached",
+    "x": 0.7040767669677734,
+    "fireAtZero": 0.27018714400947597
+   },
+   "relativeMeanDrop": 0.3520383834838867
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 20,
+   "r": 5,
+   "falseFire": 0.019351109194852834,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.019351109194852834
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.019351109194852834
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 40,
+   "r": 1,
+   "falseFire": 0.9999899434148384,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9999899434148384
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9999899434148384
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 40,
+   "r": 3,
+   "falseFire": 0.46737319523095455,
+   "additive": {
+    "status": "reached",
+    "x": 0.18076801300048828,
+    "fireAtZero": 0.46737319523095455
+   },
+   "additiveMeanDrop": 0.18076801300048828,
+   "relative": {
+    "status": "reached",
+    "x": 0.36153507232666016,
+    "fireAtZero": 0.46737319523095455
+   },
+   "relativeMeanDrop": 0.18076753616333008
+  },
+  {
+   "scenario": "p=0.5",
+   "m": 40,
+   "r": 5,
+   "falseFire": 0.038327752962634465,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.038327752962634465
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.038327752962634465
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 5,
+   "r": 1,
+   "falseFire": 0.6922943601,
+   "additive": {
+    "status": "reached",
+    "x": 0.09317207336425781,
+    "fireAtZero": 0.6922943601
+   },
+   "additiveMeanDrop": 0.09317207336425781,
+   "relative": {
+    "status": "reached",
+    "x": 0.1331033706665039,
+    "fireAtZero": 0.6922943601
+   },
+   "relativeMeanDrop": 0.09317235946655278
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 5,
+   "r": 3,
+   "falseFire": 0.04545524487945041,
+   "additive": {
+    "status": "reached",
+    "x": 0.629241943359375,
+    "fireAtZero": 0.04545524487945041
+   },
+   "additiveMeanDrop": 0.629241943359375,
+   "relative": {
+    "status": "reached",
+    "x": 0.8989171981811523,
+    "fireAtZero": 0.04545524487945041
+   },
+   "relativeMeanDrop": 0.6292420387268066
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 5,
+   "r": 5,
+   "falseFire": 0.0020403831929863836,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.0020403831929863836
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.0020403831929863836
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 10,
+   "r": 1,
+   "falseFire": 0.9053172391737315,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9053172391737315
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9053172391737315
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 10,
+   "r": 3,
+   "falseFire": 0.08884431047185004,
+   "additive": {
+    "status": "reached",
+    "x": 0.4567756652832031,
+    "fireAtZero": 0.08884431047185004
+   },
+   "additiveMeanDrop": 0.4567756652832031,
+   "relative": {
+    "status": "reached",
+    "x": 0.6525363922119141,
+    "fireAtZero": 0.08884431047185004
+   },
+   "relativeMeanDrop": 0.4567754745483398
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 10,
+   "r": 5,
+   "falseFire": 0.004076603222398667,
+   "additive": {
+    "status": "reached",
+    "x": 0.675755500793457,
+    "fireAtZero": 0.004076603222398667
+   },
+   "additiveMeanDrop": 0.675755500793457,
+   "relative": {
+    "status": "reached",
+    "x": 0.9653644561767578,
+    "fireAtZero": 0.004076603222398667
+   },
+   "relativeMeanDrop": 0.6757551193237304
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 20,
+   "r": 1,
+   "falseFire": 0.9910351748023156,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9910351748023156
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9910351748023156
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 20,
+   "r": 3,
+   "falseFire": 0.1697953094404815,
+   "additive": {
+    "status": "reached",
+    "x": 0.30859947204589844,
+    "fireAtZero": 0.1697953094404815
+   },
+   "additiveMeanDrop": 0.30859947204589844,
+   "relative": {
+    "status": "reached",
+    "x": 0.4408559799194336,
+    "fireAtZero": 0.1697953094404815
+   },
+   "relativeMeanDrop": 0.30859918594360347
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 20,
+   "r": 5,
+   "falseFire": 0.008136587750964486,
+   "additive": {
+    "status": "reached",
+    "x": 0.5561695098876953,
+    "fireAtZero": 0.008136587750964486
+   },
+   "additiveMeanDrop": 0.5561695098876953,
+   "relative": {
+    "status": "reached",
+    "x": 0.7945270538330078,
+    "fireAtZero": 0.008136587750964486
+   },
+   "relativeMeanDrop": 0.5561689376831054
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 40,
+   "r": 1,
+   "falseFire": 0.999919631909175,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.999919631909175
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.999919631909175
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 40,
+   "r": 3,
+   "falseFire": 0.3107601717729741,
+   "additive": {
+    "status": "reached",
+    "x": 0.1862630844116211,
+    "fireAtZero": 0.3107601717729741
+   },
+   "additiveMeanDrop": 0.1862630844116211,
+   "relative": {
+    "status": "reached",
+    "x": 0.26608943939208984,
+    "fireAtZero": 0.3107601717729741
+   },
+   "relativeMeanDrop": 0.1862626075744629
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 40,
+   "r": 5,
+   "falseFire": 0.01620697144169969,
+   "additive": {
+    "status": "reached",
+    "x": 0.44831371307373047,
+    "fireAtZero": 0.01620697144169969
+   },
+   "additiveMeanDrop": 0.44831371307373047,
+   "relative": {
+    "status": "reached",
+    "x": 0.6404476165771484,
+    "fireAtZero": 0.01620697144169969
+   },
+   "relativeMeanDrop": 0.4483133316040039
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 5,
+   "r": 1,
+   "falseFire": 0.37596785489999984,
+   "additive": {
+    "status": "reached",
+    "x": 0.20580101013183594,
+    "fireAtZero": 0.37596785489999984
+   },
+   "additiveMeanDrop": 0.20580101013183594,
+   "relative": {
+    "status": "reached",
+    "x": 0.2286672592163086,
+    "fireAtZero": 0.37596785489999984
+   },
+   "relativeMeanDrop": 0.20580053329467773
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 5,
+   "r": 3,
+   "falseFire": 0.0036396894627928056,
+   "additive": {
+    "status": "reached",
+    "x": 0.6227445602416992,
+    "fireAtZero": 0.0036396894627928056
+   },
+   "additiveMeanDrop": 0.6227445602416992,
+   "relative": {
+    "status": "reached",
+    "x": 0.6919384002685547,
+    "fireAtZero": 0.0036396894627928056
+   },
+   "relativeMeanDrop": 0.6227445602416992
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 5,
+   "r": 5,
+   "falseFire": 0.00002952415132340125,
+   "additive": {
+    "status": "reached",
+    "x": 0.7584085464477539,
+    "fireAtZero": 0.00002952415132340125
+   },
+   "additiveMeanDrop": 0.7584085464477539,
+   "relative": {
+    "status": "reached",
+    "x": 0.8426752090454102,
+    "fireAtZero": 0.00002952415132340125
+   },
+   "relativeMeanDrop": 0.7584076881408691
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 10,
+   "r": 1,
+   "falseFire": 0.6105838818818924,
+   "additive": {
+    "status": "reached",
+    "x": 0.06517791748046875,
+    "fireAtZero": 0.6105838818818924
+   },
+   "additiveMeanDrop": 0.06517791748046875,
+   "relative": {
+    "status": "reached",
+    "x": 0.07242012023925781,
+    "fireAtZero": 0.6105838818818924
+   },
+   "relativeMeanDrop": 0.06517810821533199
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 10,
+   "r": 3,
+   "falseFire": 0.007266131586200153,
+   "additive": {
+    "status": "reached",
+    "x": 0.4886035919189453,
+    "fireAtZero": 0.007266131586200153
+   },
+   "additiveMeanDrop": 0.4886035919189453,
+   "relative": {
+    "status": "reached",
+    "x": 0.5428924560546875,
+    "fireAtZero": 0.007266131586200153
+   },
+   "relativeMeanDrop": 0.4886032104492188
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 10,
+   "r": 5,
+   "falseFire": 0.00005904743097140397,
+   "additive": {
+    "status": "reached",
+    "x": 0.6589212417602539,
+    "fireAtZero": 0.00005904743097140397
+   },
+   "additiveMeanDrop": 0.6589212417602539,
+   "relative": {
+    "status": "reached",
+    "x": 0.7321348190307617,
+    "fireAtZero": 0.00005904743097140397
+   },
+   "relativeMeanDrop": 0.6589213371276855
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 20,
+   "r": 1,
+   "falseFire": 0.8483550869498241,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.8483550869498241
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.8483550869498241
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 20,
+   "r": 3,
+   "falseFire": 0.014479466504172311,
+   "additive": {
+    "status": "reached",
+    "x": 0.3733549118041992,
+    "fireAtZero": 0.014479466504172311
+   },
+   "additiveMeanDrop": 0.3733549118041992,
+   "relative": {
+    "status": "reached",
+    "x": 0.4148387908935547,
+    "fireAtZero": 0.014479466504172311
+   },
+   "relativeMeanDrop": 0.3733549118041992
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 20,
+   "r": 5,
+   "falseFire": 0.00011809137534368741,
+   "additive": {
+    "status": "reached",
+    "x": 0.5659093856811523,
+    "fireAtZero": 0.00011809137534368741
+   },
+   "additiveMeanDrop": 0.5659093856811523,
+   "relative": {
+    "status": "reached",
+    "x": 0.6287879943847656,
+    "fireAtZero": 0.00011809137534368741
+   },
+   "relativeMeanDrop": 0.5659091949462891
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 40,
+   "r": 1,
+   "falseFire": 0.9770038203460046,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9770038203460046
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9770038203460046
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 40,
+   "r": 3,
+   "falseFire": 0.028749278058099126,
+   "additive": {
+    "status": "reached",
+    "x": 0.27820491790771484,
+    "fireAtZero": 0.028749278058099126
+   },
+   "additiveMeanDrop": 0.27820491790771484,
+   "relative": {
+    "status": "reached",
+    "x": 0.3091163635253906,
+    "fireAtZero": 0.028749278058099126
+   },
+   "relativeMeanDrop": 0.2782047271728516
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 40,
+   "r": 5,
+   "falseFire": 0.00023616880511434513,
+   "additive": {
+    "status": "reached",
+    "x": 0.4820213317871094,
+    "fireAtZero": 0.00023616880511434513
+   },
+   "additiveMeanDrop": 0.4820213317871094,
+   "relative": {
+    "status": "reached",
+    "x": 0.5355796813964844,
+    "fireAtZero": 0.00023616880511434513
+   },
+   "relativeMeanDrop": 0.48202171325683596
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 5,
+   "r": 1,
+   "falseFire": 0.7173992360522634,
+   "additive": {
+    "status": "reached",
+    "x": 0.1037740707397461,
+    "fireAtZero": 0.7173992360522634
+   },
+   "additiveMeanDrop": 0.1037740707397461,
+   "relative": {
+    "status": "reached",
+    "x": 0.1875438690185547,
+    "fireAtZero": 0.7173992360522634
+   },
+   "relativeMeanDrop": 0.09377193450927736
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 5,
+   "r": 3,
+   "falseFire": 0.0556307544787521,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.0556307544787521
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.0556307544787521
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 5,
+   "r": 5,
+   "falseFire": 0.002985399722839066,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.002985399722839066
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.002985399722839066
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 10,
+   "r": 1,
+   "falseFire": 0.9201368082161557,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9201368082161557
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9201368082161557
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 10,
+   "r": 3,
+   "falseFire": 0.10816672811362904,
+   "additive": {
+    "status": "reached",
+    "x": 0.6498937606811523,
+    "fireAtZero": 0.10816672811362904
+   },
+   "additiveMeanDrop": 0.48329792022705076,
+   "relative": {
+    "status": "reached",
+    "x": 0.9455041885375977,
+    "fireAtZero": 0.10816672811362904
+   },
+   "relativeMeanDrop": 0.4727520942687988
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 10,
+   "r": 5,
+   "falseFire": 0.005961886834173091,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.005961886834173091
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.005961886834173091
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 20,
+   "r": 1,
+   "falseFire": 0.9936218705980969,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9936218705980969
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9936218705980969
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 20,
+   "r": 3,
+   "falseFire": 0.20463341515645028,
+   "additive": {
+    "status": "reached",
+    "x": 0.3952474594116211,
+    "fireAtZero": 0.20463341515645028
+   },
+   "additiveMeanDrop": 0.36349830627441404,
+   "relative": {
+    "status": "reached",
+    "x": 0.6405925750732422,
+    "fireAtZero": 0.20463341515645028
+   },
+   "relativeMeanDrop": 0.3202962875366211
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 20,
+   "r": 5,
+   "falseFire": 0.011888229573722597,
+   "additive": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.011888229573722597
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "unreachable",
+    "x": null,
+    "fireAtZero": 0.011888229573722597
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 40,
+   "r": 1,
+   "falseFire": 0.9999593194653326,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9999593194653326
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9999593194653326
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 40,
+   "r": 3,
+   "falseFire": 0.36739199571430836,
+   "additive": {
+    "status": "reached",
+    "x": 0.22440814971923828,
+    "fireAtZero": 0.36739199571430836
+   },
+   "additiveMeanDrop": 0.22440814971923828,
+   "relative": {
+    "status": "reached",
+    "x": 0.38146305084228516,
+    "fireAtZero": 0.36739199571430836
+   },
+   "relativeMeanDrop": 0.19073152542114255
+  },
+  {
+   "scenario": "mid (0.3/0.5/0.7)",
+   "m": 40,
+   "r": 5,
+   "falseFire": 0.02363512914504773,
+   "additive": {
+    "status": "reached",
+    "x": 0.5717840194702148,
+    "fireAtZero": 0.02363512914504773
+   },
+   "additiveMeanDrop": 0.45726133982340494,
+   "relative": {
+    "status": "reached",
+    "x": 0.8470211029052734,
+    "fireAtZero": 0.02363512914504773
+   },
+   "relativeMeanDrop": 0.4235105514526367
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 5,
+   "r": 1,
+   "falseFire": 0.4063869388265964,
+   "additive": {
+    "status": "reached",
+    "x": 0.27664661407470703,
+    "fireAtZero": 0.4063869388265964
+   },
+   "additiveMeanDrop": 0.23131729125976563,
+   "relative": {
+    "status": "reached",
+    "x": 0.32268619537353516,
+    "fireAtZero": 0.4063869388265964
+   },
+   "relativeMeanDrop": 0.2081325960159302
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 5,
+   "r": 3,
+   "falseFire": 0.02338442466912838,
+   "additive": {
+    "status": "reached",
+    "x": 0.77459716796875,
+    "fireAtZero": 0.02338442466912838
+   },
+   "additiveMeanDrop": 0.547298583984375,
+   "relative": {
+    "status": "reached",
+    "x": 0.8097085952758789,
+    "fireAtZero": 0.02338442466912838
+   },
+   "relativeMeanDrop": 0.522262043952942
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 5,
+   "r": 5,
+   "falseFire": 0.0014642793247857666,
+   "additive": {
+    "status": "reached",
+    "x": 0.8785743713378906,
+    "fireAtZero": 0.0014642793247857666
+   },
+   "additiveMeanDrop": 0.5992871856689453,
+   "relative": {
+    "status": "reached",
+    "x": 0.907139778137207,
+    "fireAtZero": 0.0014642793247857666
+   },
+   "relativeMeanDrop": 0.5851051568984986
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 10,
+   "r": 1,
+   "falseFire": 0.647623533604341,
+   "additive": {
+    "status": "reached",
+    "x": 0.07733917236328125,
+    "fireAtZero": 0.647623533604341
+   },
+   "additiveMeanDrop": 0.071871337890625,
+   "relative": {
+    "status": "reached",
+    "x": 0.09086990356445312,
+    "fireAtZero": 0.647623533604341
+   },
+   "relativeMeanDrop": 0.05861108779907225
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 10,
+   "r": 3,
+   "falseFire": 0.04622201802115056,
+   "additive": {
+    "status": "reached",
+    "x": 0.5944852828979492,
+    "fireAtZero": 0.04622201802115056
+   },
+   "additiveMeanDrop": 0.45724264144897464,
+   "relative": {
+    "status": "reached",
+    "x": 0.6436061859130859,
+    "fireAtZero": 0.04622201802115056
+   },
+   "relativeMeanDrop": 0.4151259899139404
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 10,
+   "r": 5,
+   "falseFire": 0.0029264145356305837,
+   "additive": {
+    "status": "reached",
+    "x": 0.7683906555175781,
+    "fireAtZero": 0.0029264145356305837
+   },
+   "additiveMeanDrop": 0.5441953277587891,
+   "relative": {
+    "status": "reached",
+    "x": 0.7967014312744141,
+    "fireAtZero": 0.0029264145356305837
+   },
+   "relativeMeanDrop": 0.5138724231719971
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 20,
+   "r": 1,
+   "falseFire": 0.875830825930509,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.875830825930509
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.875830825930509
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 20,
+   "r": 3,
+   "falseFire": 0.0903075610923536,
+   "additive": {
+    "status": "reached",
+    "x": 0.4369192123413086,
+    "fireAtZero": 0.0903075610923536
+   },
+   "additiveMeanDrop": 0.3595353698730469,
+   "relative": {
+    "status": "reached",
+    "x": 0.49776268005371094,
+    "fireAtZero": 0.0903075610923536
+   },
+   "relativeMeanDrop": 0.3210569286346435
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 20,
+   "r": 5,
+   "falseFire": 0.005844265169226759,
+   "additive": {
+    "status": "reached",
+    "x": 0.6616153717041016,
+    "fireAtZero": 0.005844265169226759
+   },
+   "additiveMeanDrop": 0.4908076858520508,
+   "relative": {
+    "status": "reached",
+    "x": 0.6928739547729492,
+    "fireAtZero": 0.005844265169226759
+   },
+   "relativeMeanDrop": 0.4469037008285523
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 40,
+   "r": 1,
+   "falseFire": 0.9845820162109005,
+   "additive": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9845820162109005
+   },
+   "additiveMeanDrop": null,
+   "relative": {
+    "status": "fires-without-drop",
+    "x": null,
+    "fireAtZero": 0.9845820162109005
+   },
+   "relativeMeanDrop": null
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 40,
+   "r": 3,
+   "falseFire": 0.17245966659425793,
+   "additive": {
+    "status": "reached",
+    "x": 0.31656455993652344,
+    "fireAtZero": 0.17245966659425793
+   },
+   "additiveMeanDrop": 0.26325164794921874,
+   "relative": {
+    "status": "reached",
+    "x": 0.37227821350097656,
+    "fireAtZero": 0.17245966659425793
+   },
+   "relativeMeanDrop": 0.24011944770812987
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 40,
+   "r": 5,
+   "falseFire": 0.011654374903085185,
+   "additive": {
+    "status": "reached",
+    "x": 0.5575418472290039,
+    "fireAtZero": 0.011654374903085185
+   },
+   "additiveMeanDrop": 0.438770923614502,
+   "relative": {
+    "status": "reached",
+    "x": 0.5983438491821289,
+    "fireAtZero": 0.011654374903085185
+   },
+   "relativeMeanDrop": 0.38593178272247314
+  }
+ ],
+ "mdrPerSet": {
+  "sets": 500,
+  "unknown": 0,
+  "min": 0.5192785263061523,
+  "p10": 0.5429744720458984,
+  "median": 0.5873355865478516,
+  "p90": 0.6610145568847656,
+  "max": 0.8859024047851562,
+  "mixture": 0.5944852828979492
+ },
+ "mcChecksB": [
+  {
+   "scenario": "p=0.9",
+   "m": 10,
+   "r": 3,
+   "x": 0.4886035919189453,
+   "observed": 0.800085,
+   "lo": 0.7983264780181963,
+   "hi": 0.8018319945615123,
+   "z": 0.09503288904374302
+  },
+  {
+   "scenario": "p=0.7",
+   "m": 20,
+   "r": 3,
+   "x": 0.30859947204589844,
+   "observed": 0.79984,
+   "lo": 0.7980806776035634,
+   "hi": 0.8015878043875384,
+   "z": -0.17888543820003797
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "m": 40,
+   "r": 3,
+   "x": 0.31656455993652344,
+   "observed": 0.801315,
+   "lo": 0.7995605119915108,
+   "hi": 0.8030579133391618,
+   "z": 1.4702146952060617
+  },
+  {
+   "scenario": "p=0.9",
+   "m": 5,
+   "r": 1,
+   "x": 0.20580101013183594,
+   "observed": 0.79976,
+   "lo": 0.7980004164660964,
+   "hi": 0.8015080685981134,
+   "z": -0.2683281572999949
+  }
+ ],
+ "typeI": [
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.051,
+   "lo": 0.048036340963523244,
+   "hi": 0.054136107414858706,
+   "z": 0.6488856845230189,
+   "harmSide": 0.04945
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0504,
+   "lo": 0.04745347452539702,
+   "hi": 0.05351920429625227,
+   "z": 23.007869333818157,
+   "harmSide": 0.05205
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0488,
+   "lo": 0.04589975115015081,
+   "hi": 0.05187354218687801,
+   "z": -0.7786628214276866,
+   "harmSide": 0.0476
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0105,
+   "lo": 0.009178359419231709,
+   "hi": 0.01200964387969472,
+   "z": -13.134413596077325,
+   "harmSide": 0.01125
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.07375,
+   "lo": 0.07020903004498168,
+   "hi": 0.07745468069284751,
+   "z": 15.411035007422402,
+   "harmSide": 0.07185
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.06595,
+   "lo": 0.0625929341533125,
+   "hi": 0.06947377234699191,
+   "z": 37.093395638576915,
+   "harmSide": 0.0654
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.06615,
+   "lo": 0.0627880556684722,
+   "hi": 0.06967857401740979,
+   "z": 10.479503805047226,
+   "harmSide": 0.0584
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02445,
+   "lo": 0.022399169208250073,
+   "hi": 0.02668347628471103,
+   "z": -0.4982018950236425,
+   "harmSide": 0.022
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0758,
+   "lo": 0.0722127290779933,
+   "hi": 0.07955019431200587,
+   "z": 16.74125066069466,
+   "harmSide": 0.07825
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0655,
+   "lo": 0.06215394390707475,
+   "hi": 0.06901293542568017,
+   "z": 36.68577590628487,
+   "harmSide": 0.0671
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0528,
+   "lo": 0.04978563448799096,
+   "hi": 0.05598612256058902,
+   "z": 1.8168799166645107,
+   "harmSide": 0.0548
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02665,
+   "lo": 0.024507151081169416,
+   "hi": 0.028974649453144825,
+   "z": 1.4946056850708458,
+   "harmSide": 0.02265
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.07005,
+   "lo": 0.06659468214915,
+   "hi": 0.07367044965549437,
+   "z": 13.010157974687122,
+   "harmSide": 0.06815
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0472,
+   "lo": 0.044346913581891106,
+   "hi": 0.050226994270517245,
+   "z": 20.10924012640799,
+   "harmSide": 0.0469
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04985,
+   "lo": 0.04691928473993355,
+   "hi": 0.05295360532137744,
+   "z": -0.09733285267848728,
+   "harmSide": 0.04945
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02715,
+   "lo": 0.024986814400630532,
+   "hi": 0.029494794097627612,
+   "z": 1.9475164987286842,
+   "harmSide": 0.02685
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.06325,
+   "lo": 0.059959695881614844,
+   "hi": 0.06670804761339255,
+   "z": 8.597735319930383,
+   "harmSide": 0.0647
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.04125,
+   "lo": 0.038580835769049866,
+   "hi": 0.044095357312426135,
+   "z": 14.71960144387972,
+   "harmSide": 0.041
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04905,
+   "lo": 0.04614246308269581,
+   "hi": 0.05213073423630495,
+   "z": -0.6164414002969241,
+   "harmSide": 0.0525
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0225,
+   "lo": 0.020534514340009642,
+   "hi": 0.024648880093570268,
+   "z": -2.2645540682892116,
+   "harmSide": 0.0229
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.07,
+   "lo": 0.0665458586697866,
+   "hi": 0.0736192923384634,
+   "z": 12.977713690460973,
+   "harmSide": 0.0683
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.04095,
+   "lo": 0.03829049662024771,
+   "hi": 0.043785811682861955,
+   "z": 14.447854955685015,
+   "harmSide": 0.0404
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04705,
+   "lo": 0.044201381985967424,
+   "hi": 0.05007258347725776,
+   "z": -1.9142127693430249,
+   "harmSide": 0.04995
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0249,
+   "lo": 0.02282999650325364,
+   "hi": 0.027152476157256966,
+   "z": -0.09058216273158907,
+   "harmSide": 0.025
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05975,
+   "lo": 0.056548859577197345,
+   "hi": 0.06312022817020277,
+   "z": 6.326635424099706,
+   "harmSide": 0.0629
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0347,
+   "lo": 0.03225155874748462,
+   "hi": 0.03732715000632635,
+   "z": 8.78646978496204,
+   "harmSide": 0.03395
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0552,
+   "lo": 0.05211957731875282,
+   "hi": 0.05845125795675785,
+   "z": 3.37420555951983,
+   "harmSide": 0.0578
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0229,
+   "lo": 0.020916695257996262,
+   "hi": 0.025066545546738768,
+   "z": -1.90222541736294,
+   "harmSide": 0.0235
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05695,
+   "lo": 0.05382247184911466,
+   "hi": 0.060247691300199656,
+   "z": 4.509755507435168,
+   "harmSide": 0.0567
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0318,
+   "lo": 0.029456675558960588,
+   "hi": 0.03432314700397579,
+   "z": 6.15958706574658,
+   "harmSide": 0.03025
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0497,
+   "lo": 0.04677361416941829,
+   "hi": 0.052799333502709545,
+   "z": -0.19466570535694305,
+   "harmSide": 0.0505
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02735,
+   "lo": 0.025178736381070127,
+   "hi": 0.029702795302765567,
+   "z": 2.1286808241918185,
+   "harmSide": 0.02615
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0595,
+   "lo": 0.05630534723230724,
+   "hi": 0.06286383653312093,
+   "z": 6.164414002968943,
+   "harmSide": 0.0568
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0326,
+   "lo": 0.030227168846868376,
+   "hi": 0.035152346458378225,
+   "z": 6.884244367599116,
+   "harmSide": 0.0299
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04945,
+   "lo": 0.04653084675352752,
+   "hi": 0.05254219693662836,
+   "z": -0.35688712648770565,
+   "harmSide": 0.04935
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0245,
+   "lo": 0.02244702962278111,
+   "hi": 0.026735596666574386,
+   "z": -0.45291081365785735,
+   "harmSide": 0.0259
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0512,
+   "lo": 0.04823065586678381,
+   "hi": 0.054341715697175705,
+   "z": 0.7786628214276327,
+   "harmSide": 0.0511
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02555,
+   "lo": 0.02345262780282817,
+   "hi": 0.027829595210809507,
+   "z": 0.4982018950236016,
+   "harmSide": 0.02645
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0493,
+   "lo": 0.046385196478274104,
+   "hi": 0.0523879048226986,
+   "z": -0.4542199791661659,
+   "harmSide": 0.04985
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0245,
+   "lo": 0.02244702962278111,
+   "hi": 0.026735596666574386,
+   "z": -0.45291081365785735,
+   "harmSide": 0.02705
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05555,
+   "lo": 0.05246008629916682,
+   "hi": 0.05881061455110459,
+   "z": 3.601315549102899,
+   "harmSide": 0.0537
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02555,
+   "lo": 0.02345262780282817,
+   "hi": 0.027829595210809507,
+   "z": 0.4982018950236016,
+   "harmSide": 0.0285
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0489,
+   "lo": 0.045996833337636024,
+   "hi": 0.05197642159218157,
+   "z": -0.7137742529753843,
+   "harmSide": 0.0514
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0247,
+   "lo": 0.022638494584730315,
+   "hi": 0.02694405489020274,
+   "z": -0.2717464881947232,
+   "harmSide": 0.02435
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0556,
+   "lo": 0.05250873332583739,
+   "hi": 0.0588619483208284,
+   "z": 3.6337598333290484,
+   "harmSide": 0.05255
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.03025,
+   "lo": 0.027965024027510353,
+   "hi": 0.03271539384719994,
+   "z": 4.755563543407279,
+   "harmSide": 0.0277
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0516,
+   "lo": 0.048619324376531964,
+   "hi": 0.05475289355858266,
+   "z": 1.038217095236851,
+   "harmSide": 0.05145
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0247,
+   "lo": 0.022638494584730315,
+   "hi": 0.02694405489020274,
+   "z": -0.2717464881947232,
+   "harmSide": 0.02375
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0067,
+   "lo": 0.005660273316327411,
+   "hi": 0.007929189456625413,
+   "z": -28.09675013984809,
+   "harmSide": 0.00635
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0064,
+   "lo": 0.0053856677612602235,
+   "hi": 0.007603910233326263,
+   "z": -16.848282268071596,
+   "harmSide": 0.006
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.00675,
+   "lo": 0.005706097196676445,
+   "hi": 0.007983346372670768,
+   "z": -28.064305855621935,
+   "harmSide": 0.00685
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.00025,
+   "lo": 0.0001067896345439496,
+   "hi": 0.0005851504035326231,
+   "z": -22.419085276063004,
+   "harmSide": 0.0002
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.02155,
+   "lo": 0.019627521973076066,
+   "hi": 0.023656237329010447,
+   "z": -18.4607977246808,
+   "harmSide": 0.02345
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02235,
+   "lo": 0.020391239936839296,
+   "hi": 0.024492212107557445,
+   "z": -2.4004273123865634,
+   "harmSide": 0.02405
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0221,
+   "lo": 0.020152502842146282,
+   "hi": 0.024231045220278514,
+   "z": -18.103910598193117,
+   "harmSide": 0.02065
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.00185,
+   "lo": 0.0013425368836908263,
+   "hi": 0.0025487886390062114,
+   "z": -20.969770672357924,
+   "harmSide": 0.0023
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.037,
+   "lo": 0.03447159685858056,
+   "hi": 0.03970622852937232,
+   "z": -8.435513898799679,
+   "harmSide": 0.03635
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.03255,
+   "lo": 0.030179001295493862,
+   "hi": 0.03510053321335836,
+   "z": 6.8389532862333375,
+   "harmSide": 0.0313
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0296,
+   "lo": 0.027339977800916807,
+   "hi": 0.03204068972066642,
+   "z": -13.237267964270245,
+   "harmSide": 0.0312
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.00455,
+   "lo": 0.0037076791394211545,
+   "hi": 0.00558260938857292,
+   "z": -18.5240522786056,
+   "harmSide": 0.0052
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0318,
+   "lo": 0.029456675558960588,
+   "hi": 0.03432314700397579,
+   "z": -11.809719458319535,
+   "harmSide": 0.0316
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0317,
+   "lo": 0.029360392389417907,
+   "hi": 0.03421946858072968,
+   "z": 6.06900490301501,
+   "harmSide": 0.03125
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.03105,
+   "lo": 0.028734709790947582,
+   "hi": 0.03354540082607294,
+   "z": -12.296383721711823,
+   "harmSide": 0.02925
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.007,
+   "lo": 0.00593544741735811,
+   "hi": 0.00825390013396105,
+   "z": -16.30478929168219,
+   "harmSide": 0.00595
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05545,
+   "lo": 0.05236279440619451,
+   "hi": 0.05870794485128811,
+   "z": 3.5364269806505924,
+   "harmSide": 0.05785
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.03665,
+   "lo": 0.034133583251834784,
+   "hi": 0.03934437656135738,
+   "z": 10.552821958227609,
+   "harmSide": 0.0403
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0446,
+   "lo": 0.041825554247836454,
+   "hi": 0.04754935219206364,
+   "z": -3.503982696424498,
+   "harmSide": 0.04065
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0105,
+   "lo": 0.009178359419231709,
+   "hi": 0.01200964387969472,
+   "z": -13.134413596077325,
+   "harmSide": 0.01125
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05885,
+   "lo": 0.05567229183680263,
+   "hi": 0.06219714157549847,
+   "z": 5.742638308028962,
+   "harmSide": 0.06165
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0399,
+   "lo": 0.037274627346400635,
+   "hi": 0.04270208423242684,
+   "z": 13.496742247003553,
+   "harmSide": 0.0387
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04625,
+   "lo": 0.04342535284963607,
+   "hi": 0.04924891987127887,
+   "z": -2.4333213169614663,
+   "harmSide": 0.0483
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0163,
+   "lo": 0.01463567589932398,
+   "hi": 0.01815009978135163,
+   "z": -7.880648157646404,
+   "harmSide": 0.01555
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05865,
+   "lo": 0.055477528045259634,
+   "hi": 0.06199198218146392,
+   "z": 5.612861171124353,
+   "harmSide": 0.06345
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0255,
+   "lo": 0.02340471971783761,
+   "hi": 0.027777522499405672,
+   "z": 0.4529108136578165,
+   "harmSide": 0.02545
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0552,
+   "lo": 0.05211957731875282,
+   "hi": 0.05845125795675785,
+   "z": 3.37420555951983,
+   "harmSide": 0.05355
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02335,
+   "lo": 0.021346845942050118,
+   "hi": 0.025536222030234413,
+   "z": -1.4946056850708866,
+   "harmSide": 0.02215
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.06125,
+   "lo": 0.05801027143144296,
+   "hi": 0.06465824020778883,
+   "z": 7.2999639508842815,
+   "harmSide": 0.06315
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.03125,
+   "lo": 0.028927198096508813,
+   "hi": 0.033752835706089265,
+   "z": 5.661385170722956,
+   "harmSide": 0.03165
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0518,
+   "lo": 0.04881367784124333,
+   "hi": 0.05495846327944886,
+   "z": 1.1679942321414603,
+   "harmSide": 0.05145
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02275,
+   "lo": 0.02077335783749501,
+   "hi": 0.02490994057805685,
+   "z": -2.038098661460292,
+   "harmSide": 0.0204
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0616,
+   "lo": 0.05835134951088909,
+   "hi": 0.06501702770310344,
+   "z": 7.527073940467351,
+   "harmSide": 0.0581
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0285,
+   "lo": 0.026282895826614742,
+   "hi": 0.030898194174291918,
+   "z": 3.1703756956048474,
+   "harmSide": 0.0329
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04975,
+   "lo": 0.04682217018525079,
+   "hi": 0.052850758283271425,
+   "z": -0.16222142113078963,
+   "harmSide": 0.04965
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.024,
+   "lo": 0.021968531819753244,
+   "hi": 0.02621428650565836,
+   "z": -0.9058216273156958,
+   "harmSide": 0.0229
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0663,
+   "lo": 0.06293440272371548,
+   "hi": 0.06983216935134967,
+   "z": 10.576836657725682,
+   "harmSide": 0.06245
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02915,
+   "lo": 0.026907428645489534,
+   "hi": 0.031573411708544184,
+   "z": 3.759159753360035,
+   "harmSide": 0.02635
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05395,
+   "lo": 0.05090376658630195,
+   "hi": 0.05716754877934898,
+   "z": 2.563098453866017,
+   "harmSide": 0.0518
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0227,
+   "lo": 0.020725583895254904,
+   "hi": 0.02485773372390257,
+   "z": -2.083389742826074,
+   "harmSide": 0.02215
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05325,
+   "lo": 0.05022311640474463,
+   "hi": 0.05644846781138484,
+   "z": 2.1088784746998823,
+   "harmSide": 0.0526
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0283,
+   "lo": 0.02609079515990534,
+   "hi": 0.030690371655423758,
+   "z": 2.9892113701417102,
+   "harmSide": 0.02635
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05245,
+   "lo": 0.049445414044474396,
+   "hi": 0.05562647742934485,
+   "z": 1.5897699270814412,
+   "harmSide": 0.0526
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02615,
+   "lo": 0.024027694540036573,
+   "hi": 0.028454298030333773,
+   "z": 1.0416948714130072,
+   "harmSide": 0.02425
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05575,
+   "lo": 0.05265467871563883,
+   "hi": 0.05901594532021013,
+   "z": 3.7310926860075084,
+   "harmSide": 0.05285
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0283,
+   "lo": 0.02609079515990534,
+   "hi": 0.030690371655423758,
+   "z": 2.9892113701417102,
+   "harmSide": 0.0275
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0487,
+   "lo": 0.045802672421761455,
+   "hi": 0.051770659322478575,
+   "z": -0.8435513898799935,
+   "harmSide": 0.0493
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0259,
+   "lo": 0.023788045608357452,
+   "hi": 0.02819404298004095,
+   "z": 0.8152394645840879,
+   "harmSide": 0.0269
+  }
+ ],
+ "typeIExact": [
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.051,
+   "lo": 0.048036340963523244,
+   "hi": 0.054136107414858706,
+   "z": 0.7770606328547236,
+   "harmSide": 0.04945,
+   "exact": 0.04980468749999999,
+   "exactHarm": 0.04980468749999999
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0504,
+   "lo": 0.04745347452539702,
+   "hi": 0.05351920429625227,
+   "z": 0.3870066681276502,
+   "harmSide": 0.05205,
+   "exact": 0.04980468749999999,
+   "exactHarm": 0.04980468749999999
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0488,
+   "lo": 0.04589975115015081,
+   "hi": 0.05187354218687801,
+   "z": -0.6531372378112167,
+   "harmSide": 0.0476,
+   "exact": 0.04980468749999999,
+   "exactHarm": 0.04980468749999999
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0105,
+   "lo": 0.009178359419231709,
+   "hi": 0.01200964387969472,
+   "z": -0.33225047721637807,
+   "harmSide": 0.01125,
+   "exact": 0.010742187499999993,
+   "exactHarm": 0.010742187499999993
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.07375,
+   "lo": 0.07020903004498168,
+   "hi": 0.07745468069284751,
+   "z": 0.6146934965383383,
+   "harmSide": 0.07185,
+   "exact": 0.07262200769037006,
+   "exactHarm": 0.07262200769037006
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.06595,
+   "lo": 0.0625929341533125,
+   "hi": 0.06947377234699191,
+   "z": 0.3295251188463358,
+   "harmSide": 0.0654,
+   "exact": 0.06537403631955382,
+   "exactHarm": 0.06537403631955384
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.06615,
+   "lo": 0.0627880556684722,
+   "hi": 0.06967857401740979,
+   "z": 2.532486799456483,
+   "harmSide": 0.0584,
+   "exact": 0.061836845241487005,
+   "exactHarm": 0.061836845241487005
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02445,
+   "lo": 0.022399169208250073,
+   "hi": 0.02668347628471103,
+   "z": 0.6739529042273342,
+   "harmSide": 0.022,
+   "exact": 0.023724727332591997,
+   "exactHarm": 0.023724727332592004
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0758,
+   "lo": 0.0722127290779933,
+   "hi": 0.07955019431200587,
+   "z": -1.3068370567155925,
+   "harmSide": 0.07825,
+   "exact": 0.07828220098700188,
+   "exactHarm": 0.07828220098700188
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0655,
+   "lo": 0.06215394390707475,
+   "hi": 0.06901293542568017,
+   "z": 0.37990538604138824,
+   "harmSide": 0.0671,
+   "exact": 0.0648385145630934,
+   "exactHarm": 0.0648385145630934
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0528,
+   "lo": 0.04978563448799096,
+   "hi": 0.05598612256058902,
+   "z": -1.8801016741449925,
+   "harmSide": 0.0548,
+   "exact": 0.05585287442213625,
+   "exactHarm": 0.05585287442213625
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02665,
+   "lo": 0.024507151081169416,
+   "hi": 0.028974649453144825,
+   "z": 1.899455727582952,
+   "harmSide": 0.02265,
+   "exact": 0.024570683045853407,
+   "exactHarm": 0.02457068304585341
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.07005,
+   "lo": 0.06659468214915,
+   "hi": 0.07367044965549437,
+   "z": 1.5024820050742675,
+   "harmSide": 0.06815,
+   "exact": 0.06738662719726582,
+   "exactHarm": 0.0673866271972658
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0472,
+   "lo": 0.044346913581891106,
+   "hi": 0.050226994270517245,
+   "z": -0.18215996970197829,
+   "harmSide": 0.0469,
+   "exact": 0.04747390747070328,
+   "exactHarm": 0.04747390747070328
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04985,
+   "lo": 0.04691928473993355,
+   "hi": 0.05295360532137744,
+   "z": 1.1159172558119945,
+   "harmSide": 0.04945,
+   "exact": 0.04816055297851578,
+   "exactHarm": 0.04816055297851578
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02715,
+   "lo": 0.024986814400630532,
+   "hi": 0.029494794097627612,
+   "z": 0.6849679884739873,
+   "harmSide": 0.02685,
+   "exact": 0.026373863220214927,
+   "exactHarm": 0.026373863220214924
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.06325,
+   "lo": 0.059959695881614844,
+   "hi": 0.06670804761339255,
+   "z": -0.7046276263029863,
+   "harmSide": 0.0647,
+   "exact": 0.06447366874756152,
+   "exactHarm": 0.06447366874756164
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.04125,
+   "lo": 0.038580835769049866,
+   "hi": 0.044095357312426135,
+   "z": -0.2897165441612211,
+   "harmSide": 0.041,
+   "exact": 0.041659330779244934,
+   "exactHarm": 0.04165933077924495
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04905,
+   "lo": 0.04614246308269581,
+   "hi": 0.05213073423630495,
+   "z": -1.19308166222853,
+   "harmSide": 0.0525,
+   "exact": 0.05090433220315443,
+   "exactHarm": 0.05090433220315444
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0225,
+   "lo": 0.020534514340009642,
+   "hi": 0.024648880093570268,
+   "z": -1.1347733238516415,
+   "harmSide": 0.0229,
+   "exact": 0.023721092076107717,
+   "exactHarm": 0.023721092076107706
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.07,
+   "lo": 0.0665458586697866,
+   "hi": 0.0736192923384634,
+   "z": 1.884387560594189,
+   "harmSide": 0.0683,
+   "exact": 0.06667603589562347,
+   "exactHarm": 0.06667603589562357
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.04095,
+   "lo": 0.03829049662024771,
+   "hi": 0.043785811682861955,
+   "z": -0.1745129813746716,
+   "harmSide": 0.0404,
+   "exact": 0.04119524568693558,
+   "exactHarm": 0.04119524568693588
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04705,
+   "lo": 0.044201381985967424,
+   "hi": 0.05007258347725776,
+   "z": -1.930113030206353,
+   "harmSide": 0.04995,
+   "exact": 0.05002521437159898,
+   "exactHarm": 0.05002521437159931
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0249,
+   "lo": 0.02282999650325364,
+   "hi": 0.027152476157256966,
+   "z": 0.5037095040716388,
+   "harmSide": 0.025,
+   "exact": 0.02435100249423138,
+   "exactHarm": 0.024351002494231208
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05975,
+   "lo": 0.056548859577197345,
+   "hi": 0.06312022817020277,
+   "z": 0.040533897523521475,
+   "harmSide": 0.0629,
+   "exact": 0.059682101094949765,
+   "exactHarm": 0.05968210109494972
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0347,
+   "lo": 0.03225155874748462,
+   "hi": 0.03732715000632635,
+   "z": -0.5652722433108435,
+   "harmSide": 0.03395,
+   "exact": 0.03543900653676245,
+   "exactHarm": 0.035439006536762414
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0552,
+   "lo": 0.05211957731875282,
+   "hi": 0.05845125795675785,
+   "z": 0.7778494503652028,
+   "harmSide": 0.0578,
+   "exact": 0.05395731492535562,
+   "exactHarm": 0.05395731492535557
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0229,
+   "lo": 0.020916695257996262,
+   "hi": 0.025066545546738768,
+   "z": -0.6953160929268181,
+   "harmSide": 0.0235,
+   "exact": 0.023647066631383513,
+   "exactHarm": 0.023647066631383478
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05695,
+   "lo": 0.05382247184911466,
+   "hi": 0.060247691300199656,
+   "z": -0.45950024186359717,
+   "harmSide": 0.0567,
+   "exact": 0.05770767044355758,
+   "exactHarm": 0.057707670443557804
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0318,
+   "lo": 0.029456675558960588,
+   "hi": 0.03432314700397579,
+   "z": -0.12365241027009806,
+   "harmSide": 0.03025,
+   "exact": 0.03195377889937141,
+   "exactHarm": 0.031953778899371774
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0497,
+   "lo": 0.04677361416941829,
+   "hi": 0.052799333502709545,
+   "z": -0.021244109027359844,
+   "harmSide": 0.0505,
+   "exact": 0.049732656320851366,
+   "exactHarm": 0.04973265632085177
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02735,
+   "lo": 0.025178736381070127,
+   "hi": 0.029702795302765567,
+   "z": 1.4476974920946464,
+   "harmSide": 0.02615,
+   "exact": 0.02572924931403336,
+   "exactHarm": 0.02572924931403336
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0512,
+   "lo": 0.04823065586678381,
+   "hi": 0.054341715697175705,
+   "z": -0.05502943687649884,
+   "harmSide": 0.0511,
+   "exact": 0.05128583145298548,
+   "exactHarm": 0.0512858314529854
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02555,
+   "lo": 0.02345262780282817,
+   "hi": 0.027829595210809507,
+   "z": -1.0895166128470026,
+   "harmSide": 0.02645,
+   "exact": 0.02679405756935246,
+   "exactHarm": 0.026794057569352454
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0493,
+   "lo": 0.046385196478274104,
+   "hi": 0.0523879048226986,
+   "z": 0.3481341229198466,
+   "harmSide": 0.04985,
+   "exact": 0.04876978764225822,
+   "exactHarm": 0.048769787642258165
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0245,
+   "lo": 0.02244702962278111,
+   "hi": 0.026735596666574386,
+   "z": -1.6570298541826622,
+   "harmSide": 0.02705,
+   "exact": 0.026377712752917903,
+   "exactHarm": 0.026377712752917892
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0067,
+   "lo": 0.005660273316327411,
+   "hi": 0.007929189456625413,
+   "z": 0.09684164809056019,
+   "harmSide": 0.00635,
+   "exact": 0.006644367780730638,
+   "exactHarm": 0.006644367780730638
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0064,
+   "lo": 0.0053856677612602235,
+   "hi": 0.007603910233326263,
+   "z": -0.42538260987945925,
+   "harmSide": 0.006,
+   "exact": 0.006644367780730638,
+   "exactHarm": 0.006644367780730638
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.00675,
+   "lo": 0.005706097196676445,
+   "hi": 0.007983346372670768,
+   "z": 0.18387902441889625,
+   "harmSide": 0.00685,
+   "exact": 0.006644367780730638,
+   "exactHarm": 0.006644367780730638
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.00025,
+   "lo": 0.0001067896345439496,
+   "hi": 0.0005851504035326231,
+   "z": -1.0346701482699434,
+   "harmSide": 0.0002,
+   "exact": 0.0003954635823017175,
+   "exactHarm": 0.0003954635823017175
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.02155,
+   "lo": 0.019627521973076066,
+   "hi": 0.023656237329010447,
+   "z": -2.0093174206780553,
+   "harmSide": 0.02345,
+   "exact": 0.02371174436888488,
+   "exactHarm": 0.023711744368884877
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02235,
+   "lo": 0.020391239936839296,
+   "hi": 0.024492212107557445,
+   "z": -0.16544571144715994,
+   "harmSide": 0.02405,
+   "exact": 0.022523585090139183,
+   "exactHarm": 0.022523585090139183
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0221,
+   "lo": 0.020152502842146282,
+   "hi": 0.024231045220278514,
+   "z": 0.13157701341031947,
+   "harmSide": 0.02065,
+   "exact": 0.021963637591940793,
+   "exactHarm": 0.021963637591940793
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.00185,
+   "lo": 0.0013425368836908263,
+   "hi": 0.0025487886390062114,
+   "z": -1.862115776475576,
+   "harmSide": 0.0023,
+   "exact": 0.0025086702292337554,
+   "exactHarm": 0.0025086702292337563
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.037,
+   "lo": 0.03447159685858056,
+   "hi": 0.03970622852937232,
+   "z": -0.04839079711272172,
+   "harmSide": 0.03635,
+   "exact": 0.03706464370796288,
+   "exactHarm": 0.03706464370796287
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.03255,
+   "lo": 0.030179001295493862,
+   "hi": 0.03510053321335836,
+   "z": -0.4195413730521993,
+   "harmSide": 0.0313,
+   "exact": 0.03308056845244839,
+   "exactHarm": 0.033080568452448375
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0296,
+   "lo": 0.027339977800916807,
+   "hi": 0.03204068972066642,
+   "z": -0.921094866968209,
+   "harmSide": 0.0312,
+   "exact": 0.030723962220523936,
+   "exactHarm": 0.030723962220523923
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.00455,
+   "lo": 0.0037076791394211545,
+   "hi": 0.00558260938857292,
+   "z": -0.27555879248617676,
+   "harmSide": 0.0052,
+   "exact": 0.004683028091794716,
+   "exactHarm": 0.004683028091794712
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0318,
+   "lo": 0.029456675558960588,
+   "hi": 0.03432314700397579,
+   "z": 0.11359390102990984,
+   "harmSide": 0.0316,
+   "exact": 0.03165936119436559,
+   "exactHarm": 0.03165936119436559
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0317,
+   "lo": 0.029360392389417907,
+   "hi": 0.03421946858072968,
+   "z": 0.4337139660037306,
+   "harmSide": 0.03125,
+   "exact": 0.031167081349028285,
+   "exactHarm": 0.03116708134902828
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.03105,
+   "lo": 0.028734709790947582,
+   "hi": 0.03354540082607294,
+   "z": -0.09550145382997524,
+   "harmSide": 0.02925,
+   "exact": 0.031167346267983197,
+   "exactHarm": 0.031167346267983193
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.007,
+   "lo": 0.00593544741735811,
+   "hi": 0.00825390013396105,
+   "z": 1.3236415701779438,
+   "harmSide": 0.00595,
+   "exact": 0.006261692493286427,
+   "exactHarm": 0.006261692493286427
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05545,
+   "lo": 0.05236279440619451,
+   "hi": 0.05870794485128811,
+   "z": -0.5414528576451699,
+   "harmSide": 0.05785,
+   "exact": 0.056332745585190656,
+   "exactHarm": 0.05633274558519061
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.03665,
+   "lo": 0.034133583251834784,
+   "hi": 0.03934437656135738,
+   "z": -0.778631287195191,
+   "harmSide": 0.0403,
+   "exact": 0.03769866159623211,
+   "exactHarm": 0.037698661596232065
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0446,
+   "lo": 0.041825554247836454,
+   "hi": 0.04754935219206364,
+   "z": 1.7028716608229466,
+   "harmSide": 0.04065,
+   "exact": 0.042179746206751224,
+   "exactHarm": 0.04217974620675118
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0105,
+   "lo": 0.009178359419231709,
+   "hi": 0.01200964387969472,
+   "z": -1.418625582521866,
+   "harmSide": 0.01125,
+   "exact": 0.011572866256137649,
+   "exactHarm": 0.011572866256137664
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05885,
+   "lo": 0.05567229183680263,
+   "hi": 0.06219714157549847,
+   "z": -1.2509692635780312,
+   "harmSide": 0.06165,
+   "exact": 0.06096649773748451,
+   "exactHarm": 0.06096649773748428
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0399,
+   "lo": 0.037274627346400635,
+   "hi": 0.04270208423242684,
+   "z": 0.8550982839018263,
+   "harmSide": 0.0387,
+   "exact": 0.038733284010731825,
+   "exactHarm": 0.03873328401073161
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.04625,
+   "lo": 0.04342535284963607,
+   "hi": 0.04924891987127887,
+   "z": 0.6373001017490918,
+   "harmSide": 0.0483,
+   "exact": 0.04531271941375529,
+   "exactHarm": 0.04531271941375506
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0163,
+   "lo": 0.01463567589932398,
+   "hi": 0.01815009978135163,
+   "z": 1.8215427082335873,
+   "harmSide": 0.01555,
+   "exact": 0.014747412563906466,
+   "exactHarm": 0.014747412563906426
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05865,
+   "lo": 0.055477528045259634,
+   "hi": 0.06199198218146392,
+   "z": -1.6346707329355394,
+   "harmSide": 0.06345,
+   "exact": 0.061425387599062006,
+   "exactHarm": 0.06142538759906203
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0255,
+   "lo": 0.02340471971783761,
+   "hi": 0.027777522499405672,
+   "z": 0.4762373771328627,
+   "harmSide": 0.02545,
+   "exact": 0.024974509404961126,
+   "exactHarm": 0.024974509404961133
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0552,
+   "lo": 0.05211957731875282,
+   "hi": 0.05845125795675785,
+   "z": 2.4069977424255202,
+   "harmSide": 0.05355,
+   "exact": 0.051440370507947794,
+   "exactHarm": 0.05144037050794779
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02335,
+   "lo": 0.021346845942050118,
+   "hi": 0.025536222030234413,
+   "z": 1.2880219540099163,
+   "harmSide": 0.02215,
+   "exact": 0.022013648580616826,
+   "exactHarm": 0.022013648580616826
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.06125,
+   "lo": 0.05801027143144296,
+   "hi": 0.06465824020778883,
+   "z": -0.5043050785783338,
+   "harmSide": 0.06315,
+   "exact": 0.06211067116342005,
+   "exactHarm": 0.06211067116341981
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.03125,
+   "lo": 0.028927198096508813,
+   "hi": 0.033752835706089265,
+   "z": -0.1781742980102021,
+   "harmSide": 0.03165,
+   "exact": 0.03146995542156197,
+   "exactHarm": 0.03146995542156208
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0518,
+   "lo": 0.04881367784124333,
+   "hi": 0.05495846327944886,
+   "z": 0.865257906145759,
+   "harmSide": 0.05145,
+   "exact": 0.0504607431943727,
+   "exactHarm": 0.05046074319437244
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02275,
+   "lo": 0.02077335783749501,
+   "hi": 0.02490994057805685,
+   "z": 0.3931120322327037,
+   "harmSide": 0.0204,
+   "exact": 0.02233920111254734,
+   "exactHarm": 0.022339201112547318
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.0663,
+   "lo": 0.06293440272371548,
+   "hi": 0.06983216935134967,
+   "z": 2.068139346502899,
+   "harmSide": 0.06245,
+   "exact": 0.0627534146644566,
+   "exactHarm": 0.06275341466445654
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.02915,
+   "lo": 0.026907428645489534,
+   "hi": 0.031573411708544184,
+   "z": 1.3472882544050562,
+   "harmSide": 0.02635,
+   "exact": 0.02758957522906167,
+   "exactHarm": 0.0275895752290617
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.95,
+   "nominal": 0.050000000000000044,
+   "observed": 0.05395,
+   "lo": 0.05090376658630195,
+   "hi": 0.05716754877934898,
+   "z": 2.029076640756071,
+   "harmSide": 0.0518,
+   "exact": 0.05079941072573244,
+   "exactHarm": 0.05079941072573251
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "level": 0.975,
+   "nominal": 0.025000000000000022,
+   "observed": 0.0227,
+   "lo": 0.020725583895254904,
+   "hi": 0.02485773372390257,
+   "z": 0.48266836981169653,
+   "harmSide": 0.02215,
+   "exact": 0.022197184760566768,
+   "exactHarm": 0.022197184760566764
+  }
+ ],
+ "mde": [
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": 0.45,
+    "realized": 0.44999999999999996,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.45,
+    "realized": 0.45,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": 0.55,
+    "realized": 0.5,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.5,
+    "realized": 0.5,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": 0.35,
+    "realized": 0.35,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.35,
+    "realized": 0.35,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": 0.45,
+    "realized": 0.44999999999999996,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.45,
+    "realized": 0.45,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": 0.5,
+    "realized": 0.5,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.5,
+    "realized": 0.5,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": 0.5,
+    "realized": 0.5,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.5,
+    "realized": 0.5,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": 0.35,
+    "realized": 0.35,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.35,
+    "realized": 0.35,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": 0.4,
+    "realized": 0.4,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.4,
+    "realized": 0.4,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": 0.3,
+    "realized": 0.30000000000000004,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.3,
+    "realized": 0.3,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": 0.3,
+    "realized": 0.30000000000000004,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.3,
+    "realized": 0.3,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": 0.4,
+    "realized": 0.4,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.4,
+    "realized": 0.4,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": 0.45,
+    "realized": 0.44999999999999996,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.45,
+    "realized": 0.45,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": 0.25,
+    "realized": 0.25,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.25,
+    "realized": 0.25,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": 0.3,
+    "realized": 0.30000000000000004,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.25,
+    "realized": 0.25,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": 0.2,
+    "realized": 0.19999999999999996,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.2,
+    "realized": 0.2,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 20,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": 0.25,
+    "realized": 0.25,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.25,
+    "realized": 0.25,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": 0.3,
+    "realized": 0.30000000000000004,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.3,
+    "realized": 0.3,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": 0.3,
+    "realized": 0.30000000000000004,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.3,
+    "realized": 0.3,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": 0.2,
+    "realized": 0.19999999999999996,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.2,
+    "realized": 0.2,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": 0.2,
+    "realized": 0.19999999999999996,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.2,
+    "realized": 0.2,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": 0.15,
+    "realized": 0.15000000000000002,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.15,
+    "realized": 0.15000000000000002,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "p=0.5",
+   "tasks": 40,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": 0.15,
+    "realized": 0.15000000000000002,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.15,
+    "realized": 0.15000000000000002,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.5,
+    "realized": 0.41000000000000003,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.4,
+    "realized": 0.33,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 5,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.5,
+    "realized": 0.41000000000000003,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": 0.5,
+    "realized": 0.265,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.35,
+    "realized": 0.29,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.4,
+    "realized": 0.33,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": 0.45,
+    "realized": 0.24,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.25,
+    "realized": 0.21000000000000002,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 10,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": null,
+    "realized": null,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.3,
+    "realized": 0.25,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": 0.55,
+    "realized": 0.275,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.4,
+    "realized": 0.33,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": 0.55,
+    "realized": 0.275,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.45,
+    "realized": 0.37,
+    "uncertain": true
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": 0.3,
+    "realized": 0.16500000000000004,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.25,
+    "realized": 0.21000000000000002,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": 0.35,
+    "realized": 0.19,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.25,
+    "realized": 0.21000000000000002,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": 0.25,
+    "realized": 0.14,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.2,
+    "realized": 0.16999999999999998,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 20,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": 0.25,
+    "realized": 0.14,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.2,
+    "realized": 0.16999999999999998,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "z",
+   "benefit": {
+    "mde": 0.4,
+    "realized": 0.21500000000000002,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.3,
+    "realized": 0.25,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 1,
+   "method": "t",
+   "benefit": {
+    "mde": 0.4,
+    "realized": 0.21500000000000002,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.3,
+    "realized": 0.25,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 3,
+   "method": "z",
+   "benefit": {
+    "mde": 0.25,
+    "realized": 0.14,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.15,
+    "realized": 0.13000000000000003,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 3,
+   "method": "t",
+   "benefit": {
+    "mde": 0.25,
+    "realized": 0.14,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.15,
+    "realized": 0.13000000000000003,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 5,
+   "method": "z",
+   "benefit": {
+    "mde": 0.15,
+    "realized": 0.09000000000000002,
+    "uncertain": true
+   },
+   "harm": {
+    "mde": 0.15,
+    "realized": 0.13000000000000003,
+    "uncertain": false
+   }
+  },
+  {
+   "scenario": "saturated (0.97:50%, 0.5:30%, 0.05:20%)",
+   "tasks": 40,
+   "runs": 5,
+   "method": "t",
+   "benefit": {
+    "mde": 0.2,
+    "realized": 0.115,
+    "uncertain": false
+   },
+   "harm": {
+    "mde": 0.15,
+    "realized": 0.13000000000000003,
+    "uncertain": false
+   }
+  }
+ ],
+ "gates": [
+  {
+   "n": 29,
+   "fcMax": 0.05,
+   "maxFailures": -1,
+   "pass": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.025,
+    0.05
+   ]
+  },
+  {
+   "n": 29,
+   "fcMax": 0.1,
+   "maxFailures": 0,
+   "pass": [
+    1,
+    0.8647077305675338,
+    0.7471720943315964,
+    0.5566166524310584,
+    0.22593554099256583,
+    0.047101286972462436
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.05,
+    0.1
+   ]
+  },
+  {
+   "n": 59,
+   "fcMax": 0.05,
+   "maxFailures": 0,
+   "pass": [
+    1,
+    0.7439808620067384,
+    0.5526834771623853,
+    0.3036256558082865,
+    0.22452894007830831,
+    0.04849452524942322
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.025,
+    0.05
+   ]
+  },
+  {
+   "n": 59,
+   "fcMax": 0.1,
+   "maxFailures": 1,
+   "pass": [
+    1,
+    0.9645581025011986,
+    0.8820604989056253,
+    0.6692157311692846,
+    0.1990827878660533,
+    0.01508601239434338
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.05,
+    0.1
+   ]
+  },
+  {
+   "n": 100,
+   "fcMax": 0.05,
+   "maxFailures": 1,
+   "pass": [
+    1,
+    0.9101776910086824,
+    0.7357619789229566,
+    0.4032717107820048,
+    0.2834077766870409,
+    0.03708120932735522
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.025,
+    0.05
+   ]
+  },
+  {
+   "n": 100,
+   "fcMax": 0.1,
+   "maxFailures": 4,
+   "pass": [
+    1,
+    0.9998414007611663,
+    0.9965676784122464,
+    0.9491695546305008,
+    0.43598130068571267,
+    0.023711082663476823
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.05,
+    0.1
+   ]
+  },
+  {
+   "n": 200,
+   "fcMax": 0.05,
+   "maxFailures": 4,
+   "pass": [
+    1,
+    0.9964545201954877,
+    0.9482537363692147,
+    0.6288435801288172,
+    0.43826921321619083,
+    0.026446800009120114
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.025,
+    0.05
+   ]
+  },
+  {
+   "n": 200,
+   "fcMax": 0.1,
+   "maxFailures": 12,
+   "pass": [
+    1,
+    0.9999999999547486,
+    0.9999998443705956,
+    0.9997745476401274,
+    0.7964843459884593,
+    0.03204652879690656
+   ],
+   "rates": [
+    0,
+    0.005,
+    0.01,
+    0.02,
+    0.05,
+    0.1
+   ]
+  }
+ ],
+ "nr": [
+  {
+   "margin": 0.05,
+   "tauB": 0,
+   "tauW": 0,
+   "sigmaD2": 0.14795306287280985,
+   "rho": 0.0017966513791214773,
+   "nRepos": 48,
+   "truth": 0,
+   "realized": 0,
+   "passA": {
+    "hits": 3155,
+    "reps": 4000,
+    "p": 0.78875,
+    "se": 0.006454135060176538,
+    "lo": 0.775826123605486,
+    "hi": 0.8011197978947113
+   },
+   "passB": {
+    "hits": 3162,
+    "reps": 4000,
+    "p": 0.7905,
+    "se": 0.006434472589109383,
+    "lo": 0.7776129175471843,
+    "hi": 0.8028296459014991
+   },
+   "both": {
+    "hits": 2688,
+    "reps": 4000,
+    "p": 0.672,
+    "se": 0.007423206854183709,
+    "lo": 0.6572918026085146,
+    "hi": 0.6863781488998282
+   },
+   "predicted": 0.806538747468229,
+   "predictedT": 0.7901838486005511,
+   "predictedTrue": 0.7940502779311482,
+   "product": 0.6235068749999999,
+   "clipRate": 0,
+   "verdictsA": {
+    "PASS": 3155,
+    "FAIL": 0,
+    "INCONCLUSIVE": 845
+   }
+  },
+  {
+   "margin": 0.05,
+   "tauB": 0,
+   "tauW": 0,
+   "sigmaD2": 0.14795306287280985,
+   "rho": 0.0017966513791214773,
+   "nRepos": 48,
+   "truth": -0.0125,
+   "realized": -0.012500000000000708,
+   "passA": {
+    "hits": 2165,
+    "reps": 4000,
+    "p": 0.54125,
+    "se": 0.007878744149609124,
+    "lo": 0.5257757271122756,
+    "hi": 0.556645118816324
+   },
+   "passB": {
+    "hits": 2189,
+    "reps": 4000,
+    "p": 0.54725,
+    "se": 0.00787031507469682,
+    "lo": 0.5317864673027376,
+    "hi": 0.5626228653063857
+   },
+   "both": {
+    "hits": 1494,
+    "reps": 4000,
+    "p": 0.3735,
+    "se": 0.0076484924985254455,
+    "lo": 0.35863730131626675,
+    "hi": 0.3886054378360278
+   },
+   "predicted": 0.5631332271178199,
+   "predictedT": 0.5459802062790867,
+   "predictedTrue": 0.5499899244383657,
+   "product": 0.2961990625,
+   "clipRate": 0,
+   "verdictsA": {
+    "PASS": 2165,
+    "FAIL": 0,
+    "INCONCLUSIVE": 1835
+   }
+  },
+  {
+   "margin": 0.05,
+   "tauB": 0,
+   "tauW": 0,
+   "sigmaD2": 0.14795306287280985,
+   "rho": 0.0017966513791214773,
+   "nRepos": 48,
+   "truth": -0.05,
+   "realized": -0.050000000000002834,
+   "passA": {
+    "hits": 83,
+    "reps": 4000,
+    "p": 0.02075,
+    "se": 0.0022538543375737485,
+    "lo": 0.016770581716294513,
+    "hi": 0.025649044676884367
+   },
+   "passB": {
+    "hits": 100,
+    "reps": 4000,
+    "p": 0.025,
+    "se": 0.0024685522072664372,
+    "lo": 0.020598357145241542,
+    "hi": 0.03031311397997487
+   },
+   "both": {
+    "hits": 20,
+    "reps": 4000,
+    "p": 0.005,
+    "se": 0.0011152354011597732,
+    "lo": 0.0032391284674616857,
+    "hi": 0.007710720389342784
+   },
+   "predicted": 0.024999999999990807,
+   "predictedT": 0.02499999999999115,
+   "predictedTrue": 0.02499999999999108,
+   "product": 0.00051875,
+   "clipRate": 0,
+   "verdictsA": {
+    "PASS": 83,
+    "FAIL": 101,
+    "INCONCLUSIVE": 3816
+   }
+  },
+  {
+   "margin": 0.05,
+   "tauB": 0.05,
+   "tauW": 0.05,
+   "sigmaD2": 0.152761258938165,
+   "rho": 0.0180918126308859,
+   "nRepos": 56,
+   "truth": 0,
+   "realized": 0.000052571175087963186,
+   "passA": {
+    "hits": 3152,
+    "reps": 4000,
+    "p": 0.788,
+    "se": 0.006462507253380842,
+    "lo": 0.7750604615173129,
+    "hi": 0.8003868991478191
+   },
+   "passB": {
+    "hits": 3196,
+    "reps": 4000,
+    "p": 0.799,
+    "se": 0.00633638303766431,
+    "lo": 0.7862966885890681,
+    "hi": 0.8111295643236904
+   },
+   "both": {
+    "hits": 2754,
+    "reps": 4000,
+    "p": 0.6885,
+    "se": 0.007322358738821802,
+    "lo": 0.6739733318870301,
+    "hi": 0.7026649579927525
+   },
+   "predicted": 0.8024374723415886,
+   "predictedT": 0.7884284983840004,
+   "predictedTrue": null,
+   "product": 0.6296120000000001,
+   "clipRate": 0.0000035714285714285714,
+   "verdictsA": {
+    "PASS": 3152,
+    "FAIL": 0,
+    "INCONCLUSIVE": 848
+   }
+  },
+  {
+   "margin": 0.05,
+   "tauB": 0.05,
+   "tauW": 0.05,
+   "sigmaD2": 0.152761258938165,
+   "rho": 0.0180918126308859,
+   "nRepos": 56,
+   "truth": -0.0125,
+   "realized": -0.0124377156404687,
+   "passA": {
+    "hits": 2176,
+    "reps": 4000,
+    "p": 0.544,
+    "se": 0.007875023809487815,
+    "lo": 0.5285303698587903,
+    "hi": 0.5593851991317161
+   },
+   "passB": {
+    "hits": 2208,
+    "reps": 4000,
+    "p": 0.552,
+    "se": 0.007862823920195593,
+    "lo": 0.5365465711446844,
+    "hi": 0.5673536467531868
+   },
+   "both": {
+    "hits": 1584,
+    "reps": 4000,
+    "p": 0.396,
+    "se": 0.00773278733704736,
+    "lo": 0.38095074119942285,
+    "hi": 0.41124882300483523
+   },
+   "predicted": 0.5592477199032958,
+   "predictedT": 0.5446500429910349,
+   "predictedTrue": null,
+   "product": 0.30028800000000005,
+   "clipRate": 0.000005580357142857143,
+   "verdictsA": {
+    "PASS": 2176,
+    "FAIL": 1,
+    "INCONCLUSIVE": 1823
+   }
+  },
+  {
+   "margin": 0.05,
+   "tauB": 0.05,
+   "tauW": 0.05,
+   "sigmaD2": 0.152761258938165,
+   "rho": 0.0180918126308859,
+   "nRepos": 56,
+   "truth": -0.05,
+   "realized": -0.04992937806745345,
+   "passA": {
+    "hits": 108,
+    "reps": 4000,
+    "p": 0.027,
+    "se": 0.002562762181709415,
+    "lo": 0.022412836192116026,
+    "hi": 0.03249479715994158
+   },
+   "passB": {
+    "hits": 93,
+    "reps": 4000,
+    "p": 0.02325,
+    "se": 0.0023827210023416507,
+    "lo": 0.019017249822824475,
+    "hi": 0.02839757935390589
+   },
+   "both": {
+    "hits": 26,
+    "reps": 4000,
+    "p": 0.0065,
+    "se": 0.0012706051707749343,
+    "lo": 0.004439706820353364,
+    "hi": 0.009507263706582
+   },
+   "predicted": 0.025232651049119315,
+   "predictedT": 0.025228614390508164,
+   "predictedTrue": null,
+   "product": 0.0006277499999999999,
+   "clipRate": 0.000034598214285714284,
+   "verdictsA": {
+    "PASS": 108,
+    "FAIL": 96,
+    "INCONCLUSIVE": 3796
+   }
+  },
+  {
+   "margin": 0.1,
+   "tauB": 0,
+   "tauW": 0,
+   "sigmaD2": 0.14942654637965766,
+   "rho": 0.0029757321327124157,
+   "nRepos": 13,
+   "truth": 0,
+   "realized": 0,
+   "passA": {
+    "hits": 3069,
+    "reps": 4000,
+    "p": 0.76725,
+    "se": 0.006681643463624799,
+    "lo": 0.7539015808823123,
+    "hi": 0.7800855966793422
+   },
+   "passB": {
+    "hits": 3070,
+    "reps": 4000,
+    "p": 0.7675,
+    "se": 0.006679141973337593,
+    "lo": 0.754156235857777,
+    "hi": 0.7803304619822325
+   },
+   "both": {
+    "hits": 2537,
+    "reps": 4000,
+    "p": 0.63425,
+    "se": 0.007615394564630253,
+    "lo": 0.6192019016302609,
+    "hi": 0.6490404878464543
+   },
+   "predicted": 0.8291670654997896,
+   "predictedT": 0.7618545399693305,
+   "predictedTrue": 0.7741115746023862,
+   "product": 0.588864375,
+   "clipRate": 0,
+   "verdictsA": {
+    "PASS": 3069,
+    "FAIL": 0,
+    "INCONCLUSIVE": 931
+   }
+  },
+  {
+   "margin": 0.1,
+   "tauB": 0,
+   "tauW": 0,
+   "sigmaD2": 0.14942654637965766,
+   "rho": 0.0029757321327124157,
+   "nRepos": 13,
+   "truth": -0.025,
+   "realized": -0.025000000000001403,
+   "passA": {
+    "hits": 2154,
+    "reps": 4000,
+    "p": 0.5385,
+    "se": 0.00788222287809727,
+    "lo": 0.5230215572298397,
+    "hi": 0.5539045656368532
+   },
+   "passB": {
+    "hits": 2136,
+    "reps": 4000,
+    "p": 0.534,
+    "se": 0.007887395007225136,
+    "lo": 0.518515752149173,
+    "hi": 0.5494190057071273
+   },
+   "both": {
+    "hits": 1443,
+    "reps": 4000,
+    "p": 0.36075,
+    "se": 0.007592915077557499,
+    "lo": 0.34600830325510523,
+    "hi": 0.37575890170107673
+   },
+   "predicted": 0.5882976829067313,
+   "predictedT": 0.5188885468223475,
+   "predictedTrue": 0.5309230025797279,
+   "product": 0.287559,
+   "clipRate": 0,
+   "verdictsA": {
+    "PASS": 2154,
+    "FAIL": 0,
+    "INCONCLUSIVE": 1846
+   }
+  },
+  {
+   "margin": 0.1,
+   "tauB": 0,
+   "tauW": 0,
+   "sigmaD2": 0.14942654637965766,
+   "rho": 0.0029757321327124157,
+   "nRepos": 13,
+   "truth": -0.1,
+   "realized": -0.10000000000000561,
+   "passA": {
+    "hits": 97,
+    "reps": 4000,
+    "p": 0.02425,
+    "se": 0.0024321768798753105,
+    "lo": 0.019919949273860368,
+    "hi": 0.029492961016290602
+   },
+   "passB": {
+    "hits": 89,
+    "reps": 4000,
+    "p": 0.02225,
+    "se": 0.0023321094260347216,
+    "lo": 0.01811678002138506,
+    "hi": 0.027299968041924708
+   },
+   "both": {
+    "hits": 13,
+    "reps": 4000,
+    "p": 0.00325,
+    "se": 0.0008999218716088636,
+    "lo": 0.0019003484269795898,
+    "hi": 0.005552858481338834
+   },
+   "predicted": 0.02499999999999064,
+   "predictedT": 0.024999999999989402,
+   "predictedTrue": 0.024999999999989298,
+   "product": 0.0005395625,
+   "clipRate": 0,
+   "verdictsA": {
+    "PASS": 97,
+    "FAIL": 94,
+    "INCONCLUSIVE": 3809
+   }
+  },
+  {
+   "margin": 0.1,
+   "tauB": 0.05,
+   "tauW": 0.05,
+   "sigmaD2": 0.15185011571758517,
+   "rho": 0.013479235935002675,
+   "nRepos": 14,
+   "truth": 0,
+   "realized": -0.000133342135871458,
+   "passA": {
+    "hits": 2983,
+    "reps": 4000,
+    "p": 0.74575,
+    "se": 0.006884891747514989,
+    "lo": 0.7320244911813892,
+    "hi": 0.7590039424417226
+   },
+   "passB": {
+    "hits": 2974,
+    "reps": 4000,
+    "p": 0.7435,
+    "se": 0.006904848839764706,
+    "lo": 0.7297375969218812,
+    "hi": 0.7567951541960344
+   },
+   "both": {
+    "hits": 2462,
+    "reps": 4000,
+    "p": 0.6155,
+    "se": 0.0076918747714715165,
+    "lo": 0.600320213227027,
+    "hi": 0.630458155373052
+   },
+   "predicted": 0.816907816878928,
+   "predictedT": 0.7541020819049652,
+   "predictedTrue": null,
+   "product": 0.554465125,
+   "clipRate": 0.0000035714285714285714,
+   "verdictsA": {
+    "PASS": 2983,
+    "FAIL": 0,
+    "INCONCLUSIVE": 1017
+   }
+  },
+  {
+   "margin": 0.1,
+   "tauB": 0.05,
+   "tauW": 0.05,
+   "sigmaD2": 0.15185011571758517,
+   "rho": 0.013479235935002675,
+   "nRepos": 14,
+   "truth": -0.025,
+   "realized": -0.02491644532901604,
+   "passA": {
+    "hits": 2041,
+    "reps": 4000,
+    "p": 0.51025,
+    "se": 0.007904032791872767,
+    "lo": 0.49475597642727465,
+    "hi": 0.5257243549852864
+   },
+   "passB": {
+    "hits": 2026,
+    "reps": 4000,
+    "p": 0.5065,
+    "se": 0.007905026091038537,
+    "lo": 0.49100763031043326,
+    "hi": 0.5219798969268005
+   },
+   "both": {
+    "hits": 1414,
+    "reps": 4000,
+    "p": 0.3535,
+    "se": 0.007558732532640641,
+    "lo": 0.3388321565242266,
+    "hi": 0.368448960359656
+   },
+   "predicted": 0.576522577626442,
+   "predictedT": 0.5131907784018905,
+   "predictedTrue": null,
+   "product": 0.25844162499999995,
+   "clipRate": 0.000007142857142857143,
+   "verdictsA": {
+    "PASS": 2041,
+    "FAIL": 0,
+    "INCONCLUSIVE": 1959
+   }
+  },
+  {
+   "margin": 0.1,
+   "tauB": 0.05,
+   "tauW": 0.05,
+   "sigmaD2": 0.15185011571758517,
+   "rho": 0.013479235935002675,
+   "nRepos": 14,
+   "truth": -0.1,
+   "realized": -0.09961998008037051,
+   "passA": {
+    "hits": 92,
+    "reps": 4000,
+    "p": 0.023,
+    "se": 0.0023701793181107626,
+    "lo": 0.018791917877354257,
+    "hi": 0.02812339102102096
+   },
+   "passB": {
+    "hits": 99,
+    "reps": 4000,
+    "p": 0.02475,
+    "se": 0.002456493308559989,
+    "lo": 0.020372093336873627,
+    "hi": 0.03003985750998764
+   },
+   "both": {
+    "hits": 22,
+    "reps": 4000,
+    "p": 0.0055,
+    "se": 0.0011693748329770057,
+    "lo": 0.00363499761104977,
+    "hi": 0.008313891802464998
+   },
+   "predicted": 0.025643701541611275,
+   "predictedT": 0.025597796413935964,
+   "predictedTrue": null,
+   "product": 0.00056925,
+   "clipRate": 0.0003785714285714286,
+   "verdictsA": {
+    "PASS": 92,
+    "FAIL": 98,
+    "INCONCLUSIVE": 3810
+   }
+  }
+ ]
+}
