@@ -74,6 +74,7 @@ npm run -w @dcc/core prove:manual     # a task developed by a person: the mark, 
 npm run -w @dcc/core prove:onboarding # the whole onboarding run on the kit's repository: diagnosis, rules, the measurement's "without" arm, cards, build with real hook checks, the "with" arm, delivery (same)
 npm run -w @dcc/core eval:onboarding -- --repo <dir> --baseline <sha> --files <list.json>  # the measurement as a research script, with and without a set of files, into a scratch database (safe with the API up)
 npm run -w @dcc/research pilot -- status   # Research Protocol v1 pilot (F1-F8): frozen-text check, open parameters, what each question is blocked by. The package never imports @dcc/core or @dcc/db (safe with the API up); see docs/research/pilot/README.md
+npm run -w @dcc/research test:integration  # the pilot's agent copy, runner and leak detection on synthetic repositories with a mock agent (no model, no network)
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run -w @dcc/web build      # production build of the web app
@@ -87,7 +88,10 @@ errors; style leftovers are warnings — do not add new ones.
 modules in `packages/core/src`). **A test must import the module under test by
 its own file, never `@dcc/core`'s index or `@dcc/db`** — that opens the PGlite
 directory, which is unsafe while the API is up. Anything that needs the database
-stays a `dev:prove` / `smoke` / `prove:*` script.
+stays a `dev:prove` / `smoke` / `prove:*` script. Tests that spawn git or node
+processes are named `*.integration.test.ts`: `npm test` leaves them out (run in
+parallel they starve other files' timeouts) and their package runs them one file
+at a time with `test:integration`.
 
 Repository onboarding (`openspec/changes/repository-coach`) is one fixed
 process — connect, diagnose (no model), processes and the agent test, a trial
