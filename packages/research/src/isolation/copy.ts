@@ -33,17 +33,22 @@ export type ViolationKind =
   | "REFLOG_PRESENT" | "STATE_FILE" | "WORKTREE_MISMATCH" | "OVERLAY_NOT_BEFORE_START"
   | "OVERLAY_DATE_ANCESTRY_DISAGREE" | "SOLUTION_TOKEN_IN_OVERLAY" | "FOREIGN_COMMIT_AFTER_RUN";
 
-/** How a violation bears on the evidence: invalid (5.4.5), a flag to report, or a case the protocol does not define. */
-export type Consequence = "INVALID" | "FLAG" | "UNDEFINED";
+/**
+ * How a violation bears on the evidence, in the protocol's own terms only:
+ * INVALID (5.4.5: information later than S_c, or a copy that is not the
+ * defined state), or UNKNOWN (0.2: assessed, the evidence is not enough to
+ * decide; used for a heuristic sign and for a case the protocol does not settle).
+ */
+export type Consequence = "INVALID" | "UNKNOWN";
 
 export const CONSEQUENCE: Record<ViolationKind, Consequence> = {
   HEAD_NOT_START: "INVALID", FOREIGN_OBJECT: "INVALID", TASK_COMMIT_PRESENT: "INVALID", EXTRA_REF: "INVALID",
   REMOTE_CONFIGURED: "INVALID", ALTERNATES: "INVALID", REFLOG_PRESENT: "INVALID", STATE_FILE: "INVALID",
   WORKTREE_MISMATCH: "INVALID", OVERLAY_NOT_BEFORE_START: "INVALID", FOREIGN_COMMIT_AFTER_RUN: "INVALID",
   // A heuristic: a sign, not a proof.
-  SOLUTION_TOKEN_IN_OVERLAY: "FLAG",
+  SOLUTION_TOKEN_IN_OVERLAY: "UNKNOWN",
   // Dates and ancestry disagree: the protocol uses both words; not decided here.
-  OVERLAY_DATE_ANCESTRY_DISAGREE: "UNDEFINED",
+  OVERLAY_DATE_ANCESTRY_DISAGREE: "UNKNOWN",
 };
 
 export type Violation = { kind: ViolationKind; consequence: Consequence; detail: string };
@@ -102,7 +107,8 @@ export type VerifyInput = {
   afterRun?: boolean;
 };
 
-export type VerifyResult = { valid: boolean; consequence: Consequence | "VALID"; violations: Violation[]; checks: string[] };
+/** The copy condition in three-valued terms (0.2): FAIL when a violation makes the evidence INVALID, UNKNOWN when only undecidable signs were found, PASS otherwise. */
+export type VerifyResult = { status: "PASS" | "FAIL" | "UNKNOWN"; evidence: "INVALID" | null; violations: Violation[]; checks: string[] };
 
 export function verifyAgentCopy(v: VerifyInput): VerifyResult {
   const violations: Violation[] = [];
@@ -195,7 +201,7 @@ export function verifyAgentCopy(v: VerifyInput): VerifyResult {
     }
   }
 
-  const order: Consequence[] = ["INVALID", "UNDEFINED", "FLAG"];
-  const worst = order.find((c) => violations.some((x) => x.consequence === c));
-  return { valid: violations.length === 0, consequence: worst ?? "VALID", violations, checks };
+  const invalid = violations.some((x) => x.consequence === "INVALID");
+  const status = invalid ? "FAIL" : violations.length ? "UNKNOWN" : "PASS";
+  return { status, evidence: invalid ? "INVALID" : null, violations, checks };
 }

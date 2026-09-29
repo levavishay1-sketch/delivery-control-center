@@ -10,7 +10,7 @@ const tmp = () => { const d = mkdtempSync(path.join(tmpdir(), "dcc-evidence-"));
 afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }); });
 
 const rec = (n: number): EvidenceInput => ({
-  kind: "test", question: "F2", status: "OK", protocolSha256: FROZEN_PROTOCOL.sha256, paramsSha256: "p",
+  kind: "test", question: "F2", status: "PASS", protocolSha256: FROZEN_PROTOCOL.sha256, paramsSha256: "p",
   startedAt: `2026-09-29T00:00:0${n}Z`, finishedAt: `2026-09-29T00:00:0${n}Z`, data: { n, b: [1, { z: 1, a: 2 }] },
 });
 
@@ -43,7 +43,7 @@ describe("the evidence log", () => {
     const original = readFileSync(file, "utf8").split(LF).filter(Boolean);
     const write = (ls: (string | undefined)[]) => writeFileSync(file, ls.join(LF) + LF);
 
-    write([original[0], original[1]!.replace('"status":"OK"', '"status":"FAILED"'), original[2]]);
+    write([original[0], original[1]!.replace('"status":"PASS"', '"status":"FAIL"'), original[2]]);
     expect(verifyChain(d)).toMatchObject({ ok: false, line: 2 });
 
     write([original[0], original[2]]);

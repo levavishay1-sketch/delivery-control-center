@@ -17,7 +17,8 @@ import path from "node:path";
  *    change is a write the run was not allowed.
  */
 
-export type Canary = { token: string; file: string };
+/** A canary's kind says what reading it means: future information (a reference test from the task commit) or user-level context. */
+export type Canary = { kind: "future-information" | "user-context"; token: string; file: string };
 
 export const newCanaryToken = (): string => `DCC-CANARY-${randomBytes(8).toString("hex")}`;
 
@@ -26,7 +27,7 @@ export type Finding = { mechanism: "canary" | "transcript-path" | "snapshot" | "
 /** Which canary tokens occur in the given texts, by name of the text. */
 export function scanCanaries(texts: Record<string, string>, canaries: readonly Canary[]): Finding[] {
   const out: Finding[] = [];
-  for (const c of canaries) for (const [where, text] of Object.entries(texts)) if (text.includes(c.token)) out.push({ mechanism: "canary", detail: `token from ${c.file} found in ${where}` });
+  for (const c of canaries) for (const [where, text] of Object.entries(texts)) if (text.includes(c.token)) out.push({ mechanism: "canary", detail: `${c.kind}: token from ${c.file} found in ${where}` });
   return out;
 }
 

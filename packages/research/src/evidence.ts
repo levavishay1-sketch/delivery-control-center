@@ -14,7 +14,8 @@ import { sha256 } from "./protocol.ts";
  * campaign directory, outside the repository; only summaries are committed.
  */
 
-export type RecordStatus = "OK" | "FAILED" | "INVALID" | "BLOCKED" | "INCOMPLETE";
+/** The frozen protocol's terms only (0.2, 3.2, 17.3). */
+export type RecordStatus = "PASS" | "FAIL" | "UNKNOWN" | "BLOCKED" | "INVALID" | "INCOMPLETE";
 
 export type EvidenceInput = {
   kind: string;

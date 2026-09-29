@@ -29,8 +29,8 @@ describe("paths in the transcript", () => {
 
 describe("canaries and snapshots", () => {
   it("a token is found wherever it appears, and only there", () => {
-    const f = scanCanaries({ stdout: "x DCC-CANARY-1 y", stderr: "" }, [{ token: "DCC-CANARY-1", file: "a" }, { token: "DCC-CANARY-2", file: "b" }]);
-    expect(f).toEqual([{ mechanism: "canary", detail: "token from a found in stdout" }]);
+    const f = scanCanaries({ stdout: "x DCC-CANARY-1 y", stderr: "" }, [{ kind: "future-information", token: "DCC-CANARY-1", file: "a" }, { kind: "user-context", token: "DCC-CANARY-2", file: "b" }]);
+    expect(f).toEqual([{ mechanism: "canary", detail: "future-information: token from a found in stdout" }]);
   });
   it("added, changed and removed files", () => {
     const before = new Map([["a", "1"], ["b", "2"]]);

@@ -42,7 +42,7 @@ describe("a correct copy", () => {
     expect(head).toBe(c.start);
     const v = verifyAgentCopy({ dir, start: c.start, task: c.task, overlay: goodOverlay(), source, solutionTokens: solutionOnlyTokens(source, c.start, c.task) });
     expect(v.violations).toEqual([]);
-    expect(v.consequence).toBe("VALID");
+    expect(v.status).toBe("PASS");
     expect(git(source, ["for-each-ref"])).toBe(refsBefore); // the source was not touched
   }, 60_000);
 
@@ -60,7 +60,8 @@ describe("deliberate violations are caught and classified", () => {
     git(dir, ["update-ref", "-d", "refs/heads/tmp"]);
     const v = verifyAgentCopy({ dir, start: c.start, task: c.task });
     expect(v.violations.map((x) => x.kind)).toEqual(expect.arrayContaining(["FOREIGN_OBJECT", "TASK_COMMIT_PRESENT"]));
-    expect(v.consequence).toBe("INVALID");
+    expect(v.status).toBe("FAIL");
+    expect(v.evidence).toBe("INVALID");
   }, 60_000);
 
   it("a tag, a remote, alternates, a reflog and FETCH_HEAD", () => {
@@ -80,7 +81,8 @@ describe("deliberate violations are caught and classified", () => {
     const { dir } = fresh(overlay);
     const v = verifyAgentCopy({ dir, start: c.start, overlay, source });
     expect(v.violations.map((x) => x.kind)).toContain("OVERLAY_NOT_BEFORE_START");
-    expect(v.consequence).toBe("INVALID");
+    expect(v.status).toBe("FAIL");
+    expect(v.evidence).toBe("INVALID");
   }, 60_000);
 
   it("an overlay from a commit dated before S_c but not its ancestor: invalid by ancestry, and the disagreement is reported, not decided", () => {
@@ -89,15 +91,16 @@ describe("deliberate violations are caught and classified", () => {
     const v = verifyAgentCopy({ dir, start: c.start, overlay, source });
     const kinds = v.violations.map((x) => x.kind);
     expect(kinds).toEqual(expect.arrayContaining(["OVERLAY_NOT_BEFORE_START", "OVERLAY_DATE_ANCESTRY_DISAGREE"]));
-    expect(v.violations.find((x) => x.kind === "OVERLAY_DATE_ANCESTRY_DISAGREE")!.consequence).toBe("UNDEFINED");
+    expect(v.violations.find((x) => x.kind === "OVERLAY_DATE_ANCESTRY_DISAGREE")!.consequence).toBe("UNKNOWN");
   }, 60_000);
 
-  it("an overlay that names what the solution introduces is flagged (heuristic, not invalid by itself)", () => {
+  it("an overlay that names what the solution introduces: UNKNOWN (a heuristic sign, not invalid by itself)", () => {
     const overlay: Overlay = { generatedFrom: c.F, files: [{ path: "CLAUDE.md", content: "Use computeLedgerChecksum for checksums.\n" }] };
     const { dir } = fresh(overlay);
     const v = verifyAgentCopy({ dir, start: c.start, overlay, source, solutionTokens: solutionOnlyTokens(source, c.start, c.task) });
     expect(v.violations.map((x) => x.kind)).toEqual(["SOLUTION_TOKEN_IN_OVERLAY"]);
-    expect(v.consequence).toBe("FLAG");
+    expect(v.status).toBe("UNKNOWN");
+    expect(v.evidence).toBeNull();
   }, 60_000);
 
   it("a working tree that is not S_c plus the overlay: a future file, a changed file, an undeclared file", () => {

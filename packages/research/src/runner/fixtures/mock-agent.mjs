@@ -2,10 +2,10 @@
 // It speaks Claude Code's stream-json shape (one JSON object per line:
 // system/init, assistant turns with tool_use blocks, user tool results, a
 // final result) and acts out one scenario, chosen by MOCK_SCENARIO. Some
-// scenarios misbehave on purpose so that the harness's detection can be
-// tested; the targets they misbehave against come from the test, in MOCK_*
-// variables.
-import { execFileSync } from "node:child_process";
+// scenarios misbehave on purpose so that the harness's detection and
+// enforcement can be tested; the targets they misbehave against come from
+// the test, in MOCK_* variables.
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -20,8 +20,8 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let turns = 0;
 const t = (name, input) => { turns++; turn(name, input); };
 
-emit({ type: "system", subtype: "init", cwd: process.cwd(), tools: ["Read", "Edit", "Bash"] });
 const scenario = process.env.MOCK_SCENARIO ?? "normal";
+if (scenario !== "heartbeat") emit({ type: "system", subtype: "init", cwd: process.cwd(), tools: ["Read", "Edit", "Bash"] });
 
 function viaProxy(method, target) {
   const proxy = new URL(process.env.HTTP_PROXY);
@@ -34,6 +34,14 @@ function viaProxy(method, target) {
   });
 }
 
+// A detached child that appends to a file every 50 ms for 20 s; its pid goes to MOCK_PID_FILE.
+function leaveChildRunning() {
+  const c = spawn(process.execPath, [process.argv[1]], { detached: true, stdio: "ignore", env: { ...process.env, MOCK_SCENARIO: "heartbeat" } });
+  c.unref();
+  writeFileSync(process.env.MOCK_PID_FILE, String(c.pid));
+  return c.pid;
+}
+
 switch (scenario) {
   case "normal": {
     t("Read", { file_path: "README.md" });
@@ -44,10 +52,20 @@ switch (scenario) {
     finish("done");
     break;
   }
+  case "tools-check": {
+    t("Bash", { command: "node --version && git --version" });
+    const probe = (cmd) => { const r = spawnSync(cmd, ["--version"], { encoding: "utf8", timeout: 20_000 }); return r.error ? `not found (${r.error.code})` : `runs (exit ${r.status})`; };
+    const out = {};
+    for (const cmd of ["node", "git", "npm", "npx", "dotnet", "claude", "curl", "powershell", "bash", "where", "cmd"]) out[cmd] = probe(cmd);
+    finish(JSON.stringify(out));
+    break;
+  }
   case "env-dump": {
+    // Everything the process can see about itself, into a file the test reads; only key names go to the output.
     t("Bash", { command: "env" });
-    const e = process.env;
-    finish(JSON.stringify({ keys: Object.keys(e).sort(), homedir: os.homedir(), home: { HOMEDRIVE: e.HOMEDRIVE, HOMEPATH: e.HOMEPATH, USERNAME: e.USERNAME } }));
+    const u = os.userInfo();
+    writeFileSync(process.env.MOCK_DUMP_FILE, JSON.stringify({ env: process.env, cwd: process.cwd(), execPath: process.execPath, argv: process.argv, homedir: os.homedir(), tmpdir: os.tmpdir(), userInfo: { username: u.username, homedir: u.homedir } }));
+    finish(JSON.stringify({ keys: Object.keys(process.env).sort() }));
     break;
   }
   case "read-forbidden": {
@@ -106,6 +124,31 @@ switch (scenario) {
   case "many-turns": {
     for (let i = 0; i < 1000; i++) { t("Read", { file_path: "README.md" }); await sleep(1); }
     finish("done");
+    break;
+  }
+  case "many-turns-with-child": {
+    leaveChildRunning();
+    for (let i = 0; i < 1000; i++) { t("Read", { file_path: "README.md" }); await sleep(1); }
+    finish("done");
+    break;
+  }
+  case "flood": {
+    const line = JSON.stringify({ type: "system", subtype: "noise", pad: "x".repeat(8000) }) + "\n";
+    for (let i = 0; i < 6000; i++) { process.stdout.write(line); if (i % 50 === 0) await sleep(0); }
+    finish("done");
+    break;
+  }
+  case "orphan": {
+    leaveChildRunning();
+    await sleep(300);
+    t("Bash", { command: "node worker.js &" });
+    toolResult("started a worker");
+    finish("left a child running");
+    break;
+  }
+  case "heartbeat": {
+    setInterval(() => appendFileSync(process.env.MOCK_HEARTBEAT_FILE, "x"), 50);
+    await sleep(20_000);
     break;
   }
   case "over-budget": {
