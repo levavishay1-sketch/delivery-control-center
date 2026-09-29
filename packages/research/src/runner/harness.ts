@@ -27,7 +27,7 @@ export const ENFORCEMENT = {
   environmentVariables: "ENFORCED at spawn: the child receives only the variables the harness lists; PATH is a synthetic list of tool folders, never the user's",
   processIdentity: "NOT HIDDEN: the process runs as the real OS account, whose name and profile folder remain available through operating-system calls",
   userSettingsLocation: "REDIRECTED: home, AppData, temp and CLAUDE_CONFIG_DIR point into a synthetic home outside the user's profile; the real ones stay readable by absolute path",
-  processTree: "ENFORCED on Windows by a Job Object: no process of the run outlives it or escapes a stop",
+  processTree: "ENFORCED on Windows by a Job Object for the processes the run creates itself: they cannot leave the job and are killed when the run stops or ends. A process a system service starts on the run's behalf (Task Scheduler, WMI, an out-of-process COM server) is outside the job; not tested",
   caps: "DETECTED, THEN ENFORCED: turn, output and wall-clock caps stop the tree after the runner sees them crossed; not hard limits, overshoot measured per run",
   fileSystemReads: "NOT ENFORCED: same OS account; detected by canaries and by paths in the transcript only",
   fileSystemWrites: "NOT ENFORCED: detected by snapshots of watched directories only",
