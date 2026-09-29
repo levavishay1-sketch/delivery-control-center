@@ -73,6 +73,7 @@ npm run -w @dcc/core prove:checks     # every task's checks (build → tests), i
 npm run -w @dcc/core prove:manual     # a task developed by a person: the mark, the report, each check by hand (same)
 npm run -w @dcc/core prove:onboarding # the whole onboarding run on the kit's repository: diagnosis, rules, the measurement's "without" arm, cards, build with real hook checks, the "with" arm, delivery (same)
 npm run -w @dcc/core eval:onboarding -- --repo <dir> --baseline <sha> --files <list.json>  # the measurement as a research script, with and without a set of files, into a scratch database (safe with the API up)
+npm run -w @dcc/research pilot -- status   # Research Protocol v1 pilot (F1-F8): frozen-text check, open parameters, what each question is blocked by. The package never imports @dcc/core or @dcc/db (safe with the API up); see docs/research/pilot/README.md
 npm run -w @dcc/api dev        # API on :3001 (tsx watch)
 npm run -w @dcc/web dev        # web UI on :5173 (vite)
 npm run -w @dcc/web build      # production build of the web app

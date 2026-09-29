@@ -1,0 +1,148 @@
+{
+  "entries": {
+    "U1": {
+      "state": "UNSET"
+    },
+    "U2": {
+      "state": "UNSET"
+    },
+    "U3": {
+      "state": "UNSET"
+    },
+    "U4": {
+      "state": "UNSET"
+    },
+    "U5": {
+      "state": "UNSET"
+    },
+    "U6": {
+      "state": "UNSET"
+    },
+    "U7": {
+      "state": "UNSET"
+    },
+    "U8": {
+      "state": "UNSET"
+    },
+    "U9": {
+      "state": "UNSET"
+    },
+    "U10": {
+      "state": "UNSET"
+    },
+    "U11": {
+      "state": "UNSET"
+    },
+    "U12": {
+      "state": "UNSET"
+    },
+    "U13": {
+      "state": "UNSET"
+    },
+    "U14": {
+      "state": "UNSET"
+    },
+    "U15": {
+      "state": "UNSET"
+    },
+    "U16": {
+      "state": "UNSET"
+    },
+    "U17": {
+      "state": "UNSET"
+    },
+    "U18a": {
+      "state": "UNSET"
+    },
+    "U18b": {
+      "state": "UNSET"
+    },
+    "U18c": {
+      "state": "UNSET"
+    },
+    "U19": {
+      "state": "UNSET"
+    },
+    "U20": {
+      "state": "UNSET"
+    },
+    "U21": {
+      "state": "UNSET"
+    },
+    "U22": {
+      "state": "UNSET"
+    },
+    "U23-pilot": {
+      "state": "UNSET"
+    },
+    "U23-locked": {
+      "state": "UNSET"
+    },
+    "U24": {
+      "state": "UNSET"
+    },
+    "U25": {
+      "state": "UNSET"
+    },
+    "U26": {
+      "state": "UNSET"
+    },
+    "U27": {
+      "state": "UNSET"
+    },
+    "U28": {
+      "state": "UNSET"
+    },
+    "U29": {
+      "state": "UNSET"
+    },
+    "U30": {
+      "state": "UNSET"
+    },
+    "U31": {
+      "state": "UNSET"
+    },
+    "U32": {
+      "state": "UNSET"
+    },
+    "U33": {
+      "state": "UNSET"
+    },
+    "U34": {
+      "state": "UNSET"
+    },
+    "U35": {
+      "state": "UNSET"
+    },
+    "U36": {
+      "state": "UNSET"
+    },
+    "U37": {
+      "state": "UNSET"
+    },
+    "U38": {
+      "state": "UNSET"
+    },
+    "U39": {
+      "state": "UNSET"
+    },
+    "PP-1": {
+      "state": "UNSET"
+    },
+    "PP-2": {
+      "state": "UNSET"
+    },
+    "PP-3": {
+      "state": "UNSET"
+    },
+    "PP-4": {
+      "state": "UNSET"
+    },
+    "PP-5": {
+      "state": "UNSET"
+    },
+    "OP-1": {
+      "state": "UNSET"
+    }
+  }
+}
