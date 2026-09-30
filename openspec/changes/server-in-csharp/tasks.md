@@ -32,6 +32,9 @@ one PR to `master` at the end, when the user asks.
   - The identity audit moved to `/identity-audit`: `/audit` is the activity log's route (4.8)
   - Errors are `{ error: code, message }`; the client's `errText` shows the message
 - [ ] 4.2 Requirements, timeline, context brief, gaps, blockers, decisions, attachments, spec
+  - Done: `POST /workitems`, `GET/PATCH/DELETE /workitems/:id`, `/workitems/:id/timeline`, `/brief` (assembled, never summarised), `/requirements/:id/flow`, `/workitems/:id/spec` (the document read out of the attachment — a .docx through OpenXml, text otherwise), `/clients/:clientId/inbox`, `/list/workitems`, `/list/initiatives`, assign, ado-link, requirement repositories, dependencies, gaps (propose, verify — resolved/dismissed/spun off —, edit, delete), blockers (raise, answer, edit, delete, "waiting on me"), attachments (stored, text extracted from txt/md/docx/pdf, uploaded to Azure DevOps when connected, handed back); decisions recorded on reopen; the ledger writer (`ClaudeLedger`) and `TableColumns` (whole rows in the old camelCase shape)
+  - Still open here: `POST /events` — the capture endpoint the hooks and the "add note" form use (sessions, git activity, notes)
+  - Belongs to later tasks: `/workitems/:id/start`, task flow, bug links, research, flow runs (4.3); materialize and ADO sync (4.4); assess, breakdown, spec map, cost and calls (4.5); touches and review (4.6)
 - [ ] 4.3 Tasks, flow, the checks pipeline, manual work, built-on, start-build, task ADO sync
 - [ ] 4.4 Azure DevOps: http, pull, sync, import
 - [ ] 4.5 Claude: ai-assist (`claude.exe`), chat, the Claude centre, insights, retention, routing

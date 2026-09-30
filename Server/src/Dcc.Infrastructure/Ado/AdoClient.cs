@@ -75,6 +75,104 @@ public sealed class AdoClient(IHttpClientFactory http)
         return new AdoResult(false, last?.Status ?? 0, null, null, last is { } l ? $"{l.Status} {l.Text}" : "no response");
     }
 
+    /// <summary>POST / PATCH a path after <c>/_apis/</c> (a work item: json-patch). Walks the api-versions like a GET.</summary>
+    public async Task<AdoResult> SendAsync(string baseUrl, string apiPath, HttpMethod method, object body, string pat,
+        string contentType = "application/json-patch+json", CancellationToken ct = default)
+    {
+        var clean = baseUrl.TrimEnd('/');
+        var client = http.CreateClient(HttpClientName);
+        (int Status, string Text)? last = null;
+        foreach (var v in VersionsFor(clean))
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(method, $"{clean}/_apis/{apiPath}{(apiPath.Contains('?') ? "&" : "?")}api-version={v}");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(":" + pat)));
+                req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8);
+                req.Content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+                using var res = await client.SendAsync(req, ct);
+                var text = await res.Content.ReadAsStringAsync(ct);
+                if (res.IsSuccessStatusCode)
+                {
+                    WorkingVersion[Host(clean)] = v;
+                    JsonElement? parsed = null;
+                    try { parsed = JsonDocument.Parse(text).RootElement.Clone(); } catch (JsonException) { }
+                    return new AdoResult(true, (int)res.StatusCode, v, parsed, "");
+                }
+                if (res.StatusCode == HttpStatusCode.Unauthorized)
+                    return new AdoResult(false, 401, null, null, "401 — ה-PAT נדחה (צריך Work Items: Read, write & manage).");
+                last = ((int)res.StatusCode, text.Length > 300 ? text[..300] : text);
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                return new AdoResult(false, 0, null, null, $"שגיאת רשת: {e.Message}");
+            }
+        }
+        return new AdoResult(false, last?.Status ?? 0, null, null, last is { } l ? $"{l.Status} — {l.Text}" : "no response");
+    }
+
+    /// <summary>Uploads raw bytes as an attachment; the result's body carries <c>id</c> and <c>url</c>.</summary>
+    public async Task<AdoResult> UploadAsync(string baseUrl, string fileName, byte[] bytes, string pat, CancellationToken ct = default)
+    {
+        var clean = baseUrl.TrimEnd('/');
+        var client = http.CreateClient(HttpClientName);
+        (int Status, string Text)? last = null;
+        foreach (var v in VersionsFor(clean))
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, $"{clean}/_apis/wit/attachments?fileName={Uri.EscapeDataString(fileName)}&api-version={v}");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(":" + pat)));
+                req.Content = new ByteArrayContent(bytes);
+                req.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+                using var res = await client.SendAsync(req, ct);
+                var text = await res.Content.ReadAsStringAsync(ct);
+                if (res.IsSuccessStatusCode)
+                {
+                    WorkingVersion[Host(clean)] = v;
+                    JsonElement? parsed = null;
+                    try { parsed = JsonDocument.Parse(text).RootElement.Clone(); } catch (JsonException) { }
+                    return new AdoResult(true, (int)res.StatusCode, v, parsed, "");
+                }
+                if (res.StatusCode == HttpStatusCode.Unauthorized) return new AdoResult(false, 401, null, null, "401 — PAT rejected (needs Work Items: write)");
+                last = ((int)res.StatusCode, text.Length > 200 ? text[..200] : text);
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                return new AdoResult(false, 0, null, null, e.Message);
+            }
+        }
+        return new AdoResult(false, last?.Status ?? 0, null, null, last?.Text ?? "no response");
+    }
+
+    /// <summary>DELETE a path (a work item goes to the recycle bin). Every version answering 404 means it is already gone — the wanted end state.</summary>
+    public async Task<AdoResult> DeleteAsync(string baseUrl, string apiPath, string pat, CancellationToken ct = default)
+    {
+        var clean = baseUrl.TrimEnd('/');
+        var client = http.CreateClient(HttpClientName);
+        var only404 = true;
+        var last = 0;
+        foreach (var v in VersionsFor(clean))
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Delete, $"{clean}/_apis/{apiPath}{(apiPath.Contains('?') ? "&" : "?")}api-version={v}");
+                req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(":" + pat)));
+                using var res = await client.SendAsync(req, ct);
+                if (res.IsSuccessStatusCode) { WorkingVersion[Host(clean)] = v; return new AdoResult(true, (int)res.StatusCode, v, null, ""); }
+                if (res.StatusCode == HttpStatusCode.Unauthorized) return new AdoResult(false, 401, null, null, "PAT rejected");
+                if (res.StatusCode != HttpStatusCode.NotFound) only404 = false;
+                last = (int)res.StatusCode;
+            }
+            catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+            {
+                return new AdoResult(false, 0, null, null, e.Message);
+            }
+        }
+        return only404 ? new AdoResult(true, 404, null, null, "") : new AdoResult(false, last, null, null, $"{last}");
+    }
+
     private static IEnumerable<string> VersionsFor(string baseUrl) =>
         WorkingVersion.TryGetValue(Host(baseUrl), out var cached) ? ApiVersions.Where(v => v != cached).Prepend(cached) : ApiVersions;
 

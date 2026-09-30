@@ -75,6 +75,9 @@ public sealed class PermissionService(DccDbContext db, IMemoryCache cache) : IPe
         return own.Intersect(ownerSet).ToHashSet();
     }
 
+    public async Task<bool> ScopeExistsAsync(ScopeRef scope, CancellationToken ct = default) =>
+        await ResolveAsync(scope, ct) is not null;
+
     public async Task<bool> HasAnywhereAsync(Guid userId, string permission, CancellationToken ct = default)
     {
         var claim = await ClaimForAsync(userId, ct);

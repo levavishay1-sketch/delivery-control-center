@@ -62,6 +62,15 @@ public static class DependencyInjection
         services.AddScoped<PolicyService>();
         services.AddScoped<InternalClient>();
 
+        // Requirements, their timeline, brief, gaps, blockers, files and spec (phase 4.2)
+        services.AddScoped<Ledger.ClaudeLedger>();
+        services.AddScoped<Requirements.BriefService>();
+        services.AddScoped<Requirements.RequirementService>();
+        services.AddScoped<Requirements.GapService>();
+        services.AddScoped<Requirements.BlockerService>();
+        services.AddScoped<Requirements.AttachmentService>();
+        services.AddScoped<Requirements.SpecService>();
+
         services.AddSingleton<GraphClientFactory>();
         services.AddScoped<IGuestInvitationService, GraphGuestInvitationService>();
         services.AddScoped<EntraIdentityLinker>();

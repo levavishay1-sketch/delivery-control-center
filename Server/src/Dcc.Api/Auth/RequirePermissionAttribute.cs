@@ -49,7 +49,10 @@ public sealed class RequirePermissionAttribute(string permission, ScopeType scop
         }
 
         var permissions = http.RequestServices.GetRequiredService<IPermissionService>();
-        if (!await permissions.HasAsync(http.User.UserId(), Permission, new ScopeRef(Scope, id), http.RequestAborted))
-            context.Result = new ObjectResult(new { error = "forbidden", message = "You do not have permission for this.", permission = Permission }) { StatusCode = 403 };
+        var scope = new ScopeRef(Scope, id);
+        if (await permissions.HasAsync(http.User.UserId(), Permission, scope, http.RequestAborted)) return;
+        context.Result = Scope != ScopeType.Global && !await permissions.ScopeExistsAsync(scope, http.RequestAborted)
+            ? new NotFoundObjectResult(new { error = "not_found", message = $"{(Scope == ScopeType.Client ? "client" : "workitem")} not found" })
+            : new ObjectResult(new { error = "forbidden", message = "You do not have permission for this.", permission = Permission }) { StatusCode = 403 };
     }
 }

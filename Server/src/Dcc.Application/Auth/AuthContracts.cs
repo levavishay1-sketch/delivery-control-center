@@ -57,6 +57,9 @@ public interface IPermissionService
     /// </summary>
     Task<IReadOnlySet<Guid>?> ClientsWithAsync(Guid userId, string permission, CancellationToken ct = default);
 
+    /// <summary>Whether the client or requirement a scope names exists at all (a missing one answers 404, not 403).</summary>
+    Task<bool> ScopeExistsAsync(ScopeRef scope, CancellationToken ct = default);
+
     /// <summary>Whether the user holds <paramref name="permission"/> anywhere at all — for an org-wide library everyone who works with it may read.</summary>
     Task<bool> HasAnywhereAsync(Guid userId, string permission, CancellationToken ct = default);
 }
