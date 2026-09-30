@@ -5,6 +5,7 @@ using Dcc.Api.Infrastructure;
 using Dcc.Application.Auth;
 using Dcc.Application.Common;
 using Dcc.Domain.Auth;
+using Dcc.Infrastructure.Ado;
 using Dcc.Infrastructure.Claude;
 using Dcc.Infrastructure.Requirements;
 using Dcc.Infrastructure.Tasks;
@@ -57,8 +58,21 @@ public sealed class RequirementTasksController(RequirementService requirements, 
     /// <summary>"I'm ready to build this": a stable key, the move to building, the branch and the repositories.</summary>
     [HttpPost("workitems/{id:guid}/start")]
     [RequirePermission(Permissions.Requirements.Edit, ScopeType.Requirement, From = Id)]
-    public async Task<JsonObject> Start(Guid id, [FromServices] TaskTreeService tree, CancellationToken ct) =>
-        (await tree.StartBuildingAsync(await ClientAsync(id, ct), id, User.UserId(), ct)).Result;
+    public async Task<JsonObject> Start(Guid id, [FromServices] TaskTreeService tree, [FromServices] AdoRequirements ado, CancellationToken ct)
+    {
+        var clientId = await ClientAsync(id, ct);
+        var (result, moved, linked) = await tree.StartBuildingAsync(clientId, id, User.UserId(), ct);
+        // A requirement already linked to a work item mirrors the move there (state → Active) — best-effort.
+        if (moved && linked is not null)
+            try { await ado.SyncAsync(clientId, id, User.UserId(), ct); } catch (AppException) { }
+        return result;
+    }
+
+    /// <summary>Work items from a Boards CSV export become requirements of this client — nothing is pushed back.</summary>
+    [HttpPost("clients/{id:guid}/import/ado-csv")]
+    [RequirePermission(Permissions.Requirements.Create, ScopeType.Client, From = Id)]
+    public Task<JsonObject> ImportAdoCsv(Guid id, [FromBody] JsonElement b, [FromServices] AdoRequirements ado, CancellationToken ct) =>
+        ado.ImportCsvAsync(id, b.Required("csv", 10), User.UserId(), ct);
 
     // ── the requirement's own run (assess / breakdown) ───────────────
 

@@ -43,7 +43,11 @@ one PR to `master` at the end, when the user asks.
   - Found by the tests and fixed: a research/testing requirement's one tracking task got the build/test checks, so it could never be closed — checks are added only to a development requirement's tasks; tool paths in a run's transcript are shown relative to the repository (the old pattern missed the `.dcc-repos` folder); `TenantScope` nests per database context, so a background run records to the ledger in its own transaction
   - Not ported on purpose: `task-branch-repair` (a one-time fix for tasks from before branches were recorded — the C# server starts on a fresh database)
   - Belongs to later tasks: `/tasks/:id/spec` and the spec map (4.5), `/tasks/:id/code-map` (4.7), start-build mirroring the move to TFS (4.4), assess and breakdown runs (4.5)
-- [ ] 4.4 Azure DevOps: http, pull, sync, import
+- [x] 4.4 Azure DevOps: http, pull, sync, import
+  - The field mapping (`Dcc.Domain/Ado/AdoMap`, with its old tests) and the CSV reader; `POST /clients/:id/import/ado-csv` brings a Boards export in as requirements (key `ADO-<id>`, type, state, area, the description as a note; a second import skips what exists)
+  - A requirement already linked to a work item is mirrored when building starts (title, then state → Active; best-effort) — `AdoRequirements.SyncAsync`; putting tasks into TFS on approval, the Discussion checklist and the "Removed" mirror are 4.3's `TaskAdoSync`, now covered by tests against a fake Azure DevOps
+  - The HTTP layer is 4.1's `AdoClient`
+  - Not ported on purpose: the requirement↔TFS push-all and pull-as-mirror (`pullFromAdo`, `pullOneFromAdo`, `adoWorkItemExists`, `syncAllToAdo`, `trySyncNewRequirement`, `deleteAdoForRequirement`) — the old server had already retired them (no route called them; the TFS side is the task tree). They go with `OldServer/` in 5.2
 - [ ] 4.5 Claude: ai-assist (`claude.exe`), chat, the Claude centre, insights, retention, routing
 - [ ] 4.6 Pull request centre
 - [ ] 4.7 Repository onboarding: PTY (`Porta.Pty`) over an authenticated WebSocket, branches, code map, local folder

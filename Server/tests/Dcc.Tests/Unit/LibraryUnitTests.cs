@@ -78,3 +78,40 @@ public sealed class ModelPolicyLayoutTests
         return dir is null ? throw new FileNotFoundException(relative) : Path.Combine(dir.FullName, relative);
     }
 }
+
+/// <summary>The old ado-map tests, and the CSV reader the import uses.</summary>
+public sealed class AdoMapTests
+{
+    [Fact]
+    public void Maps_known_types_and_states_case_insensitively()
+    {
+        Assert.Equal("story", Dcc.Domain.Ado.AdoMap.MapType("  User Story "));
+        Assert.Equal("story", Dcc.Domain.Ado.AdoMap.MapType("PRODUCT BACKLOG ITEM"));
+        Assert.Equal("building", Dcc.Domain.Ado.AdoMap.MapState(" In Progress"));
+        Assert.Equal("archived", Dcc.Domain.Ado.AdoMap.MapState("Removed"));
+    }
+
+    [Fact]
+    public void Falls_back_to_task_and_intake()
+    {
+        Assert.Equal("task", Dcc.Domain.Ado.AdoMap.MapType("Something Custom"));
+        Assert.Equal("intake", Dcc.Domain.Ado.AdoMap.MapState("Waiting on vendor"));
+    }
+
+    [Fact]
+    public void Html_to_text()
+    {
+        Assert.Equal("one\ntwo\nthree", Dcc.Domain.Ado.AdoMap.HtmlToText("<div>one</div><p>two<br/>three</p>"));
+        Assert.Equal("a b & c <d> \"e\" 'f'", Dcc.Domain.Ado.AdoMap.HtmlToText("a&nbsp;b &amp; c &lt;d&gt; &quot;e&quot; &#39;f&#39;"));
+        Assert.Equal("a\n\nb", Dcc.Domain.Ado.AdoMap.HtmlToText("<p>a</p><p></p><p></p><p>b</p>"));
+    }
+
+    [Fact]
+    public void Reads_csv_with_quotes_escapes_and_embedded_newlines()
+    {
+        var rows = Dcc.Domain.Ado.AdoMap.ParseCsv("ID,Title,Description\r\n1,\"Hello, world\",\"line one\nline \"\"two\"\"\"\r\n\r\n2,Plain,\n");
+        Assert.Equal(3, rows.Count);
+        Assert.Equal(["1", "Hello, world", "line one\nline \"two\""], rows[1]);
+        Assert.Equal(["2", "Plain", ""], rows[2]);
+    }
+}

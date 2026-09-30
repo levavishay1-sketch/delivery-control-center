@@ -18,11 +18,6 @@ namespace Dcc.Infrastructure.Tasks;
 /// </summary>
 public sealed class TaskAdoSync(DccDbContext db, ITenantScope tenant, TaskStore store, AdoClient ado, IEventLogWriter events, BriefService brief)
 {
-    public static readonly Dictionary<string, string> TaskStateToAdo = new()
-    {
-        ["pending"] = "New", ["in_progress"] = "Active", ["failed_checks"] = "Active", ["blocked"] = "Active", ["done"] = "Closed", ["dropped"] = "Removed",
-    };
-
     private static int LevelOf(Guid id, Dictionary<Guid, TaskRow> byId, HashSet<Guid>? seen = null)
     {
         seen ??= [];
@@ -180,7 +175,7 @@ public sealed class TaskAdoSync(DccDbContext db, ITenantScope tenant, TaskStore 
         try
         {
             if (await AdoConnections.ActiveAsync(tenant, clientId, ct) is not { Project.Length: > 0 } conn) return;
-            var want = active ? TaskStateToAdo.GetValueOrDefault(dccState, "New") : "Removed";
+            var want = active ? Domain.Ado.AdoMap.TaskStateToAdoState.GetValueOrDefault(dccState, "New") : "Removed";
             await ado.SendAsync(conn.ProjectBase, $"wit/workitems/{linkedAdoId}", HttpMethod.Patch,
                 new[] { new { op = "add", path = "/fields/System.State", value = want } }, conn.Pat, ct: ct);
         }

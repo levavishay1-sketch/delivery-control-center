@@ -50,6 +50,7 @@ public static class DependencyInjection
         // Clients, repositories, Azure DevOps connections (phase 4.1)
         services.AddHttpClient(AdoClient.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
         services.AddScoped<AdoClient>();
+        services.AddScoped<AdoRequirements>();
         services.AddScoped<ClientService>();
         services.AddScoped<ConnectionService>();
 
