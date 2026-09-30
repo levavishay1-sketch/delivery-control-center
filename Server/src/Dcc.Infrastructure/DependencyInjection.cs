@@ -71,6 +71,29 @@ public static class DependencyInjection
         services.AddScoped<Requirements.AttachmentService>();
         services.AddScoped<Requirements.SpecService>();
 
+        // Tasks: their tree, statuses, runs on DCC's own copy of the repository, checks, manual work (phase 4.3)
+        services.Configure<Repos.RepoOptions>(config.GetSection(Repos.RepoOptions.Section));
+        services.Configure<Claude.ClaudeOptions>(config.GetSection(Claude.ClaudeOptions.Section));
+        services.AddSingleton<Repos.RepoCheckouts>();
+        services.AddSingleton<Claude.ModelRouter>();
+        services.AddSingleton<Claude.FlowRunHub>();
+        services.AddScoped<Claude.ClaudeRunner>();
+        services.AddScoped<Claude.FlowRunService>();
+        services.AddHostedService<Claude.FlowRunLifecycle>();
+        services.AddScoped<Tasks.TaskStore>();
+        services.AddScoped<Tasks.TaskFacts>();
+        services.AddScoped<Tasks.TaskAdoSync>();
+        services.AddScoped<Tasks.TaskRunService>();
+        services.AddScoped<Claude.IFlowRunWork>(sp => sp.GetRequiredService<Tasks.TaskRunService>());
+        services.AddScoped<Tasks.TaskService>();
+        services.AddScoped<Tasks.ManualWorkService>();
+        services.AddScoped<Tasks.TaskCodeService>();
+        services.AddScoped<Tasks.TaskTreeService>();
+        services.AddHostedService<Tasks.TaskStartup>();
+        services.AddScoped<Actions.ActionRegistry>();
+        services.AddScoped<Actions.ActionDef, Actions.ImplementAction>();
+        services.AddScoped<Actions.ActionDef, Actions.ApproveTaskAction>();
+
         services.AddSingleton<GraphClientFactory>();
         services.AddScoped<IGuestInvitationService, GraphGuestInvitationService>();
         services.AddScoped<EntraIdentityLinker>();

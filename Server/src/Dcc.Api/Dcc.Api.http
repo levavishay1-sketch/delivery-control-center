@@ -102,3 +102,39 @@ Content-Type: application/json
 ### Every change to identity and permissions, newest first
 GET {{api}}/identity-audit
 Authorization: Bearer {{token}}
+
+### ── tasks ───────────────────────────────────────────────────────────
+
+### Propose tasks on a requirement (the second waits for the first)
+POST {{api}}/workitems/REQUIREMENT-ID/tasks
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "tasks": [ { "intent": "Add the discount table", "appetite": "small" }, { "intent": "Apply the discount at checkout", "dependsOn": [0] } ] }
+
+### The tree, its schedule and every card's status
+GET {{api}}/workitems/REQUIREMENT-ID/task-flow
+Authorization: Bearer {{token}}
+
+### Approve a task — its checklist with it; it goes to TFS at once when a connection exists
+POST {{api}}/tasks/TASK-ID/approve
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{}
+
+### What a run would send to Claude (never runs it)
+GET {{api}}/tasks/TASK-ID/implement-preview
+Authorization: Bearer {{token}}
+
+### Develop the task with Claude, on DCC's own copy of the repository (commits locally, never pushes)
+POST {{api}}/tasks/TASK-ID/implement
+Authorization: Bearer {{token}}
+
+### The live transcript of its run
+GET {{api}}/tasks/TASK-ID/flow-run
+Authorization: Bearer {{token}}
+
+### The task's whole page: status, steps, development, checks, runs
+GET {{api}}/tasks/TASK-ID
+Authorization: Bearer {{token}}

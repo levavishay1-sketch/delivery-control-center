@@ -49,7 +49,19 @@ public sealed class DccFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Entra__TenantId", "");
         Environment.SetEnvironmentVariable("Entra__ClientId", "");
         Environment.SetEnvironmentVariable("Entra__ClientSecret", "");
+        // Claude is a stand-in script: a test never calls the real CLI (or spends anything). DCC_CLAUDE_BIN wins
+        // over the settings, so it is set here too — a developer's own DCC_CLAUDE_BIN must not leak in.
+        FakeClaudePath = Path.Combine(_tempDir, "fake-claude.cjs");
+        File.WriteAllText(FakeClaudePath, FakeClaude.Script);
+        Environment.SetEnvironmentVariable("DCC_CLAUDE_BIN", "node");
+        Environment.SetEnvironmentVariable("Claude__BinArgs__0", FakeClaudePath);
+        RepoCachePath = Path.Combine(_tempDir, "repos");
+        Environment.SetEnvironmentVariable("Repos__CachePath", RepoCachePath);
     }
+
+    public string FakeClaudePath { get; }
+    public string RepoCachePath { get; }
+    public string TempDir => _tempDir;
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -185,7 +197,7 @@ public sealed class DccFactory : WebApplicationFactory<Program>
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        try { Directory.Delete(_tempDir, recursive: true); } catch (IOException) { }
+        try { Dcc.Infrastructure.Repos.RepoCheckouts.ForceDelete(_tempDir); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
 }
 

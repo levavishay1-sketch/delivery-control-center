@@ -73,6 +73,17 @@ public sealed class PromptService(DccDbContext db, ModelPolicyStore policy, IAud
         return new JsonObject { ["updated"] = true };
     }
 
+    public sealed record PromptRow(string Key, string Title, string Body, string? BodyHe, string? DefaultModel);
+
+    /// <summary>The row a call is built from. Missing is a real failure, said in words — never a hidden copy of the text in code.</summary>
+    public async Task<PromptRow> RequireAsync(string key, CancellationToken ct)
+    {
+        var r = await SqlJson.QuerySingleAsync(db, """
+            select key, title, body, body_he as "bodyHe", default_model as "defaultModel" from prompt_template where key = @key
+            """, new { key }, ct) ?? throw AppException.Conflict("prompt_missing", $"הפרומפט \"{key}\" חסר במסך הפרומפטים — אי אפשר לבנות את הקריאה בלעדיו");
+        return new PromptRow(key, r["title"]!.GetValue<string>(), r["body"]!.GetValue<string>(), r["bodyHe"]?.GetValue<string>(), r["defaultModel"]?.GetValue<string>());
+    }
+
     private static AppException Refused(string message) => AppException.Conflict("prompt_refused", message);
 
     private static JsonArray Arr(IEnumerable<string> items) => new(items.Select(i => (JsonNode?)i).ToArray());
