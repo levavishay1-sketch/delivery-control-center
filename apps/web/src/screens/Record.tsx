@@ -23,8 +23,8 @@ const post = async (path: string, body: unknown) => {
   return r.json();
 };
 
-// Overview first (rightmost in RTL), then Timeline, then Repositories.
-const TABS = ["Overview", "Timeline", "Repositories"] as const;
+// Overview first (rightmost in RTL), then Metrics, Timeline, Repositories.
+const TABS = ["Overview", "Metrics", "Timeline", "Repositories"] as const;
 type Tab = (typeof TABS)[number];
 
 const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "claude.call", "review.completed"]);
@@ -109,7 +109,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   useEffect(() => { getCostSummary(id).then(setCost).catch(() => {}); }, [id]);
 
   // A Claude run's own "בעבודה…" indicator lives inside WorkflowTab
-  // (under the Overview tab) — but switching to Timeline/Repositories
+  // (under the Overview tab) — but switching to Metrics/Timeline/Repositories
   // unmounts it, hiding the one visible sign that anything is still
   // running. This independent, lightweight poll keeps a badge on the
   // Overview tab itself visible from any tab, so leaving Overview never
@@ -455,31 +455,6 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             </div>
           )}
 
-          {/* metrics */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, marginBottom: 20 }}>
-            <div className="ov-card" style={{ padding: "16px 18px" }}>
-              <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
-                <div className="ov-metric"><div className="lbl">Phase<Info k="phase" /></div><div className="val">{wi.phase}</div></div>
-                <div className="ov-metric"><div className="lbl">Priority<Info k="priority" /></div><div className="val">{wi.priority}</div></div>
-                <div className="ov-metric"><div className="lbl">Risk<Info k="risk" /></div><div className="val">{wi.risk}</div></div>
-                <div className="ov-metric"><div className="lbl">Executor<Info k="executor" /></div><div className="val">{wi.executor}</div></div>
-                <div className="ov-metric"><div className="lbl">AI budget<Info k="ai_budget" /></div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
-                <div className="ov-metric" style={{ cursor: "pointer" }}
-                     title={cost ? `${cost.runCount} הרצות · ${cost.totalInputTokens + cost.totalOutputTokens} tokens — לחץ לפירוט` : undefined}
-                     onClick={openCostDetail}>
-                  <div className="lbl">עלות AI בפועל 🔍<Info k="ai_cost" /></div>
-                  <div className="val">{cost ? `$${cost.totalUsd.toFixed(2)}` : "—"}</div>
-                </div>
-                <div className="ov-metric"><div className="lbl">TFS<Info k="tfs_tasks" /></div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{progressPct}%</span>
-                <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
-                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks<Info k="progress" /></span>
-              </div>
-            </div>
-          </div>
-
           {/* the requirement's full text, with its attachments beside it */}
           <div className="ov-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
             <p style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)", marginBottom: 12 }}>פירוט דרישה<Info k="requirement_detail" /></p>
@@ -574,6 +549,30 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             {d.events.length === 0 && <div className="empty">No events yet.</div>}
           </div>
         </>
+      )}
+
+      {tab === "Metrics" && (
+        <div className="ov-card" style={{ padding: "16px 18px" }}>
+          <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
+            <div className="ov-metric"><div className="lbl">Phase<Info k="phase" /></div><div className="val">{wi.phase}</div></div>
+            <div className="ov-metric"><div className="lbl">Priority<Info k="priority" /></div><div className="val">{wi.priority}</div></div>
+            <div className="ov-metric"><div className="lbl">Risk<Info k="risk" /></div><div className="val">{wi.risk}</div></div>
+            <div className="ov-metric"><div className="lbl">Executor<Info k="executor" /></div><div className="val">{wi.executor}</div></div>
+            <div className="ov-metric"><div className="lbl">AI budget<Info k="ai_budget" /></div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
+            <div className="ov-metric" style={{ cursor: "pointer" }}
+                 title={cost ? `${cost.runCount} הרצות · ${cost.totalInputTokens + cost.totalOutputTokens} tokens — לחץ לפירוט` : undefined}
+                 onClick={openCostDetail}>
+              <div className="lbl">עלות AI בפועל 🔍<Info k="ai_cost" /></div>
+              <div className="val">{cost ? `$${cost.totalUsd.toFixed(2)}` : "—"}</div>
+            </div>
+            <div className="ov-metric"><div className="lbl">TFS<Info k="tfs_tasks" /></div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{progressPct}%</span>
+            <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
+            <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks<Info k="progress" /></span>
+          </div>
+        </div>
       )}
 
       {tab === "Repositories" && (
