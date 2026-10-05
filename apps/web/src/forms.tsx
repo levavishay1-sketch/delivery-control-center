@@ -790,3 +790,31 @@ export function AddNote({ workitemId, onClose, onDone }: { workitemId: string; o
     </Modal>
   );
 }
+
+/** One text of a requirement — its title or its detail — edited on its own. */
+export function EditRequirementText({ wi, field, onClose, onDone }: { wi: WorkItem; field: "title" | "description"; onClose: () => void; onDone: () => void }) {
+  const isTitle = field === "title";
+  const [text, setText] = useState(isTitle ? wi.title : wi.description ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const submit = async () => {
+    if (isTitle && !text.trim()) return setErr("כותרת היא שדה חובה");
+    setBusy(true); setErr(null);
+    try {
+      await updateRequirement(wi.id, isTitle ? { title: text.trim() } : { description: text.trim() || null });
+      onDone();
+    } catch (e) { setErr(String(e)); setBusy(false); }
+  };
+  return (
+    <Modal title={isTitle ? "עריכת כותרת" : "עריכת פירוט דרישה"} onClose={onClose}>
+      {isTitle
+        ? <input autoFocus value={text} onChange={(e) => setText(e.target.value)} style={{ width: "100%" }} />
+        : <textarea autoFocus value={text} onChange={(e) => setText(e.target.value)} style={{ width: "100%", minHeight: 160 }} />}
+      {err && <p style={{ color: "var(--status-critical)", fontSize: 12, marginTop: 8 }}>{err}</p>}
+      <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+        <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? "שומר…" : "שמור"}</button>
+        <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
+      </div>
+    </Modal>
+  );
+}

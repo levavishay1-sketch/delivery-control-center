@@ -922,6 +922,7 @@ app.patch("/workitems/:id", async (req) => {
   const { id } = req.params as { id: string };
   const b = z.object({
     title: z.string().min(1).optional(),
+    description: z.string().nullable().optional(),
     type: WITYPE.optional(),
     requirementType: z.enum(["development", "research", "testing"]).optional(),
     priority: z.enum(["low", "medium", "high", "critical"]).optional(),

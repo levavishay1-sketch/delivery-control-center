@@ -12,7 +12,7 @@ import {
 import { errText } from "../api.ts";
 import { CardTitle, Pill, TypeChip } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
-import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
+import { AddNote, EditRequirement, EditRequirementText, LinkRepoToReq } from "../forms.tsx";
 import { WorkflowTab } from "./WorkflowTab.tsx";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
@@ -63,6 +63,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [editText, setEditText] = useState<"title" | "description" | null>(null);
   const [repoOpen, setRepoOpen] = useState(false);
   const [correcting, setCorrecting] = useState<EventRow | null>(null);
   const [newGap, setNewGap] = useState({ description: "", blocking: false });
@@ -409,6 +410,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     <>
       {noteOpen && <AddNote workitemId={wi.id} onClose={() => setNoteOpen(false)} onDone={() => { setNoteOpen(false); reload(); }} />}
       {editOpen && <EditRequirement wi={wi} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); reload(); }} />}
+      {editText && <EditRequirementText wi={wi} field={editText} onClose={() => setEditText(null)} onDone={() => { setEditText(null); reload(); }} />}
       {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
       {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
       {costDetailOpen && <CallsModal rows={costDetail} loading={costDetailLoading} summary={cost} nav={nav} onClose={() => setCostDetailOpen(false)} />}
@@ -416,6 +418,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
           <CardTitle as="h1" info="page_requirement">{wi.title}</CardTitle>
+          <button className="btn btn-secondary btn-sm" onClick={() => setEditText("title")}>עריכת כותרת</button>
           <TypeChip type={wi.type} />
           {wi.key && <span style={{ fontFamily: "var(--mono)", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
@@ -463,9 +466,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
 
           {/* the requirement's full text, with its attachments beside it */}
           <div className="ov-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)", marginBottom: 12 }}>פירוט דרישה<Info k="requirement_detail" /></p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)" }}>פירוט דרישה<Info k="requirement_detail" /></span>
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditText("description")}>עריכה</button>
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, alignItems: "start" }}>
-              <p style={{ fontSize: 13, lineHeight: 1.8, color: "var(--ov-body)", fontWeight: 500 }}>{wi.title}</p>
+              <p style={{ fontSize: 13, lineHeight: 1.8, color: wi.description ? "var(--ov-body)" : "var(--ov-label)", fontWeight: 500, whiteSpace: "pre-wrap" }}>{wi.description || "עדיין אין פירוט לדרישה — לחצו על עריכה כדי לכתוב."}</p>
               <div style={{ borderInlineStart: "1px solid #EAE8F5", paddingInlineStart: 20 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
                   <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות<Info k="attachment_read" /></span>
