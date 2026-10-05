@@ -6,7 +6,7 @@ import { chatCommand, onChatChanged, useClaudeContext } from "../claude/context.
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement,
   attachmentHref,
-  getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, deleteAttachment, verifyGap,
   type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
 import { errText } from "../api.ts";
@@ -215,6 +215,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       reload();
     } catch (e) { alert(`העלאת הקובץ נכשלה:\n${errText(e)}`); }
     setUploading(false);
+  };
+
+  const onDeleteAttachment = async (attId: string, name: string, inTfs: boolean) => {
+    if (!confirm(`למחוק את הצרופה "${name}"?${inTfs ? "\n\nהקובץ יישאר מצורף ב-TFS — רק ההעתק ב-DCC נמחק." : ""}`)) return;
+    try { await deleteAttachment(wi.id, attId); reload(); }
+    catch (e) { alert(`מחיקת הצרופה נכשלה:\n${errText(e)}`); }
   };
 
   // events superseded by a later correction
@@ -473,9 +479,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
                       <a href={a.stored ? attachmentHref(wi.id, a.id) : (a.adoUrl ?? undefined)} target="_blank" rel="noreferrer"
                         style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↓</a>
-                      <Pill tone={a.textChars > 0 ? "healthy" : "warning"}>
-                        {a.textChars > 0 ? `נקרא · ${a.textChars.toLocaleString("he-IL")} תווים` : "לא נקרא"}
-                      </Pill>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                        <Pill tone={a.textChars > 0 ? "healthy" : "warning"}>
+                          {a.textChars > 0 ? `נקרא · ${a.textChars.toLocaleString("he-IL")} תווים` : "לא נקרא"}
+                        </Pill>
+                        <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={() => onDeleteAttachment(a.id, a.name, !!a.adoUrl)}>מחק</a>
+                      </span>
                     </div>
                     {a.textChars === 0 && a.extractError && (
                       <div style={{ fontSize: 10.5, color: "var(--ov-label)", marginTop: 3 }}>{a.extractError} — הדביקו את התוכן כהערה כדי שקלוד יראה אותו.</div>

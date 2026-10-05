@@ -915,3 +915,5 @@ export function errText(e: unknown): string {
   } catch { /* not JSON */ }
   return body;
 }
+export const deleteAttachment = (workitemId: string, attachmentId: string) =>
+  del<{ ok: boolean }>(`/workitems/${workitemId}/attachments/${attachmentId}`);
