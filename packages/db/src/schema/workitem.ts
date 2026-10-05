@@ -89,6 +89,8 @@ export const workitem = pgTable(
     /** 0..100 rollup of task completion, cached for list views. */
     progressPct: integer("progress_pct").notNull().default(0),
     title: text("title").notNull(),
+    /** The requirement's own detail — free text on what is wanted. The title stays the short name. Null until someone writes it. */
+    description: text("description"),
     /** Null until an ADO work item is linked. ADO is SoT once linked (architecture §8). */
     linkedAdoId: integer("linked_ado_id"),
     /** The ADO work item's own URL — stored once at link time (same pattern as `task.adoUrl`) so every place that shows this requirement's TFS reference can link straight to it, not just display the number. */

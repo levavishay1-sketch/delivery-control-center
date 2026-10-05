@@ -6,14 +6,13 @@ import { chatCommand, onChatChanged, useClaudeContext } from "../claude/context.
 import {
   answerBlocker, correctNote, deleteBlocker, deleteGap, deleteRequirement,
   attachmentHref,
-  getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, verifyGap,
+  getBrief, getWorkitemCalls, getDetail, getFlowRun, getCostSummary, unlinkRepoFromReq, uploadAttachment, deleteAttachment, verifyGap,
   type Blocker, type ClaudeCallView, type EventRow, type Gap, type RequirementCostSummary, type WorkItemDetail,
 } from "../api.ts";
 import { errText } from "../api.ts";
 import { CardTitle, Pill, TypeChip } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
-import { FlowGraph } from "./FlowGraph.tsx";
-import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
+import { AddNote, EditRequirement, EditRequirementText, LinkRepoToReq } from "../forms.tsx";
 import { WorkflowTab } from "./WorkflowTab.tsx";
 
 const DEV_EMAIL = import.meta.env.VITE_DCC_DEV_EMAIL ?? "you@dcc.local";
@@ -24,8 +23,8 @@ const post = async (path: string, body: unknown) => {
   return r.json();
 };
 
-// Overview first (rightmost in RTL), then Timeline, then Dependencies.
-const TABS = ["Overview", "Timeline", "Dependencies"] as const;
+// Overview first (rightmost in RTL), then Metrics, Timeline, Repositories.
+const TABS = ["Overview", "Metrics", "Timeline", "Repositories"] as const;
 type Tab = (typeof TABS)[number];
 
 const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "claude.call", "review.completed"]);
@@ -64,6 +63,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   const [err, setErr] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [editText, setEditText] = useState<"title" | "description" | null>(null);
   const [repoOpen, setRepoOpen] = useState(false);
   const [correcting, setCorrecting] = useState<EventRow | null>(null);
   const [newGap, setNewGap] = useState({ description: "", blocking: false });
@@ -110,7 +110,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   useEffect(() => { getCostSummary(id).then(setCost).catch(() => {}); }, [id]);
 
   // A Claude run's own "בעבודה…" indicator lives inside WorkflowTab
-  // (under the Overview tab) — but switching to Timeline/Dependencies
+  // (under the Overview tab) — but switching to Metrics/Timeline/Repositories
   // unmounts it, hiding the one visible sign that anything is still
   // running. This independent, lightweight poll keeps a badge on the
   // Overview tab itself visible from any tab, so leaving Overview never
@@ -216,6 +216,12 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       reload();
     } catch (e) { alert(`העלאת הקובץ נכשלה:\n${errText(e)}`); }
     setUploading(false);
+  };
+
+  const onDeleteAttachment = async (attId: string, name: string, inTfs: boolean) => {
+    if (!confirm(`למחוק את הצרופה "${name}"?${inTfs ? "\n\nהקובץ יישאר מצורף ב-TFS — רק ההעתק ב-DCC נמחק." : ""}`)) return;
+    try { await deleteAttachment(wi.id, attId); reload(); }
+    catch (e) { alert(`מחיקת הצרופה נכשלה:\n${errText(e)}`); }
   };
 
   // events superseded by a later correction
@@ -404,6 +410,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
     <>
       {noteOpen && <AddNote workitemId={wi.id} onClose={() => setNoteOpen(false)} onDone={() => { setNoteOpen(false); reload(); }} />}
       {editOpen && <EditRequirement wi={wi} onClose={() => setEditOpen(false)} onDone={() => { setEditOpen(false); reload(); }} />}
+      {editText && <EditRequirementText wi={wi} field={editText} onClose={() => setEditText(null)} onDone={() => { setEditText(null); reload(); }} />}
       {repoOpen && <LinkRepoToReq workitemId={wi.id} onClose={() => setRepoOpen(false)} onDone={() => { setRepoOpen(false); reload(); }} />}
       {correcting && <CorrectNote ev={correcting} workitemId={wi.id} onClose={() => setCorrecting(null)} onDone={() => { setCorrecting(null); reload(); }} />}
       {costDetailOpen && <CallsModal rows={costDetail} loading={costDetailLoading} summary={cost} nav={nav} onClose={() => setCostDetailOpen(false)} />}
@@ -411,6 +418,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
       <div className="rec-head" style={{ justifyContent: "space-between" }}>
         <div className="rec-head" style={{ margin: 0 }}>
           <CardTitle as="h1" info="page_requirement">{wi.title}</CardTitle>
+          <button className="btn btn-secondary btn-sm" onClick={() => setEditText("title")}>עריכת כותרת</button>
           <TypeChip type={wi.type} />
           {wi.key && <span style={{ fontFamily: "var(--mono)", color: "var(--ink-400)", fontSize: 13 }}>{wi.key}</span>}
           {wi.startedWithOpenBlocker && <Pill tone="warning">התחיל עם חוסם פתוח</Pill>}
@@ -456,80 +464,42 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             </div>
           )}
 
-          {/* metrics · repositories · attachments — one row, 3 columns */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 20, marginBottom: 20 }}>
-            <div className="ov-card" style={{ padding: "16px 18px" }}>
-              <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
-                <div className="ov-metric"><div className="lbl">Phase<Info k="phase" /></div><div className="val">{wi.phase}</div></div>
-                <div className="ov-metric"><div className="lbl">Priority<Info k="priority" /></div><div className="val">{wi.priority}</div></div>
-                <div className="ov-metric"><div className="lbl">Risk<Info k="risk" /></div><div className="val">{wi.risk}</div></div>
-                <div className="ov-metric"><div className="lbl">Executor<Info k="executor" /></div><div className="val">{wi.executor}</div></div>
-                <div className="ov-metric"><div className="lbl">AI budget<Info k="ai_budget" /></div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
-                <div className="ov-metric" style={{ cursor: "pointer" }}
-                     title={cost ? `${cost.runCount} הרצות · ${cost.totalInputTokens + cost.totalOutputTokens} tokens — לחץ לפירוט` : undefined}
-                     onClick={openCostDetail}>
-                  <div className="lbl">עלות AI בפועל 🔍<Info k="ai_cost" /></div>
-                  <div className="val">{cost ? `$${cost.totalUsd.toFixed(2)}` : "—"}</div>
-                </div>
-                <div className="ov-metric"><div className="lbl">TFS<Info k="tfs_tasks" /></div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{progressPct}%</span>
-                <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
-                <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks<Info k="progress" /></span>
-              </div>
-            </div>
-
-            <div className="ov-card" style={{ padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Repositories</span>
-                <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר</button>
-              </div>
-              {d.repos.map((r, i) => (
-                <div key={r.id} style={{ padding: "8px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                    <Pill tone={r.linkKind === "auto" ? "ai" : "neutral"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill>
-                    <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.name}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
-                    <span style={{ fontSize: 10.5, color: "var(--ov-label)", direction: "ltr", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.adoRepoRef ?? "—"}</span>
-                    <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)", flexShrink: 0 }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
-                  </div>
-                </div>
-              ))}
-              {d.repos.length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין repositories מקושרים</div>}
-            </div>
-
-            <div className="ov-card" style={{ padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות<Info k="attachment_read" /></span>
-                <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-                  {uploading ? "מעלה…" : "העלה"}
-                  <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
-                </label>
-              </div>
-              {(d.attachments ?? []).map((a, i) => (
-                <div key={a.id} style={{ padding: "7px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                    <a href={a.stored ? attachmentHref(wi.id, a.id) : (a.adoUrl ?? undefined)} target="_blank" rel="noreferrer"
-                      style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↓</a>
-                    <Pill tone={a.textChars > 0 ? "healthy" : "warning"}>
-                      {a.textChars > 0 ? `נקרא · ${a.textChars.toLocaleString("he-IL")} תווים` : "לא נקרא"}
-                    </Pill>
-                  </div>
-                  {a.textChars === 0 && a.extractError && (
-                    <div style={{ fontSize: 10.5, color: "var(--ov-label)", marginTop: 3 }}>{a.extractError} — הדביקו את התוכן כהערה כדי שקלוד יראה אותו.</div>
-                  )}
-                </div>
-              ))}
-              {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
-            </div>
-          </div>
-
-          {/* the requirement's full text */}
+          {/* the requirement's full text, with its attachments beside it */}
           <div className="ov-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)", marginBottom: 8 }}>פירוט הדרישה</p>
-            <p style={{ fontSize: 13, lineHeight: 1.8, color: "var(--ov-body)", fontWeight: 500 }}>{wi.title}</p>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)" }}>פירוט דרישה<Info k="requirement_detail" /></span>
+              <button className="btn btn-secondary btn-sm" onClick={() => setEditText("description")}>עריכה</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, alignItems: "start" }}>
+              <p style={{ fontSize: 13, lineHeight: 1.8, color: wi.description ? "var(--ov-body)" : "var(--ov-label)", fontWeight: 500, whiteSpace: "pre-wrap" }}>{wi.description || "עדיין אין פירוט לדרישה — לחצו על עריכה כדי לכתוב."}</p>
+              <div style={{ borderInlineStart: "1px solid #EAE8F5", paddingInlineStart: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות<Info k="attachment_read" /></span>
+                  <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+                    {uploading ? "מעלה…" : "העלה"}
+                    <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
+                  </label>
+                </div>
+                {(d.attachments ?? []).map((a, i) => (
+                  <div key={a.id} style={{ padding: "7px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                      <a href={a.stored ? attachmentHref(wi.id, a.id) : (a.adoUrl ?? undefined)} target="_blank" rel="noreferrer"
+                        style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↓</a>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                        <Pill tone={a.textChars > 0 ? "healthy" : "warning"}>
+                          {a.textChars > 0 ? `נקרא · ${a.textChars.toLocaleString("he-IL")} תווים` : "לא נקרא"}
+                        </Pill>
+                        <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)" }} onClick={() => onDeleteAttachment(a.id, a.name, !!a.adoUrl)}>מחק</a>
+                      </span>
+                    </div>
+                    {a.textChars === 0 && a.extractError && (
+                      <div style={{ fontSize: 10.5, color: "var(--ov-label)", marginTop: 3 }}>{a.extractError} — הדביקו את התוכן כהערה כדי שקלוד יראה אותו.</div>
+                    )}
+                  </div>
+                ))}
+                {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
+              </div>
+            </div>
           </div>
 
           {/* every closed gap's resolution, permanently visible right here —
@@ -596,9 +566,49 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </>
       )}
 
-      {tab === "Dependencies" && (
-        <div style={{ height: "60vh", border: "1px solid var(--border-hairline)", borderRadius: "var(--radius-md)", overflow: "hidden", position: "relative" }}>
-          <FlowGraph requirementId={wi.id} />
+      {tab === "Metrics" && (
+        <div className="ov-card" style={{ padding: "16px 18px" }}>
+          <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
+            <div className="ov-metric"><div className="lbl">Phase<Info k="phase" /></div><div className="val">{wi.phase}</div></div>
+            <div className="ov-metric"><div className="lbl">Priority<Info k="priority" /></div><div className="val">{wi.priority}</div></div>
+            <div className="ov-metric"><div className="lbl">Risk<Info k="risk" /></div><div className="val">{wi.risk}</div></div>
+            <div className="ov-metric"><div className="lbl">Executor<Info k="executor" /></div><div className="val">{wi.executor}</div></div>
+            <div className="ov-metric"><div className="lbl">AI budget<Info k="ai_budget" /></div><div className="val">{wi.budgetUsd ? `$${wi.budgetUsd}` : "default"}</div></div>
+            <div className="ov-metric" style={{ cursor: "pointer" }}
+                 title={cost ? `${cost.runCount} הרצות · ${cost.totalInputTokens + cost.totalOutputTokens} tokens — לחץ לפירוט` : undefined}
+                 onClick={openCostDetail}>
+              <div className="lbl">עלות AI בפועל 🔍<Info k="ai_cost" /></div>
+              <div className="val">{cost ? `$${cost.totalUsd.toFixed(2)}` : "—"}</div>
+            </div>
+            <div className="ov-metric"><div className="lbl">TFS<Info k="tfs_tasks" /></div><div className="val">{tasksInTfs} <span style={{ fontSize: 10, fontWeight: 500, color: "var(--ov-label)" }}>משימות</span></div></div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{progressPct}%</span>
+            <div className="progress-track" style={{ flex: 1, height: 5, background: "#F0EFF7" }}><div className="progress-fill" style={{ width: `${progressPct}%`, background: "#584EF3" }} /></div>
+            <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks<Info k="progress" /></span>
+          </div>
+        </div>
+      )}
+
+      {tab === "Repositories" && (
+        <div className="ov-card" style={{ padding: "14px 16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Repositories<Info k="repository" /></span>
+            <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר</button>
+          </div>
+          {d.repos.map((r, i) => (
+            <div key={r.id} style={{ padding: "8px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                <Pill tone={r.linkKind === "auto" ? "ai" : "neutral"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill>
+                <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.name}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
+                <span style={{ fontSize: 10.5, color: "var(--ov-label)", direction: "ltr", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.adoRepoRef ?? "—"}</span>
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)", flexShrink: 0 }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
+              </div>
+            </div>
+          ))}
+          {d.repos.length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין repositories מקושרים</div>}
         </div>
       )}
     </>

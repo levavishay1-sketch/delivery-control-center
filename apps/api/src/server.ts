@@ -67,6 +67,7 @@ import {
   importAdoCsv,
   attachmentsFor,
   addAttachment,
+  removeAttachment,
   attachmentContent,
   AttachmentRefused,
   RepoRequired,
@@ -921,6 +922,7 @@ app.patch("/workitems/:id", async (req) => {
   const { id } = req.params as { id: string };
   const b = z.object({
     title: z.string().min(1).optional(),
+    description: z.string().nullable().optional(),
     type: WITYPE.optional(),
     requirementType: z.enum(["development", "research", "testing"]).optional(),
     priority: z.enum(["low", "medium", "high", "critical"]).optional(),
@@ -1339,6 +1341,14 @@ app.post("/workitems/:id/attachments", async (req, reply) => {
   const bytes = Buffer.from(b.contentBase64, "base64");
   const out = await addAttachment({ clientId: wi.clientId, workitemId: id, name: b.name, bytes, by: { userId: dev.id } });
   return reply.code(201).send(out);
+});
+
+app.delete("/workitems/:id/attachments/:attId", async (req, reply) => {
+  const dev = await actingUser(req);
+  const { id, attId } = req.params as { id: string; attId: string };
+  const wi = await locateWorkItem({ id });
+  const ok = await removeAttachment({ clientId: wi.clientId, workitemId: id, attachmentId: attId, by: { userId: dev.id } });
+  return ok ? { ok: true } : reply.code(404).send({ error: "לא נמצאה צרופה" });
 });
 
 // DCC holds the bytes now, so it also hands them back — a file attached to a

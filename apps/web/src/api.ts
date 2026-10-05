@@ -72,7 +72,7 @@ export type Task = {
  *  WorkflowTab/Flow-card treatment — that's still an open design question. */
 export type RequirementType = "development" | "research" | "testing";
 export type WorkItem = {
-  id: string; key: string | null; title: string; clientId: string; parentId: string | null;
+  id: string; key: string | null; title: string; description: string | null; clientId: string; parentId: string | null;
   type: ReqType; requirementType: RequirementType; phase: string;
   priority: "low" | "medium" | "high" | "critical"; risk: "low" | "medium" | "high";
   executor: "human" | "ai" | "mixed"; budgetUsd: string | null; dueDate: string | null;
@@ -469,7 +469,7 @@ export const approveTask = (id: string, body: { clientId: string; intent?: strin
   post<{ approved: boolean; materialized: MaterializeResult | null; materializeError?: string }>(`/tasks/${id}/approve`, body);
 export const rejectTask = (id: string, clientId: string) => post<{ rejected: boolean }>(`/tasks/${id}/reject`, { clientId });
 export const updateRequirement = (id: string, body: Partial<{
-  title: string; type: ReqType; requirementType: RequirementType; priority: string; risk: string; executor: string; phase: string;
+  title: string; description: string | null; type: ReqType; requirementType: RequirementType; priority: string; risk: string; executor: string; phase: string;
   budgetUsd: string | number | null; dueDate: string | null; parentId: string | null; adoAreaPath: string | null; key: string | null;
   /** Why — required in spirit whenever this patch reopens a done/archived
    *  requirement's phase; recorded to decision history. */
@@ -915,3 +915,5 @@ export function errText(e: unknown): string {
   } catch { /* not JSON */ }
   return body;
 }
+export const deleteAttachment = (workitemId: string, attachmentId: string) =>
+  del<{ ok: boolean }>(`/workitems/${workitemId}/attachments/${attachmentId}`);
