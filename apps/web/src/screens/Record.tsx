@@ -12,7 +12,6 @@ import {
 import { errText } from "../api.ts";
 import { CardTitle, Pill, TypeChip } from "../ui.tsx";
 import { Info } from "../claude/Info.tsx";
-import { FlowGraph } from "./FlowGraph.tsx";
 import { AddNote, EditRequirement, LinkRepoToReq } from "../forms.tsx";
 import { WorkflowTab } from "./WorkflowTab.tsx";
 
@@ -24,8 +23,8 @@ const post = async (path: string, body: unknown) => {
   return r.json();
 };
 
-// Overview first (rightmost in RTL), then Timeline, then Dependencies.
-const TABS = ["Overview", "Timeline", "Dependencies"] as const;
+// Overview first (rightmost in RTL), then Timeline, then Repositories.
+const TABS = ["Overview", "Timeline", "Repositories"] as const;
 type Tab = (typeof TABS)[number];
 
 const AI_TYPES = new Set(["gap.proposed", "tasks.proposed", "blocker.raised", "claude.call", "review.completed"]);
@@ -110,7 +109,7 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
   useEffect(() => { getCostSummary(id).then(setCost).catch(() => {}); }, [id]);
 
   // A Claude run's own "בעבודה…" indicator lives inside WorkflowTab
-  // (under the Overview tab) — but switching to Timeline/Dependencies
+  // (under the Overview tab) — but switching to Timeline/Repositories
   // unmounts it, hiding the one visible sign that anything is still
   // running. This independent, lightweight poll keeps a badge on the
   // Overview tab itself visible from any tab, so leaving Overview never
@@ -456,8 +455,8 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
             </div>
           )}
 
-          {/* metrics · repositories · attachments — one row, 3 columns */}
-          <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 20, marginBottom: 20 }}>
+          {/* metrics */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 20, marginBottom: 20 }}>
             <div className="ov-card" style={{ padding: "16px 18px" }}>
               <div className="ov-metric-grid" style={{ marginBottom: 14 }}>
                 <div className="ov-metric"><div className="lbl">Phase<Info k="phase" /></div><div className="val">{wi.phase}</div></div>
@@ -479,57 +478,38 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
                 <span style={{ fontSize: 11, color: "var(--ov-label)", flexShrink: 0 }}>{doneTasks}/{liveTasks.length} tasks<Info k="progress" /></span>
               </div>
             </div>
-
-            <div className="ov-card" style={{ padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Repositories</span>
-                <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר</button>
-              </div>
-              {d.repos.map((r, i) => (
-                <div key={r.id} style={{ padding: "8px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
-                    <Pill tone={r.linkKind === "auto" ? "ai" : "neutral"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill>
-                    <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.name}</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
-                    <span style={{ fontSize: 10.5, color: "var(--ov-label)", direction: "ltr", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.adoRepoRef ?? "—"}</span>
-                    <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)", flexShrink: 0 }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
-                  </div>
-                </div>
-              ))}
-              {d.repos.length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין repositories מקושרים</div>}
-            </div>
-
-            <div className="ov-card" style={{ padding: "14px 16px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות<Info k="attachment_read" /></span>
-                <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
-                  {uploading ? "מעלה…" : "העלה"}
-                  <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
-                </label>
-              </div>
-              {(d.attachments ?? []).map((a, i) => (
-                <div key={a.id} style={{ padding: "7px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
-                    <a href={a.stored ? attachmentHref(wi.id, a.id) : (a.adoUrl ?? undefined)} target="_blank" rel="noreferrer"
-                      style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↓</a>
-                    <Pill tone={a.textChars > 0 ? "healthy" : "warning"}>
-                      {a.textChars > 0 ? `נקרא · ${a.textChars.toLocaleString("he-IL")} תווים` : "לא נקרא"}
-                    </Pill>
-                  </div>
-                  {a.textChars === 0 && a.extractError && (
-                    <div style={{ fontSize: 10.5, color: "var(--ov-label)", marginTop: 3 }}>{a.extractError} — הדביקו את התוכן כהערה כדי שקלוד יראה אותו.</div>
-                  )}
-                </div>
-              ))}
-              {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
-            </div>
           </div>
 
-          {/* the requirement's full text */}
+          {/* the requirement's full text, with its attachments beside it */}
           <div className="ov-card" style={{ padding: "18px 20px", marginBottom: 20 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)", marginBottom: 8 }}>פירוט הדרישה</p>
-            <p style={{ fontSize: 13, lineHeight: 1.8, color: "var(--ov-body)", fontWeight: 500 }}>{wi.title}</p>
+            <p style={{ fontSize: 11, fontWeight: 700, color: "var(--ov-label)", marginBottom: 12 }}>פירוט דרישה<Info k="requirement_detail" /></p>
+            <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 24, alignItems: "start" }}>
+              <p style={{ fontSize: 13, lineHeight: 1.8, color: "var(--ov-body)", fontWeight: 500 }}>{wi.title}</p>
+              <div style={{ borderInlineStart: "1px solid #EAE8F5", paddingInlineStart: 20 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>צרופות<Info k="attachment_read" /></span>
+                  <label className="btn btn-secondary btn-sm" style={{ cursor: "pointer" }}>
+                    {uploading ? "מעלה…" : "העלה"}
+                    <input type="file" hidden disabled={uploading} onChange={(e) => onUpload(e.target.files?.[0])} />
+                  </label>
+                </div>
+                {(d.attachments ?? []).map((a, i) => (
+                  <div key={a.id} style={{ padding: "7px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6 }}>
+                      <a href={a.stored ? attachmentHref(wi.id, a.id) : (a.adoUrl ?? undefined)} target="_blank" rel="noreferrer"
+                        style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.name} ↓</a>
+                      <Pill tone={a.textChars > 0 ? "healthy" : "warning"}>
+                        {a.textChars > 0 ? `נקרא · ${a.textChars.toLocaleString("he-IL")} תווים` : "לא נקרא"}
+                      </Pill>
+                    </div>
+                    {a.textChars === 0 && a.extractError && (
+                      <div style={{ fontSize: 10.5, color: "var(--ov-label)", marginTop: 3 }}>{a.extractError} — הדביקו את התוכן כהערה כדי שקלוד יראה אותו.</div>
+                    )}
+                  </div>
+                ))}
+                {(d.attachments ?? []).length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין צרופות עדיין</div>}
+              </div>
+            </div>
           </div>
 
           {/* every closed gap's resolution, permanently visible right here —
@@ -596,9 +576,25 @@ export function Record({ id, nav }: { id: string; nav: (h: string) => void }) {
         </>
       )}
 
-      {tab === "Dependencies" && (
-        <div style={{ height: "60vh", border: "1px solid var(--border-hairline)", borderRadius: "var(--radius-md)", overflow: "hidden", position: "relative" }}>
-          <FlowGraph requirementId={wi.id} />
+      {tab === "Repositories" && (
+        <div className="ov-card" style={{ padding: "14px 16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--ov-label)", textTransform: "uppercase", letterSpacing: "0.04em" }}>Repositories<Info k="repository" /></span>
+            <button className="btn btn-secondary btn-sm" onClick={() => setRepoOpen(true)}>+ קשר</button>
+          </div>
+          {d.repos.map((r, i) => (
+            <div key={r.id} style={{ padding: "8px 0", borderTop: i > 0 ? "1px solid #EAE8F5" : "none" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                <Pill tone={r.linkKind === "auto" ? "ai" : "neutral"}>{r.linkKind === "auto" ? "מהתהליך" : "ידני"}</Pill>
+                <span style={{ fontWeight: 700, fontSize: 12.5 }}>{r.name}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 6 }}>
+                <span style={{ fontSize: 10.5, color: "var(--ov-label)", direction: "ltr", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.adoRepoRef ?? "—"}</span>
+                <a style={{ fontSize: 11, cursor: "pointer", color: "var(--status-critical)", flexShrink: 0 }} onClick={async () => { if (confirm(`לנתק את ${r.name} מהדרישה?`)) { await unlinkRepoFromReq(wi.id, r.id); reload(); } }}>נתק</a>
+              </div>
+            </div>
+          ))}
+          {d.repos.length === 0 && <div style={{ textAlign: "center", color: "var(--ov-label)", fontSize: 12, padding: "20px 0" }}>אין repositories מקושרים</div>}
         </div>
       )}
     </>
