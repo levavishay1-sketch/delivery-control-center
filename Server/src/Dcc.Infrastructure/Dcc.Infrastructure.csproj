@@ -18,6 +18,8 @@
     <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="PdfPig" Version="0.1.16" />
+    <!-- the onboarding /init session: the real, interactive Claude Code in a pseudo-terminal (ConPTY on Windows) -->
+    <PackageReference Include="Porta.Pty" Version="2.2.3" />
   </ItemGroup>
 
   <PropertyGroup>

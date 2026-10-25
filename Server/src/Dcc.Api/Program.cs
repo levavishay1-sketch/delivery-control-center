@@ -127,6 +127,13 @@ app.Map("/ws/session", async (HttpContext http) =>
         });
 }).AllowAnonymous();
 
+// An onboarding run's terminal: the live /init session and DCC's own lines. Signed in by its first message, like /ws/session.
+app.Map("/repos/{id:guid}/onboarding/runs/{runId:guid}/terminal", async (HttpContext http, Guid id, Guid runId) =>
+{
+    if (!http.WebSockets.IsWebSocketRequest) { http.Response.StatusCode = 400; return; }
+    await OnboardingTerminalSocket.RunAsync(http, id, runId);
+}).AllowAnonymous();
+
 app.Run();
 
 /// <summary>Visible to the integration tests (WebApplicationFactory&lt;Program&gt;).</summary>

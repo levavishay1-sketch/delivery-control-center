@@ -69,6 +69,7 @@ public sealed class DccFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Repos__CachePath", RepoCachePath);
         Environment.SetEnvironmentVariable("Repos__VerifyPath", Path.Combine(_tempDir, "verify"));
         Environment.SetEnvironmentVariable("Onboarding__WorkspaceRoot", Path.Combine(_tempDir, "onboarding"));
+        Environment.SetEnvironmentVariable("Onboarding__CoachRecheck", "false");
         Environment.SetEnvironmentVariable("Chat__Dir", Path.Combine(_tempDir, "chat"));
     }
 

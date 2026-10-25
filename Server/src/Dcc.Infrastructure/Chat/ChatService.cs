@@ -567,6 +567,8 @@ public sealed partial class ChatService(
     {
         "wi" or "gaps" when t.WorkitemId is { } w => new ActionEntity(t.Kind, w, t.ClientId, w),
         "task" when Guid.TryParse(t.Id, out var id) => new ActionEntity("task", id, t.ClientId, t.WorkitemId),
+        // An onboarding run: its actions find the repository from the run themselves.
+        "run" when Guid.TryParse(t.Id, out var rid) => new ActionEntity("run", rid, t.ClientId, null),
         _ => null,
     };
 

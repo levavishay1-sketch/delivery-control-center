@@ -13,4 +13,7 @@ public sealed class OnboardingOptions
     /// the home folder, not TEMP: TEMP can resolve to an 8.3 short name, which Claude Code's write check refuses.
     /// </summary>
     public string WorkspaceRoot { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dcc-repos-onboarding");
+
+    /// <summary>The coach's weekly recheck of the remembered marketplace sources. Off in the tests, which never reach the internet.</summary>
+    public bool CoachRecheck { get; set; } = true;
 }

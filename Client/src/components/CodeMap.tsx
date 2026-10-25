@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { openFolder, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapPlace } from "../api.ts";
+import { errText, openFolder, type CodeMap, type CodeMapLane, type CodeMapNode, type CodeMapNodeKind, type CodeMapPlace } from "../api.ts";
 import { Info } from "../claude/Info.tsx";
 
 /**
@@ -111,12 +111,8 @@ const KIND_HE: Record<CodeMapNodeKind, string> = {
   empty: "הענף ריק",
 };
 
-/** The server answers a refusal with { "error": "<message for the person>" }. */
-function errMessage(e: unknown): string {
-  const body = (e instanceof Error ? e.message : String(e)).replace(/^\d{3}\s+/, "");
-  try { const j = JSON.parse(body) as { error?: unknown }; if (typeof j.error === "string") return j.error; } catch { /* not JSON */ }
-  return body || "לא הצלחתי לפתוח את התיקייה";
-}
+/** The server answers a refusal with { error: code, message: sentence for the person }; errText reads the sentence. */
+const errMessage = (e: unknown): string => errText(e) || "לא הצלחתי לפתוח את התיקייה";
 
 /** What pressing a line shows: the branch it draws. */
 const laneNode = (l: CodeMapLane): CodeMapNode => ({ kind: "other", heading: "ענף", subject: l.name ?? l.label, detail: l.detail, url: l.url, folder: l.folder });

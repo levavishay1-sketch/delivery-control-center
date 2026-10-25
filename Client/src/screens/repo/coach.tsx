@@ -14,7 +14,7 @@ import { PROPOSAL_KIND_HE, errText, fmtDate, fmtInt, fmtUsd, pct } from "./label
 
 const TREND_HE: Record<NonNullable<HealthScore["trend"]>, string> = { up: "↑ משתפר", down: "↓ נחלש", flat: "→ יציב" };
 const PROPOSAL_STATUS_HE: Record<string, { label: string; cls: string }> = {
-  open: { label: "מחכה להחלטה", cls: "human" }, approved: { label: "אושר", cls: "ok" }, declined: { label: "נדחה", cls: "bad" }, applied: { label: "יושם", cls: "ok" }, superseded: { label: "הוחלף", cls: "" },
+  proposed: { label: "מחכה להחלטה", cls: "human" }, approved: { label: "אושר", cls: "ok" }, declined: { label: "נדחה", cls: "bad" }, applied: { label: "יושם", cls: "ok" }, superseded: { label: "הוחלף", cls: "" },
 };
 
 export function CoachPanel({ repoId, busy, onRunStarted, onError }: { repoId: string; busy: boolean; onRunStarted: (runId: string) => void; onError: (text: string) => void }) {
@@ -35,8 +35,9 @@ export function CoachPanel({ repoId, busy, onRunStarted, onError }: { repoId: st
       if (r.runId) onRunStarted(r.runId);
     } catch (e) { onError(errText(e)); } finally { setWorking(null); }
   };
-  const open = view.proposals.filter((p) => p.status === "open");
-  const past = view.proposals.filter((p) => p.status !== "open");
+  // The server writes a proposal that waits for a decision as "proposed".
+  const open = view.proposals.filter((p) => p.status === "proposed");
+  const past = view.proposals.filter((p) => p.status !== "proposed");
   const h = view.health;
   return (
     <div className="panel" style={{ display: "grid", gap: 10 }}>

@@ -58,6 +58,8 @@ public sealed class ClaudeController(ChatService chat, IPermissionService permis
             "pr" when Guid.TryParse(topic.Id?.Split('/')[0], out var repoId) =>
                 await HttpContext.RequestServices.GetRequiredService<Dcc.Infrastructure.PullRequests.PullRequestService>()
                     .VisibleReposAsync(await permissions.ClientsWithAsync(me, Permissions.PullRequests.Read, ct), ct) is not { } visible || visible.Contains(repoId),
+            // An onboarding run is a person's to talk about when they may read the repositories of the client that owns it.
+            "run" => await permissions.HasAsync(me, Permissions.Repos.Read, new ScopeRef(ScopeType.Client, topic.ClientId), ct),
             _ when topic.WorkitemId is { } w => await permissions.HasAsync(me, Permissions.Requirements.Read, new ScopeRef(ScopeType.Requirement, w), ct),
             _ => await permissions.HasAsync(me, Permissions.Clients.Read, new ScopeRef(ScopeType.Client, topic.ClientId), ct),
         };

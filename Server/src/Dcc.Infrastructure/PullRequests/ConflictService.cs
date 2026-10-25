@@ -39,7 +39,7 @@ public sealed record ConflictDecision(IReadOnlyList<ResolvedFile> Files, string?
 /// result is an ordinary merge commit on the request's branch, branch first and target second, pushed as the person
 /// and never forced; and a file is only offered when git left markers in it.
 /// </summary>
-public sealed class ConflictService(PullRequestService prs, PullRequestCache cache, RepoCheckouts checkouts, TaskStore store, ITenantScope tenant, IAuditLog audit)
+public sealed class ConflictService(PullRequestService prs, PullRequestCache cache, RepoCheckouts checkouts, TaskStore store, Onboarding.RepoAiEvents repoEvents, IAuditLog audit)
 {
     private static AppException Refused(string message) => AppException.Conflict("conflict_refused", message);
     private static string Cut(string s, int n) => s.Length > n ? s[..n] : s;
@@ -178,13 +178,11 @@ public sealed class ConflictService(PullRequestService prs, PullRequestCache cac
             // The merge is pushed; the record is best effort.
             try
             {
-                await tenant.RunAsync(clientId, d => SqlJson.ExecuteAsync(d, """
-                    insert into repo_ai_event (client_id, repo_id, type, payload, actor_user_id) values (@c, @r, 'pull_request.conflict_resolved', @p::jsonb, @u)
-                    """, new { c = clientId, r = repoId, u = userId, p = new JsonObject
-                    {
-                        ["number"] = pr.Number, ["branch"] = pr.HeadBranch, ["base"] = pr.BaseBranch, ["commit"] = built.Sha,
-                        ["files"] = new JsonArray(built.Paths.Select(x => (JsonNode?)x).ToArray()),
-                    }.ToJsonString() }, ct), ct);
+                await repoEvents.AppendAsync(clientId, repoId, "pull_request.conflict_resolved", new JsonObject
+                {
+                    ["number"] = pr.Number, ["branch"] = pr.HeadBranch, ["base"] = pr.BaseBranch, ["commit"] = built.Sha,
+                    ["files"] = new JsonArray(built.Paths.Select(x => (JsonNode?)x).ToArray()),
+                }, userId, ct);
             }
             catch (Npgsql.NpgsqlException) { }
         }

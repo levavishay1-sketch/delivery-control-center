@@ -84,10 +84,11 @@ Repository onboarding (`openspec/changes/repository-coach`) is one fixed
 process — connect, diagnose (no model), processes and the agent test, a trial
 run, component cards with their evidence, a verified build, delivery — whose
 result differs per repository, and a coach that keeps proposing afterwards.
-The rules are data (`OldServer/packages/core/src/repo-onboarding/rules.json`, until rewritten); the
-reusable templates are the operator catalog (`.../repo-onboarding/catalog/`).
+The rules are data (`Server/onboarding/rules.json`, with the interview and the
+trial tasks beside it); the reusable templates are the operator catalog
+(`Server/onboarding/catalog/templates/`).
 The `/init` draft session inside the plan step is the real, interactive Claude
-Code in a pseudo-terminal (`@lydell/node-pty`); the screen reaches it over a
+Code in a pseudo-terminal (Porta.Pty); the screen reaches it over a
 WebSocket on the same `/api` proxy, and an API restart disconnects it — the
 run's screen reopens the same conversation (`--resume`).
 

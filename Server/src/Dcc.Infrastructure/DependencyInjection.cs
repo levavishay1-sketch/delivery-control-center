@@ -8,6 +8,7 @@ using Dcc.Infrastructure.Entra;
 using Dcc.Infrastructure.Clients;
 using Dcc.Infrastructure.Events;
 using Dcc.Infrastructure.Glossary;
+using Dcc.Infrastructure.Onboarding;
 using Dcc.Infrastructure.Policy;
 using Dcc.Infrastructure.Prompts;
 using Dcc.Infrastructure.Persistence;
@@ -120,6 +121,27 @@ public static class DependencyInjection
         services.AddScoped<PullRequests.ConflictService>();
         services.AddScoped<Chat.IChatCodeSource, PullRequests.PullRequestChatCode>();
         services.AddScoped<Requirements.ContentionService>();
+
+        // Repository onboarding: the run engine and what it decides from, the memory of ready-made components, the chat's
+        // view of a run and its two actions, the restart; then the interactive half — the terminal, the /init draft
+        // session, the coach, opening a folder (phase 4.7)
+        services.Configure<Onboarding.OnboardingOptions>(config.GetSection(Onboarding.OnboardingOptions.Section));
+        services.AddSingleton<Onboarding.OnboardingData>();
+        services.AddSingleton<Onboarding.OnboardingWorkspace>();
+        services.AddSingleton<Onboarding.Deliverer>();
+        services.AddSingleton<Onboarding.OnboardingLocks>();
+        services.AddScoped<Onboarding.RepoAiEvents>();
+        services.AddScoped<Onboarding.OnboardingStore>();
+        services.AddScoped<Onboarding.MarketplaceStore>();
+        services.AddScoped<Onboarding.OnboardingRuns>();
+        services.AddScoped<Onboarding.ICoachRunStarter>(sp => sp.GetRequiredService<Onboarding.OnboardingRuns>());
+        services.AddScoped<Onboarding.OnboardingChat>();
+        services.AddScoped<Chat.IChatRunFacts>(sp => sp.GetRequiredService<Onboarding.OnboardingChat>());
+        services.AddScoped<Chat.IChatCodeSource>(sp => sp.GetRequiredService<Onboarding.OnboardingChat>());
+        services.AddScoped<Actions.ActionDef, Actions.SendToSessionAction>();
+        services.AddScoped<Actions.ActionDef, Actions.RequestComponentAction>();
+        services.AddHostedService<Onboarding.OnboardingStartup>();
+        services.AddOnboardingSessions();
 
         services.AddSingleton<GraphClientFactory>();
         services.AddScoped<IGuestInvitationService, GraphGuestInvitationService>();

@@ -3,6 +3,7 @@ import { Terminal as XTerm } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { onboardingTerminalUrl, terminalAuthMessage, type SessionState } from "../../api.ts";
+import { refresh } from "../../auth/session.ts";
 
 const STATE_HE: Record<SessionState, string> = {
   none: "סשן הטיוטה נפתח מכרטיס טיוטת /init",
@@ -59,17 +60,25 @@ export function RunTerminal({ repoId, runId, screenRef }: { repoId: string; runI
       if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
     };
     const connect = () => {
-      ws = new WebSocket(onboardingTerminalUrl(repoId, runId));
-      ws.onopen = () => { ws?.send(terminalAuthMessage()); setConnected(true); sendResize(); };
-      ws.onmessage = (e) => {
+      const socket = new WebSocket(onboardingTerminalUrl(repoId, runId));
+      ws = socket;
+      socket.onopen = () => { socket.send(terminalAuthMessage()); setConnected(true); sendResize(); };
+      socket.onmessage = (e) => {
         const m = JSON.parse(String(e.data)) as { type: string; data?: string; state?: SessionState };
         if (m.type === "replay") { term.reset(); term.write(m.data ?? ""); }
         else if (m.type === "output") term.write(m.data ?? "");
         else if (m.type === "state" && m.state) setState(m.state);
+        // The token is about to expire (or the permissions changed): a fresh one keeps the same connection — and the
+        // screen — open; without it the server closes the socket and the screen is drawn again from the start.
+        else if (m.type === "reauth_required") void refresh().then((s) => { if (s && socket.readyState === WebSocket.OPEN) socket.send(terminalAuthMessage()); });
       };
-      ws.onclose = () => {
+      socket.onclose = (e) => {
         setConnected(false);
-        if (!closed) retry = window.setTimeout(connect, 2000);
+        if (closed) return;
+        // Closed for an expired token: reconnect with a fresh one, not with the same one again.
+        retry = window.setTimeout(() => {
+          void (e.code === 4401 ? refresh() : Promise.resolve(true)).then((ok) => { if (ok && !closed) connect(); });
+        }, 2000);
       };
     };
     const input = term.onData((d) => { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "input", data: d })); });
