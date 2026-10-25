@@ -110,6 +110,17 @@ public static class DependencyInjection
         services.AddScoped<Actions.ActionDef, Actions.ResolveGapAction>();
         services.AddScoped<Actions.ActionDef, Actions.DismissGapAction>();
 
+        // The pull-request centre on GitHub and Azure DevOps; the contention map and the Reviewer (phase 4.6)
+        services.Configure<PullRequests.GitHubOptions>(config.GetSection(PullRequests.GitHubOptions.Section));
+        services.AddSingleton<PullRequests.GitHubCli>();
+        services.AddSingleton<PullRequests.PullRequestCache>();
+        services.AddScoped<PullRequests.IPullRequestHost, PullRequests.GitHubHost>();
+        services.AddScoped<PullRequests.IPullRequestHost, PullRequests.AzureDevOpsHost>();
+        services.AddScoped<PullRequests.PullRequestService>();
+        services.AddScoped<PullRequests.ConflictService>();
+        services.AddScoped<Chat.IChatCodeSource, PullRequests.PullRequestChatCode>();
+        services.AddScoped<Requirements.ContentionService>();
+
         services.AddSingleton<GraphClientFactory>();
         services.AddScoped<IGuestInvitationService, GraphGuestInvitationService>();
         services.AddScoped<EntraIdentityLinker>();

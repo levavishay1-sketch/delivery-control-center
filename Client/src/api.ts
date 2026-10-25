@@ -823,10 +823,12 @@ export const getPullRequestConflict = (repoId: string, number: number) =>
 /** The repository's own checks, run on the merged result before anything is pushed. */
 export type CheckResult = { name: string; command: string; ok: boolean; skipped?: string; ms: number; output: string };
 export type VerifyResult = { ran: boolean; why?: string; commit: string; checks: CheckResult[] };
-export const verifyPullRequestConflict = (repoId: string, number: number, files: { path: string; content: string }[]) =>
-  post<VerifyResult>(`/repos/${repoId}/pull-requests/${number}/conflict/verify`, { files });
-export const resolvePullRequestConflict = (repoId: string, number: number, files: { path: string; content: string }[]) =>
-  post<{ commitSha: string; branch: string; base: string; files: number }>(`/repos/${repoId}/pull-requests/${number}/conflict/resolve`, { files });
+/** `on`: the two commits the decision was made on — a branch that moved since is refused, not merged blind. */
+export type ConflictBasis = { headSha: string; baseSha: string };
+export const verifyPullRequestConflict = (repoId: string, number: number, files: { path: string; content: string }[], on: ConflictBasis) =>
+  post<VerifyResult>(`/repos/${repoId}/pull-requests/${number}/conflict/verify`, { files, ...on });
+export const resolvePullRequestConflict = (repoId: string, number: number, files: { path: string; content: string }[], on: ConflictBasis) =>
+  post<{ commitSha: string; branch: string; base: string; files: number }>(`/repos/${repoId}/pull-requests/${number}/conflict/resolve`, { files, ...on });
 
 /** Every branch of a repository and what to do about it. */
 export type BranchHealth = {

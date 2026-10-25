@@ -198,6 +198,14 @@ public sealed class TasksTests(DbFixture fx)
         Assert.Equal(JsonValueKind.Null, file.GetProperty("before").ValueKind);
         Assert.Equal("made by the stand-in", file.GetProperty("after").GetString());
 
+        // the same drawing the pull-request screen uses: the task's branch leaves main, with its one commit on it
+        var map = await Ok(await admin.GetAsync($"/tasks/{a}/code-map"));
+        Assert.Equal(JsonValueKind.String, map.GetProperty("branch").ValueKind);
+        var lanes = map.GetProperty("codeMap").GetProperty("lanes");
+        Assert.Equal(["base", "ours"], lanes.EnumerateArray().Select(l => l.GetProperty("id").GetString()));
+        Assert.Equal("main", lanes[0].GetProperty("label").GetString());
+        Assert.Equal(["ours"], lanes[1].GetProperty("nodes").EnumerateArray().Select(n => n.GetProperty("kind").GetString()));
+
         // every call to Claude is one ledger row, with its cost
         var calls = await _f.ScalarAsync<long>("select count(*) from claude_call where entity_id = @t and cost_usd = 0.0123", ("t", a.ToString()));
         Assert.Equal(2, calls);

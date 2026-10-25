@@ -138,3 +138,31 @@ Authorization: Bearer {{token}}
 ### The task's whole page: status, steps, development, checks, runs
 GET {{api}}/tasks/TASK-ID
 Authorization: Bearer {{token}}
+
+# ── Pull requests (GitHub through gh, Azure DevOps through the client's connection) ──
+
+### Every open request of the repositories you may see, and the recent merged and closed ones (refresh=1 skips the one-minute memory)
+GET {{api}}/pull-requests?refresh=1
+Authorization: Bearer {{token}}
+
+### One request: what blocks it, the next step, its files, the code map, the timeline
+GET {{api}}/repos/REPO-ID/pull-requests/NUMBER
+Authorization: Bearer {{token}}
+
+### A review, sent to the host as the operator's account and recorded under you (comment / approve / request_changes)
+POST {{api}}/repos/REPO-ID/pull-requests/NUMBER/review
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "decision": "comment", "text": "Looks right to me" }
+
+### A repository's branches and what to do about each
+GET {{api}}/repos/REPO-ID/branches
+Authorization: Bearer {{token}}
+
+### The files a requirement's work touches, and which other requirements touch them too
+POST {{api}}/workitems/REQUIREMENT-ID/touches
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{ "repo": "shop", "branch": "task/WI-1-discount", "paths": ["src/cart.ts"] }

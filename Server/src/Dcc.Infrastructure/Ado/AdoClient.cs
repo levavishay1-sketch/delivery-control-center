@@ -75,6 +75,25 @@ public sealed class AdoClient(IHttpClientFactory http)
         return new AdoResult(false, last?.Status ?? 0, null, null, last is { } l ? $"{l.Status} {l.Text}" : "no response");
     }
 
+    /// <summary>A GET of a path after <c>/_apis/</c> that takes no api-version (connectionData answers only a preview one).</summary>
+    public async Task<AdoResult> GetUnversionedAsync(string baseUrl, string path, string pat, CancellationToken ct = default)
+    {
+        try
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{baseUrl.TrimEnd('/')}/_apis/{path}");
+            req.Headers.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(":" + pat)));
+            req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            using var res = await http.CreateClient(HttpClientName).SendAsync(req, ct);
+            JsonElement? body = null;
+            try { body = JsonDocument.Parse(await res.Content.ReadAsStringAsync(ct)).RootElement.Clone(); } catch (JsonException) { }
+            return new AdoResult(res.IsSuccessStatusCode, (int)res.StatusCode, null, body, res.IsSuccessStatusCode ? "" : $"{(int)res.StatusCode} {res.ReasonPhrase}");
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException)
+        {
+            return new AdoResult(false, 0, null, null, $"שגיאת רשת: {e.Message}");
+        }
+    }
+
     /// <summary>POST / PATCH a path after <c>/_apis/</c> (a work item: json-patch). Walks the api-versions like a GET.</summary>
     public async Task<AdoResult> SendAsync(string baseUrl, string apiPath, HttpMethod method, object body, string pat,
         string contentType = "application/json-patch+json", CancellationToken ct = default)

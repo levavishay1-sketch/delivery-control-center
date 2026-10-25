@@ -613,17 +613,6 @@ public sealed partial class TaskRunService(
         return new JsonObject { ["rolledBack"] = true, ["branch"] = branch, ["dir"] = dir, ["invalidatedRuns"] = invalidated };
     }
 
-    [GeneratedRegex(@"^git@([^:]+):(.+?)(\.git)?$")] private static partial Regex SshRemote();
-    [GeneratedRegex(@"^https?://([^/]+)/(.+?)(\.git)?$")] private static partial Regex HttpsRemote();
-
-    /// <summary>git@github.com:owner/repo.git or https://github.com/owner/repo.git → https://github.com/owner/repo</summary>
-    public static string? HttpsRepoUrl(string remote)
-    {
-        if (SshRemote().Match(remote) is { Success: true } s) return $"https://{s.Groups[1].Value}/{s.Groups[2].Value}";
-        if (HttpsRemote().Match(remote) is { Success: true } h) return $"https://{h.Groups[1].Value}/{h.Groups[2].Value}";
-        return null;
-    }
-
     /// <summary>
     /// Push a task's branch to the repository's real remote — the one step never automatic. Uses whatever git
     /// credentials are already set up. A task built on another task's branch is reviewed against that branch.
@@ -655,7 +644,7 @@ public sealed partial class TaskRunService(
             if (!merged && onHost) baseBranch = bb;
             else if (!merged) note = $"המשימה בנויה על גבי הענף של {label}, והענף הזה לא נמצא ב-GitHub. אם {label} עוד לא נדחפה — דחפו אותה קודם, ואז פתחו את בקשת המיזוג של המשימה הזו מול הענף שלה ({bb}); בקשה מול {def} תכלול גם את העבודה של {label}. אם {label} כבר מוזגה — פתחו מול {def}.";
         }
-        var httpsBase = HttpsRepoUrl(remote);
+        var httpsBase = Git.HttpsRepoUrl(remote);
         await MarkLatestRunAsync(taskId, "pushedAt", ct);
         await store.NoteAsync(clientId, workitemId, taskId, new UserActor(actor), $"⬆ הקוד של משימה #{t.Seq} ({Cut(t.Intent, 60)}) נדחף ל-GitHub — branch {branch}.", ct, "git");
         await brief.RegenerateAsync(clientId, workitemId, ct);

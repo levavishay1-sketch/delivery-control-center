@@ -424,7 +424,7 @@ public sealed partial class ChatService(
             if (topic.Kind == "gaps") return await AskGapsAsync(conv, topic, userId, question, ct);
             var facts = (JsonObject)(ctx.Facts?.DeepClone() ?? new JsonObject());
             var transcriptCursor = BaselineOf(conv)["transcriptCursor"]?.GetValue<int>();
-            if (topic.Kind == "run" && topic.Id is { } runId && services.GetService(typeof(IChatFacts)) is IChatFacts extra)
+            if (topic.Kind == "run" && topic.Id is { } runId && services.GetService(typeof(IChatRunFacts)) is IChatRunFacts extra)
             {
                 var (more, cursor) = await extra.RunFactsAsync(Guid.Parse(runId), transcriptCursor ?? 0, ct);
                 foreach (var (k, v) in more) facts[k] = v?.DeepClone();
@@ -823,8 +823,9 @@ public sealed partial class ChatService(
                 }
             }
         }
-        else if (topic.Kind is "run" or "pr" && services.GetService(typeof(IChatFacts)) is IChatFacts extra)
+        else if (((IEnumerable<IChatCodeSource>?)services.GetService(typeof(IEnumerable<IChatCodeSource>)))?.FirstOrDefault(s => s.Kind == topic.Kind) is { } extra)
         {
+            // Fetched before the card says "running": when the host refuses, the card stays as it was and the person is told why.
             var place = await extra.CodeForReadingAsync(topic, ChatDir(convId), ct);
             (dir, holds, systemKey) = (place.Dir, place.Holds, place.SystemKey);
             extraDirs.AddRange(place.ExtraDirs);
@@ -869,9 +870,17 @@ public sealed partial class ChatService(
     }
 }
 
-/// <summary>What the pull-request and onboarding topics add to the chat — their facts and where their code is read (phases 4.6, 4.7).</summary>
-public interface IChatFacts
+/// <summary>What an onboarding run adds to the chat's facts each turn: what happened in the run since the last question (phase 4.7).</summary>
+public interface IChatRunFacts
 {
     Task<(JsonObject Facts, int Cursor)> RunFactsAsync(Guid runId, int cursor, CancellationToken ct);
+}
+
+/// <summary>Where a topic's code is read when a person approves a code reading — one per topic kind ("pr", "run").</summary>
+public interface IChatCodeSource
+{
+    string Kind { get; }
+
+    /// <summary>The folder to read, a sentence on what is in it, the system prompt's key, and further folders the reading may open. A refusal is a <see cref="ChatRefused"/>.</summary>
     Task<(string? Dir, string Holds, string SystemKey, IReadOnlyList<string> ExtraDirs)> CodeForReadingAsync(ResolvedTopic topic, string conversationDir, CancellationToken ct);
 }

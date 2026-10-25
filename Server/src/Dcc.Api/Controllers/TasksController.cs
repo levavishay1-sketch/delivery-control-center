@@ -84,6 +84,14 @@ public sealed class TasksController(TaskStore store, IPermissionService permissi
         return await code.FileVersionsAsync(c, id, path, ct);
     }
 
+    /// <summary>Where the task's branch sits in git — the same drawing the pull-request screen uses.</summary>
+    [HttpGet("tasks/{id:guid}/code-map")]
+    public async Task<JsonObject> CodeMap(Guid id, [FromServices] TaskCodeService code, CancellationToken ct)
+    {
+        var (c, _) = await TaskAsync(id, Permissions.Tasks.Read, ct);
+        return await code.CodeMapAsync(c, id, ct);
+    }
+
     [HttpGet("tasks/{id:guid}/overlaps")]
     public async Task<JsonArray> Overlaps(Guid id, [FromServices] TaskCodeService code, CancellationToken ct)
     {

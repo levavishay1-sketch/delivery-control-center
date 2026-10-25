@@ -55,8 +55,13 @@ public sealed class DccFactory : WebApplicationFactory<Program>
         File.WriteAllText(FakeClaudePath, FakeClaude.Script);
         Environment.SetEnvironmentVariable("DCC_CLAUDE_BIN", "node");
         Environment.SetEnvironmentVariable("Claude__BinArgs__0", FakeClaudePath);
+        // GitHub is a stand-in script too: a test never reaches a real host or the operator's own gh login.
+        File.WriteAllText(Path.Combine(_tempDir, "fake-gh.cjs"), FakeGh.Script);
+        Environment.SetEnvironmentVariable("DCC_GH_BIN", "node");
+        Environment.SetEnvironmentVariable("GitHub__BinArgs__0", Path.Combine(_tempDir, "fake-gh.cjs"));
         RepoCachePath = Path.Combine(_tempDir, "repos");
         Environment.SetEnvironmentVariable("Repos__CachePath", RepoCachePath);
+        Environment.SetEnvironmentVariable("Repos__VerifyPath", Path.Combine(_tempDir, "verify"));
         Environment.SetEnvironmentVariable("Chat__Dir", Path.Combine(_tempDir, "chat"));
     }
 
@@ -77,6 +82,17 @@ public sealed class DccFactory : WebApplicationFactory<Program>
     {
         var file = Path.Combine(_tempDir, "calls.log");
         return File.Exists(file) ? File.ReadAllLines(file).Select(l => JsonDocument.Parse(l).RootElement.Clone()).ToList() : [];
+    }
+
+    /// <summary>What the stand-in gh answers: the first rule whose regex matches the joined arguments. <c>Out</c> may be text or any object (sent as JSON).</summary>
+    public void GhRules(params (string Match, object? Out, int Code, string? Err)[] rules) =>
+        File.WriteAllText(Path.Combine(_tempDir, "gh-rules.json"), JsonSerializer.Serialize(rules.Select(r => new { match = r.Match, @out = r.Out, code = r.Code, err = r.Err })));
+
+    /// <summary>Every call the stand-in gh received, oldest first: its arguments.</summary>
+    public List<string[]> GhCalls()
+    {
+        var file = Path.Combine(_tempDir, "gh-calls.log");
+        return File.Exists(file) ? File.ReadAllLines(file).Select(l => JsonSerializer.Deserialize<string[]>(l)!).ToList() : [];
     }
 
     /// <summary>A bare repository with one commit on main — the "remote" DCC clones from and pushes to — as a file:// address.</summary>

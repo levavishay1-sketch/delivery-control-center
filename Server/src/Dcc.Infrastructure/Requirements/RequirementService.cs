@@ -175,6 +175,9 @@ public sealed class RequirementService(DccDbContext db, ITenantScope tenant, IEv
             var reopened = wasClosed && changed.Contains("phase") && row!["phase"]?.GetValue<string>() is not ("done" or "archived");
             if (reopened && !string.IsNullOrWhiteSpace(reopenReason))
                 await RecordDecisionAsync(clientId, id, actor, "requirement_reopened", reopenReason!, ct);
+            // Finished work no longer holds its files: left held, it would show as an overlap on every later requirement.
+            if (!wasClosed && changed.Contains("phase") && row!["phase"]?.GetValue<string>() is "done" or "archived")
+                await SqlJson.ExecuteAsync(d, "update workitem_file_touch set released_at = now() where workitem_id = @id and released_at is null", new { id }, ct);
             return row!;
         }, ct);
         await brief.RegenerateAsync(clientId, id, ct);

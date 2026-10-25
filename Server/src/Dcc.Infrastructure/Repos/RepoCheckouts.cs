@@ -14,6 +14,9 @@ public sealed class RepoOptions
     /// folder, not TEMP: TEMP can resolve to an 8.3 short name, which Claude Code's write check refuses.
     /// </summary>
     public string CachePath { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dcc-repos");
+
+    /// <summary>Where a merged result is checked out for the repository's own checks, one folder per check, removed after it.</summary>
+    public string VerifyPath { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dcc-verify");
 }
 
 /// <summary>A repository as a checkout needs it.</summary>
@@ -35,6 +38,8 @@ public sealed partial class RepoCheckouts(IOptions<RepoOptions> options)
     private readonly ConcurrentDictionary<Guid, Lazy<Task<Checkout>>> _running = new();
 
     public string CacheRoot => options.Value.CachePath;
+
+    public string VerifyRoot => options.Value.VerifyPath;
 
     [GeneratedRegex(@"^(https?://|git@|file://)")] private static partial Regex GitUrl();
 

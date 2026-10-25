@@ -30,6 +30,30 @@ public sealed partial class TaskCodeService(TaskStore store, FlowRunHub hub, Rep
         return await Git.TaskBaseShaAsync(dir, branch, t.BaseSha) is { } b ? (dir, b, branch) : null;
     }
 
+    /// <summary>
+    /// The code map of a task's branch (code-map.ts <c>codeMapForTask</c>). Read-only: the branch is inspected by name,
+    /// never checked out, and opening a screen never starts a clone. A task built on another task's branch shows only
+    /// its own commits, from where it started — not the other task's work under it.
+    /// </summary>
+    public async Task<JsonObject> CodeMapAsync(Guid clientId, Guid taskId, CancellationToken ct)
+    {
+        static JsonObject Answer(Domain.Git.CodeMap? map, string? branch, string? reason = null)
+        {
+            var o = new JsonObject { ["codeMap"] = map is null ? null : System.Text.Json.JsonSerializer.SerializeToNode(map, System.Text.Json.JsonSerializerOptions.Web), ["branch"] = branch };
+            if (reason is not null) o["reason"] = reason;
+            return o;
+        }
+        var t = await store.RequireAsync(clientId, taskId, ct);
+        var key = await store.RequirementKeyAsync(clientId, t.WorkitemId, ct);
+        if (await store.FirstRepoAsync(clientId, t.WorkitemId, ct) is null) return Answer(null, null, "אין repository מקושר לדרישה");
+        var dir = await store.ExistingCloneAsync(clientId, t.WorkitemId, ct);
+        if (dir is null) return Answer(null, null, "אין עותק מקומי של הריפו — הוא ייווצר בהרצה הבאה");
+        var branch = store.BranchOf(key, t);
+        if (!await Git.ExistsAsync(dir, branch)) return Answer(null, branch, "עוד לא נוצר ענף למשימה הזו");
+        try { return Answer(await CodeMapReader.ForWorkspaceAsync(dir, new CodeMapInput(Branch: branch, Ref: branch, BaselineSha: t.BaseSha)), branch); }
+        catch (IOException) { return Answer(null, branch); }
+    }
+
     [GeneratedRegex(@"^(\d+|-)\t(\d+|-)\t(.+)$")] private static partial Regex NumStat();
     [GeneratedRegex(@"^([AMDRT])\S*\t(.+?)(?:\t(.+))?$")] private static partial Regex NameStatus();
 

@@ -200,7 +200,7 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
     if (why) { setWaiting(why); return; }
     setWaiting(null);
     setChecking(true); setErr(null); setCheck(null);
-    try { setCheck(await verifyPullRequestConflict(repoId, number, payloadOf())); }
+    try { setCheck(await verifyPullRequestConflict(repoId, number, payloadOf(), { headSha: d.headSha, baseSha: d.baseSha })); }
     catch (e) { setErr(errText(e)); } finally { setChecking(false); }
   };
 
@@ -212,7 +212,7 @@ export function PullRequestConflictScreen({ repoId, number, back }: { repoId: st
     setBusy(true); setErr(null);
     try {
       const payload = payloadOf();
-      const r = await resolvePullRequestConflict(repoId, number, payload);
+      const r = await resolvePullRequestConflict(repoId, number, payload, { headSha: d.headSha, baseSha: d.baseSha });
       // The request just changed on the host. Drop what the app still believes
       // about it, or going back shows the conflict that was just resolved.
       await getPullRequest(repoId, number, true).catch(() => { /* the screen below refreshes again */ });

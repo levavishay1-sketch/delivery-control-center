@@ -71,11 +71,16 @@ public sealed class ModelPolicyLayoutTests
         Assert.Equal(original, ModelPolicyStore.Format(JsonNode.Parse(original)) + "\n");
     }
 
-    internal static string FindRepoFile(string relative)
+    /// <summary>A file of the repository, found from the test assembly — or, when the tests were built into another folder (<c>--artifacts-path</c>), from this source file.</summary>
+    internal static string FindRepoFile(string relative, [System.Runtime.CompilerServices.CallerFilePath] string source = "")
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, relative))) dir = dir.Parent;
-        return dir is null ? throw new FileNotFoundException(relative) : Path.Combine(dir.FullName, relative);
+        foreach (var start in new[] { AppContext.BaseDirectory, Path.GetDirectoryName(source) ?? "" })
+        {
+            var dir = start.Length > 0 ? new DirectoryInfo(start) : null;
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, relative))) dir = dir.Parent;
+            if (dir is not null) return Path.Combine(dir.FullName, relative);
+        }
+        throw new FileNotFoundException(relative);
     }
 }
 

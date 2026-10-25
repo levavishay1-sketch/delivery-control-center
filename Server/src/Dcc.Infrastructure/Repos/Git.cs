@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Dcc.Infrastructure.Repos;
 
@@ -9,11 +10,22 @@ namespace Dcc.Infrastructure.Repos;
 /// (GIT_TERMINAL_PROMPT=0), long paths are on (a .NET obj/ tree breaks Windows' 260-char limit),
 /// and a timeout kills the whole tree — a credential helper's GUI prompt is a child of git.
 /// </summary>
-public static class Git
+public static partial class Git
 {
     public sealed record Result(int Code, string Out)
     {
         public bool Ok => Code == 0;
+    }
+
+    [GeneratedRegex(@"^git@([^:]+):(.+?)(\.git)?$")] private static partial Regex SshRemote();
+    [GeneratedRegex(@"^https?://([^/]+)/(.+?)(\.git)?$")] private static partial Regex HttpsRemote();
+
+    /// <summary>git@github.com:owner/repo.git or https://github.com/owner/repo.git → https://github.com/owner/repo</summary>
+    public static string? HttpsRepoUrl(string remote)
+    {
+        if (SshRemote().Match(remote) is { Success: true } s) return $"https://{s.Groups[1].Value}/{s.Groups[2].Value}";
+        if (HttpsRemote().Match(remote) is { Success: true } h) return $"https://{h.Groups[1].Value}/{h.Groups[2].Value}";
+        return null;
     }
 
     public static async Task<Result> RunAsync(IEnumerable<string> args, string cwd, int? timeoutMs = null, IReadOnlyDictionary<string, string>? env = null, CancellationToken ct = default)
@@ -55,6 +67,61 @@ public static class Git
     }
 
     public static Task<Result> RunAsync(string cwd, params string[] args) => RunAsync(args, cwd);
+
+    /// <summary>
+    /// A file's bytes as git holds them at <paramref name="rev"/> (a commit or a tree, then <c>:path</c>) — stdout only and
+    /// untrimmed, so a file keeps its final newline and no warning ends up inside it. null when git could not show it.
+    /// </summary>
+    public static async Task<string?> ShowAsync(string dir, string rev, string path, int timeoutMs = 60_000)
+    {
+        var psi = new ProcessStartInfo("git")
+        {
+            WorkingDirectory = dir, RedirectStandardOutput = true, RedirectStandardError = true, RedirectStandardInput = true,
+            UseShellExecute = false, CreateNoWindow = true, StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8,
+        };
+        foreach (var a in new[] { "-c", "core.longpaths=true", "show", $"{rev}:{path}" }) psi.ArgumentList.Add(a);
+        psi.Environment["GIT_TERMINAL_PROMPT"] = "0";
+        Process p;
+        try { p = Process.Start(psi)!; }
+        catch (Exception) { return null; }
+        using (p)
+        {
+            p.StandardInput.Close();
+            var stdout = p.StandardOutput.ReadToEndAsync(CancellationToken.None);
+            _ = p.StandardError.ReadToEndAsync(CancellationToken.None);
+            using var limit = new CancellationTokenSource(timeoutMs);
+            try { await p.WaitForExitAsync(limit.Token); }
+            catch (OperationCanceledException)
+            {
+                try { p.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
+                return null;
+            }
+            return p.ExitCode == 0 ? await stdout : null;
+        }
+    }
+
+    /// <summary>
+    /// Brings branches from origin into <c>origin/&lt;name&gt;</c> whatever the clone was made with: DCC's own copy is a
+    /// shallow single-branch clone, whose configured refspec would leave a request's branch in FETCH_HEAD only, and whose
+    /// cut-off history would hide the commit two branches share. So the refspecs are named, and a shallow copy is deepened.
+    /// </summary>
+    public static async Task<Result> FetchBranchesAsync(string dir, int timeoutMs, params string[] branches)
+    {
+        var shallow = (await RunAsync(dir, "rev-parse", "--is-shallow-repository")).Out.Trim() == "true";
+        var args = new List<string> { "fetch" };
+        if (shallow) args.Add("--unshallow");
+        args.Add("origin");
+        args.AddRange(branches.Distinct().Select(b => $"+refs/heads/{b}:refs/remotes/origin/{b}"));
+        return await RunAsync(args, dir, timeoutMs);
+    }
+
+    /// <summary>
+    /// The object id in a plumbing command's answer — its own line. The answer carries stderr too, and git may add a
+    /// warning there (a line-ending conversion on hash-object), which must never become part of the id.
+    /// </summary>
+    public static string ShaOf(string output) => Lines(output).FirstOrDefault(l => ObjectId().IsMatch(l)) ?? "";
+
+    [GeneratedRegex("^[0-9a-f]{40}([0-9a-f]{24})?$")] private static partial Regex ObjectId();
 
     /// <summary>The non-empty lines of git output.</summary>
     public static List<string> Lines(string s) => s.Split('\n').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();

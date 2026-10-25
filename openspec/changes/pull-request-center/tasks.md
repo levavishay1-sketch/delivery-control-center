@@ -52,8 +52,8 @@ Azure DevOps → verification. Tick each task as it lands.
 
 ## 7. Azure DevOps
 
-- [ ] 7.1 Provider: list, get, compare, checks — per-reviewer votes reduced to the shared review state
-- [ ] 7.2 Actions, where the host supports them
+- [x] 7.1 Provider: list, get, compare, checks — per-reviewer votes reduced to the shared review state (the C# server, `AzureDevOpsHost`, through the owning client's service connection; Azure DevOps keeps no per-file line counts and no unified diff, so those stay empty and the chat's reading of a change says so)
+- [x] 7.2 Actions, where the host supports them (a review is a vote — approve 10, request changes -5 — plus a comment thread; the merge completes the request with a merge commit; a conflict is decided with the same git plumbing as on GitHub)
 - [ ] 7.3 The list shows both hosts together, with the host named on each row
 
 ## 8. Verification
