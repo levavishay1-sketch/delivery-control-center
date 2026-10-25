@@ -57,7 +57,11 @@ one PR to `master` at the end, when the user asks.
   - Belongs to later tasks: the pull-request and onboarding topics' facts and code reading (`IChatFacts`, 4.6 and 4.7), the onboarding actions `send_to_session` and `request_component` (4.7)
 - [ ] 4.6 Pull request centre
 - [ ] 4.7 Repository onboarding: PTY (`Porta.Pty`) over an authenticated WebSocket, branches, code map, local folder
-- [ ] 4.8 Dashboard, alerts, budgets, activity log
+- [x] 4.8 Dashboard, alerts, budgets, activity log
+  - `GET /dashboard` (the four tiles, the recent top-level requirements, the recent requirements with their month's AI spend and trend, the person's latest alerts), `/list/alerts`, `/list/budgets` (spend summed from the ledger, month to date), `/audit` (the activity log: every event, 25 to a page, by who acted, type and dates — needs `audit.read`); each narrowed to the clients the person may read (budgets: `budgets.read`)
+  - `GET /resolve` (a branch's WI-nnnn, or a key, to its requirement — what the hooks ask) moved here from capture
+  - Not ported on purpose: `POST /admin/shutdown` — it existed only so PGlite could flush its data folder; with PostgreSQL the server stops like any other process
+  - The tests can now build into another folder (`dotnet test --artifacts-path …`) while a dev server holds the usual `bin`
 - [ ] 4.9 MCP server in C#; demo data; the remaining `prove:*` scripts as tests
 
 ## 5. Finish

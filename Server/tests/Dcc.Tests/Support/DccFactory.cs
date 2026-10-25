@@ -233,8 +233,15 @@ public sealed class DccFactory : WebApplicationFactory<Program>
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "DeliveryControlCenter.sln"))) dir = dir.Parent;
-        return dir?.FullName ?? throw new DirectoryNotFoundException("Server/ (DeliveryControlCenter.sln) not found above the test binaries.");
+        if (dir is not null) return dir.FullName;
+        // Built elsewhere (dotnet test --artifacts-path, while a dev server holds the usual bin folder): from this source file.
+        var fromSource = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(ThisFile())!, "..", "..", ".."));
+        return File.Exists(Path.Combine(fromSource, "DeliveryControlCenter.sln"))
+            ? fromSource
+            : throw new DirectoryNotFoundException("Server/ (DeliveryControlCenter.sln) not found above the test binaries.");
     }
+
+    private static string ThisFile([System.Runtime.CompilerServices.CallerFilePath] string path = "") => path;
 
     protected override void Dispose(bool disposing)
     {

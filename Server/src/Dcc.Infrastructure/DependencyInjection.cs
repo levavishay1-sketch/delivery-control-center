@@ -71,6 +71,7 @@ public static class DependencyInjection
         services.AddScoped<Requirements.BlockerService>();
         services.AddScoped<Requirements.AttachmentService>();
         services.AddScoped<Requirements.SpecService>();
+        services.AddScoped<Requirements.DashboardService>();
 
         // Tasks: their tree, statuses, runs on DCC's own copy of the repository, checks, manual work (phase 4.3)
         services.Configure<Repos.RepoOptions>(config.GetSection(Repos.RepoOptions.Section));
