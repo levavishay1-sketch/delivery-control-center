@@ -103,6 +103,17 @@ public sealed class GapsAndBlockersController(RequirementService requirements, I
         return StatusCode(201, await attachments.AddAsync(clientId, id, b.Required("name"), bytes, User.UserId(), ct));
     }
 
+    /// <summary>Only DCC's copy goes; a file mirrored to TFS stays attached there.</summary>
+    [HttpDelete("workitems/{id:guid}/attachments/{attId:guid}")]
+    [RequirePermission(Permissions.Requirements.Edit, ScopeType.Requirement, From = "id")]
+    public async Task<IActionResult> RemoveAttachment(Guid id, Guid attId, [FromServices] AttachmentService attachments, CancellationToken ct)
+    {
+        var (_, clientId, _) = await requirements.LocateAsync(id, ct);
+        return await attachments.RemoveAsync(clientId, id, attId, User.UserId(), ct)
+            ? Ok(new { ok = true })
+            : NotFound(new { error = "לא נמצאה צרופה", message = "לא נמצאה צרופה" });
+    }
+
     /// <summary>DCC holds the bytes, so it hands them back — a file from TFS without them redirects there.</summary>
     [HttpGet("workitems/{id:guid}/attachments/{attId:guid}/content")]
     [RequirePermission(Permissions.Requirements.Read, ScopeType.Requirement, From = "id")]

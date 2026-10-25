@@ -156,6 +156,34 @@ public sealed class RequirementsTests(DbFixture fx)
     }
 
     [Fact]
+    public async Task An_attachment_can_be_removed_and_the_timeline_says_so()
+    {
+        var (_, id, admin) = await NewRequirement();
+        var att = await Ok(await admin.PostAsJsonAsync($"/workitems/{id}/attachments", new { name = "old.txt", contentBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes("stale")) }));
+        var attId = att.GetProperty("id").GetString();
+        var removed = await Ok(await admin.DeleteAsync($"/workitems/{id}/attachments/{attId}"));
+        Assert.True(removed.GetProperty("ok").GetBoolean());
+        var page = await Ok(await admin.GetAsync($"/workitems/{id}"));
+        Assert.Equal(0, page.GetProperty("attachments").GetArrayLength());
+        Assert.Contains(page.GetProperty("events").EnumerateArray(), e => e.GetProperty("payload").TryGetProperty("body", out var b) && b.GetString() == "📎 הוסר קובץ: old.txt");
+        var again = await admin.DeleteAsync($"/workitems/{id}/attachments/{attId}");
+        Assert.Equal(HttpStatusCode.NotFound, again.StatusCode);
+        Assert.Equal("לא נמצאה צרופה", (await again.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public async Task A_requirement_has_a_detail_of_its_own_and_an_empty_one_is_cleared()
+    {
+        var (_, id, admin) = await NewRequirement();
+        Assert.Equal(JsonValueKind.Null, (await Ok(await admin.GetAsync($"/workitems/{id}"))).GetProperty("workitem").GetProperty("description").ValueKind);
+        var row = await Ok(await admin.PatchAsJsonAsync($"/workitems/{id}", new { description = "A customer can earn points on every order." }));
+        Assert.Equal("A customer can earn points on every order.", row.GetProperty("description").GetString());
+        var cleared = await Ok(await admin.PatchAsJsonAsync($"/workitems/{id}", new { description = "" }));
+        Assert.Equal(JsonValueKind.Null, cleared.GetProperty("description").ValueKind);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.PatchAsJsonAsync($"/workitems/{id}", new { description = 5 })).StatusCode);
+    }
+
+    [Fact]
     public async Task An_attached_word_document_is_shown_as_the_spec_with_its_own_table()
     {
         var (_, id, admin) = await NewRequirement();

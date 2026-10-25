@@ -127,7 +127,7 @@ public sealed class RequirementService(DccDbContext db, ITenantScope tenant, IEv
 
     private static readonly (string Field, string Column, string Cast)[] Fields =
     [
-        ("title", "title", ""), ("type", "type", "::workitem_type"), ("requirementType", "requirement_type", "::requirement_type"),
+        ("title", "title", ""), ("description", "description", ""), ("type", "type", "::workitem_type"), ("requirementType", "requirement_type", "::requirement_type"),
         ("priority", "priority", "::priority"), ("risk", "risk", "::risk_level"), ("executor", "executor", "::executor"),
         ("budgetUsd", "budget_usd", "::numeric"), ("dueDate", "due_date", "::timestamptz"), ("parentId", "parent_id", "::uuid"),
         ("adoAreaPath", "ado_area_path", ""), ("phase", "phase", "::workitem_phase"), ("key", "key", ""),
@@ -378,6 +378,8 @@ public sealed class RequirementService(DccDbContext db, ITenantScope tenant, IEv
         Enum("executor", Executors); Enum("phase", Phases);
         if (p.TryGetProperty("title", out var t) && (t.ValueKind != JsonValueKind.String || t.GetString()!.Length == 0))
             throw AppException.BadRequest("bad_request", "\"title\" cannot be empty.");
+        if (p.TryGetProperty("description", out var desc) && desc.ValueKind is not (JsonValueKind.Null or JsonValueKind.String))
+            throw AppException.BadRequest("bad_request", "\"description\" must be text or null.");
         if (p.TryGetProperty("parentId", out var pid) && pid.ValueKind is not (JsonValueKind.Null or JsonValueKind.String))
             throw AppException.BadRequest("bad_request", "\"parentId\" must be an id or null.");
         if (p.TryGetProperty("parentId", out pid) && pid.ValueKind == JsonValueKind.String && !Guid.TryParse(pid.GetString(), out _))
@@ -393,7 +395,7 @@ public sealed class RequirementService(DccDbContext db, ITenantScope tenant, IEv
             "budgetUsd" => raw.ValueKind == JsonValueKind.Number ? raw.GetRawText() : raw.GetString() is { Length: > 0 } s ? s : null,
             "dueDate" => raw.ValueKind == JsonValueKind.String && raw.GetString() is { Length: > 0 } s
                 ? DateTimeOffset.Parse(s, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal).ToString("o") : null,
-            "parentId" or "adoAreaPath" or "key" => raw.GetString() is { Length: > 0 } s ? s : null,
+            "parentId" or "adoAreaPath" or "key" or "description" => raw.GetString() is { Length: > 0 } s ? s : null,
             _ => raw.ValueKind == JsonValueKind.String ? raw.GetString() : raw.GetRawText(),
         };
     }

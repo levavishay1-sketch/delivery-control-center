@@ -77,6 +77,28 @@ public sealed class AttachmentService(ITenantScope tenant, IEventLogWriter event
         return new JsonObject { ["id"] = id.ToString(), ["name"] = name, ["adoUrl"] = adoUrl, ["textChars"] = text?.Length ?? 0, ["extractError"] = reason };
     }
 
+    /// <summary>
+    /// Removes a file from a requirement. Only DCC's copy goes: a file mirrored to TFS stays attached there — TFS is
+    /// the source of truth and is not edited from here. The removal is recorded on the timeline. False = no such file.
+    /// </summary>
+    public async Task<bool> RemoveAsync(Guid clientId, Guid workitemId, Guid attachmentId, Guid actor, CancellationToken ct)
+    {
+        var name = await tenant.RunAsync(clientId, async d =>
+        {
+            var removed = await SqlJson.ScalarAsync<string>(d, "delete from attachment where id = @id and workitem_id = @w returning name", new { id = attachmentId, w = workitemId }, ct);
+            if (removed is not null)
+                await events.AppendAsync(new NewEvent
+                {
+                    ClientId = clientId, WorkitemId = workitemId, Source = "manual", Type = "note.added", Actor = new UserActor(actor),
+                    Payload = JsonSerializer.SerializeToElement(new { body = $"📎 הוסר קובץ: {removed}" }),
+                }, ct);
+            return removed;
+        }, ct);
+        if (name is null) return false;
+        await brief.RegenerateAsync(clientId, workitemId, ct);
+        return true;
+    }
+
     public sealed record Content(string Name, byte[]? Bytes, string? AdoUrl);
 
     public Task<Content?> ContentAsync(Guid clientId, Guid attachmentId, CancellationToken ct) =>
