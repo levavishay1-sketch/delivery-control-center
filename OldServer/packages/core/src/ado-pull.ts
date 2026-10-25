@@ -261,6 +261,29 @@ export async function attachmentContent(clientId: string, attachmentId: string) 
   return row ?? null;
 }
 
+/**
+ * Remove a file from a requirement. Only DCC's copy goes: a file mirrored to
+ * TFS stays attached there, since TFS is the source of truth and is not edited
+ * from here. The removal is recorded on the timeline.
+ */
+export async function removeAttachment(input: {
+  clientId: string; workitemId: string; attachmentId: string; by: { userId: string };
+}): Promise<boolean> {
+  const [row] = await withTenant(input.clientId, (tx) =>
+    tx.delete(attachment)
+      .where(and(eq(attachment.id, input.attachmentId), eq(attachment.workitemId, input.workitemId)))
+      .returning({ name: attachment.name }),
+  );
+  if (!row) return false;
+  await appendEvent({
+    clientId: input.clientId, workitemId: input.workitemId, source: "manual", type: "note.added",
+    actor: { kind: "user", userId: input.by.userId, identityType: "interactive" },
+    payload: { body: `📎 הוסר קובץ: ${row.name}` },
+  });
+  await regenerateBrief(input.clientId, input.workitemId);
+  return true;
+}
+
 /** Above this a spec stops being a spec and starts being a problem. */
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 

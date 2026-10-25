@@ -1,5 +1,18 @@
 [
   {
+    "key": "requirement_detail",
+    "kind": "section",
+    "title": "פירוט דרישה",
+    "aliases": [
+      "פירוט הדרישה",
+      "תיאור הדרישה"
+    ],
+    "screens": [
+      "requirement"
+    ],
+    "explain": "הטקסט המלא של הדרישה, ולצדו הצרופות שצורפו אליה. את שניהם קלוד קורא כשהוא בוחן ומפרק את הדרישה."
+  },
+  {
     "key": "attachment_read",
     "kind": "section",
     "title": "צרופות",

@@ -45,7 +45,7 @@ export {
   type AssessResult, type AssessGap, type BreakdownResult, type FlowRunView, type ImplementResult, type RollbackResult, type PushResult,
   type TaskDeletePrecheck, type TaskDeleteNode, type DeleteTaskOptions, type RequirementCostSummary, type CostDetailRow,
 } from "./ai-assist.ts";
-export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, attachmentContent, AttachmentRefused, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
+export { pullFromAdo, pullOneFromAdo, attachmentsFor, addAttachment, removeAttachment, attachmentContent, AttachmentRefused, adoWorkItemExists, type PullResult } from "./ado-pull.ts";
 export { extractText, type Extraction } from "./attachments/extract.ts";
 export {
   updateClient, deleteClient, ClientRefused,

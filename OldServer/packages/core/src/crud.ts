@@ -78,7 +78,7 @@ export async function deleteClient(clientId: string) {
 
 /* ── requirement (workitem) ─────────────────────────────────────────── */
 
-const REQ_FIELDS = ["title", "type", "requirementType", "priority", "risk", "executor", "budgetUsd", "dueDate", "parentId", "adoAreaPath", "phase", "key"] as const;
+const REQ_FIELDS = ["title", "description", "type", "requirementType", "priority", "risk", "executor", "budgetUsd", "dueDate", "parentId", "adoAreaPath", "phase", "key"] as const;
 type ReqField = (typeof REQ_FIELDS)[number];
 
 export async function updateRequirement(input: {
@@ -104,7 +104,7 @@ export async function updateRequirement(input: {
       let v = input.patch[f];
       if (f === "budgetUsd") v = v == null || v === "" ? null : String(v);
       else if (f === "dueDate") v = v ? new Date(v as string) : null;
-      else if (f === "parentId" || f === "adoAreaPath" || f === "key") v = v || null;
+      else if (f === "parentId" || f === "adoAreaPath" || f === "key" || f === "description") v = v || null;
       const cur = (before as Record<string, unknown>)[f];
       const same = f === "dueDate"
         ? (cur == null && v == null) || (cur instanceof Date && v instanceof Date && cur.getTime() === v.getTime())
