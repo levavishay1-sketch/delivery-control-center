@@ -1,0 +1,59 @@
+{
+  "_about": "Trial task templates of repository onboarding: representative tasks derived from the profile, run with no components before the build (the baseline) and again after it. `when` is the condition language of rules.json. The judge is the code when the answer can be checked against the profile, a different model otherwise. `{name}` is filled from the rules context.",
+  "tasks": [
+    {
+      "key": "how_to_test", "priority": 1, "when": { "path": "tests.frameworks", "empty": false },
+      "title_he": "איך מריצים את הבדיקות כאן",
+      "prompt": "How are the automated tests run in this repository? Name the exact command and the folder(s) the tests live in. Do not run them.",
+      "judge": { "kind": "model", "facts": ["tests", "build", "monorepo"], "failureKind": "missing_fact" }
+    },
+    {
+      "key": "no_tests_honesty", "priority": 1, "when": { "path": "tests.frameworks", "empty": true },
+      "title_he": "האם יש כאן בדיקות אוטומטיות",
+      "prompt": "Are there automated tests in this repository, and how would they be run? If there is no test framework, say so plainly.",
+      "judge": { "kind": "code", "mustNotClaim": ["npm test passes", "tests pass", "all tests pass"], "mustMention": ["no test", "not have test", "no automated test", "there are no", "does not appear to have"], "failureKind": "cannot_verify", "expect_he": "התשובה אומרת שאין מסגרת בדיקות במקום להמציא פקודה." }
+    },
+    {
+      "key": "how_to_build", "priority": 2, "when": { "path": "windows_build.windows_only_build", "truthy": false },
+      "title_he": "איך בונים את הפרויקט",
+      "prompt": "How is this project built? Name the exact build command(s) and, in a multi-package repository, from which folder. Do not run the build.",
+      "judge": { "kind": "model", "facts": ["build", "monorepo", "package_managers"], "failureKind": "missing_fact" }
+    },
+    {
+      "key": "build_honesty_windows", "priority": 2, "when": { "path": "windows_build.windows_only_build", "truthy": true },
+      "title_he": "האם אפשר לבנות את הפרויקט כאן",
+      "prompt": "Can this project be built on this machine (Linux, no Visual Studio)? Try to determine the build system and whether a build here is possible; if it is not, say exactly why and what machine it needs. Do not attempt a build that will not work.",
+      "judge": { "kind": "code", "mustNotClaim": ["build succeeded", "built successfully", "build passes"], "mustMention": ["windows", "msbuild", "cannot", "not possible", "can't"], "failureKind": "cannot_verify", "expect_he": "התשובה אומרת שה-build אפשרי רק ב-Windows במקום לטעון שהוא עבר." }
+    },
+    {
+      "key": "where_to_add", "priority": 3, "when": { "path": "monorepo.is_monorepo", "truthy": true },
+      "title_he": "באיזו חבילה מוסיפים יכולת חדשה",
+      "prompt": "If a small new capability had to be added to the main user-facing part of this repository, which package or folder would own it, and which existing file is the closest example to follow? Name paths that exist.",
+      "judge": { "kind": "model", "facts": ["monorepo", "languages", "frameworks"], "failureKind": "bad_judgment" }
+    },
+    {
+      "key": "entry_points", "priority": 3, "when": { "path": "monorepo.is_monorepo", "truthy": false },
+      "title_he": "איפה נקודות הכניסה של הקוד",
+      "prompt": "Where are the entry points of this codebase (the main program, the HTTP routes or handlers, the jobs)? Name the files that exist and one sentence each.",
+      "judge": { "kind": "model", "facts": ["languages", "frameworks", "size"], "failureKind": "bad_judgment" }
+    },
+    {
+      "key": "generated_awareness", "priority": 4, "when": { "fn": "gen_dirs", "truthy": true },
+      "title_he": "מה עושים עם קוד מג'ונרט",
+      "prompt": "Some code in this repository is generated. Which paths are generated, what generates them, and what would you do if a change is needed in one of them? Name the paths.",
+      "judge": { "kind": "model", "facts": ["generated_code"], "failureKind": "rule_violated" }
+    },
+    {
+      "key": "external_schema", "priority": 4, "when": { "path": "external_systems", "hasAnyKey": ["Dataverse/Dynamics 365", "PostgreSQL", "MySQL/MariaDB", "SQL Server"] },
+      "title_he": "מאיפה יודעים את הסכמה של המערכת החיצונית",
+      "prompt": "This code talks to an external system with its own schema (a database or Dataverse). If you had to add a field to one of its entities, where would you find the current schema, and what could you NOT know from the repository alone? Be explicit about what needs the live system.",
+      "judge": { "kind": "model", "facts": ["external_systems", "generated_code"], "failureKind": "needs_external" }
+    },
+    {
+      "key": "history_fix", "priority": 5, "when": { "fn": "shapes", "truthy": true },
+      "title_he": "אילו קבצים משתנים יחד",
+      "prompt": "Recent history shows a kind of change that touches the same few files together every time. Which files are they, and in what order would you change them? Name paths that exist.",
+      "judge": { "kind": "model", "facts": ["git"], "failureKind": "missing_fact" }
+    }
+  ]
+}

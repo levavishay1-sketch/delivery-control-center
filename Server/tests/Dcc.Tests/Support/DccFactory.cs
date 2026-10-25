@@ -17,7 +17,13 @@ namespace Dcc.Tests.Support;
 /// </summary>
 public sealed class DccFactory : WebApplicationFactory<Program>
 {
-    public const string TestDatabase = "dcc_test";
+    /// <summary>
+    /// The database the tests drop and recreate — never <c>dcc</c>. <c>DCC_TEST_DATABASE</c> may name another one that
+    /// starts with <c>dcc_test</c>, so two test runs (two people, two agents) never recreate each other's database mid-run.
+    /// </summary>
+    public static readonly string TestDatabase =
+        Environment.GetEnvironmentVariable("DCC_TEST_DATABASE") is { Length: > 0 } named && System.Text.RegularExpressions.Regex.IsMatch(named, "^dcc_test[a-z0-9_]*$")
+            ? named : "dcc_test";
 
     public string OwnerConnectionString { get; }
     public string PolicyPath { get; }
@@ -62,6 +68,7 @@ public sealed class DccFactory : WebApplicationFactory<Program>
         RepoCachePath = Path.Combine(_tempDir, "repos");
         Environment.SetEnvironmentVariable("Repos__CachePath", RepoCachePath);
         Environment.SetEnvironmentVariable("Repos__VerifyPath", Path.Combine(_tempDir, "verify"));
+        Environment.SetEnvironmentVariable("Onboarding__WorkspaceRoot", Path.Combine(_tempDir, "onboarding"));
         Environment.SetEnvironmentVariable("Chat__Dir", Path.Combine(_tempDir, "chat"));
     }
 

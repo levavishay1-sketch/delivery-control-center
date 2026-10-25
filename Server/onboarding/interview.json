@@ -1,0 +1,47 @@
+{
+  "_about": "The interview bank of repository onboarding: at most four questions per run, only what the code cannot tell, each with a default so nobody has to answer. `when` is the same condition language as rules.json; the questions are ranked by `priority` (lower first) and the first four whose condition holds are asked.",
+  "questions": [
+    {
+      "key": "tools", "priority": 1, "when": { "path": "ai_config.present", "truthy": false },
+      "question_he": "מי עובד על הריפו הזה עם AI?", "why_he": "קובע אם AGENTS.md נכתב לכל הכלים או רק ל-Claude Code, ואם נגזרות הנחיות ל-Cursor ול-Copilot.",
+      "options": [{ "value": "claude", "label_he": "רק Claude Code" }, { "value": "mixed", "label_he": "גם Cursor / Copilot" }, { "value": "unknown", "label_he": "לא יודע" }],
+      "default": "claude"
+    },
+    {
+      "key": "tools_existing", "priority": 1, "when": { "path": "ai_config.present", "truthy": true },
+      "question_he": "יש כבר הגדרות AI בריפו. מה לעשות איתן?", "why_he": "קובע אם ההטמעה ממזגת לקובץ אחד, מוסיפה רק דלתא, או משאירה הכול כמו שהוא.",
+      "options": [{ "value": "delta", "label_he": "להוסיף רק מה שחסר בהן" }, { "value": "merge", "label_he": "למזג לקובץ אחד" }, { "value": "keep", "label_he": "לא לגעת" }],
+      "default": "delta"
+    },
+    {
+      "key": "forbidden_areas", "priority": 2, "when": { "any": [{ "path": "secrets.sensitive_files", "empty": false }, { "path": "generated_code.paths", "empty": false }, { "path": "external_systems", "empty": false }] },
+      "question_he": "יש אזורים שאסור לסוכן לגעת בהם מעבר למה שהאבחון מצא (סודות, קוד מג'ונרט)?", "why_he": "מוסיף איסורי קריאה ועריכה מעבר לאלה שהאבחון גזר.",
+      "options": [{ "value": "as_found", "label_he": "רק מה שנמצא" }, { "value": "more", "label_he": "כן — אכתוב בצ'אט אילו" }, { "value": "none", "label_he": "אין אזורים אסורים" }],
+      "default": "as_found"
+    },
+    {
+      "key": "done_means", "priority": 3, "when": { "path": "ci.present", "truthy": false },
+      "question_he": "אין CI. מה נחשב \"עבודה גמורה\" אצלכם?", "why_he": "קובע את השער המקומי: build בלבד, build ובדיקות, או סקירה של אדם.",
+      "options": [{ "value": "build", "label_he": "ה-build עובר" }, { "value": "build_tests", "label_he": "build ובדיקות עוברים" }, { "value": "review", "label_he": "אדם סוקר, אין בדיקה אוטומטית" }],
+      "default": "build"
+    },
+    {
+      "key": "done_means_ci", "priority": 3, "when": { "path": "ci.present", "truthy": true },
+      "question_he": "מה נחשב \"עבודה גמורה\" — מספיק ש-CI ירוק?", "why_he": "קובע אם הסוכן צריך לעבור עוד שער מעבר ל-CI (סקירה, בדיקה ידנית).",
+      "options": [{ "value": "ci", "label_he": "CI ירוק מספיק" }, { "value": "ci_review", "label_he": "CI ירוק ואדם סוקר" }, { "value": "manual", "label_he": "יש גם בדיקה ידנית" }],
+      "default": "ci_review"
+    },
+    {
+      "key": "runner", "priority": 2, "when": { "path": "windows_build.windows_only_build", "truthy": true },
+      "question_he": "ה-build רץ רק ב-Windows. יש מכונת Windows שיכולה לבנות עבור הסוכן?", "why_he": "בלי מריץ, כל אימות הוא review-only והכרטיס הכנות אומר זאת.",
+      "options": [{ "value": "no", "label_he": "אין עדיין" }, { "value": "yes", "label_he": "יש — אחבר אותה" }, { "value": "later", "label_he": "נבקש" }],
+      "default": "no"
+    },
+    {
+      "key": "pain", "priority": 4,
+      "question_he": "מה הכי מפריע היום בעבודה עם AI על הריפו הזה?", "why_he": "מכוון את ריצת הניסיון ואת הסוקר למה שכואב.",
+      "options": [{ "value": "wrong_facts", "label_he": "ממציא עובדות על הריפו" }, { "value": "breaks_things", "label_he": "שובר דברים שעבדו" }, { "value": "slow", "label_he": "מחפש הרבה זמן" }, { "value": "none", "label_he": "עוד לא עבדנו עם AI כאן" }],
+      "default": "none"
+    }
+  ]
+}
