@@ -267,6 +267,16 @@ public sealed class CatalogTests : IDisposable
     }
 
     [Fact]
+    public void A_dollar_sign_in_a_pattern_is_baked_in_as_written_and_the_hook_still_runs()
+    {
+        // The old server read "$$", "$&", "$`" and "$'" in the config as replacement patterns and wrote a hook that did not parse.
+        var hook = Hook("block-commands", """{ "patterns": ["kill $$", "echo $'x' $& $`"], "reason": "no" }""");
+        Assert.Contains("""kill $$""", File.ReadAllText(hook));
+        Assert.Equal(2, RunScript(hook, Bash("kill $$")).Status);
+        Assert.Equal(0, RunScript(hook, Bash("ls")).Status);
+    }
+
+    [Fact]
     public void Block_commands_compares_case_insensitively_with_whitespace_collapsed()
     {
         Assert.Equal(2, RunScript(BlockCommands(), Bash("Terraform \\\n   APPLY")).Status);

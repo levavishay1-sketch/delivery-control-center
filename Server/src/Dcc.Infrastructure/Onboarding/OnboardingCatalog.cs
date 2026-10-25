@@ -66,30 +66,16 @@ public sealed partial class OnboardingCatalog(string templatesDir)
     private const string ConfigMark = "/* @dcc:config */ {}";
 
     /// <summary>
-    /// A hook or a script with its parameters baked in as a const. The config goes in the way the old server's
-    /// <c>text.replace(CONFIG_MARK, json)</c> put it, replacement patterns included: a <c>$$</c>, <c>$&amp;</c>,
-    /// <c>$`</c> or <c>$'</c> inside a command is expanded, not copied (a quirk kept for parity, not a design).
+    /// A hook or a script with its parameters baked in as a const, copied exactly. (The old server used
+    /// <c>text.replace(CONFIG_MARK, json)</c>, which read a <c>$$</c>, <c>$&amp;</c>, <c>$`</c> or <c>$'</c> inside a command as
+    /// a replacement pattern and wrote a broken hook — a bug, not carried over.)
     /// </summary>
     private string Bake(string rel, JsonObject config)
     {
         var text = Text(rel);
         var at = text.IndexOf(ConfigMark, StringComparison.Ordinal);
         if (at < 0) throw new InvalidOperationException($"catalog template {rel} has no config marker");
-        var json = Stringify(config);
-        var sb = new StringBuilder(text, 0, at, text.Length + json.Length);
-        for (var i = 0; i < json.Length; i++)
-        {
-            var next = json[i] == '$' && i + 1 < json.Length ? json[i + 1] : '\0';
-            switch (next)
-            {
-                case '$': sb.Append('$'); i++; break;
-                case '&': sb.Append(ConfigMark); i++; break;
-                case '`': sb.Append(text, 0, at); i++; break;
-                case '\'': sb.Append(text, at + ConfigMark.Length, text.Length - at - ConfigMark.Length); i++; break;
-                default: sb.Append(json[i]); break;
-            }
-        }
-        return sb.Append(text, at + ConfigMark.Length, text.Length - at - ConfigMark.Length).ToString();
+        return string.Concat(text.AsSpan(0, at), Stringify(config), text.AsSpan(at + ConfigMark.Length));
     }
 
     /* ── reading parameters, as JavaScript read them ───────────────── */
