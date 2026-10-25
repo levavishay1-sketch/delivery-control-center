@@ -4,7 +4,8 @@ namespace Dcc.Tests.Support;
 /// Stands in for the claude CLI (run as <c>node fake-claude.cjs …args</c>). It answers the way the real one
 /// does — stream-json lines ending in a result line with cost and usage — and does what each kind of call
 /// is for: a write call writes <c>feature.txt</c>; a checks call (commands, no write) passes every check the
-/// prompt numbers; anything else answers a small JSON object.
+/// prompt numbers; anything else answers what a test put in <c>reply.txt</c> beside the script, or a small JSON object.
+/// Every call's arguments and prompt are appended to <c>calls.log</c>, so a test can see what was sent.
 /// </summary>
 public static class FakeClaude
 {
@@ -26,10 +27,12 @@ public static class FakeClaude
             const seqs = [...prompt.matchAll(/^#(\d+)(?: \[\w+\])?:/gm)].map((m) => Number(m[1]));
             result = { summary: 'checked', checks: seqs.map((seq) => ({ seq, passed: true, detail: 'fine' })) };
           } else {
-            result = { summary: 'read only' };
+            const reply = path.join(__dirname, 'reply.txt');
+            result = fs.existsSync(reply) ? fs.readFileSync(reply, 'utf8') : { summary: 'read only' };
           }
+          fs.appendFileSync(path.join(__dirname, 'calls.log'), JSON.stringify({ args, prompt }) + '\n');
           out({ type: 'assistant', message: { content: [{ type: 'text', text: 'working on it' }] } });
-          out({ type: 'result', subtype: 'success', is_error: false, result: JSON.stringify(result), total_cost_usd: 0.0123, duration_ms: 42, num_turns: 2,
+          out({ type: 'result', subtype: 'success', is_error: false, result: typeof result === 'string' ? result : JSON.stringify(result), total_cost_usd: 0.0123, duration_ms: 42, num_turns: 2,
                 usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, modelUsage: { 'claude-sonnet-5': { costUSD: 0.0123 } } });
           if (!streaming) process.exit(0);
         }

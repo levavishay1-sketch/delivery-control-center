@@ -74,6 +74,18 @@ public sealed partial class TaskCodeService(TaskStore store, FlowRunHub hub, Rep
         return new JsonObject { ["path"] = filePath, ["before"] = binary ? null : before.Text, ["after"] = binary ? null : after.Text, ["binary"] = binary, ["tooLarge"] = false };
     }
 
+    public sealed record ChangesForReading(string Branch, List<JsonObject> Files, string Diff, bool Cut);
+
+    /// <summary>What a person's question about a task needs to read: its branch, the files it touched and its whole diff, as text. Null when the branch is not found.</summary>
+    public async Task<ChangesForReading?> ChangesForReadingAsync(Guid clientId, Guid taskId, CancellationToken ct)
+    {
+        if (await ContextAsync(clientId, taskId, ct) is not { } c) return null;
+        var files = (await ChangedFilesAsync(clientId, taskId, ct))?.OfType<JsonObject>().ToList() ?? [];
+        var full = (await Git.RunAsync(["-c", "core.quotepath=false", "diff", c.Base, c.Branch], c.Dir, 60_000, ct: ct)).Out;
+        const int limit = 400_000;
+        return new ChangesForReading(c.Branch, files, full.Length > limit ? full[..limit] : full, full.Length > limit);
+    }
+
     // ── overlaps and merging a dependency in (task-merge.ts) ─────────
 
     private static async Task<List<string>> OwnFilesAsync(string dir, string branch, string? baseSha)

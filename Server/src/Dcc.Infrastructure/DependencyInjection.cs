@@ -95,6 +95,20 @@ public static class DependencyInjection
         services.AddScoped<Actions.ActionDef, Actions.ImplementAction>();
         services.AddScoped<Actions.ActionDef, Actions.ApproveTaskAction>();
 
+        // Claude: the requirement's AI steps, the chat, the control centre, conclusions, retention (phase 4.5)
+        services.Configure<Chat.ChatOptions>(config.GetSection(Chat.ChatOptions.Section));
+        services.AddScoped<Requirements.RequirementAiService>();
+        services.AddScoped<Claude.IFlowRunWork, Requirements.AssessRun>();
+        services.AddScoped<Claude.IFlowRunWork, Requirements.BreakdownRun>();
+        services.AddScoped<Claude.ClaudeCenter>();
+        services.AddScoped<Chat.ChatService>();
+        services.AddScoped<Chat.InsightsService>();
+        services.AddHostedService<Chat.ChatRetention>();
+        services.AddScoped<Actions.ActionDef, Actions.AssessAction>();
+        services.AddScoped<Actions.ActionDef, Actions.BreakdownAction>();
+        services.AddScoped<Actions.ActionDef, Actions.ResolveGapAction>();
+        services.AddScoped<Actions.ActionDef, Actions.DismissGapAction>();
+
         services.AddSingleton<GraphClientFactory>();
         services.AddScoped<IGuestInvitationService, GraphGuestInvitationService>();
         services.AddScoped<EntraIdentityLinker>();

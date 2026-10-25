@@ -67,6 +67,17 @@ public sealed class ModelPolicyStore(IOptions<ModelPolicyOptions> options)
     /// <summary>The chat values, with the defaults as the floor.</summary>
     public int ChatRetentionDays => Load()["chat"]?["retentionDays"]?.GetValue<int>() ?? 90;
 
+    public sealed record ChatPolicy(int RolloverInputTokens, int RolloverColdDays, int RetentionDays, double DeclareCostAboveUsd, int InsightsMinRepeats);
+
+    /// <summary>The policy's chat values with the file's defaults as the floor.</summary>
+    public ChatPolicy Chat()
+    {
+        var c = Load()["chat"] as JsonObject;
+        int I(string k, int d) => c?[k] is JsonValue v && v.TryGetValue<double>(out var x) ? (int)x : d;
+        return new ChatPolicy(I("rolloverInputTokens", 40_000), I("rolloverColdDays", 14), I("retentionDays", 90),
+            c?["declareCostAboveUsd"] is JsonValue dv && dv.TryGetValue<double>(out var dc) ? dc : 0.1, I("insightsMinRepeats", 5));
+    }
+
     // ── the file's layout ────────────────────────────────────────────
 
     private static bool IsFlat(JsonNode? x) => x is JsonObject o && o.All(kv => kv.Value is null or JsonValue);

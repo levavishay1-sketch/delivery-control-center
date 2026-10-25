@@ -57,9 +57,51 @@ public sealed class DccFactory : WebApplicationFactory<Program>
         Environment.SetEnvironmentVariable("Claude__BinArgs__0", FakeClaudePath);
         RepoCachePath = Path.Combine(_tempDir, "repos");
         Environment.SetEnvironmentVariable("Repos__CachePath", RepoCachePath);
+        Environment.SetEnvironmentVariable("Chat__Dir", Path.Combine(_tempDir, "chat"));
     }
 
     public string FakeClaudePath { get; }
+
+    /// <summary>What the stand-in claude answers to a read-only call (null = its default).</summary>
+    public string? FakeReply
+    {
+        set
+        {
+            var file = Path.Combine(_tempDir, "reply.txt");
+            if (value is null) File.Delete(file); else File.WriteAllText(file, value);
+        }
+    }
+
+    /// <summary>Every call the stand-in received, oldest first: its arguments and its prompt.</summary>
+    public List<JsonElement> FakeCalls()
+    {
+        var file = Path.Combine(_tempDir, "calls.log");
+        return File.Exists(file) ? File.ReadAllLines(file).Select(l => JsonDocument.Parse(l).RootElement.Clone()).ToList() : [];
+    }
+
+    /// <summary>A bare repository with one commit on main — the "remote" DCC clones from and pushes to — as a file:// address.</summary>
+    public async Task<string> NewOriginAsync()
+    {
+        var root = Path.Combine(_tempDir, "origins", Guid.NewGuid().ToString("N")[..8]);
+        var bare = Path.Combine(root, "origin.git");
+        var work = Path.Combine(root, "work");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(work);
+        await Dcc.Infrastructure.Repos.Git.RunAsync(bare, "init", "--bare", "-b", "main");
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "init", "-b", "main");
+        await File.WriteAllTextAsync(Path.Combine(work, "README.md"), "# shop\n");
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "add", "-A");
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "first");
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "push", bare, "main");
+        return "file:///" + bare.Replace('\\', '/');
+    }
+
+    public async Task<Guid> LinkRepoAsync(Guid clientId, Guid reqId, string url)
+    {
+        var repoId = await ScalarAsync<Guid>("insert into repo(name, ado_repo_ref) values (@n, @u) returning id", ("n", "shop-" + Guid.NewGuid().ToString("N")[..6]), ("u", url));
+        await ExecAsync("insert into workitem_repo(client_id, workitem_id, repo_id, link_kind) values (@c, @w, @r, 'declared')", ("c", clientId), ("w", reqId), ("r", repoId));
+        return repoId;
+    }
     public string RepoCachePath { get; }
     public string TempDir => _tempDir;
 

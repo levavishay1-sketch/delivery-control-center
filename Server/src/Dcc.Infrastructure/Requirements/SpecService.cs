@@ -14,7 +14,8 @@ namespace Dcc.Infrastructure.Requirements;
 /// </summary>
 public sealed class SpecService(ITenantScope tenant)
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    // jsonb reorders keys, so a block's "type" is not first when it comes back from the database.
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { AllowOutOfOrderMetadataProperties = true };
 
     public Task<JsonObject> SpecForAsync(Guid clientId, Guid workitemId, CancellationToken ct) =>
         tenant.RunAsync(clientId, async d =>
