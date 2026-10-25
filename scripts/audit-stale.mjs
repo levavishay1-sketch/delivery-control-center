@@ -227,9 +227,12 @@ if (!specBase) note("the onboarding spec check did not run — there is no origi
 else {
   const lines = (s) => (s ?? "").split("\n").map((x) => x.trim()).filter(Boolean);
   const changed = new Set([...lines(gitOut("diff", "--name-only", specBase)), ...lines(gitOut("ls-files", "--others", "--exclude-standard"))]);
+  // The process lives in the C# server: its data (Server/onboarding), its code (the Onboarding folders of the domain and
+  // the infrastructure), its prompts (a migration that touches an 'onboarding.' prompt), the screen and the screen's words.
   const isProcess = (f) =>
-    (f.startsWith("OldServer/packages/core/src/repo-onboarding/") && !f.endsWith(".test.ts")) || f.startsWith("Client/src/screens/repo/") ||
-    f === "Server/glossary/concepts/onboarding.json" || (/^OldServer\/packages\/db\/migrations\/.*\.sql$/.test(f) && existsSync(f) && /'onboarding\./.test(readFileSync(f, "utf8")));
+    f.startsWith("Server/onboarding/") || f.startsWith("Server/src/Dcc.Domain/Onboarding/") || f.startsWith("Server/src/Dcc.Infrastructure/Onboarding/") ||
+    f.startsWith("Client/src/screens/repo/") || f === "Server/glossary/concepts/onboarding.json" ||
+    (/^Server\/db\/migrations\/.*\.sql$/.test(f) && existsSync(f) && /'onboarding\./.test(readFileSync(f, "utf8")));
   const touchedProcess = [...changed].filter(isProcess);
   const waived = gitOut("log", "--format=%B", `${specBase}..HEAD`)?.match(/^Spec-unchanged:\s*(.+)$/m)?.[1];
   if (!touchedProcess.length) ok("the onboarding spec: this branch does not touch the onboarding process");

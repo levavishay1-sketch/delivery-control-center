@@ -38,3 +38,12 @@ Omit `--blocking` for a non-blocking gap.
 The Gap appears on the WorkItem for the owner to verify, dismiss, or
 spin off. It is now in the timeline and the Context Brief — the next
 session sees it. Keep working on the parts the gap does not touch.
+
+## Sign-in
+
+`dcc.mjs` acts as the person working, with their DCC API token
+(`DCC_API_TOKEN`, or the one `dcc.mjs login` saved). If it answers
+"no API token" or "token revoked or expired", stop and ask the person to run
+`node <path-to>/skills/dcc.mjs login` in their own terminal — never ask for
+the token in the conversation. A "forbidden" answer names the permission they
+lack; retrying will not help.

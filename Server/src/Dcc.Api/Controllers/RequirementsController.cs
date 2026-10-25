@@ -83,6 +83,12 @@ public sealed class RequirementsController(RequirementService requirements, IPer
     [RequirePermission(Permissions.Requirements.Read, ScopeType.Client, From = "clientId")]
     public async Task<object> Inbox(Guid clientId, CancellationToken ct) => new { events = await requirements.InboxAsync(clientId, ct) };
 
+    /// <summary>A client's requirements by a piece of their title — the newest 25 (what the MCP server's search_requirements calls).</summary>
+    [HttpGet("clients/{clientId:guid}/workitems/search")]
+    [RequirePermission(Permissions.Requirements.Read, ScopeType.Client, From = "clientId")]
+    public async Task<object> Search(Guid clientId, [FromQuery] string? q, CancellationToken ct) =>
+        new { items = await requirements.SearchAsync(clientId, q ?? "", ct) };
+
     [HttpPost("workitems/{id:guid}/assign")]
     [RequirePermission(Permissions.Requirements.Edit, ScopeType.Requirement, From = Id)]
     public async Task<JsonObject> Assign(Guid id, [FromBody] JsonElement b, [FromServices] Dcc.Infrastructure.Persistence.DccDbContext db, CancellationToken ct)

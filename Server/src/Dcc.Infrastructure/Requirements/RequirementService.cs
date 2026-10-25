@@ -356,6 +356,19 @@ public sealed class RequirementService(DccDbContext db, ITenantScope tenant, IEv
             order by w.title
             """, new { all = allowed is null, ids = (allowed ?? new HashSet<Guid>()).ToArray() }, ct);
 
+    /// <summary>
+    /// One client's requirements whose title contains the text, ignoring case — the newest 25, with just enough to pick
+    /// one (the MCP server's search_requirements). Read inside the client's tenant, so RLS backs the permission check.
+    /// A <c>%</c> or <c>_</c> in the text is a wildcard, as it always was; an empty text lists the newest 25.
+    /// </summary>
+    public Task<List<JsonObject>> SearchAsync(Guid clientId, string query, CancellationToken ct) =>
+        tenant.RunAsync(clientId, d => SqlJson.QueryAsync(d, """
+            select id, key, title, type::text as "type", phase::text as "phase", requirement_type::text as "requirementType"
+            from workitem
+            where client_id = @c and title ilike '%' || @q || '%'
+            order by updated_at desc limit 25
+            """, new { c = clientId, q = query }, ct), ct);
+
     // ── decisions ────────────────────────────────────────────────────
 
     /// <summary>The WHY behind a course-changing decision — its own event type, so history can pull decisions out without guessing.</summary>

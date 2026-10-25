@@ -60,6 +60,9 @@ public sealed class ApiTokenAuthenticationHandler(
         Context.Items[AuthErrors.ItemKey] = code;
         return AuthenticateResult.Fail(code);
     }
+
+    /// <summary>The same 401 body a refused session token gets, so a hook can say why ("invalid_token", "account_disabled").</summary>
+    protected override Task HandleChallengeAsync(AuthenticationProperties properties) => AccessTokenChecks.WriteUnauthorizedAsync(Context);
 }
 
 /// <summary>Why authentication failed, carried to the 401 body so the client knows whether to refresh or sign in.</summary>

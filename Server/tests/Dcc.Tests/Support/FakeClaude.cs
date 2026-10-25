@@ -7,11 +7,19 @@ namespace Dcc.Tests.Support;
 /// prompt numbers; anything else answers what a test put in <c>reply.txt</c> beside the script, or a small JSON object.
 /// Every call's arguments and prompt are appended to <c>calls.log</c>, so a test can see what was sent.
 ///
+/// A task's instruction steers it the way the old prove kit's stand-in was steered, by the words of its TASK line and of
+/// each numbered check: "write x.txt" writes that file instead (its content names the instruction, so two tasks writing
+/// the same file collide), "no code" writes nothing; a check that says "needs x.txt" waits for it (dependency_missing)
+/// while x.txt is not in the branch, and one that says "tamper" changes <c>base.txt</c>, which DCC must put back.
+///
 /// A repository-onboarding call is known by the instruction it carries — on stdin, or in the
 /// <c>--system-prompt-file</c> of a lean call — and gets an answer in the shape that instruction asks for: the
 /// processes, a trial task, the judge, the open search, the reviewer, a person's request, an author's file, the scan
 /// of the /init draft. A test overrides one kind with <c>onboarding-&lt;kind&gt;.txt</c> beside the script; an override
-/// that reads <c>!fail</c> makes that call fail the way a failed CLI run does (is_error).
+/// that reads <c>!fail</c> makes that call fail the way a failed CLI run does (is_error). Where the answer depends on the
+/// call (each trial task, each file an author writes), <c>onboarding-&lt;kind&gt;.rules.json</c> holds
+/// <c>[{ "when": regex, "answer": text or object }]</c>: the first rule whose regex matches the instruction answers, and a
+/// call no rule matches falls back to the override or the default.
 /// </summary>
 public static class FakeClaude
 {
@@ -50,6 +58,11 @@ public static class FakeClaude
           const hit = ONBOARDING.find(([, needle]) => text.includes(needle));
           if (!hit) return null;
           const kind = hit[0];
+          const rules = path.join(__dirname, 'onboarding-' + kind + '.rules.json');
+          if (fs.existsSync(rules)) {
+            const rule = JSON.parse(fs.readFileSync(rules, 'utf8')).find((r) => new RegExp(r.when).test(text));
+            if (rule) return { kind, answer: rule.answer };
+          }
           const override = path.join(__dirname, 'onboarding-' + kind + '.txt');
           return { kind, answer: fs.existsSync(override) ? fs.readFileSync(override, 'utf8') : ANSWERS[kind] };
         }
@@ -68,12 +81,23 @@ public static class FakeClaude
           if (ob) {
             result = ob.answer;
           } else if (tools.includes('Write')) {
-            fs.writeFileSync(path.join(process.cwd(), 'feature.txt'), 'made by the stand-in\n');
-            out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: path.join(process.cwd(), 'feature.txt') } }] } });
-            result = { summary: 'wrote feature.txt', filesChanged: ['feature.txt'], testsRun: null, followUps: [], affectedConsumers: [] };
+            const task = ((prompt.match(/TASK — this is the instruction, follow it exactly:\r?\n([^\r\n]*)/) || [])[1] || '').trim();
+            const named = (task.match(/write (\S+)/) || [])[1];
+            const file = named || (/no code/.test(task) ? null : 'feature.txt');
+            if (file) {
+              fs.writeFileSync(path.join(process.cwd(), file), named ? 'made by ' + task + '\n' : 'made by the stand-in\n');
+              out({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Write', input: { file_path: path.join(process.cwd(), file) } }] } });
+            }
+            result = { summary: file ? 'wrote ' + file : 'did ' + task, filesChanged: file ? [file] : [], testsRun: null, followUps: [], affectedConsumers: [] };
           } else if (tools.includes('Bash')) {
-            const seqs = [...prompt.matchAll(/^#(\d+)(?: \[\w+\])?:/gm)].map((m) => Number(m[1]));
-            result = { summary: 'checked', checks: seqs.map((seq) => ({ seq, passed: true, detail: 'fine' })) };
+            const checks = [...prompt.matchAll(/^#(\d+)(?: \[\w+\])?:(.*)$/gm)].map((m) => {
+              const seq = Number(m[1]); const text = m[2] || '';
+              if (/tamper/.test(text)) fs.writeFileSync(path.join(process.cwd(), 'base.txt'), 'tampered\n');
+              const needs = (text.match(/needs (\S+)/) || [])[1];
+              if (needs && !fs.existsSync(path.join(process.cwd(), needs))) return { seq, passed: false, detail: needs + ' is not here', likelyCause: 'dependency_missing' };
+              return { seq, passed: true, detail: 'fine' };
+            });
+            result = { summary: 'checked', checks };
           } else {
             const reply = path.join(__dirname, 'reply.txt');
             result = fs.existsSync(reply) ? fs.readFileSync(reply, 'utf8') : { summary: 'read only' };

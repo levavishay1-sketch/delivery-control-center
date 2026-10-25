@@ -40,3 +40,6 @@ obj/
 TestResults/
 # local-only secrets: signing key, initial admin password
 Server/.local/
+
+# A developer's own Claude Code settings — never committed (a hook token or an email must not land in git)
+.claude/settings.local.json

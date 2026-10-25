@@ -222,6 +222,9 @@ public sealed partial class ClaudeRunner(IOptions<ClaudeOptions> options, ModelR
         };
         foreach (var a in prefix.Concat(args)) psi.ArgumentList.Add(a);
         if (o.Env is not null) foreach (var (k, v) in o.Env) psi.Environment[k] = v;
+        // This run already gets its ledger row here. A run that loads the repository's own settings would also fire
+        // DCC's capture hooks (hooks/), which would record the same session a second time — they stand down on this.
+        psi.Environment["DCC_CAPTURE"] = "off";
 
         Process p;
         try { p = Process.Start(psi) ?? throw new InvalidOperationException("no process"); }

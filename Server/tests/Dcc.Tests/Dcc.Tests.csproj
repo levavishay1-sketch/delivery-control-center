@@ -24,6 +24,7 @@
     <ProjectReference Include="..\..\src\Dcc.Infrastructure\Dcc.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\Dcc.Application\Dcc.Application.csproj" />
     <ProjectReference Include="..\..\src\Dcc.Domain\Dcc.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Dcc.Mcp\Dcc.Mcp.csproj" />
   </ItemGroup>
 
 </Project>

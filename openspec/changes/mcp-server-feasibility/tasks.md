@@ -9,12 +9,9 @@ Appetite: **small** (this is a spike, not a build).
       external Claude Code session working in a client repo; others?) —
       see `proposal.md` § Assessment (also flags that the "dashboard
       search bar" use case doesn't actually need MCP)
-- [x] 1.3 Sketch how it would sit next to the existing `apps/api`
-      Fastify service — same process, separate service, thin wrapper? —
-      recommends a separate `apps/mcp` process, thin over `packages/core`
+- [x] 1.3 Sketch how it would sit next to the DCC API — the same process or
+      a separate one — recommends a separate process that calls the REST API
 - [x] 1.4 Write the recommendation and bring it back for a decision —
-      done: read-only first, no write tools until real (Entra ID) auth
-      replaces the current hook-token pilot shim, and confirm with the
-      user which of the two named use cases they actually want before
-      scoping an implementation change. **Decision is the user's — not
-      made here.**
+      read-only first, as a known person; write tools only by a later,
+      explicit decision; keep the dashboard search bar apart. **The decision
+      was the user's** (2026-09-12: build it).

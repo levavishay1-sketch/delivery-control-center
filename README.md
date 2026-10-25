@@ -4,9 +4,9 @@ A system that wraps the full lifecycle of AI-assisted software delivery —
 from the first raw requirement to the end of development — around Azure
 DevOps and Claude Code, without replacing them.
 
-> **Status:** the server is being rewritten in C# (ASP.NET Core Web API) under
-> `Server/`; users, sign-in and permissions are the first feature on it. See
-> [`openspec/changes/server-in-csharp/`](openspec/changes/server-in-csharp/).
+> **Status:** the server is C# (ASP.NET Core Web API) under `Server/`, with
+> real sign-in and permissions; it was rewritten from TypeScript, route for
+> route ([`openspec/changes/server-in-csharp/`](openspec/changes/server-in-csharp/)).
 
 ## The idea in one paragraph
 
@@ -26,26 +26,27 @@ Server/        the server — C# (.NET 10) ASP.NET Core Web API, opened in Visua
   src/Dcc.Api             controllers, sign-in, permissions, WebSockets
   src/Dcc.Application     contracts between the layers
   src/Dcc.Domain          entities, the permission catalog, event schemas
-  src/Dcc.Infrastructure  Postgres (EF Core + Npgsql), migrator, Entra / Graph
+  src/Dcc.Infrastructure  Postgres (EF Core + Npgsql), migrator, Claude CLI, git, GitHub / Azure DevOps, Entra / Graph
+  src/Dcc.Mcp             the MCP server: read-only tools over the API, as the token's person
   db/migrations           the SQL migrations — the source of truth for the schema
+  glossary/               the "i" explanations, by concept (JSON)
+  onboarding/             repository onboarding's data: rules, interview, trial tasks, catalog templates
   tests/Dcc.Tests         xUnit, against a fresh local test database
 Client/        the web client (React + Vite)
-OldServer/     the retired TypeScript server — reference only, never built,
-               deleted once the C# server covers everything
+OldServer/     the retired TypeScript server — the reference the C# server was
+               ported from; never built, never run
 hooks/         Claude Code hooks: SessionStart / SessionEnd / PostToolUse(git)
 skills/        the skill library DCC hands to a client's repository
 openspec/      the in-repo spec lifecycle — this repo dogfoods its own methodology
 ```
-
-The server is mid-rewrite from TypeScript to C#
-(`openspec/changes/server-in-csharp`). Screens whose endpoints are not yet
-rewritten show an error until their turn.
 
 ## Prerequisites
 
 - .NET 10 SDK
 - PostgreSQL 17 on the machine (`winget install PostgreSQL.PostgreSQL.17`)
 - Node ≥ 22, for the web client and the hooks
+- git 2.38 or later; the Claude Code CLI; the GitHub CLI (`gh`), signed in, for
+  the pull-request centre and deliveries to GitHub
 
 ## Getting started
 

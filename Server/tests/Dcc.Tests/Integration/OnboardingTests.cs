@@ -585,4 +585,365 @@ public sealed class OnboardingTests(DbFixture fx)
 
         await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/cancel", new { }));
     }
+
+    // ── the old onboarding.prove.ts: what the run decides, with answers that steer every decision ──
+
+    /// <summary>What the stand-in answers to every call of one kind.</summary>
+    private void StandIn(string kind, object answer) =>
+        File.WriteAllText(Path.Combine(_f.TempDir, $"onboarding-{kind}.txt"), answer as string ?? JsonSerializer.Serialize(answer));
+
+    /// <summary>What the stand-in answers to a call of one kind, by the first regex its instruction matches.</summary>
+    private void StandIn(string kind, params (string When, object Answer)[] rules) =>
+        File.WriteAllText(Path.Combine(_f.TempDir, $"onboarding-{kind}.rules.json"), JsonSerializer.Serialize(rules.Select(r => new { when = r.When, answer = r.Answer })));
+
+    private void StandInsGone()
+    {
+        foreach (var f in Directory.GetFiles(_f.TempDir, "onboarding-*.txt").Concat(Directory.GetFiles(_f.TempDir, "onboarding-*.rules.json"))) File.Delete(f);
+    }
+
+    /// <summary>A call's whole instruction — a lean call carries it in its system prompt file.</summary>
+    private static string InstructionOf(JsonElement call) =>
+        (call.TryGetProperty("system", out var s) ? s.GetString() + "\n" : "") + call.GetProperty("prompt").GetString();
+
+    /// <summary>
+    /// The old <c>onboarding.prove.ts</c>, for what the run above does not show: with the old prove kit's answers — two
+    /// processes, a trial that is honest about tests, right about the build and lost on entry points, an open search that
+    /// finds the vendor's LSP and a stranger's MCP, a reviewer's gap, a /init draft with a section, a line, a permission, a
+    /// settings file and a section about paths the code does not have — every decision the code makes is the right one:
+    /// a corrected fact holds its rule back, the agent test, the code as the judge, the trust grading, what the scan may
+    /// take, the draft set aside (its commit undone, its shell edit put back), each component validated its own way, only
+    /// the approved files delivered, and a coach with honest zeros.
+    /// </summary>
+    [Fact]
+    public async Task With_the_old_prove_kits_answers_every_decision_the_run_makes_is_the_right_one()
+    {
+        var admin = await Admin();
+        var clientId = await _f.NewClientAsync();
+        var origin = await _f.NewOriginAsync(new Dictionary<string, string>
+        {
+            ["base.txt"] = "base\n",
+            ["package.json"] = """
+                {
+                  "name": "prove-repo",
+                  "private": true,
+                  "scripts": {
+                    "build": "node -e \"process.exit(require('fs').existsSync('broken.txt') ? 1 : 0)\""
+                  }
+                }
+
+                """,
+            // a lock file, so the stack has a tag ("npm") for the open search to be asked about
+            ["package-lock.json"] = "{\n  \"name\": \"prove-repo\",\n  \"lockfileVersion\": 3\n}",
+        });
+        var (_, repoId, _) = await RepoAsync(origin);
+        // A stranger's MCP at an address the page fetcher refuses without connecting: the test never reaches the internet.
+        const string strangerUrl = "https://192.0.2.1/someone/random-mcp";
+        const string lspUrl = "https://github.com/anthropics/claude-plugins-official/tree/main/plugins/typescript-lsp";
+        StandIn("processes", new
+        {
+            processes = new object[]
+            {
+                new { key = "release", title = "Release a version", source = "docs", evidence = new[] { "package.json build script" }, steps = new object[]
+                {
+                    new { key = "build", title = "Build the package", what = "run npm run build, then check the output", agentTest = new { judgment = false, externalInfo = false, readsALot = false, parallel = false, failsToday = false, why = "a fixed procedure" } },
+                    new { key = "publish", title = "Publish", what = "publish to the registry", agentTest = new { judgment = false, externalInfo = true, readsALot = false, parallel = false, failsToday = false, why = "needs registry credentials" } },
+                } },
+                new { key = "edit_base", title = "Change base.txt", source = "git", evidence = new[] { "base.txt in every commit" }, steps = new object[]
+                {
+                    new { key = "edit", title = "Edit base.txt", what = "edit the file", agentTest = new { judgment = false, externalInfo = false, readsALot = false, parallel = false, failsToday = false, why = "one action" } },
+                } },
+            },
+        });
+        StandIn("trial",
+            (@"TASK:\r?\n[^\r\n]*automated tests", "I looked for a test runner. There is no test framework in this repository.\nRESULT: there are no automated tests"),
+            (@"TASK:\r?\n[^\r\n]*build", "package.json has a build script.\nRESULT: npm run build"),
+            (@"TASK:\r?\n[^\r\n]*entry points", "I could not find any entry point.\nRESULT: could not find"),
+            (@"[\s\S]", "Looked around.\nRESULT: done"));
+        StandIn("judge",
+            ("could not find", new { passed = false, failureKind = "missing_fact", detail = "הסוכן לא מצא את נקודת הכניסה" }),
+            (@"[\s\S]", new { passed = true, failureKind = (string?)null, detail = "עבר" }));
+        StandIn("marketplace", new
+        {
+            sources = new object[]
+            {
+                new { kind = "lsp", name = "typescript-lsp", url = lspUrl, publisher = "Anthropic", description = "Language server plugin", tags = new[] { "npm", "typescript" }, official = true, why = "navigation", toolCount = (int?)null, readOnly = (bool?)null, license = "MIT", lastActivity = "2026-09" },
+                new { kind = "mcp", name = "Random MCP", url = strangerUrl, publisher = "someone", description = "73 tools", tags = new[] { "npm" }, official = true, why = "everything", toolCount = (int?)73, readOnly = (bool?)false, license = (string?)null, lastActivity = "2020-01" },
+            },
+        });
+        StandIn("review", new { missing = new[] { new { kind = "doc", title = "מסמך הרצה", why = "אין README ואין הוראות הרצה" } }, redundant = Array.Empty<object>() });
+        StandIn("request", new { kind = "skill", title = "skill: עדכון base.txt", what = "נוהל לעדכון הקובץ", questions = new[] { new { key = "when", question_he = "מתי מריצים?", @default = "אחרי כל שינוי" } } });
+        StandIn("author",
+            (@"FORMAT REQUIRED:[\s\S]*SKILL\.md", "---\nname: update-base\ndescription: Updates base.txt the way this repository does it. Use whenever base.txt must change.\nallowed-tools: Read, Grep, Glob, Bash\n---\n\n# Update base.txt\n\n1. Open `base.txt`.\n2. Change the line.\n3. Run `npm run build` and make sure it passes.\n4. Do not touch `package.json`.\n\nThis skill exists because base.txt is in every commit of the history, and the build is the only gate.\n"),
+            (@"FORMAT REQUIRED:[\s\S]*subagent definition", "---\nname: publish-checker\ndescription: Checks a release before it is published; call it when a version is about to go out.\ntools: Glob, Grep, Read, Bash\nmodel: sonnet\n---\n\nYou check a release.\n\n- [ ] `package.json` version bumped\n- [ ] `npm run build` passes\n- [ ] `base.txt` unchanged\n- [ ] no `broken.txt` present\n\nOutput: a JSON array of findings {file, line, severity, note}.\n"),
+            (@"FORMAT REQUIRED:[\s\S]*One paragraph", "A small package used to prove DCC's onboarding: one file, base.txt, and a build script that fails while broken.txt exists."),
+            (@"FORMAT REQUIRED:[\s\S]*body of the Markdown document", "## Layout\n\n- `base.txt` — the one file\n- `package.json` — the build script\n\n## Run\n\n`npm run build`\n"),
+            (@"FORMAT REQUIRED:[\s\S]*checklist", "- [ ] `base.txt` unchanged unless the task says so\n- [ ] `npm run build` passes\n- [ ] no `broken.txt`\n- [ ] `package.json` version bumped when releasing\n- [ ] the change is small\n- [ ] no secrets"),
+            (@"[\s\S]", "content"));
+        StandIn("init_scan", """
+            {"verdict": "merge", "summary": "הטיוטה מדויקת יותר על מבנה הריפו; ההנחיה הכללית שלה לא נלקחה.",
+             "compare": [{"topic": "מבנה", "ours": "רשימת תיקיות", "theirs": "הקובץ היחיד והפקודה", "better": "theirs", "why": "base.txt ו-npm run build קיימים"}],
+             "items": [
+               {"decision": "take", "form": "section", "title": "איפה הדברים", "target": "AGENTS.md", "heading": "Where things are", "text": "The one file is `base.txt`; build with `npm run build`.", "origin": "theirs", "need": "ניסיון נקודות הכניסה נכשל", "evidence": "base.txt", "alternative": "אין בשלנו", "verify": "ניסיון חוזר", "cost": "שתי שורות"},
+               {"decision": "take", "form": "line", "title": "build לפני סיום", "target": "AGENTS.md", "text": "Run `npm run build` before saying a change is done", "origin": "merged", "need": "אין CI", "evidence": "package.json", "alternative": "סקריפט האימות", "verify": "ה-build gate", "cost": "שורה", "replaces": ["reviewer_1_doc", "no_such_card"]},
+               {"decision": "ask", "form": "line", "title": "פרסום אחרי מיזוג", "target": "AGENTS.md", "text": "Publish to the npm registry after every merge", "origin": "theirs", "need": "תהליך release", "evidence": "תהליך release", "alternative": "ידני", "verify": "—", "cost": "הרשאת פרסום", "question": "מותר לסוכן לפרסם ל-npm? ידוע: יש תהליך release. חסר: מדיניות"},
+               {"decision": "take", "form": "file", "title": "הגדרות", "target": ".claude/settings.json", "text": "{}", "origin": "theirs"},
+               {"decision": "take", "form": "section", "title": "ארכיטקטורה", "target": "AGENTS.md", "heading": "Architecture", "text": "Handlers are in `src/api/`, models in `lib/models.ts`, and `base.txt` is the data.", "origin": "theirs"}],
+             "drop_ours": [{"key": "reviewer_1_doc", "why": "הסעיף מהטיוטה מכסה את זה"}],
+             "reject": [{"what": "Use async/await everywhere", "why": "כללי — לא ספציפי לריפו"}]}
+            """);
+        try
+        {
+            // 0–1. connect and diagnose run by themselves; the processes step waits for the interview.
+            var runId = (await Ok(await admin.PostAsJsonAsync($"/repos/{repoId}/onboarding/runs", new { automation = new { level = "all_approval" } }))).GetProperty("runId").GetGuid();
+            var view = await WaitAsync(admin, repoId, runId, v => StepStatus(v, "processes") == "WaitingForUser", "the interview");
+            // diagnose: no model, a profile with facts the person can correct, saying what is missing
+            Assert.Equal(0, view.GetProperty("cost").GetProperty("calls").GetInt32());
+            var facts = view.GetProperty("profile").GetProperty("facts").EnumerateArray().ToDictionary(f => f.GetProperty("path").GetString()!);
+            Assert.True(facts.Count >= 12, string.Join(", ", facts.Keys));
+            Assert.All(new[] { "tests", "ci", "lint_format" }, k => Assert.Equal("warn", facts[k].GetProperty("tone").GetString()));
+            Assert.Contains("אין", facts["ai_config"].GetProperty("value_he").GetString());
+            // the interview asks only what the code cannot tell, each with a default
+            var questions = view.GetProperty("interview").GetProperty("questions").EnumerateArray().ToList();
+            Assert.InRange(questions.Count, 1, 4);
+            Assert.All(questions, q => Assert.Contains(q.GetProperty("options").EnumerateArray(), o => o.GetProperty("value").GetString() == q.GetProperty("default").GetString()));
+
+            // A correction before the plan: the rule that reads the fact is held back later.
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/profile/correct", new { path = "lint_format", note = "יש לנו פורמטר בחוץ" }));
+
+            // 2. One answer given, the rest assumed; the model maps the processes and the code decides each step.
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/interview", new { answers = new Dictionary<string, string> { ["done_means"] = "build_tests" } }));
+            view = await WaitAsync(admin, repoId, runId, v => StepStatus(v, "trial") == "WaitingForUser", "the trial's gate");
+            var proc = Step(view, "processes").GetProperty("result");
+            Assert.Equal(1, proc.GetProperty("answered").GetInt32());
+            Assert.Equal(questions.Count - 1, proc.GetProperty("assumed").GetInt32());
+            // an external-info step is an agent, a recurring procedure a skill, a single action nothing
+            Assert.Equal(1, proc.GetProperty("agents").GetInt32());
+            Assert.Equal(1, proc.GetProperty("skills").GetInt32());
+            Assert.Contains(view.GetProperty("processes").EnumerateArray(), p => p.GetProperty("steps").EnumerateArray().Any(s => s.GetProperty("decision").GetString() == "none"));
+            // with "everything waits for approval" the trial's cost is declared before it is spent
+            var waiting = view.GetProperty("trials").GetProperty("waiting");
+            Assert.True(waiting.GetProperty("estimateUsd").GetDouble() > 0);
+            Assert.Contains(waiting.GetProperty("tasks").EnumerateArray(), t => t.GetProperty("key").GetString() == "no_tests_honesty");
+
+            // 3. The trial: the code judges the honesty task; the stand-in judges the rest, and one fails.
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/trial/approve", new { }));
+            view = await WaitAsync(admin, repoId, runId, v => StepStatus(v, "plan") == "WaitingForUser", "the plan");
+            var baseline = view.GetProperty("trials").GetProperty("baseline").EnumerateArray().ToList();
+            var trial = baseline.ToDictionary(t => t.GetProperty("taskKey").GetString()!);
+            Assert.True(trial["no_tests_honesty"].GetProperty("passed").GetBoolean());
+            Assert.Equal("code", trial["no_tests_honesty"].GetProperty("judgedBy").GetString());
+            Assert.True(trial["how_to_build"].GetProperty("passed").GetBoolean());
+            Assert.NotEqual("code", trial["how_to_build"].GetProperty("judgedBy").GetString());
+            Assert.False(trial["entry_points"].GetProperty("passed").GetBoolean());
+            Assert.Equal("missing_fact", trial["entry_points"].GetProperty("failureKind").GetString());
+            // every trial task is a ledger row, and every row carries its step
+            var rows = view.GetProperty("cost").GetProperty("rows").EnumerateArray().ToList();
+            Assert.Equal(baseline.Count, rows.Count(r => r.GetProperty("capability").GetString() == "onboarding_trial"));
+            Assert.All(rows, r => Assert.Equal(JsonValueKind.String, r.GetProperty("meta").GetProperty("stepKey").ValueKind));
+
+            // 4. The plan: the repository's signals fired; the corrected fact held its rule back, and the plan says which.
+            var plan = view.GetProperty("plan");
+            var fired = plan.GetProperty("rulesFired").EnumerateArray().Select(r => r.GetString()).ToList();
+            Assert.All(new[] { "R02", "R05", "R17", "R22b" }, r => Assert.Contains(r, fired));
+            Assert.DoesNotContain("R21", fired);
+            Assert.Contains(plan.GetProperty("rulesSuppressed").EnumerateArray(), s => s.GetProperty("rule").GetString() == "R21" && s.GetProperty("fact").GetString() == "lint_format");
+            JsonElement? Card(JsonElement v, string key) => v.GetProperty("components").EnumerateArray().Cast<JsonElement?>().FirstOrDefault(c => c!.Value.GetProperty("key").GetString() == key);
+            Assert.Equal("agent", Card(view, "agent_release_publish")?.GetProperty("kind").GetString());
+            Assert.Equal("skill", Card(view, "skill_release_build")?.GetProperty("kind").GetString());
+            // the open search's finds graded by the code: the vendor's LSP is official; the stranger is unverified despite the model's claim
+            Assert.Equal("official", Card(view, "lsp_typescript_lsp")?.GetProperty("params").GetProperty("trust").GetString());
+            Assert.Equal("unverified", Card(view, "mcp_random_mcp")?.GetProperty("params").GetProperty("trust").GetString());
+            Assert.Contains("אזהרה", Card(view, "mcp_random_mcp")?.GetProperty("why_he").GetString());
+            var cards = view.GetProperty("components").EnumerateArray().ToList();
+            Assert.Contains(cards, c => c.GetProperty("source").GetString() == "reviewer" && c.GetProperty("group").GetString() == "approval" && c.GetProperty("status").GetString() == "proposed");
+            // at "everything waits" only reports are automatic; what is not recommended says why
+            Assert.All(cards.Where(c => c.GetProperty("group").GetString() == "auto"), c => Assert.Equal("report", c.GetProperty("kind").GetString()));
+            Assert.Contains(cards, c => c.GetProperty("group").GetString() == "not_recommended" && c.GetProperty("status").GetString() == "declined"
+                && !string.IsNullOrEmpty(c.GetProperty("declineReason").GetString()));
+            Assert.All(cards, c =>
+            {
+                Assert.True(c.GetProperty("why_he").GetString()!.Length > 10, c.ToString());
+                if (c.GetProperty("kind").GetString() is not ("report" or "runner")) Assert.True(c.GetProperty("verifyHow_he").GetString()!.Length > 3, c.ToString());
+            });
+            Assert.False(view.GetProperty("readiness").GetProperty("ready").GetBoolean());
+            Assert.Contains(view.GetProperty("readiness").GetProperty("items").EnumerateArray(), i => !i.GetProperty("ok").GetBoolean());
+
+            // A person's request becomes a skill card with at most three questions.
+            var req = await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/components/request", new { text = "תכין skill לעדכון base.txt" }));
+            Assert.Equal("skill", req.GetProperty("kind").GetString());
+            Assert.InRange(req.GetProperty("questions").GetArrayLength(), 1, 3);
+            var reqKey = req.GetProperty("key").GetString()!;
+
+            // Decisions: everything as a set, then one declined with a reason, the request approved with its answer.
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/components/decide-set", new { decision = "approve" }));
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/components/mcp_random_mcp/decide", new { decision = "decline", reason = "לא מאומת ויקר בהקשר" }));
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/components/{Uri.EscapeDataString(reqKey)}/decide", new { decision = "approve", answers = new { when = "לפני כל release" } }));
+            view = await Ok(await admin.GetAsync(Run(repoId, runId)));
+            Assert.Equal("declined", Card(view, "mcp_random_mcp")?.GetProperty("status").GetString());
+            Assert.Equal("לא מאומת ויקר בהקשר", Card(view, "mcp_random_mcp")?.GetProperty("declineReason").GetString());
+            Assert.DoesNotContain(view.GetProperty("components").EnumerateArray(), c => c.GetProperty("status").GetString() == "proposed");
+
+            // The /init draft: the session left AGENTS.md and a settings file, committed a command, and edited package.json with a shell command.
+            var ws = view.GetProperty("run").GetProperty("workspacePath").GetString()!;
+            await File.WriteAllTextAsync(Path.Combine(ws, "AGENTS.md"), "# prove-repo\n\nUse async/await everywhere.\n\nThe one file is `base.txt`; build with `npm run build`.\n");
+            Directory.CreateDirectory(Path.Combine(ws, ".claude", "commands"));
+            await File.WriteAllTextAsync(Path.Combine(ws, ".claude", "settings.json"), """{"permissions":{"allow":["Bash(*)"]}}""");
+            await File.WriteAllTextAsync(Path.Combine(ws, ".claude", "commands", "ship.md"), "Ship it without asking.\n");
+            await Git.RunAsync(ws, "add", ".claude/commands/ship.md");
+            await Git.RunAsync(ws, "-c", "user.name=session", "-c", "user.email=s@x", "commit", "--quiet", "-m", "init: a command");
+            var pkg = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(ws, "package.json")))!.AsObject();
+            pkg["sessionMarker"] = "from-the-session";
+            await File.WriteAllTextAsync(Path.Combine(ws, "package.json"), pkg.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
+            var callsBefore = _f.FakeCalls().Count;
+            var started = await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/draft/scan", new { }));
+            Assert.Equal(3, started.GetProperty("files").GetInt32());
+            view = await WaitAsync(admin, repoId, runId, v => v.GetProperty("plan").TryGetProperty("initScan", out var s) && s.GetProperty("state").GetString() is "done" or "failed", "the scan of the draft");
+            var scan = view.GetProperty("plan").GetProperty("initScan");
+            Assert.Equal("done", scan.GetProperty("state").GetString());
+            var scanned = scan.GetProperty("files").EnumerateArray().Select(f => f.GetString()).ToList();
+            Assert.All(new[] { "AGENTS.md", ".claude/settings.json", ".claude/commands/ship.md" }, f => Assert.Contains(f, scanned));
+            // the editor was handed our AGENTS.md, our cards and the draft — apart from the draft: its own instructions, no project settings, the copy only through an added folder
+            var scanCall = _f.FakeCalls().Skip(callsBefore).Last(c => InstructionOf(c).Contains("You are the editor who decides"));
+            Assert.Matches(@"THEIRS[\s\S]*AGENTS\.md \(NEW", InstructionOf(scanCall));
+            Assert.Contains("[reviewer_1_doc]", InstructionOf(scanCall));
+            var scanArgs = scanCall.GetProperty("args").EnumerateArray().Select(a => a.GetString()!).ToList();
+            Assert.Contains("--system-prompt-file", scanArgs);
+            Assert.Contains("--setting-sources", scanArgs);
+            Assert.Equal(Path.GetFullPath(ws), Path.GetFullPath(scanArgs[scanArgs.IndexOf("--add-dir") + 1]));
+            Assert.Contains(view.GetProperty("cost").GetProperty("rows").EnumerateArray(), r => r.GetProperty("capability").GetString() == "onboarding_init_scan" && r.GetProperty("meta").GetProperty("stepKey").GetString() == "plan");
+            // what the scan took waits for a person, with its exact text; a permission is a question; paths the code lacks are not recommended
+            var fromDraft = view.GetProperty("components").EnumerateArray().Where(c => c.GetProperty("source").GetString() == "init").ToList();
+            JsonElement Taken(string title) => fromDraft.Single(c => c.GetProperty("title_he").GetString() == title);
+            Assert.Equal(4, fromDraft.Count);
+            Assert.All(new[] { "איפה הדברים", "build לפני סיום", "פרסום אחרי מיזוג" }, t =>
+            {
+                Assert.Equal("approval", Taken(t).GetProperty("group").GetString());
+                Assert.Equal("proposed", Taken(t).GetProperty("status").GetString());
+            });
+            Assert.Equal("The one file is `base.txt`; build with `npm run build`.", Taken("איפה הדברים").GetProperty("params").GetProperty("text").GetString());
+            Assert.Matches("צריך החלטה שלך: מותר לסוכן לפרסם", Taken("פרסום אחרי מיזוג").GetProperty("why_he").GetString());
+            Assert.Equal("not_recommended", Taken("ארכיטקטורה").GetProperty("group").GetString());
+            Assert.Contains("src/api/", Taken("ארכיטקטורה").GetProperty("why_he").GetString());
+            // a settings file is not taken whole, the generic line is left out — both said, with why
+            Assert.Contains(scan.GetProperty("refused").EnumerateArray(), r => r.GetProperty("why").GetString()!.Contains("settings.json"));
+            Assert.Contains(scan.GetProperty("reject").EnumerateArray(), r => r.GetProperty("what").GetString()!.Contains("async"));
+            // a card of ours the scan finds redundant gets a note and stays the person's; "replaces" names only real cards
+            Assert.Contains("סריקת /init: ", Card(view, "reviewer_1_doc")?.GetProperty("why_he").GetString());
+            Assert.Equal(["reviewer_1_doc"], Taken("build לפני סיום").GetProperty("params").GetProperty("replaces").EnumerateArray().Select(x => x.GetString()));
+
+            // "approve all" approves what was taken and leaves the question to be answered on its own
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/components/decide-set", new { decision = "approve" }));
+            view = await Ok(await admin.GetAsync(Run(repoId, runId)));
+            string? StatusOf(JsonElement v, string title) => v.GetProperty("components").EnumerateArray().First(c => c.GetProperty("title_he").GetString() == title).GetProperty("status").GetString();
+            Assert.Equal("approved", StatusOf(view, "איפה הדברים"));
+            Assert.Equal("approved", StatusOf(view, "build לפני סיום"));
+            Assert.Equal("proposed", StatusOf(view, "פרסום אחרי מיזוג"));
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/components/{Uri.EscapeDataString(Taken("פרסום אחרי מיזוג").GetProperty("key").GetString()!)}/decide",
+                new { decision = "decline", reason = "לא — אין פרסום אוטומטי" }));
+            // a second scan: told what the first took and what was decided, and keeping those decisions
+            var rescan = await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/draft/scan", new { }));
+            Assert.Equal(3, rescan.GetProperty("files").GetInt32());
+            view = await WaitAsync(admin, repoId, runId, v => v.GetProperty("plan").GetProperty("initScan").GetProperty("state").GetString() == "done"
+                && EventTypes(v).Count(t => t == "onboarding.draft.scanned") == 2, "the second scan");
+            Assert.Contains("taken from the draft by an earlier scan", InstructionOf(_f.FakeCalls().Skip(callsBefore).Last(c => InstructionOf(c).Contains("You are the editor who decides"))));
+            var lastScan = view.GetProperty("events").EnumerateArray().Last(e => e.GetProperty("type").GetString() == "onboarding.draft.scanned");
+            Assert.Equal(4, lastScan.GetProperty("payload").GetProperty("created").GetArrayLength());
+            Assert.Equal("approved", StatusOf(view, "איפה הדברים"));
+            Assert.Equal("declined", StatusOf(view, "פרסום אחרי מיזוג"));
+
+            // 5. The build: each component validated its own way, the trial again.
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/build", new { }));
+            view = await WaitAsync(admin, repoId, runId, v => StepStatus(v, "deliver") == "WaitingForUser", "the build", seconds: 300);
+            var dir = view.GetProperty("run").GetProperty("workspacePath").GetString()!;
+            JsonElement Built(string key) => Card(view, key) ?? throw new Xunit.Sdk.XunitException($"no card {key}");
+            // the build gate hook was written and really run
+            Assert.Equal("verified", Built("build_gate_hook").GetProperty("status").GetString());
+            Assert.Contains(".claude/hooks/build-gate.mjs", Built("build_gate_hook").GetProperty("files").EnumerateArray().Select(f => f.GetString()));
+            Assert.True(Built("build_gate_hook").GetProperty("validation").GetProperty("passed").GetBoolean(), Built("build_gate_hook").GetProperty("validation").ToString());
+            // the local gate ran the real build and passed
+            Assert.Equal("verified", Built("local_gate_script").GetProperty("status").GetString());
+            Assert.Contains("ok", Built("local_gate_script").GetProperty("validation").GetProperty("detail").GetString());
+            var agents = await File.ReadAllTextAsync(Path.Combine(dir, "AGENTS.md"));
+            Assert.Contains("npm run build", agents);
+            Assert.Equal("@AGENTS.md", (await File.ReadAllTextAsync(Path.Combine(dir, "CLAUDE.md"))).Trim());
+            // the skills (the process's and the person's) have a frontmatter Claude Code loads; the agent is read-only with a checklist
+            Assert.Equal("verified", Built("skill_release_build").GetProperty("status").GetString());
+            Assert.Equal("verified", Built(reqKey).GetProperty("status").GetString());
+            Assert.True(File.Exists(Path.Combine(dir, Built(reqKey).GetProperty("files")[0].GetString()!)));
+            Assert.Equal("verified", Built("agent_release_publish").GetProperty("status").GetString());
+            Assert.Contains("קריאה בלבד", Built("agent_release_publish").GetProperty("validation").GetProperty("detail").GetString());
+            // the LSP plugin is registered in settings and honestly "not verified here"
+            Assert.Equal("installed", Built("lsp_typescript_lsp").GetProperty("status").GetString());
+            Assert.Equal(JsonValueKind.Null, Built("lsp_typescript_lsp").GetProperty("validation").GetProperty("passed").ValueKind);
+            var settings = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(dir, ".claude", "settings.json")))!;
+            Assert.True(settings["enabledPlugins"]?["typescript-lsp@claude-plugins-official"]?.GetValue<bool>());
+            // the declined component was not built; a first test for a language without a template is deferred, not faked
+            Assert.Equal("declined", Built("mcp_random_mcp").GetProperty("status").GetString());
+            Assert.Equal(0, Built("mcp_random_mcp").GetProperty("files").GetArrayLength());
+            Assert.False(File.Exists(Path.Combine(dir, ".mcp.json")));
+            Assert.Equal("deferred", Built("first_tests_scaffold").GetProperty("status").GetString());
+            // the draft was set aside before the build: its generic line and its settings are gone, and it is kept
+            Assert.DoesNotContain("Use async/await", agents);
+            Assert.DoesNotContain("Bash(*)", settings.ToJsonString());
+            Assert.True(File.Exists(Path.Combine(_f.TempDir, "onboarding", "_runtime", runId.ToString(), "init-draft", "AGENTS.md")));
+            // what was approved from the draft went in after ours, as written, and was checked against the code
+            Assert.Equal("verified", view.GetProperty("components").EnumerateArray().First(c => c.GetProperty("title_he").GetString() == "איפה הדברים").GetProperty("status").GetString());
+            Assert.Contains("## Where things are\n\nThe one file is `base.txt`", agents.Replace("\r\n", "\n"));
+            Assert.True(agents.IndexOf("## Where things are", StringComparison.Ordinal) > agents.IndexOf("npm run build", StringComparison.Ordinal));
+            Assert.Contains("- Run `npm run build` before saying a change is done", agents);
+            Assert.DoesNotContain("Publish to the npm registry", agents);
+            Assert.DoesNotContain("## Architecture", agents);
+            // the session's commit was undone and its shell edit put back
+            var aside = view.GetProperty("events").EnumerateArray().First(e => e.GetProperty("type").GetString() == "onboarding.draft.set_aside").GetProperty("payload");
+            Assert.Equal(1, aside.GetProperty("commitsUndone").GetArrayLength());
+            Assert.Contains("package.json", aside.GetProperty("files").EnumerateArray().Select(f => f.GetString()));
+            Assert.False(File.Exists(Path.Combine(dir, ".claude", "commands", "ship.md")));
+            Assert.DoesNotContain("from-the-session", await File.ReadAllTextAsync(Path.Combine(dir, "package.json")));
+            // the trial ran again, measured against the baseline; the joint check counted the always-loaded context
+            var build = view.GetProperty("build");
+            Assert.Equal(baseline.Count, build.GetProperty("delta").GetProperty("before").GetProperty("total").GetInt32());
+            Assert.Equal(baseline.Count, build.GetProperty("delta").GetProperty("after").GetProperty("total").GetInt32());
+            Assert.True(build.GetProperty("jointCheck").GetProperty("alwaysLoadedTokens").GetInt32() > 0);
+            Assert.Equal(0, build.GetProperty("jointCheck").GetProperty("duplicates").GetArrayLength());
+            // only the files of installed or verified components are offered, plus the repository's own dossier
+            var files = Step(view, "deliver").GetProperty("result").GetProperty("files").EnumerateArray().Select(f => f.GetString()!).ToList();
+            Assert.All(new[] { "AGENTS.md", ".claude/hooks/build-gate.mjs", ".dcc/components.json" }, f => Assert.Contains(f, files));
+            Assert.DoesNotContain(files, f => f.Contains(".mcp.json"));
+            var dossier = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(dir, ".dcc", "components.json")))!;
+            Assert.Contains(dossier["components"]!.AsArray(), c => c?["key"]?.GetValue<string>() == "mcp_random_mcp" && c["status"]?.GetValue<string>() == "declined"
+                && !string.IsNullOrEmpty(c["declineReason"]?.GetValue<string>()));
+
+            // 6. The delivery: by name, to the bare host, with the report written from the cards.
+            _f.GhRules(("pr create", "https://github.com/acme/shop/pull/7\n", 0, null));
+            await Ok(await admin.PostAsJsonAsync($"{Run(repoId, runId)}/deliver", new { }));
+            view = await WaitAsync(admin, repoId, runId, v => v.GetProperty("run").GetProperty("status").GetString() == "Completed", "the delivery");
+            var deliver = view.GetProperty("deliver");
+            Assert.True(deliver.GetProperty("pushed").GetBoolean());
+            Assert.False(string.IsNullOrEmpty(deliver.GetProperty("commitSha").GetString()));
+            var bare = new Uri(origin).LocalPath;
+            var branch = view.GetProperty("run").GetProperty("branchName").GetString()!;
+            var committed = Git.Lines((await Git.RunAsync(bare, "diff", "--name-only", $"main..{branch}")).Out);
+            Assert.Equal(files.OrderBy(f => f, StringComparer.Ordinal), committed.OrderBy(f => f, StringComparer.Ordinal));
+            Assert.DoesNotContain(".claude/commands/ship.md", committed);
+            Assert.DoesNotContain("init: a command", (await Git.RunAsync(bare, "log", "--format=%s", $"main..{branch}")).Out);
+            var report = deliver.GetProperty("report").GetString()!;
+            Assert.All(new[] { "## התקנתי", "לא מאומת ויקר בהקשר", "## לפני / אחרי", "## כרטיס כנות ומוכנות" }, s => Assert.Contains(s, report));
+            Assert.All(view.GetProperty("steps").EnumerateArray(), s => Assert.Equal("Completed", s.GetProperty("status").GetString()));
+            // nothing was silent
+            var types = EventTypes(view);
+            Assert.All(new[] { "onboarding.profile.written", "onboarding.profile.corrected", "onboarding.interview.answered", "onboarding.trial.task", "onboarding.plan.drawn",
+                "onboarding.card.decided", "onboarding.cards.decided_set", "onboarding.card.requested", "onboarding.draft.scanned", "onboarding.draft.set_aside",
+                "onboarding.build.component", "onboarding.delivered", "onboarding.run.completed" }, t => Assert.Contains(t, types));
+
+            // 7. The coach afterwards: no tasks yet, honest zeros; across repositories, numbers only; the search's finds remembered.
+            var coach = await Ok(await admin.GetAsync($"/repos/{repoId}/coach"));
+            Assert.Equal(JsonValueKind.Null, coach.GetProperty("health").GetProperty("score").ValueKind);
+            Assert.Equal(0, coach.GetProperty("health").GetProperty("tasks").GetInt32());
+            Assert.Equal(0, coach.GetProperty("proposals").GetArrayLength());
+            Assert.Contains(coach.GetProperty("acrossRepos").EnumerateArray(), x => x.GetProperty("key").GetString() == "build_gate_hook" && x.GetProperty("repos").GetInt32() >= 1);
+            Assert.Equal(1, (await Ok(await admin.GetAsync($"/repos/{repoId}/onboarding/runs"))).GetProperty("runs").GetArrayLength());
+            Assert.Equal(2L, await _f.ScalarAsync<long>("select count(*) from marketplace_source where url = @a or url = @b", ("a", lspUrl), ("b", strangerUrl)));
+        }
+        finally { StandInsGone(); }
+    }
 }

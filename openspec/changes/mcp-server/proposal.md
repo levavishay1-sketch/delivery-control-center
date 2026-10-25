@@ -1,79 +1,107 @@
-# MCP server for DCC — v1 (read-only)
+# MCP server for DCC (read-only)
 
-Status: **built, read-only v1 shipped 2026-09-12.** Follows
-`mcp-server-feasibility`'s spike and recommendation. The user's decision
-(2026-09-12): "כן בונים MCP מלא. השאלה אם לבנות אותו עכשיו או בסיום
-המערכת זה אתה תחליט" (yes, build a full MCP; timing is this session's
-call). Decided: start now, but sequence it exactly as the feasibility
-spike recommended — read-only first, write tools deliberately withheld
-until real auth exists to back them.
+Status: **built** — five read-only tools in C#, over the REST API with a
+person's API token; one check left (task 4.3: a first run from a real Claude
+Code session with a person's token).
 
-## Why (unchanged from the spike)
+Appetite: **standard**. Follows the spike `mcp-server-feasibility`.
 
-An MCP server exposing DCC lets an external Claude Code session (the
-strongest identified use case: a developer already working in a
-client's repo) query DCC's data directly — a requirement's status, its
-timeline, its AI cost — without alt-tabbing to the web UI.
+## Why
 
-## What shipped
+A developer already working in a client's repository in Claude Code can ask
+DCC about a requirement — its status, its timeline, what its AI work cost —
+from inside that session, without switching to the web UI.
 
-A new `apps/mcp` workspace package — a thin, stdio-transport MCP server
-over `packages/core`/`@dcc/db`, the same relationship `apps/api` already
-has to those packages. Five read-only tools:
+## What it is
 
-- `list_clients` — every client this instance manages (needed to get a
-  `clientId` for the others)
-- `search_requirements(clientId, query)` — title substring search
-- `get_requirement(id)` — full detail: fields, gaps, blockers, tasks,
-  attachments, repos, full event timeline (mirrors the web UI's
-  requirement page / the REST API's `GET /workitems/:id`)
-- `get_timeline(id)` — just the event log
-- `get_cost_summary(id)` — cumulative AI cost, by kind
+- **`Server/src/Dcc.Mcp`** — a .NET 10 console project in
+  `Server/DeliveryControlCenter.sln`, on the official C# MCP SDK
+  (`ModelContextProtocol` 2.3.0, the latest stable on NuGet on 2026-10-25). An
+  MCP client starts it as a child process and speaks MCP with it over stdio:
+  stdin and stdout carry the JSON-RPC, so every log line goes to stderr. It
+  exits when the client closes stdin.
+- **No database connection.** Every tool is one `GET` on the REST API, made as
+  the person whose API token the server was given. The configuration comes
+  from the environment the MCP client starts it with:
+  - `DCC_API_URL` — where the API is (default `http://localhost:5080`; an
+    address with a path, such as the web's `/api` proxy, works too);
+  - `DCC_API_TOKEN` — a `dcc_pat_…` token, sent as `Authorization: Bearer`.
 
-## Why read-only, and why not later
+  So the API's own checks decide what a tool may return —
+  `[RequirePermission]`, the client filter of the lists, and RLS inside the
+  tenant — exactly as for the same person on the web. Nothing about
+  permissions lives in the MCP server.
+- **Five tools, all of them read** (each one says `readOnlyHint`):
 
-DCC's own non-negotiable #2 is "every AI action runs as a named user's
-Claude identity, even background work." `apps/api`'s current auth
-(`actingUser` in `context.ts`) is explicitly documented as *"Phase 0 ...
-NOT production auth — a pilot shim"* — a shared secret plus a
-self-reported email header. That's acceptable for a trusted local dev
-harness calling its own API; it is not strong enough to hand to an
-external MCP client and call the resulting WRITE actions "a named real
-person." Read tools don't carry that requirement — reading data doesn't
-need to be attributed to anyone, matching how the equivalent REST `GET`
-routes already work today (no acting-user resolution either). Write
-tools (approve, progress, compose) stay explicitly out of this v1 until
-real (Entra ID) auth replaces the shim — building them now would mean
-either leaving them genuinely unsafe or inventing a throwaway auth
-mechanism nobody would keep.
+  | Tool | Parameters | REST route | Answers |
+  |---|---|---|---|
+  | `list_clients` | — | `GET /clients` | the clients the person may read, as a bare array: id, name, initiatives, workitems, this month's AI spend, monthly budget |
+  | `search_requirements` | `clientId` (uuid), `query` | `GET /clients/{clientId}/workitems/search?q=` | up to 25 requirements of that client whose title contains the text (case-insensitive; `%` and `_` act as wildcards), newest first: id, key, title, type, phase, requirementType |
+  | `get_requirement` | `id` (uuid) | `GET /workitems/{id}` | the requirement page: `{workitem, attachments, repos, gaps, blockers, tasks, taskDependencies, events}` |
+  | `get_timeline` | `id` (uuid) | `GET /workitems/{id}/timeline` | the events, as a bare array — the newest 200 |
+  | `get_cost_summary` | `id` (uuid) | `GET /workitems/{id}/cost` | `{totalUsd, totalInputTokens, totalOutputTokens, runCount, byKind}` |
 
-## Explicitly out of scope (this v1)
+- **The search route** `GET /clients/{clientId}/workitems/search?q=` answers
+  `{items}` and needs `requirements.read` on the client; it reads inside the
+  client's tenant (`RequirementService.SearchAsync`).
+- **An answer** is one text block: the JSON, indented by two spaces, with
+  Hebrew and other text written as itself.
+- **A refusal** is a sentence with `isError`, never a protocol error:
+  - 404 — `no requirement with id <id>` (for the search: `no client with id <id>`);
+  - 403 — "The token's person may not read requirement <id> (it needs
+    requirements.read).";
+  - 401 — the token was not accepted (missing, wrong, expired, revoked, or its
+    person disabled): set `DCC_API_TOKEN` to a token from `POST /tokens`;
+  - the API cannot be reached — "Cannot reach the DCC API at <address>: …";
+  - an id argument that is missing or not a uuid (a key such as `WI-1284`) —
+    "id must be a uuid — a requirement's id, from search_requirements (it is
+    "WI-1284")." (`clientId`: "… a client's id, from list_clients …"),
+    answered before the API is called.
 
-- Any write tool (approve_task, progress_task, add_note, start_breakdown,
-  ...) — see above.
-- Deployment/packaging (how a developer actually gets this server
-  registered in their own Claude Code config) — this ships the server
-  itself; wiring it into someone's local `.mcp.json` is a separate,
-  per-developer step, not a DCC repo concern.
-- The "dashboard search bar" use case the user originally named — the
-  feasibility spike already flagged this doesn't actually need MCP (an
-  in-app AI search feature would call the existing REST API directly);
-  unaffected by this build.
+## Who it acts as
+
+Always a named person — the token's. An admin creates the token with
+`POST /tokens` (for a person: `forAgentId` = that person's id; it carries the
+person's full powers, nothing narrower) and hands it over; the person puts it
+in their own MCP client's configuration. A token made for a delegated agent
+acts as that agent, which never exceeds its owner. `DELETE /tokens/{id}`
+revokes a token, and from then on every tool answers that the token was not
+accepted.
+
+## Connecting it to Claude Code
+
+```bash
+claude mcp add dcc -e DCC_API_URL=http://localhost:5080 -e DCC_API_TOKEN=dcc_pat_… \
+  -- dotnet run --project <repo>/Server/src/Dcc.Mcp
+```
+
+`claude mcp add` keeps the server (and the token) in the local scope —
+private to you, never in a repository's `.mcp.json`. The server needs the API
+running (`npm run server`).
+
+## Out of scope
+
+- **Write tools** (add a note, approve or progress a task, start an
+  assessment). The server stays read-only (the user's decision, 2026-10-25):
+  an outside session may look, not act. Tools that start a Claude run from
+  inside a Claude session would also spend money from there.
+- **An HTTP `/mcp` endpoint inside the API** — what a remote caller such as a
+  claude.ai connector would need. Its own change, when there is such a caller.
+- **A screen for tokens** — tokens are made through the API (`POST /tokens`).
+- **A search bar in the web app** — an AI feature inside DCC calls the REST
+  API itself; it does not need MCP.
 
 ## Impact
 
-- New workspace package `apps/mcp`, added to the root `tsconfig.json`
-  references and `package.json` workspaces (already covered by the
-  existing `apps/*` glob).
-- New dependency: `@modelcontextprotocol/sdk` (installed, pinned in
-  `apps/mcp/package.json`).
-- No changes to `packages/core`'s public surface beyond what was already
-  exported — the MCP tools compose existing exports, per the
-  feasibility recommendation to keep this a thin adapter.
+- New project `Server/src/Dcc.Mcp` (packages `ModelContextProtocol` 2.3.0,
+  `Microsoft.Extensions.Hosting` 10.0.12), added to the solution; the test
+  project references it.
+- New route `GET /clients/{clientId}/workitems/search`
+  (`RequirementsController.Search`, `RequirementService.SearchAsync`).
+- Tests: `Server/tests/Dcc.Tests/Integration/McpTests.cs`.
 
 ## Exit gate
 
-`npx tsx apps/mcp/src/server.ts` (or `npm -w @dcc/mcp run dev`) starts a
-working MCP server over stdio that a Claude Code session can register
-and query — search/read a requirement's data without opening the DCC
-web UI.
+A Claude Code session with the server registered and a person's token lists
+that person's clients, finds and reads a requirement of theirs, and is
+refused a requirement of a client they may not read.

@@ -15,11 +15,13 @@
     "web": "npm run dev -w @dcc/web",
     "typecheck": "tsc -p Client --noEmit",
     "lint": "eslint .",
-    "test": "vitest run --passWithNoTests && dotnet test Server/DeliveryControlCenter.sln",
+    "test": "vitest run --passWithNoTests && npm run test:hooks && dotnet test Server/DeliveryControlCenter.sln",
     "audit:stale": "node scripts/audit-stale.mjs",
     "sync": "node scripts/sync.mjs",
     "spec": "openspec",
-    "info:drift": "node scripts/info-drift.mjs"
+    "info:drift": "node scripts/info-drift.mjs",
+    "test:hooks": "node --test \"hooks/test/*.test.mjs\"",
+    "mcp": "dotnet run --project Server/src/Dcc.Mcp"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

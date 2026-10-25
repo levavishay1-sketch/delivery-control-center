@@ -35,3 +35,12 @@ The blocker is routed to the WorkItem owner (who may not be at a
 terminal). Stop this task and pick up another one that is not blocked.
 When the owner answers, the answer lands in the timeline and the
 Context Brief; a later session continues from there.
+
+## Sign-in
+
+`dcc.mjs` acts as the person working, with their DCC API token
+(`DCC_API_TOKEN`, or the one `dcc.mjs login` saved). If it answers
+"no API token" or "token revoked or expired", stop and ask the person to run
+`node <path-to>/skills/dcc.mjs login` in their own terminal — never ask for
+the token in the conversation. A "forbidden" answer names the permission they
+lack; retrying will not help.

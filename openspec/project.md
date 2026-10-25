@@ -47,9 +47,12 @@ frozen artifact.
 
 ## Stack
 
-TypeScript / Node · PostgreSQL · Drizzle ORM (SQL-first → natural RLS) ·
-React + Radix + Tailwind · Claude Agent SDK · OpenSpec for the
-in-repo spec lifecycle · Azure Key Vault for secrets.
+C# / .NET 10 ASP.NET Core Web API (`Server/`) · PostgreSQL 17 with SQL
+migrations (SQL-first → natural RLS; EF Core + Npgsql read and write, never
+migrate) · React + Radix + Tailwind (`Client/`) · the Claude Code CLI ·
+an MCP server in C# (`Server/src/Dcc.Mcp`) · OpenSpec for the in-repo spec
+lifecycle · Azure Key Vault for secrets (later; `Server/.local` on a
+developer's machine).
 
 ## Methodology
 
@@ -59,8 +62,14 @@ from commit 1.
 
 ## Conventions
 
-- npm workspaces. Packages under `packages/*`, apps under `apps/*`.
-- `@dcc/*` package names.
-- Node ≥ 22, ESM, `.ts` extensions in imports (NodeNext).
-- Every tenant-scoped table carries `client_id` and an RLS policy.
-- Only `appendEvent()` writes to `event_log`. Never raw INSERT.
+- `Server/DeliveryControlCenter.sln`: `Dcc.Api`, `Dcc.Application`, `Dcc.Domain`,
+  `Dcc.Infrastructure`, `Dcc.Mcp`, `tests/Dcc.Tests` (xUnit). The schema is the
+  SQL in `Server/db/migrations`; data the server reads lives beside it
+  (`Server/glossary`, `Server/onboarding`).
+- The web client is the npm workspace `@dcc/web` in `Client/`; the hooks and
+  skills are zero-dependency Node scripts (Node ≥ 22).
+- Every tenant-scoped table carries `client_id` and an RLS policy, and is
+  touched only inside `TenantScope`.
+- Only `IEventLogWriter` writes to `event_log`. Never raw INSERT.
+- `OldServer/` is the retired TypeScript server, kept as the reference the C#
+  server was ported from — never built, never run, never added to.

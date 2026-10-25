@@ -8,21 +8,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Working in this repo
 
-The server is being rewritten from TypeScript to **C# (.NET 10) ASP.NET Core Web
-API** (`openspec/changes/server-in-csharp`), with one cut-over at the end.
+The server is **C# (.NET 10) ASP.NET Core Web API**, rewritten from TypeScript
+route for route (`openspec/changes/server-in-csharp`).
 
 - `Server/` — the server. `DeliveryControlCenter.sln`: `Dcc.Api` (controllers,
   sign-in, `[RequirePermission]`, WebSockets), `Dcc.Application` (contracts),
   `Dcc.Domain` (entities, the permission catalog, event actor and payload
-  schemas), `Dcc.Infrastructure` (EF Core + Npgsql, migrator, Graph), and
-  `tests/Dcc.Tests` (xUnit). The schema is the SQL in `Server/db/migrations`
+  schemas), `Dcc.Infrastructure` (EF Core + Npgsql, migrator, the Claude CLI, git,
+  GitHub / Azure DevOps, Graph), `Dcc.Mcp` (the read-only MCP server, calling the
+  API as its token's person) and `tests/Dcc.Tests` (xUnit). The schema is the SQL in `Server/db/migrations`
   (plus `Server/db/guards.sql`); EF Core never migrates.
 - `Client/` — the React web client (npm workspace `@dcc/web`).
 - `OldServer/` — the retired TypeScript server (`apps/api`, `apps/mcp`,
   `packages/core`, `packages/db`): out of the npm workspaces and the build, kept
-  **only as the reference being rewritten**. Never run it; never add to it. The
-  "i" glossary lives in `Server/glossary` (JSON), served by `GlossaryService`.
-- A rewritten endpoint keeps the old route and JSON shape (`OldServer/apps/api/src/server.ts`,
+  **only as the reference the C# server was ported from**. Never run it; never add
+  to it. The "i" glossary lives in `Server/glossary` (JSON), served by
+  `GlossaryService`; repository onboarding's data in `Server/onboarding`.
+- An endpoint keeps the old route and JSON shape (`OldServer/apps/api/src/server.ts`,
   `Client/src/api.ts`), so the client changes only in how it authenticates.
 - Only `IEventLogWriter` writes to `event_log`; where the log is kept is decided
   in `AddEventLog()` only. Every tenant-scoped table carries `client_id` and an
@@ -54,8 +56,11 @@ their contents.
 - Sign-in: email + password for now (the first admin is created on first
   start). Entra ID, B2B guests and the directory sync are built and off until
   the `Entra` settings are filled (in `Server/.local/appsettings.local.json`).
-- The hooks and `skills/dcc.mjs` still send the old shared-secret headers; they
-  move to API tokens (task 5.1) — until then they do nothing against the C# server.
+- The hooks and `skills/dcc.mjs` authenticate with an API token (`dcc_pat_…`, from
+  `POST /tokens`): `DCC_API_TOKEN`, or `~/.dcc/credentials.json` written by
+  `node skills/dcc.mjs login` — never in a repository file (`hooks/README.md`).
+  The claude processes DCC itself starts carry `DCC_CAPTURE=off`, so they are not
+  captured twice.
 
 ## Commands
 
@@ -67,7 +72,9 @@ dotnet build Server/DeliveryControlCenter.sln
 dotnet test Server/DeliveryControlCenter.sln   # xUnit: unit + integration against dcc_test
 npm run typecheck              # the web client's tsconfig
 npm run lint                   # eslint (Client + scripts) — errors fail, warnings are existing leftovers
-npm test                       # vitest (Client) + dotnet test
+npm test                       # vitest (Client) + the hooks' tests + dotnet test
+npm run test:hooks             # the hooks and skills/dcc.mjs, against a local stub (node --test)
+npm run mcp                    # the MCP server over stdio (DCC_API_URL, DCC_API_TOKEN)
 npm run audit:stale            # leftovers of replaced designs, stale OpenSpec statuses, missing "i" hints
 npm run info:drift             # "i" explanations on lines a change touched — run before a PR that touches a screen
 npm run sync                   # after merges: master current, merged local branches gone, what is left

@@ -126,10 +126,10 @@ if (dirty.length) note("uncommitted", dirty);
 
 // 9. The running app.
 try {
-  const r = await fetch("http://localhost:3001/health", { signal: AbortSignal.timeout(2000) });
-  console.log(`\n· the API answers on :3001 (${r.status})`);
+  const r = await fetch("http://localhost:5080/health", { signal: AbortSignal.timeout(2000) });
+  console.log(`\n· the API answers on :5080 (${r.status})`);
 } catch {
-  console.log("\n· the API is not answering on :3001");
+  console.log("\n· the API is not answering on :5080");
 }
 
 console.log(problems ? `\n${problems} thing(s) to look at.` : "\nClean.");

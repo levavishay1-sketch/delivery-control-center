@@ -276,4 +276,57 @@ public sealed class ClaudeTests(DbFixture fx)
         Assert.Equal("archived", c.GetProperty("conversation").GetProperty("status").GetString());
         Assert.All(c.GetProperty("messages").EnumerateArray(), m => Assert.Equal("התוכן נמחק לפי תקופת השמירה", m.GetProperty("text").GetString()));
     }
+
+    /// <summary>
+    /// The rest of the old <c>retention.prove.ts</c>: nothing of an archived conversation is kept but that it existed — no
+    /// payload, no note, no CLI session id or context hash, no session folder; a rolled conversation past its period goes too;
+    /// one inside its period is untouched, folder included; and a second pass finds nothing.
+    /// </summary>
+    [Fact]
+    public async Task Retention_keeps_nothing_of_an_expired_conversation_spares_a_fresh_one_and_runs_twice_to_the_same_end()
+    {
+        var admin = await Admin();
+        var clientId = await _f.NewClientAsync();
+        var person = await _f.ScalarAsync<Guid>("select id from users where email = @e", ("e", _f.AdminEmail));
+        async Task<Guid> ConversationAsync(string retainUntil, string status)
+        {
+            var id = await _f.ScalarAsync<Guid>($"""
+                insert into conversation (client_id, topic_key, topic_kind, topic_title, created_by, status, retain_until, cli_session_id, context_hash)
+                values (@c, 'app', 'app', 'המערכת', @u, @s, now() + interval '{retainUntil}', @sid, 'hash') returning id
+                """, ("c", clientId), ("u", person), ("s", status), ("sid", Guid.NewGuid().ToString()));
+            await _f.ExecAsync("""
+                insert into conversation_message (conversation_id, client_id, role, kind, source, text, payload, helpful_note) values
+                  (@id, @c, 'user', 'answer', 'system', 'מה השלב הבא?', '{}'::jsonb, null),
+                  (@id, @c, 'assistant', 'answer', 'model', 'התשובה שניתנה', '{"unanswered": false}'::jsonb, 'הערה')
+                """, ("id", id), ("c", clientId));
+            var dir = Path.Combine(_f.TempDir, "chat", id.ToString());
+            Directory.CreateDirectory(dir);
+            await File.WriteAllTextAsync(Path.Combine(dir, "system.txt"), "rules");
+            return id;
+        }
+        var expired = await ConversationAsync("-1 day", "active");
+        var rolled = await ConversationAsync("-1 day", "rolled");
+        var fresh = await ConversationAsync("1 day", "active");
+
+        // Counted by their end state, not by the pass's totals: the daily pass in the background may get to them first.
+        await Ok(await admin.PostAsync("/claude/retention/run", null));
+
+        foreach (var id in new[] { expired, rolled })
+        {
+            Assert.Equal("archived", await _f.ScalarAsync<string>("select status from conversation where id = @id", ("id", id)));
+            Assert.Equal(0L, await _f.ScalarAsync<long>("select count(*) from conversation where id = @id and (cli_session_id is not null or context_hash is not null)", ("id", id)));
+            Assert.Equal(2L, await _f.ScalarAsync<long>("""
+                select count(*) from conversation_message where conversation_id = @id and text = 'התוכן נמחק לפי תקופת השמירה' and payload = '{}'::jsonb and helpful_note is null
+                """, ("id", id)));
+            Assert.False(Directory.Exists(Path.Combine(_f.TempDir, "chat", id.ToString())));
+        }
+        Assert.Equal("active", await _f.ScalarAsync<string>("select status from conversation where id = @id", ("id", fresh)));
+        Assert.Equal(0L, await _f.ScalarAsync<long>("select count(*) from conversation_message where conversation_id = @id and text = 'התוכן נמחק לפי תקופת השמירה'", ("id", fresh)));
+        Assert.Equal(1L, await _f.ScalarAsync<long>("select count(*) from conversation where id = @id and cli_session_id is not null and context_hash is not null", ("id", fresh)));
+        Assert.True(Directory.Exists(Path.Combine(_f.TempDir, "chat", fresh.ToString())));
+
+        var second = await Ok(await admin.PostAsync("/claude/retention/run", null));
+        Assert.Equal(0, second.GetProperty("archived").GetInt32());
+        Assert.Equal(0, second.GetProperty("messages").GetInt32());
+    }
 }

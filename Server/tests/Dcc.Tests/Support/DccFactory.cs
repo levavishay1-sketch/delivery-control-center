@@ -120,6 +120,50 @@ public sealed class DccFactory : WebApplicationFactory<Program>
         return "file:///" + bare.Replace('\\', '/');
     }
 
+    /// <summary>A bare repository whose one commit on main holds exactly these files (path → text), as a file:// address.</summary>
+    public async Task<string> NewOriginAsync(IReadOnlyDictionary<string, string> files)
+    {
+        var root = Path.Combine(_tempDir, "origins", Guid.NewGuid().ToString("N")[..8]);
+        var bare = Path.Combine(root, "origin.git");
+        var work = Path.Combine(root, "work");
+        Directory.CreateDirectory(bare);
+        Directory.CreateDirectory(work);
+        await Dcc.Infrastructure.Repos.Git.RunAsync(bare, "init", "--bare", "-b", "main");
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "init", "-b", "main");
+        foreach (var (path, text) in files)
+        {
+            var full = Path.Combine(work, path);
+            Directory.CreateDirectory(Path.GetDirectoryName(full)!);
+            await File.WriteAllTextAsync(full, text);
+        }
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "add", "-A");
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-m", "base");
+        await Dcc.Infrastructure.Repos.Git.RunAsync(work, "push", bare, "main");
+        return "file:///" + bare.Replace('\\', '/');
+    }
+
+    /// <summary>
+    /// The old prove kit's repository: <c>base.txt</c> and a real npm package whose build fails while <c>broken.txt</c> is in
+    /// the tree — so a task's build check is a real <c>npm run build</c> that DCC runs itself (npm must be on PATH).
+    /// </summary>
+    public Task<string> NewPackageOriginAsync() => NewOriginAsync(new Dictionary<string, string>
+    {
+        ["base.txt"] = "base\n",
+        ["package.json"] = """
+            {
+              "name": "prove-repo",
+              "private": true,
+              "scripts": {
+                "build": "node -e \"process.exit(require('fs').existsSync('broken.txt') ? 1 : 0)\""
+              }
+            }
+
+            """,
+    });
+
+    /// <summary>DCC's own clone of a repository (the cache every task run works in), whether or not it was cloned yet.</summary>
+    public string CloneOf(Guid repoId) => Path.Combine(RepoCachePath, repoId.ToString());
+
     public async Task<Guid> LinkRepoAsync(Guid clientId, Guid reqId, string url)
     {
         var repoId = await ScalarAsync<Guid>("insert into repo(name, ado_repo_ref) values (@n, @u) returning id", ("n", "shop-" + Guid.NewGuid().ToString("N")[..6]), ("u", url));

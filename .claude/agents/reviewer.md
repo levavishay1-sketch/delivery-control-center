@@ -57,3 +57,12 @@ node <path-to>/skills/dcc.mjs review \
 
 A `pass` verdict is **not** an approval — it means the mechanical pass
 found nothing blocking. A human still decides.
+
+## Sign-in
+
+`dcc.mjs` acts as the person working, with their DCC API token
+(`DCC_API_TOKEN`, or the one `dcc.mjs login` saved). If it answers
+"no API token" or "token revoked or expired", stop and ask the person to run
+`node <path-to>/skills/dcc.mjs login` in their own terminal — never ask for
+the token in the conversation. A "forbidden" answer names the permission they
+lack; retrying will not help.

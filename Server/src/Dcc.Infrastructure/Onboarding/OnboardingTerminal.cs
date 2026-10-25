@@ -384,7 +384,9 @@ public sealed partial class OnboardingTerminal : IOnboardingTerminal, IDisposabl
                 VerbatimCommandLine = OperatingSystem.IsWindows(),
                 // A session started from a server that itself runs inside Claude Code must not think it is nested; an
                 // empty value removes the variable from the inherited environment.
-                Environment = new Dictionary<string, string> { ["CLAUDECODE"] = "", ["CLAUDE_CODE_ENTRYPOINT"] = "", ["CLAUDE_CODE_NEW_INIT"] = "1" },
+                // DCC_CAPTURE=off: this is DCC's own session, recorded by DCC in ledger slices — the capture hooks must not
+                // record it a second time as the person whose credentials happen to sit on the server's account.
+                Environment = new Dictionary<string, string> { ["CLAUDECODE"] = "", ["CLAUDE_CODE_ENTRYPOINT"] = "", ["CLAUDE_CODE_NEW_INIT"] = "1", ["DCC_CAPTURE"] = "off" },
             }, ct);
 
             var s = new Session(pty);

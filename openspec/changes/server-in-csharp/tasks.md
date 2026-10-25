@@ -31,9 +31,9 @@ one PR to `master` at the end, when the user asks.
   - The glossary moved from TypeScript to `Server/glossary/concepts/*.json` + `screens.json`; the server (`GlossaryService`) and the scripts (`scripts/glossary.mjs`: audit-stale, info-drift) read it there. Swept: the scripts, the info-hint hook, the `info-hints` skill, `CLAUDE.md`, `openspec/changes/{info-hints,claude-in-dcc}`, `docs/wishlist.md`, `Client/src/api.ts`. Kept on purpose: `docs/research/**` and the `docs/fable-brief-*` notes (they describe the code as it was when written), and three files under `OldServer/` that still import the deleted TypeScript glossary (`core/src/index.ts`, `chat/index.ts`, `insights.ts`) — reference only, never built, deleted with `OldServer/` (5.2)
   - The identity audit moved to `/identity-audit`: `/audit` is the activity log's route (4.8)
   - Errors are `{ error: code, message }`; the client's `errText` shows the message
-- [ ] 4.2 Requirements, timeline, context brief, gaps, blockers, decisions, attachments, spec
+- [x] 4.2 Requirements, timeline, context brief, gaps, blockers, decisions, attachments, spec
   - Done: `POST /workitems`, `GET/PATCH/DELETE /workitems/:id`, `/workitems/:id/timeline`, `/brief` (assembled, never summarised), `/requirements/:id/flow`, `/workitems/:id/spec` (the document read out of the attachment — a .docx through OpenXml, text otherwise), `/clients/:clientId/inbox`, `/list/workitems`, `/list/initiatives`, assign, ado-link, requirement repositories, dependencies, gaps (propose, verify — resolved/dismissed/spun off —, edit, delete), blockers (raise, answer, edit, delete, "waiting on me"), attachments (stored, text extracted from txt/md/docx/pdf, uploaded to Azure DevOps when connected, handed back); decisions recorded on reopen; the ledger writer (`ClaudeLedger`) and `TableColumns` (whole rows in the old camelCase shape)
-  - Still open here: `POST /events` — the capture endpoint the hooks and the "add note" form use (sessions, git activity, notes)
+  - `POST /events` — the capture route the hooks and the "add note" / "correct note" forms use: a session (and its `interactive_session` ledger row), git activity, a note or its correction (only of a not-yet-corrected note of the same requirement). Narrowed on purpose: a key is resolved only inside the client the body names, whether a key exists is never revealed outside that client, and a write needs requirements.read where it lands (session, git) or requirements.edit (a note)
   - Belongs to later tasks: `/workitems/:id/start`, task flow, bug links, research, flow runs (4.3); materialize and ADO sync (4.4); assess, breakdown, spec map, cost and calls (4.5); touches and review (4.6)
 - [x] 4.3 Tasks, flow, the checks pipeline, manual work, built-on, start-build, task ADO sync
   - The pure decisions moved to `Dcc.Domain/Tasks` with their old unit tests, one for one: relations (a group is a task with sub-tasks; what a task really waits for), types (the TFS rung by role), statuses (every Hebrew label as it was), the steps a task went through, the branch base, branch names, overlaps, the manual report; the build recipe (no model — the real command) in `Dcc.Infrastructure/Tasks`
@@ -74,10 +74,16 @@ one PR to `master` at the end, when the user asks.
   - `GET /resolve` (a branch's WI-nnnn, or a key, to its requirement — what the hooks ask) moved here from capture
   - Not ported on purpose: `POST /admin/shutdown` — it existed only so PGlite could flush its data folder; with PostgreSQL the server stops like any other process
   - The tests can now build into another folder (`dotnet test --artifacts-path …`) while a dev server holds the usual `bin`
-- [ ] 4.9 MCP server in C#; demo data; the remaining `prove:*` scripts as tests
+- [x] 4.9 MCP server in C#; demo data; the remaining `prove:*` scripts as tests
+  - The MCP server: `Server/src/Dcc.Mcp` (the official C# SDK, stdio), the same five read-only tools, calling the API as its token's person — so the permissions and the wall apply (the old server read any requirement by id and listed every client); `search_requirements` gets its route, `GET /clients/:clientId/workitems/search` (requirements.read on the client); a malformed id is answered with a sentence that names it
+  - The demo (`demo.ts`) is `PhaseZeroTests`, through the API (it also writes the gap events the old script skipped)
+  - The prove scripts: `dev:prove` → `TenantWallTests` + `LedgerWallTests`; `prove:routing` → `ModelRouterTests`; `prove:retention`, `prove:manual` → `ClaudeTests` and `TasksTests`; `prove:checks` → `TaskChecksTests` (a test origin that is an npm package); `prove:built-on` → `TaskBuiltOnTests`; `prove:onboarding` → `OnboardingTests`. Not ported on purpose: the db dev scripts (setup, migrate, adopt-migrations — `DatabaseMigrator` replaced them; backfill-ledger — a one-off) and `task-branch-repair` (4.3)
+  - Decision 02 at the event log's door: an agent's token is recorded as the person behind it — a delegated agent as its owner with the agent named, an independent one with its sponsor (`PersonBehindActorWriter`, wrapped around the validation in `AddEventLog()`)
 
 ## 5. Finish
 
-- [ ] 5.1 Hooks and `skills/dcc.mjs` authenticate with API tokens
+- [x] 5.1 Hooks and `skills/dcc.mjs` authenticate with API tokens
+  - `Authorization: Bearer dcc_pat_…` from `DCC_API_TOKEN` or `~/.dcc/credentials.json` (`node skills/dcc.mjs login` / `whoami`); a hook never breaks or holds up a session (a 5-second limit, every failure one line and exit 0); DCC's own claude processes carry `DCC_CAPTURE=off`; `.dcc.json` points at :5080; `.claude/settings.local.json` is no longer tracked; the 401 of a refused token says why. Tested with `npm run test:hooks` (node --test, against a stub)
 - [ ] 5.2 `OldServer/` deleted; the old names swept ("Replacing a design"), added to the retired list in `scripts/audit-stale.mjs`
-- [ ] 5.3 `CLAUDE.md`, `README.md`, `RUNNING.md`, `openspec/project.md` describe only the C# server
+  - Left on purpose (the user, 2026-10-25): `OldServer/` stays as the reference for now. The retired names (the old headers, `apps/mcp`, `prove-kit`, `dev:prove`) go into the audit with it, since the audit scans that folder
+- [x] 5.3 `CLAUDE.md`, `README.md`, `RUNNING.md`, `openspec/project.md` describe only the C# server (`OldServer/` named as the reference it was ported from)

@@ -655,7 +655,7 @@ function CorrectNote({ ev, workitemId, onClose, onDone }: { ev: EventRow; workit
         <p style={{ fontSize: 12, color: "var(--ink-400)", marginBottom: 10 }}>ההערה המקורית תישאר ב-timeline מסומנת "תוקן". זו רשומה חדשה שמחליפה אותה.</p>
         <textarea value={text} onChange={(e) => setText(e.target.value)} style={{ width: "100%", minHeight: 110 }} />
         <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
-          <button className="btn btn-primary" disabled={busy} onClick={async () => { setBusy(true); try { await correctNote(workitemId, ev.id, text.trim()); onDone(); } catch (e) { alert(String(e)); setBusy(false); } }}>{busy ? "שומר…" : "שמור תיקון"}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={async () => { setBusy(true); try { await correctNote(workitemId, ev.id, text.trim()); onDone(); } catch (e) { alert(errText(e)); setBusy(false); } }}>{busy ? "שומר…" : "שמור תיקון"}</button>
           <button className="btn btn-secondary" onClick={onClose}>ביטול</button>
         </div>
       </div>

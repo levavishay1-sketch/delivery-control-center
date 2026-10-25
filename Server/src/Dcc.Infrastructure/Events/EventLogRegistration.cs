@@ -19,7 +19,9 @@ public static class EventLogRegistration
         services.AddScoped<PostgresEventLogWriter>();      // Store: writer
         services.AddScoped<IEventLogReader, PostgresEventLogReader>(); // Store: reader
 
-        services.AddScoped<IEventLogWriter>(sp => new ValidatingEventLogWriter(sp.GetRequiredService<PostgresEventLogWriter>()));
+        // An agent's actor becomes the person behind it, then the event is validated, then stored (decisions 02, 01).
+        services.AddScoped<IEventLogWriter>(sp => new PersonBehindActorWriter(
+            new ValidatingEventLogWriter(sp.GetRequiredService<PostgresEventLogWriter>()), sp.GetRequiredService<Persistence.DccDbContext>()));
         return services;
     }
 }

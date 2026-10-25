@@ -262,6 +262,135 @@ public sealed class TasksTests(DbFixture fx)
         Assert.Equal("done", (await Ok(await admin.GetAsync($"/tasks/{a}"))).GetProperty("status").GetProperty("key").GetString());
     }
 
+    /// <summary>
+    /// The rest of the old <c>manual-work.prove.ts</c>: a task developed by hand is never a second path — Claude is refused it
+    /// and its checks, a group or a check is never marked, the report is the task's development (its customisations on the
+    /// timeline under their heading), each check is set by hand with the same gate, a report can be replaced or taken back,
+    /// and a task is never both: a report blocks un-marking it, Claude's development blocks marking it until Rollback.
+    /// </summary>
+    [Fact]
+    public async Task A_task_developed_by_hand_is_never_a_second_path_and_never_both()
+    {
+        var w = await TaskWorld.CreateAsync(_f, "manual work");
+        var admin = w.Admin;
+        var m = await w.TaskAsync("M", "write m.txt");
+        var plain = await w.TaskAsync("plain", "write plain.txt");
+        await w.ReadyAsync(m);
+        await w.ReadyAsync(plain);
+
+        // 1. The mark, and what it does to Claude.
+        Assert.Contains("סמנו קודם", await TaskWorld.Refused(admin.PostAsJsonAsync($"/tasks/{m}/manual-report", new { summary = "עשיתי" })));
+        await TaskWorld.Ok(await admin.PutAsJsonAsync($"/tasks/{m}/manual", new { manual = true }));
+        Assert.True((await w.RowAsync(m)).GetProperty("developedManually").GetBoolean());
+        Assert.Contains("מפותחת ידנית", await TaskWorld.Refused(admin.PostAsync($"/tasks/{m}/implement", null)));
+        var checksM = await w.ChecksOfAsync(m);
+        Assert.Equal(3, checksM.Count);
+        foreach (var c in checksM)
+            Assert.Contains("מפותחת ידנית", await TaskWorld.Refused(admin.PostAsync($"/tasks/{c.GetProperty("id").GetGuid()}/implement", null)));
+        // marked but not reported: ready to develop, like any other task
+        Assert.Equal("ready", await w.StatusKeyAsync(m));
+
+        // 2. What cannot be marked: a group (its work is its sub-tasks), a check.
+        var g = await w.TaskAsync("G", "write g.txt");
+        await w.SubtaskAsync("g-sub", "write gs.txt", g);
+        Assert.Contains("קבוצה", await TaskWorld.Refused(admin.PutAsJsonAsync($"/tasks/{g}/manual", new { manual = true })));
+        Assert.Contains("לא בדיקה", await TaskWorld.Refused(admin.PutAsJsonAsync($"/tasks/{checksM[0].GetProperty("id").GetGuid()}/manual", new { manual = true })));
+
+        // 3. The report — refused where a run would be, then accepted as the task's development.
+        var late = await w.TaskAsync("late", "write late.txt");
+        await w.ApproveAsync(late);
+        await TaskWorld.Ok(await admin.PutAsJsonAsync($"/tasks/{late}/manual", new { manual = true }));
+        Assert.Contains("TFS", await TaskWorld.Refused(admin.PostAsJsonAsync($"/tasks/{late}/manual-report", new { summary = "עשיתי" })));
+        await TaskWorld.Refused(admin.PostAsJsonAsync($"/tasks/{m}/manual-report", new { summary = " " }));
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{m}/manual-report", new
+        {
+            summary = "הוקם השדה וחובר לטופס", customisation = Dcc.Domain.Tasks.ManualReport.CustomisationTemplate + "FormCancellation\nControlStageStatus",
+            components = "Alt.BL", reference = "branch/wi-1",
+        }));
+        var page = await w.PageAsync(m);
+        var dev = page.GetProperty("development");
+        Assert.Equal("הוקם השדה וחובר לטופס", dev.GetProperty("summary").GetString());
+        Assert.Equal(["FormCancellation", "ControlStageStatus"], dev.GetProperty("manual").GetProperty("customisations").EnumerateArray().Select(x => x.GetString()));
+        Assert.Equal("branch/wi-1", dev.GetProperty("manual").GetProperty("reference").GetString());
+        Assert.True(page.GetProperty("developed").GetBoolean());
+        Assert.Equal("build_pending", page.GetProperty("status").GetProperty("key").GetString());
+        Assert.Equal("in_progress", page.GetProperty("task").GetProperty("state").GetString());
+        Assert.Equal(["develop", "checks", "review"], page.GetProperty("flow").EnumerateArray().Select(s => s.GetProperty("kind").GetString()));
+        var events = (await TaskWorld.Ok(await admin.GetAsync($"/workitems/{w.ReqId}"))).GetProperty("events").EnumerateArray();
+        Assert.Contains(events, e => e.GetProperty("payload").TryGetProperty("body", out var body) && body.GetString()!.Contains("CUSTOMISATION: FormCancellation · ControlStageStatus"));
+        Assert.Contains("מפותחת ידנית", await TaskWorld.Refused(admin.PostAsync($"/tasks/{m}/implement", null)));
+
+        // 4. Each check by hand; the done gate reads them like any result.
+        var build = await w.CheckOfKindAsync(m, "build");
+        var tests = await w.CheckOfKindAsync(m, "tests");
+        var regression = await w.CheckOfKindAsync(m, "regression");
+        var plainCheck = (await w.ChecksOfAsync(plain))[0].GetProperty("id").GetGuid();
+        Assert.Contains("עוד לא פותחה", await TaskWorld.Refused(admin.PostAsJsonAsync($"/tasks/{plainCheck}/manual-result", new { result = "passed" })));
+        // whoever developed the task, the last word on a check is a person's — and a task nobody marked is Claude's to develop
+        await w.DevelopAsync(plain);
+        var claudeCheck = await w.CheckOfKindAsync(plain, "regression");
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{claudeCheck}/manual-result", new { result = "failed", note = "נבדק ידנית — נפל" }));
+        Assert.Equal("failed", await w.CheckResultAsync(claudeCheck));
+        Assert.Contains("מה נכשל", await TaskWorld.Refused(admin.PostAsJsonAsync($"/tasks/{regression}/manual-result", new { result = "failed" })));
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{build}/manual-result", new { result = "passed", note = "אין קימפול במשימה הזו — סקריפט בלבד" }));
+        var buildRow = await w.RowAsync(build);
+        Assert.Equal("passed", buildRow.GetProperty("checkResult").GetString());
+        Assert.Equal(w.AdminId, buildRow.GetProperty("checkResolvedBy").GetGuid());
+        Assert.Equal("אין קימפול במשימה הזו — סקריפט בלבד",
+            (await w.PageAsync(m)).GetProperty("checkOutcomes").GetProperty(build.ToString()).GetProperty("detail").GetString());
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{tests}/manual-result", new { result = "passed" }));
+        Assert.Equal("develop:done checks:current review:todo", await w.StepsAsync(m));
+        Assert.Equal("checks_pending", await w.StatusKeyAsync(m));
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{regression}/manual-result", new { result = "failed", note = "נפל בעדכון הטופס" }));
+        var failed = await w.StatusAsync(m);
+        Assert.Equal("failed", failed.GetProperty("key").GetString());
+        Assert.Contains("רגרסיה", failed.GetProperty("label").GetString());
+        Assert.NotNull(await w.CloseRefusalAsync(m));
+        // a failure carries no approval
+        Assert.Equal(JsonValueKind.Null, (await w.RowAsync(regression)).GetProperty("checkResolvedBy").ValueKind);
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{regression}/manual-result", new { result = "passed", note = "תוקן" }));
+        Assert.Equal("review", await w.StatusKeyAsync(m));
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{tests}/manual-result", new { result = "not_run" }));
+        Assert.Null(await w.CheckResultAsync(tests));
+        Assert.Equal("checks_pending", await w.StatusKeyAsync(m));
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{tests}/manual-result", new { result = "passed" }));
+        // not every task compiles: a check set aside as not applicable stops counting
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{regression}/active", new { active = false }));
+        Assert.Equal("review", await w.StatusKeyAsync(m));
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{regression}/active", new { active = true }));
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{regression}/manual-result", new { result = "passed" }));
+        Assert.Null(await w.CloseRefusalAsync(m));
+        Assert.Equal("done", (await w.RowAsync(m)).GetProperty("state").GetString());
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{m}/progress", new { to = "in_progress", reopenReason = "בדיקה נוספת" }));
+
+        // 5. A report can be replaced — the old one stays as history — and taken back.
+        await TaskWorld.Ok(await admin.PostAsJsonAsync($"/tasks/{m}/manual-report", new { summary = "נוסח מתוקן", customisation = Dcc.Domain.Tasks.ManualReport.CustomisationTemplate + "Only" }));
+        page = await w.PageAsync(m);
+        Assert.Equal("נוסח מתוקן", page.GetProperty("development").GetProperty("summary").GetString());
+        var runs = page.GetProperty("history").EnumerateArray().Select(r => r.GetProperty("state").GetString()).ToList();
+        Assert.Equal(1, runs.Count(s => s == "rolled_back"));
+        Assert.Equal(1, runs.Count(s => s == "done"));
+        Assert.Contains("דיווח ידני", await TaskWorld.Refused(admin.PutAsJsonAsync($"/tasks/{m}/manual", new { manual = false })));
+        await TaskWorld.Ok(await admin.DeleteAsync($"/tasks/{m}/manual-report"));
+        page = await w.PageAsync(m);
+        Assert.False(page.GetProperty("developed").GetBoolean());
+        Assert.All(await w.ChecksOfAsync(m), c => Assert.Equal(JsonValueKind.Null, c.GetProperty("checkResult").ValueKind));
+        Assert.Equal("ready", page.GetProperty("status").GetProperty("key").GetString());
+        await TaskWorld.Refused(admin.DeleteAsync($"/tasks/{m}/manual-report"));
+        await TaskWorld.Ok(await admin.PutAsJsonAsync($"/tasks/{m}/manual", new { manual = false }));
+        Assert.False((await w.RowAsync(m)).GetProperty("developedManually").GetBoolean());
+        // handed back: Claude may develop it again
+        await w.DevelopAsync(m);
+
+        // 6. Never both: Claude's development blocks the mark until Rollback.
+        var byClaude = await w.TaskAsync("byClaude", "write c.txt");
+        await w.ReadyAsync(byClaude);
+        await w.DevelopAsync(byClaude);
+        Assert.Contains("Rollback", await TaskWorld.Refused(admin.PutAsJsonAsync($"/tasks/{byClaude}/manual", new { manual = true })));
+        await w.RollbackAsync(byClaude);
+        Assert.True((await TaskWorld.Ok(await admin.PutAsJsonAsync($"/tasks/{byClaude}/manual", new { manual = true }))).GetProperty("manual").GetBoolean());
+    }
+
     [Fact]
     public async Task Deleting_a_task_names_each_risk_and_needs_it_confirmed()
     {
